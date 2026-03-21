@@ -1,19 +1,34 @@
 ---
 title: Sessions
-description: A session records the full lifecycle of a single execution run.
+description: A session records the full lifecycle of a single execution run. Every run creates a new session.
 ---
 
 # Sessions
 
-A session records the full lifecycle of a single execution run. Each `qap run` or `qap run-task` creates a session that tracks:
+A session is a first-class run history record. **Every `run`, `run-next`, or `run-task` creates a new session** — sessions are never reused or overwritten.
+
+Each session tracks:
 
 - **Identity** — `id`, `projectId`, `workspaceId`
 - **Timing** — `startedAt`, `finishedAt`
 - **Status** — `running`, `completed`, `failed`, `aborted`
 - **Provider** — which agent provider was used
+- **Trigger** — what started the session: `run`, `run-next`, `run-task`
 - **Progress** — `currentTaskId`, `tasksCompleted`, `tasksFailed`
 - **Logs** — `eventLogPath`, `changelogPath`
 - **Notes** — session-level steering notes
+
+## New Run = New Session
+
+This is a core guarantee:
+
+```bash
+qap run            # → new session
+qap run-next       # → new session
+qap run-task QUE-1 # → new session
+```
+
+Old sessions are never modified. You can always browse back to any previous run.
 
 ## Progressive Updates
 
@@ -29,14 +44,50 @@ The TUI auto-refreshes during execution:
 
 No manual `/refresh` needed. The TUI detects running sessions automatically.
 
-## Session Commands
+## Session Browsing
+
+### TUI Commands
 
 ```bash
-# In TUI
-/sessions              # Show session history
-/session show <id>     # Show session details
+/sessions              # Show session list (tab 2)
+/session show <id>     # Open session detail view
+/session latest        # Open most recent session
+/session current       # Open currently running session
+```
 
-# From CLI
+### Navigation
+
+- Press `2` to switch to the sessions tab
+- Use `j/k` or arrow keys to navigate the session list
+- Press `Enter` to open the session detail view
+- Press `ESC` to go back to the session list
+
+### Session Detail View
+
+The detail view shows:
+
+- Status, timing, duration
+- Provider and backend
+- Trigger action (`run`, `run-next`, `run-task`)
+- Task progress (completed/failed/total)
+- Current execution phase
+- Steering notes
+- Last assistant update
+
+## Retry Flow
+
+If a task fails, you can retry it from the TUI:
+
+```bash
+/retry QUE-238         # Resets the task to "todo" and runs it in a new session
+```
+
+The retry command reuses any existing steering notes (project + task), so the agent gets the same context plus any fixes you've added.
+
+## Session Commands (CLI)
+
+```bash
 qap run                # Start a new session
+qap run-next           # Run next ready task in a new session
 qap run-task <id>      # Run a specific task in a new session
 ```

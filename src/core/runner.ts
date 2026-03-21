@@ -247,6 +247,9 @@ export class Runner {
 
     if (!this.opts.dryRun) {
       await this.initSession();
+      if (this.session) {
+        this.session.triggerAction = this.opts.taskFilter ? "run-task" : "run";
+      }
       await this.liveStatus.write(this.config, this.store, "run-start");
       await this.events.emit({
         ts: new Date().toISOString(),
@@ -310,6 +313,8 @@ export class Runner {
     }
 
     if (!this.opts.dryRun) {
+      await this.initSession();
+      if (this.session) this.session.triggerAction = "run-next";
       await this.changelog.init(this.store.getSessionId());
     }
 

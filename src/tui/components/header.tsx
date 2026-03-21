@@ -28,6 +28,10 @@ export function Header({
   const projText = project ? project.name : "—";
 
   const tabs: TuiView[] = ["project", "sessions", "logs", "help"];
+  const tabLabel = (tab: TuiView): string => {
+    if (tab === "sessions" && activeView === "session-detail") return "SESSION";
+    return tab.toUpperCase();
+  };
 
   return (
     <box
@@ -66,18 +70,21 @@ export function Header({
 
       {/* Tab bar */}
       <box flexDirection="row" gap={2}>
-        {tabs.map((tab) => (
-          <text
-            key={tab}
-            fg={tab === activeView ? BRAND.purple : BRAND.fgMuted}
-          >
-            {tab === activeView ? (
-              <strong>{` [${tab.toUpperCase()}] `}</strong>
-            ) : (
-              `  ${tab.toUpperCase()}  `
-            )}
-          </text>
-        ))}
+        {tabs.map((tab) => {
+          const isActive = tab === activeView || (tab === "sessions" && activeView === "session-detail");
+          return (
+            <text
+              key={tab}
+              fg={isActive ? BRAND.purple : BRAND.fgMuted}
+            >
+              {isActive ? (
+                <strong>{` [${tabLabel(tab)}] `}</strong>
+              ) : (
+                `  ${tabLabel(tab)}  `
+              )}
+            </text>
+          );
+        })}
       </box>
     </box>
   );

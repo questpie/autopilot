@@ -5,7 +5,7 @@ import { getUpdateStatusText } from "../update/notify.js";
 
 // ── TUI State ───────────────────────────────────────────────
 
-export type TuiView = "project" | "sessions" | "logs" | "help";
+export type TuiView = "project" | "sessions" | "session-detail" | "logs" | "help";
 
 export interface TaskEntry {
   id: string;
@@ -59,6 +59,10 @@ export interface TuiState {
   needsProjectPicker: boolean;
   updateStatus: string | null;
   runningSession: RunningSession | null;
+  /** Selected session for detail view */
+  selectedSession: SessionMeta | null;
+  /** All task entries (for autocomplete and retry) */
+  allTasks: TaskEntry[];
 }
 
 export function createInitialState(): TuiState {
@@ -85,6 +89,8 @@ export function createInitialState(): TuiState {
     needsProjectPicker: false,
     updateStatus: null,
     runningSession: null,
+    selectedSession: null,
+    allTasks: [],
   };
 }
 
@@ -173,6 +179,7 @@ export async function loadTuiState(): Promise<TuiState | null> {
   let readyTasks: TaskEntry[] = [];
   let completedTasks: TaskEntry[] = [];
   let inProgressTasks: TaskEntry[] = [];
+  let allTasks: TaskEntry[] = [];
   let taskCounts: TaskCounts = {
     total: 0,
     ready: 0,
@@ -199,7 +206,7 @@ export async function loadTuiState(): Promise<TuiState | null> {
       const allStates = store.getAllTasks();
       const ready = findReadyTasks(config.tasks, allStates);
 
-      readyTasks = ready.map((t) => {
+      const toEntry = (t: (typeof config.tasks)[0]): TaskEntry => {
         const ts = allStates[t.id];
         return {
           id: t.id,
@@ -212,44 +219,21 @@ export async function loadTuiState(): Promise<TuiState | null> {
           validationRecommendation: ts?.lastValidation?.recommendation,
           remediationAttempts: ts?.remediationAttempts,
         };
-      });
+      };
+
+      allTasks = config.tasks.map(toEntry);
+      readyTasks = ready.map(toEntry);
 
       completedTasks = config.tasks
         .filter((t) => {
           const s = allStates[t.id]?.state;
           return s === "done" || s === "committed" || s === "failed";
         })
-        .map((t) => {
-          const ts = allStates[t.id];
-          return {
-            id: t.id,
-            title: t.title,
-            state: ts?.state ?? "todo",
-            track: t.track,
-            kind: t.kind,
-            epicId: t.epicId,
-            validationSummary: ts?.lastValidation?.summary,
-            validationRecommendation: ts?.lastValidation?.recommendation,
-            remediationAttempts: ts?.remediationAttempts,
-          };
-        });
+        .map(toEntry);
 
       inProgressTasks = config.tasks
         .filter((t) => allStates[t.id]?.state === "in_progress")
-        .map((t) => {
-          const ts = allStates[t.id];
-          return {
-            id: t.id,
-            title: t.title,
-            state: "in_progress",
-            track: t.track,
-            kind: t.kind,
-            epicId: t.epicId,
-            validationSummary: ts?.lastValidation?.summary,
-            validationRecommendation: ts?.lastValidation?.recommendation,
-            remediationAttempts: ts?.remediationAttempts,
-          };
-        });
+        .map(toEntry);
 
       const states = config.tasks.map((t) => allStates[t.id]?.state ?? "todo");
       taskCounts = {
@@ -362,5 +346,7 @@ export async function loadTuiState(): Promise<TuiState | null> {
     needsProjectPicker: false,
     updateStatus,
     runningSession,
+    selectedSession: null,
+    allTasks,
   };
 }

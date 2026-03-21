@@ -46,7 +46,7 @@ Projects are created via `qap project init` or `qap project import`. If a worksp
 
 ### Session
 
-A session is a run history record for a project. Each time Autopilot executes tasks, it creates a session that tracks what ran, what succeeded, and what failed.
+A session is a first-class run history record. **Every `run`, `run-next`, or `run-task` creates a new session** — old sessions are never reused or overwritten. Each session tracks what ran, what succeeded, what failed, the trigger action, and timing.
 
 ## Default Flow
 
@@ -144,18 +144,37 @@ Run `qap` to open the terminal UI.
 | `/project list` | List all projects |
 | `/sessions` | Show session history |
 | `/session show <id>` | Show session details |
-| `/run` | Run next ready task |
-| `/run-task <id>` | Run a specific task |
+| `/session latest` | Show most recent session |
+| `/session current` | Show running session |
+| `/run` | Run next ready task (new session) |
+| `/run-next` | Run next ready task (new session) |
+| `/run-task <id>` | Run a specific task (new session) |
+| `/retry <id>` | Retry a failed task (new session) |
 | `/status` | Show task counts |
+| `/note <task-id> <text>` | Add a note to a task |
+| `/steer project <text>` | Add project steering note |
 | `/refresh` | Reload project state |
 | `/help` | Toggle help overlay |
+
+### Command Autocomplete
+
+The TUI command input supports autocomplete:
+
+- Type `/` to see all available commands
+- `Tab` accepts the current suggestion
+- `Up/Down` navigates suggestions or command history
+- Task IDs, session IDs, and project IDs autocomplete contextually
+- Invalid task/session IDs show nearest matches
 
 ### Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
 | `Enter` | Submit command |
-| `ESC` | Close help / clear input |
+| `Tab` | Accept autocomplete suggestion |
+| `Up/Down` | Navigate suggestions / command history |
+| `j/k` | Navigate session list |
+| `ESC` | Close overlay / go back / clear input |
 | `Ctrl+L` | Refresh state |
 | `Ctrl+C` | Exit |
 
@@ -292,12 +311,15 @@ The workspace ID is derived from the repo root path. You never need to know or t
 
 ## Sessions
 
-A session records the full lifecycle of a single execution run. Each `qap run` or `qap run-task` creates a session that tracks:
+A session records the full lifecycle of a single execution run. **Every `run`, `run-next`, or `run-task` always creates a new session** — old sessions are never modified.
+
+Each session tracks:
 
 - `id`, `projectId`, `workspaceId` — identity
 - `startedAt`, `finishedAt` — timing
 - `status` — `running`, `completed`, `failed`, `aborted`
 - `provider` — which agent provider was used
+- `triggerAction` — `run`, `run-next`, or `run-task`
 - `currentTaskId` — task currently being executed
 - `lastEventAt` — timestamp of the most recent event
 - `tasksCompleted`, `tasksFailed` — counters updated progressively
@@ -305,6 +327,27 @@ A session records the full lifecycle of a single execution run. Each `qap run` o
 - `notes` — session-level steering notes
 
 Sessions are updated **progressively** during execution, not just at the end. The TUI polls session state every 3 seconds to show live progress.
+
+### Session Browsing
+
+The TUI provides full session navigation:
+
+```bash
+/sessions              # Show session list with status, timing, task counts
+/session show <id>     # Open session detail (partial ID match supported)
+/session latest        # Jump to the most recent session
+/session current       # Jump to the currently running session
+```
+
+In the sessions list view, use `j/k` or arrow keys to navigate and `Enter` to open the detail view. Press `ESC` to go back.
+
+### Retry Failed Tasks
+
+```bash
+/retry QUE-238         # Resets the task to "todo" and runs it in a new session
+```
+
+The retry command preserves existing steering notes, so the agent gets the same context.
 
 ## Steering Notes
 
@@ -461,8 +504,7 @@ Validation entries include the fail reason and recommendation, not just PASS/FAI
 ## Current Limitations
 
 - TUI only — no web UI or remote cockpit
-- CLI-based agent runners only — no SDK integration yet
-- Session browser shows metadata — no full replay
+- Session browser shows metadata and navigation — no full replay of agent output
 - Planning workflow is thin — no multi-agent validation
 - No distributed or multi-machine execution
 - Linear sync is optional and one-directional

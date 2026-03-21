@@ -42,6 +42,8 @@ export interface SessionMeta {
   eventLogPath?: string;
   changelogPath?: string;
   notes: string[];
+  /** What triggered this session: "run", "run-next", "run-task" */
+  triggerAction?: "run" | "run-next" | "run-task";
   /** Current execution phase (implement, validate-primary, etc.) */
   currentPhase?: string;
   /** Currently active tool name */

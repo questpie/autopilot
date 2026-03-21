@@ -1,6 +1,6 @@
 ---
 title: CLI Reference
-description: Complete reference for all qap commands, TUI slash commands, and keyboard shortcuts.
+description: Complete reference for all qap commands, TUI slash commands, keyboard shortcuts, and command autocomplete.
 ---
 
 # CLI Reference
@@ -36,9 +36,9 @@ qap status                    Show project status
 qap next                      Show next ready task(s)
 qap list                      List all tasks with states
 qap show <id>                 Show task or epic details
-qap run [--max <n>]           Run autonomous loop
-qap run-next                  Run just the next ready task
-qap run-task <id>             Run a specific task
+qap run [--max <n>]           Run autonomous loop (creates new session)
+qap run-next                  Run just the next ready task (creates new session)
+qap run-task <id>             Run a specific task (creates new session)
 ```
 
 ## Steering
@@ -68,8 +68,12 @@ qap steer show                Show project steering notes
 | `/project list` | List all projects |
 | `/sessions` | Show session history |
 | `/session show <id>` | Show session details |
-| `/run` | Run next ready task |
-| `/run-task <id>` | Run a specific task |
+| `/session latest` | Show most recent session |
+| `/session current` | Show running session |
+| `/run` | Run next ready task (creates new session) |
+| `/run-next` | Run next ready task (creates new session) |
+| `/run-task <id>` | Run a specific task (creates new session) |
+| `/retry <id>` | Retry a failed task (creates new session) |
 | `/status` | Show task counts |
 | `/refresh` | Reload project state |
 | `/note <task-id> <text>` | Add a note to a task |
@@ -77,6 +81,19 @@ qap steer show                Show project steering notes
 | `/steer project <text>` | Add project steering note |
 | `/steer show` | Show project steering notes |
 | `/help` | Toggle help overlay |
+
+## Command Autocomplete
+
+The TUI command input supports autocomplete:
+
+- Type `/` to see all available commands
+- `Tab` accepts the current suggestion
+- `Up/Down` navigates suggestions or command history
+- Task IDs, session IDs, and project IDs autocomplete contextually
+
+When typing a command that expects a task ID (like `/run-task` or `/retry`), the autocomplete suggests matching task IDs from your project. Partial matches work — type a few characters and Tab to complete.
+
+If a task ID or session ID doesn't exist, the TUI suggests the closest matches.
 
 ## Keyboard Shortcuts
 
@@ -87,6 +104,9 @@ qap steer show                Show project steering notes
 | `3` | Logs tab |
 | `4` | Help tab |
 | `Enter` | Submit command |
-| `ESC` | Close help / clear input |
+| `Tab` | Accept autocomplete suggestion |
+| `Up/Down` | Navigate suggestions or command history |
+| `j/k` | Navigate session list |
+| `ESC` | Close overlay / go back / clear input |
 | `Ctrl+L` | Refresh state |
 | `Ctrl+C` | Exit |

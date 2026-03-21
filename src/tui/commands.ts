@@ -39,8 +39,14 @@ export async function handleCommand(
     case "run":
       return cmdRun(parts.slice(1), currentState);
 
+    case "run-next":
+      return cmdRunNext(parts.slice(1), currentState);
+
     case "run-task":
       return cmdRunTask(parts.slice(1), currentState);
+
+    case "retry":
+      return cmdRetry(parts.slice(1), currentState);
 
     case "status":
       return cmdStatus(currentState);
@@ -56,7 +62,7 @@ export async function handleCommand(
 
     case "help":
       return {
-        log: `[${timestamp()}] Commands: /project [init|import|list|use <id>], /sessions, /session show <id>, /run, /run-task <id>, /status, /note [show] <task-id> [text], /steer [project <text>|show], /refresh, /help | Views: 1=project 2=sessions 3=logs`,
+        log: `[${timestamp()}] Commands: /project, /sessions, /session [show|latest|current], /run, /run-next, /run-task <id>, /retry <id>, /status, /note, /steer, /refresh, /help | Views: 1=project 2=sessions 3=logs 4=help`,
       };
 
     default:
@@ -153,8 +159,9 @@ async function cmdProject(
 
     default:
       if (!sub) {
-        // /project with no sub — show info or switch view
+        // /project with no sub — switch to project view
         return {
+          newState: { ...currentState, activeView: "project" },
           log: `[${timestamp()}] Usage: /project [init|import|list|use <id>]`,
         };
       }
@@ -178,10 +185,14 @@ async function cmdSessions(
   );
 
   if (sessions.length === 0) {
-    return { log: `[${timestamp()}] No sessions yet` };
+    return {
+      newState: { ...currentState, activeView: "sessions", sessions },
+      log: `[${timestamp()}] No sessions yet. Use /run or /run-task to start one.`,
+    };
   }
 
   const listing = sessions
+    .slice(0, 10)
     .map(
       (s) =>
         `  ${s.id.slice(0, 8)} ${s.status.padEnd(10)} ${s.startedAt.slice(0, 19)} ${s.tasksCompleted}/${s.taskCount} tasks`
@@ -200,31 +211,84 @@ async function cmdSession(
 ): Promise<CommandResult> {
   const sub = args[0]?.toLowerCase();
 
+  if (!currentState.workspace || !currentState.activeProject) {
+    return { log: `[${timestamp()}] No active project` };
+  }
+
+  const ws = new WorkspaceManager();
+
   if (sub === "show") {
     const id = args[1];
     if (!id) return { log: `[${timestamp()}] Usage: /session show <id>` };
-    if (!currentState.workspace || !currentState.activeProject) {
-      return { log: `[${timestamp()}] No active project` };
-    }
 
-    const ws = new WorkspaceManager();
-    const session = await ws.loadSession(
+    // Support partial ID match
+    const sessions = await ws.listSessions(
       currentState.workspace.id,
-      currentState.activeProject.id,
-      id
+      currentState.activeProject.id
+    );
+    const session = sessions.find(
+      (s) => s.id === id || s.id.startsWith(id)
     );
 
     if (!session) {
+      // Suggest closest matches
+      const similar = sessions
+        .filter((s) => s.id.toLowerCase().includes(id.toLowerCase()))
+        .slice(0, 3);
+      if (similar.length > 0) {
+        const matches = similar.map((s) => s.id.slice(0, 8)).join(", ");
+        return { log: `[${timestamp()}] Session "${id}" not found. Did you mean: ${matches}?` };
+      }
       return { log: `[${timestamp()}] Session "${id}" not found` };
     }
 
     return {
-      log: `[${timestamp()}] Session ${session.id}\n  Status: ${session.status}\n  Started: ${session.startedAt}\n  Tasks: ${session.tasksCompleted}/${session.taskCount} completed, ${session.tasksFailed} failed`,
+      newState: {
+        ...currentState,
+        activeView: "session-detail",
+        selectedSession: session,
+      },
+    };
+  }
+
+  if (sub === "latest") {
+    const sessions = await ws.listSessions(
+      currentState.workspace.id,
+      currentState.activeProject.id
+    );
+    if (sessions.length === 0) {
+      return { log: `[${timestamp()}] No sessions yet` };
+    }
+    const latest = sessions[0]!; // Already sorted by startedAt desc
+    return {
+      newState: {
+        ...currentState,
+        activeView: "session-detail",
+        selectedSession: latest,
+      },
+    };
+  }
+
+  if (sub === "current") {
+    const sessions = await ws.listSessions(
+      currentState.workspace.id,
+      currentState.activeProject.id
+    );
+    const running = sessions.find((s) => s.status === "running");
+    if (!running) {
+      return { log: `[${timestamp()}] No running session` };
+    }
+    return {
+      newState: {
+        ...currentState,
+        activeView: "session-detail",
+        selectedSession: running,
+      },
     };
   }
 
   return {
-    log: `[${timestamp()}] Usage: /session show <id>`,
+    log: `[${timestamp()}] Usage: /session [show <id>|latest|current]`,
   };
 }
 
@@ -254,13 +318,21 @@ async function cmdRun(
     });
 
     return {
-      log: `[${timestamp()}] Running next task...`,
+      log: `[${timestamp()}] Running next task... (new session created)`,
     };
   } catch (err) {
     return {
       log: `[${timestamp()}] Run failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+}
+
+async function cmdRunNext(
+  args: string[],
+  currentState: TuiState
+): Promise<CommandResult> {
+  // Alias for /run
+  return cmdRun(args, currentState);
 }
 
 async function cmdRunTask(
@@ -277,13 +349,29 @@ async function cmdRunTask(
     };
   }
 
+  // Validate task exists
+  const matchedTask = currentState.allTasks.find(
+    (t) => t.id === taskId || t.id.toLowerCase() === taskId.toLowerCase()
+  );
+  if (!matchedTask) {
+    // Suggest closest matches
+    const similar = currentState.allTasks
+      .filter((t) => t.id.toLowerCase().includes(taskId.toLowerCase()))
+      .slice(0, 3);
+    if (similar.length > 0) {
+      const matches = similar.map((t) => t.id).join(", ");
+      return { log: `[${timestamp()}] Task "${taskId}" not found. Did you mean: ${matches}?` };
+    }
+    return { log: `[${timestamp()}] Task "${taskId}" not found` };
+  }
+
   try {
     const { loadConfig } = await import("../config/loader.js");
     const { Runner } = await import("../core/runner.js");
     const config = await loadConfig(currentState.configPath);
     const runner = new Runner(config, {
       dryRun: args.includes("--dry-run"),
-      taskFilter: taskId,
+      taskFilter: matchedTask.id,
       workspaceId: currentState.workspace?.id,
       projectId: currentState.activeProject?.id,
     });
@@ -293,11 +381,85 @@ async function cmdRunTask(
     });
 
     return {
-      log: `[${timestamp()}] Running task ${taskId}...`,
+      log: `[${timestamp()}] Running task ${matchedTask.id}... (new session created)`,
     };
   } catch (err) {
     return {
       log: `[${timestamp()}] Run failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+async function cmdRetry(
+  args: string[],
+  currentState: TuiState
+): Promise<CommandResult> {
+  const taskId = args[0];
+  if (!taskId) {
+    // If no arg, find the most recently failed task
+    const failed = currentState.completedTasks.filter((t) => t.state === "failed");
+    if (failed.length === 0) {
+      return { log: `[${timestamp()}] No failed tasks to retry` };
+    }
+    return { log: `[${timestamp()}] Usage: /retry <task-id>. Failed tasks: ${failed.map((t) => t.id).join(", ")}` };
+  }
+
+  if (!currentState.configPath) {
+    return { log: `[${timestamp()}] No active config` };
+  }
+
+  // Find the task
+  const task = currentState.allTasks.find(
+    (t) => t.id === taskId || t.id.toLowerCase() === taskId.toLowerCase()
+  );
+  if (!task) {
+    const similar = currentState.allTasks
+      .filter((t) => t.id.toLowerCase().includes(taskId.toLowerCase()))
+      .slice(0, 3);
+    if (similar.length > 0) {
+      return { log: `[${timestamp()}] Task "${taskId}" not found. Did you mean: ${similar.map((t) => t.id).join(", ")}?` };
+    }
+    return { log: `[${timestamp()}] Task "${taskId}" not found` };
+  }
+
+  if (task.state !== "failed") {
+    return { log: `[${timestamp()}] Task ${task.id} is ${task.state}, not failed. Use /run-task to re-run.` };
+  }
+
+  // Reset the task state to todo, then run it
+  try {
+    const { loadConfig } = await import("../config/loader.js");
+    const { Store } = await import("../storage/store.js");
+    const { Runner } = await import("../core/runner.js");
+    const config = await loadConfig(currentState.configPath);
+    const store = new Store(config.project.rootDir, config.project.id);
+    await store.load();
+    for (const t of config.tasks) store.initTask(t.id);
+
+    // Reset failed task to todo
+    const taskState = store.getTask(task.id);
+    if (taskState) {
+      taskState.state = "todo";
+      store.setTask(task.id, taskState);
+      await store.save();
+    }
+
+    const runner = new Runner(config, {
+      taskFilter: task.id,
+      workspaceId: currentState.workspace?.id,
+      projectId: currentState.activeProject?.id,
+    });
+
+    runner.run().then(async () => {
+      // Auto-refresh will pick up changes
+    });
+
+    return {
+      log: `[${timestamp()}] Retrying task ${task.id}... (new session created)`,
+    };
+  } catch (err) {
+    return {
+      log: `[${timestamp()}] Retry failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }

@@ -13,9 +13,17 @@ const COMMANDS = [
   ["/project list", "List all projects"],
   ["/sessions", "Show session history"],
   ["/session show <id>", "Show session details"],
-  ["/run", "Run next ready task"],
-  ["/run-task <id>", "Run a specific task"],
+  ["/session latest", "Show most recent session"],
+  ["/session current", "Show running session"],
+  ["/run", "Run next ready task (creates session)"],
+  ["/run-next", "Run next ready task (creates session)"],
+  ["/run-task <id>", "Run a specific task (creates session)"],
+  ["/retry <id>", "Retry a failed task (creates session)"],
   ["/status", "Show task counts"],
+  ["/note <id> <text>", "Add note to a task"],
+  ["/note show <id>", "Show task notes"],
+  ["/steer project <text>", "Add project steering note"],
+  ["/steer show", "Show project steering notes"],
   ["/refresh", "Reload project state"],
   ["/help", "Toggle this help"],
 ] as const;
@@ -23,13 +31,16 @@ const COMMANDS = [
 const KEYS = [
   ["1-4", "Switch tabs (Project/Sessions/Logs/Help)"],
   ["Ctrl+L", "Refresh state"],
-  ["ESC", "Close help / cancel"],
+  ["ESC", "Close overlay / go back"],
   ["Enter", "Submit command"],
+  ["Tab", "Accept autocomplete suggestion"],
+  ["Up/Down", "Navigate suggestions / command history"],
+  ["j/k", "Navigate session list"],
   ["Ctrl+C", "Exit"],
 ] as const;
 
 export function HelpOverlay({ width, height }: HelpOverlayProps) {
-  const boxW = Math.min(64, width - 4);
+  const boxW = Math.min(72, width - 4);
 
   return (
     <box
@@ -56,10 +67,11 @@ export function HelpOverlay({ width, height }: HelpOverlayProps) {
         <text fg={BRAND.purple}>
           <strong>SLASH COMMANDS</strong>
         </text>
+        <text fg={BRAND.fgMuted}>{"Autocomplete: type / then Tab to complete"}</text>
         {COMMANDS.map(([cmd, desc]) => (
           <box key={cmd} flexDirection="row">
             <text fg={BRAND.fg}>
-              <strong>{cmd.padEnd(30)}</strong>
+              <strong>{cmd.padEnd(32)}</strong>
             </text>
             <text fg={BRAND.fgDim}>{desc}</text>
           </box>
@@ -71,7 +83,7 @@ export function HelpOverlay({ width, height }: HelpOverlayProps) {
         {KEYS.map(([key, desc]) => (
           <box key={key} flexDirection="row">
             <text fg={BRAND.fg}>
-              <strong>{key.padEnd(30)}</strong>
+              <strong>{key.padEnd(32)}</strong>
             </text>
             <text fg={BRAND.fgDim}>{desc}</text>
           </box>

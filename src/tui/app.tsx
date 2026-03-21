@@ -1,15 +1,10 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useKeyboard, useTerminalDimensions, useRenderer } from "@opentui/react";
 import { BRAND } from "./brand.js";
 import { Header } from "./components/header.js";
-import { ProjectPanel } from "./components/project-panel.js";
-import { ProjectPicker } from "./components/project-picker.js";
-import { TasksPanel } from "./components/tasks-panel.js";
-import { SessionsPanel } from "./components/sessions-panel.js";
-import { LogPanel } from "./components/log-panel.js";
+import { MainContent } from "./components/main-content.js";
 import { CommandInput } from "./components/command-input.js";
 import { HelpOverlay } from "./components/help-overlay.js";
-import { MainContent } from "./components/main-content.js";
 import type { TuiState, TuiView } from "./state.js";
 import { createInitialState, loadTuiState } from "./state.js";
 import { handleCommand } from "./commands.js";
@@ -43,10 +38,10 @@ export function App() {
         if (s) {
           setState((prev) => ({
             ...s,
-            // Preserve user's active view and logs
+            // Preserve user's active view, logs, and selected session
             activeView: prev.activeView,
             logs: prev.logs,
-            // Use fresh session events from state reload
+            selectedSession: prev.selectedSession,
           }));
         }
       });
@@ -57,9 +52,11 @@ export function App() {
   // Global keybindings — all state access via functional setState
   useKeyboard(useCallback((key: { name?: string; ctrl?: boolean }) => {
     if (key.name === "escape") {
-      setState((prev) =>
-        prev.activeView === "help" ? { ...prev, activeView: "project" } : prev
-      );
+      setState((prev) => {
+        if (prev.activeView === "help") return { ...prev, activeView: "project" };
+        if (prev.activeView === "session-detail") return { ...prev, activeView: "sessions", selectedSession: null };
+        return prev;
+      });
     }
 
     if (key.ctrl && key.name === "l") {
@@ -70,9 +67,28 @@ export function App() {
 
     const tab = key.name ? TAB_MAP[key.name] : undefined;
     if (tab) {
-      setState((prev) => ({ ...prev, activeView: tab }));
+      setState((prev) => ({ ...prev, activeView: tab, selectedSession: tab !== "session-detail" ? null : prev.selectedSession }));
     }
   }, []));
+
+  // Compute autocomplete IDs from state
+  const taskIds = useMemo(() => state.allTasks.map((t) => t.id), [state.allTasks]);
+  const sessionIds = useMemo(() => state.sessions.map((s) => s.id.slice(0, 8)), [state.sessions]);
+  const projectIds = useMemo(() => state.projects.map((p) => p.id), [state.projects]);
+
+  // Handle session selection from SessionsPanel
+  const onSessionSelect = useCallback((sessionId: string) => {
+    const session = stateRef.current.sessions.find(
+      (s) => s.id === sessionId || s.id.startsWith(sessionId)
+    );
+    if (session) {
+      setState((prev) => ({
+        ...prev,
+        activeView: "session-detail",
+        selectedSession: session,
+      }));
+    }
+  }, []);
 
   // Stable command handler — uses ref for current state, functional setState for updates
   const onCommand = useCallback(async (cmd: string) => {
@@ -140,9 +156,16 @@ export function App() {
         rightW={rightW}
         topPanelH={topPanelH}
         bottomPanelH={bottomPanelH}
+        onSessionSelect={onSessionSelect}
       />
 
-      <CommandInput width={width} onSubmit={onCommand} />
+      <CommandInput
+        width={width}
+        onSubmit={onCommand}
+        taskIds={taskIds}
+        sessionIds={sessionIds}
+        projectIds={projectIds}
+      />
 
       {state.activeView === "help" && (
         <HelpOverlay

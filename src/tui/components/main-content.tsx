@@ -3,6 +3,7 @@ import { ProjectPanel } from "./project-panel.js";
 import { ProjectPicker } from "./project-picker.js";
 import { TasksPanel } from "./tasks-panel.js";
 import { SessionsPanel } from "./sessions-panel.js";
+import { SessionDetailPanel } from "./session-detail-panel.js";
 import { LogPanel } from "./log-panel.js";
 import { RunPanel } from "./run-panel.js";
 import type { TuiState } from "../state.js";
@@ -15,6 +16,7 @@ interface MainContentProps {
   rightW: number;
   topPanelH: number;
   bottomPanelH: number;
+  onSessionSelect?: (sessionId: string) => void;
 }
 
 export function MainContent({
@@ -25,6 +27,7 @@ export function MainContent({
   rightW,
   topPanelH,
   bottomPanelH,
+  onSessionSelect,
 }: MainContentProps) {
   if (state.needsProjectPicker) {
     return (
@@ -39,6 +42,18 @@ export function MainContent({
     );
   }
 
+  if (state.activeView === "session-detail" && state.selectedSession) {
+    return (
+      <box width={width} height={mainH} flexDirection="row">
+        <SessionDetailPanel
+          width={width}
+          height={mainH}
+          session={state.selectedSession}
+        />
+      </box>
+    );
+  }
+
   if (state.activeView === "sessions") {
     return (
       <box width={width} height={mainH} flexDirection="row">
@@ -46,6 +61,7 @@ export function MainContent({
           width={width}
           height={mainH}
           sessions={state.sessions}
+          onSelect={onSessionSelect}
         />
       </box>
     );

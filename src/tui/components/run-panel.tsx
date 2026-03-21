@@ -24,6 +24,8 @@ export function RunPanel({
   taskCounts,
 }: RunPanelProps) {
   if (!runningSession) {
+    const hasReady = taskCounts.ready > 0;
+    const hasFailed = taskCounts.failed > 0;
     return (
       <box
         width={width}
@@ -36,14 +38,22 @@ export function RunPanel({
         backgroundColor={BRAND.card}
         flexDirection="column"
       >
-        <box padding={1}>
-          <text fg={BRAND.fgDim}>No active run. Use /run or /run-task to start.</text>
-        </box>
         <box flexDirection="row" gap={2} paddingLeft={1}>
           <text fg={BRAND.success}>{`${taskCounts.done} done`}</text>
           <text fg={BRAND.info}>{`${taskCounts.ready} ready`}</text>
           <text fg={BRAND.error}>{`${taskCounts.failed} failed`}</text>
           <text fg={BRAND.fgDim}>{`${taskCounts.total} total`}</text>
+        </box>
+        <box paddingLeft={1}>
+          {taskCounts.total === 0 ? (
+            <text fg={BRAND.fgDim}>No tasks configured. Use /project init or /project import.</text>
+          ) : hasReady ? (
+            <text fg={BRAND.purple}>{"/run or /run-task <id> to start"}</text>
+          ) : hasFailed ? (
+            <text fg={BRAND.warning}>{"/retry <id> to retry a failed task"}</text>
+          ) : (
+            <text fg={BRAND.fgDim}>All tasks completed or blocked.</text>
+          )}
         </box>
       </box>
     );
