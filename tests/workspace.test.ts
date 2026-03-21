@@ -332,11 +332,14 @@ describe("WorkspaceManager — sessions", () => {
     await ws.saveSession("sess-ws", "sess-proj", {
       id: "session-001",
       projectId: "sess-proj",
+      workspaceId: "sess-ws",
       startedAt: "2024-01-01T00:00:00.000Z",
       status: "completed",
+      provider: "claude",
       taskCount: 5,
       tasksCompleted: 4,
       tasksFailed: 1,
+      notes: [],
     });
 
     const sessions = await ws.listSessions("sess-ws", "sess-proj");
@@ -366,20 +369,26 @@ describe("WorkspaceManager — sessions", () => {
     await ws.saveSession("sess-ws2", "sess-proj2", {
       id: "older",
       projectId: "sess-proj2",
+      workspaceId: "sess-ws2",
       startedAt: "2024-01-01T00:00:00.000Z",
       status: "completed",
+      provider: "claude",
       taskCount: 3,
       tasksCompleted: 3,
       tasksFailed: 0,
+      notes: [],
     });
     await ws.saveSession("sess-ws2", "sess-proj2", {
       id: "newer",
       projectId: "sess-proj2",
+      workspaceId: "sess-ws2",
       startedAt: "2024-06-01T00:00:00.000Z",
       status: "running",
+      provider: "claude",
       taskCount: 5,
       tasksCompleted: 2,
       tasksFailed: 0,
+      notes: [],
     });
 
     const sessions = await ws.listSessions("sess-ws2", "sess-proj2");
@@ -428,5 +437,112 @@ describe("WorkspaceManager — import/init same workspace", () => {
     expect(
       await ws.readProjectFile(workspace.id, "project-beta", "test.txt")
     ).toBe("beta");
+  });
+});
+
+// ── Steering Notes ──
+
+describe("WorkspaceManager — steering notes", () => {
+  test("can write and read project steering", async () => {
+    const ws = new WorkspaceManager();
+    const workspace = await ws.ensureWorkspace("/tmp/steer-repo");
+    await ws.saveProject(workspace.id, {
+      id: "steer-proj",
+      name: "Steer Project",
+      repoRoot: "/tmp/steer-repo",
+      provider: "claude",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Initially empty
+    const empty = await ws.readSteering(workspace.id, "steer-proj");
+    expect(empty).toBeNull();
+
+    // Write steering
+    await ws.appendSteering(workspace.id, "steer-proj", "Focus on type safety");
+    const content = await ws.readSteering(workspace.id, "steer-proj");
+    expect(content).toContain("Focus on type safety");
+    expect(content).toContain("# Project Steering Notes");
+
+    // Append more
+    await ws.appendSteering(workspace.id, "steer-proj", "Avoid any-casts");
+    const updated = await ws.readSteering(workspace.id, "steer-proj");
+    expect(updated).toContain("Focus on type safety");
+    expect(updated).toContain("Avoid any-casts");
+  });
+
+  test("can add session notes", async () => {
+    const ws = new WorkspaceManager();
+    const workspace = await ws.ensureWorkspace("/tmp/sessnote-repo");
+    await ws.saveProject(workspace.id, {
+      id: "sessnote-proj",
+      name: "SessNote Project",
+      repoRoot: "/tmp/sessnote-repo",
+      provider: "claude",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await ws.saveSession(workspace.id, "sessnote-proj", {
+      id: "sess-note-001",
+      projectId: "sessnote-proj",
+      workspaceId: workspace.id,
+      startedAt: new Date().toISOString(),
+      status: "running",
+      provider: "claude",
+      taskCount: 3,
+      tasksCompleted: 0,
+      tasksFailed: 0,
+      notes: [],
+    });
+
+    await ws.addSessionNote(workspace.id, "sessnote-proj", "sess-note-001", "Be careful with auth");
+    const session = await ws.loadSession(workspace.id, "sessnote-proj", "sess-note-001");
+    expect(session).not.toBeNull();
+    expect(session!.notes.length).toBe(1);
+    expect(session!.notes[0]).toContain("Be careful with auth");
+  });
+
+  test("session record includes all new fields", async () => {
+    const ws = new WorkspaceManager();
+    const workspace = await ws.ensureWorkspace("/tmp/sessfields-repo");
+    await ws.saveProject(workspace.id, {
+      id: "sessfields-proj",
+      name: "Fields Project",
+      repoRoot: "/tmp/sessfields-repo",
+      provider: "claude",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const session = {
+      id: "sess-fields-001",
+      projectId: "sessfields-proj",
+      workspaceId: workspace.id,
+      startedAt: new Date().toISOString(),
+      status: "running" as const,
+      provider: "claude",
+      taskCount: 5,
+      tasksCompleted: 2,
+      tasksFailed: 1,
+      currentTaskId: "TASK-003",
+      lastEventAt: new Date().toISOString(),
+      eventLogPath: "/tmp/events.jsonl",
+      changelogPath: "/tmp/changelog.md",
+      notes: ["note1"],
+    };
+
+    await ws.saveSession(workspace.id, "sessfields-proj", session);
+    const loaded = await ws.loadSession(workspace.id, "sessfields-proj", "sess-fields-001");
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.workspaceId).toBe(workspace.id);
+    expect(loaded!.provider).toBe("claude");
+    expect(loaded!.currentTaskId).toBe("TASK-003");
+    expect(loaded!.lastEventAt).toBeDefined();
+    expect(loaded!.eventLogPath).toBe("/tmp/events.jsonl");
+    expect(loaded!.changelogPath).toBe("/tmp/changelog.md");
+    expect(loaded!.notes).toEqual(["note1"]);
   });
 });

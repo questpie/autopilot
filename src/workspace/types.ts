@@ -29,12 +29,19 @@ export interface ProjectMeta {
 export interface SessionMeta {
   id: string;
   projectId: string;
+  workspaceId: string;
   startedAt: string;
   finishedAt?: string;
   status: "running" | "completed" | "failed" | "aborted";
+  provider: string;
   taskCount: number;
   tasksCompleted: number;
   tasksFailed: number;
+  currentTaskId?: string;
+  lastEventAt?: string;
+  eventLogPath?: string;
+  changelogPath?: string;
+  notes: string[];
 }
 
 // ── Constants ──
@@ -78,4 +85,11 @@ export function getSessionsDir(
   projectId: string
 ): string {
   return `${getProjectDir(workspaceId, projectId)}/sessions`;
+}
+
+export function getSteeringPath(
+  workspaceId: string,
+  projectId: string
+): string {
+  return `${getProjectDir(workspaceId, projectId)}/steering.md`;
 }

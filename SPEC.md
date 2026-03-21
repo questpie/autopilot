@@ -234,6 +234,68 @@ MVP does not need:
 - full SDK migration
 - polished app generator
 
+## Session Record Schema
+
+Each session is stored as `~/.qap/workspaces/<ws-id>/projects/<prj-id>/sessions/<session-id>.json`:
+
+```typescript
+interface SessionMeta {
+  id: string;              // UUID
+  projectId: string;
+  workspaceId: string;
+  startedAt: string;       // ISO 8601
+  finishedAt?: string;     // ISO 8601
+  status: "running" | "completed" | "failed" | "aborted";
+  provider: string;        // "claude" | "codex"
+  taskCount: number;
+  tasksCompleted: number;
+  tasksFailed: number;
+  currentTaskId?: string;  // Updated progressively during run
+  lastEventAt?: string;    // Timestamp of last event
+  eventLogPath?: string;   // Path to events.jsonl
+  changelogPath?: string;  // Path to session changelog
+  notes: string[];         // Session-level steering notes
+}
+```
+
+Sessions are updated progressively: `currentTaskId`, counters, and `lastEventAt` change as tasks execute.
+
+## Steering Model
+
+Three levels of steering notes, injected into every execution prompt:
+
+### Precedence (all included, in order)
+
+1. **Project steering** — `~/.qap/workspaces/<ws-id>/projects/<prj-id>/steering.md`
+2. **Task notes** — `TaskRunState.notes[]` in `.autopilot-state.json`
+3. **Session notes** — `SessionMeta.notes[]` in session JSON
+
+### Prompt Injection Rules
+
+- Steering notes are rendered as a `# Steering Notes` section at the top of the execution prompt
+- Project steering is always included if it exists
+- Task notes are included only for the current task
+- Session notes are included from the active session
+- Empty notes are omitted (no empty sections)
+
+### CLI Commands
+
+```
+qap steer project <text>     Append to project steering
+qap steer show               Show project steering
+qap note <task-id> <text>    Add task note
+qap note show <task-id>      Show task notes
+```
+
+### TUI Slash Commands
+
+```
+/steer project <text>        Append to project steering
+/steer show                  Show project steering
+/note <task-id> <text>       Add task note
+/note show <task-id>         Show task notes
+```
+
 ## Branding Rules
 
 - product brand is QUESTPIE

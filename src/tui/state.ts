@@ -25,6 +25,16 @@ export interface TaskCounts {
   blocked: number;
 }
 
+export interface RunningSession {
+  id: string;
+  status: string;
+  currentTaskId?: string;
+  tasksCompleted: number;
+  tasksFailed: number;
+  taskCount: number;
+  lastEventAt?: string;
+}
+
 export interface TuiState {
   workspace: WorkspaceMeta | null;
   activeProject: ProjectMeta | null;
@@ -32,12 +42,14 @@ export interface TuiState {
   sessions: SessionMeta[];
   readyTasks: TaskEntry[];
   completedTasks: TaskEntry[];
+  inProgressTasks: TaskEntry[];
   taskCounts: TaskCounts;
   logs: string[];
   configPath: string | null;
   activeView: TuiView;
   needsProjectPicker: boolean;
   updateStatus: string | null;
+  runningSession: RunningSession | null;
 }
 
 export function createInitialState(): TuiState {
@@ -48,6 +60,7 @@ export function createInitialState(): TuiState {
     sessions: [],
     readyTasks: [],
     completedTasks: [],
+    inProgressTasks: [],
     taskCounts: {
       total: 0,
       ready: 0,
@@ -61,6 +74,7 @@ export function createInitialState(): TuiState {
     activeView: "project",
     needsProjectPicker: false,
     updateStatus: null,
+    runningSession: null,
   };
 }
 
@@ -148,6 +162,7 @@ export async function loadTuiState(): Promise<TuiState | null> {
 
   let readyTasks: TaskEntry[] = [];
   let completedTasks: TaskEntry[] = [];
+  let inProgressTasks: TaskEntry[] = [];
   let taskCounts: TaskCounts = {
     total: 0,
     ready: 0,
@@ -197,6 +212,17 @@ export async function loadTuiState(): Promise<TuiState | null> {
           epicId: t.epicId,
         }));
 
+      inProgressTasks = config.tasks
+        .filter((t) => allStates[t.id]?.state === "in_progress")
+        .map((t) => ({
+          id: t.id,
+          title: t.title,
+          state: "in_progress",
+          track: t.track,
+          kind: t.kind,
+          epicId: t.epicId,
+        }));
+
       const states = config.tasks.map((t) => allStates[t.id]?.state ?? "todo");
       taskCounts = {
         total: config.tasks.length,
@@ -209,6 +235,21 @@ export async function loadTuiState(): Promise<TuiState | null> {
     } catch {
       // Config loading may fail if no tasks defined yet
     }
+  }
+
+  // Detect running session
+  let runningSession: RunningSession | null = null;
+  const runningS = sessions.find((s) => s.status === "running");
+  if (runningS) {
+    runningSession = {
+      id: runningS.id,
+      status: runningS.status,
+      currentTaskId: runningS.currentTaskId,
+      tasksCompleted: runningS.tasksCompleted,
+      tasksFailed: runningS.tasksFailed,
+      taskCount: runningS.taskCount,
+      lastEventAt: runningS.lastEventAt,
+    };
   }
 
   // Non-blocking update check
@@ -238,11 +279,13 @@ export async function loadTuiState(): Promise<TuiState | null> {
     sessions,
     readyTasks,
     completedTasks,
+    inProgressTasks,
     taskCounts,
     logs,
     configPath,
     activeView: "project",
     needsProjectPicker: false,
     updateStatus,
+    runningSession,
   };
 }

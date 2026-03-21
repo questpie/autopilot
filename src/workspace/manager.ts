@@ -11,6 +11,7 @@ import {
   getWorkspaceDir,
   getProjectDir,
   getSessionsDir,
+  getSteeringPath,
   workspaceIdFromPath,
   WORKSPACES_DIR,
 } from "./types.js";
@@ -316,5 +317,56 @@ export class WorkspaceManager {
     } catch {
       return null;
     }
+  }
+
+  // ── Steering Notes ──
+
+  async readSteering(
+    workspaceId: string,
+    projectId: string
+  ): Promise<string | null> {
+    const filePath = getSteeringPath(workspaceId, projectId);
+    try {
+      return await readFile(filePath, "utf-8");
+    } catch {
+      return null;
+    }
+  }
+
+  async writeSteering(
+    workspaceId: string,
+    projectId: string,
+    content: string
+  ): Promise<void> {
+    const filePath = getSteeringPath(workspaceId, projectId);
+    await mkdir(resolve(filePath, ".."), { recursive: true });
+    await writeFile(filePath, content);
+  }
+
+  async appendSteering(
+    workspaceId: string,
+    projectId: string,
+    text: string
+  ): Promise<void> {
+    const existing = await this.readSteering(workspaceId, projectId);
+    const entry = `\n[${new Date().toISOString()}] ${text}`;
+    await this.writeSteering(
+      workspaceId,
+      projectId,
+      (existing ?? "# Project Steering Notes\n") + entry
+    );
+  }
+
+  async addSessionNote(
+    workspaceId: string,
+    projectId: string,
+    sessionId: string,
+    text: string
+  ): Promise<void> {
+    const session = await this.loadSession(workspaceId, projectId, sessionId);
+    if (!session) return;
+    session.notes = session.notes ?? [];
+    session.notes.push(`[${new Date().toISOString()}] ${text}`);
+    await this.saveSession(workspaceId, projectId, session);
   }
 }

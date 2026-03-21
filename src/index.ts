@@ -169,7 +169,10 @@ async function main() {
     case "mark":
       return cmdMark(args[1]!, args[2] as TaskState);
     case "note":
+      if (args[1] === "show") return cmdNoteShow(args[2]!);
       return cmdNote(args[1]!, args.slice(2).join(" "));
+    case "steer":
+      return cmdSteer(args.slice(1));
     case "validate":
       if (args[1] === "readiness") return cmdValidateReadiness();
       break;
@@ -276,6 +279,9 @@ Execution:
   qap start <task>              Mark task as in_progress
   qap mark <task> <state>       Manually set task state
   qap note <task> <text>        Add a note to a task
+  qap note show <task>          Show notes for a task
+  qap steer project <text>      Add project steering note
+  qap steer show                Show project steering notes
   qap validate readiness        Check all dependency readiness
   qap report session            Show session changelog
   qap report project            Show project summary
@@ -539,20 +545,29 @@ async function cmdPrompt(id: string, mode: PromptMode) {
   console.log(prompt);
 }
 
-function makeRunnerOpts() {
+async function makeRunnerOpts() {
+  const ws = new WorkspaceManager();
+  const workspace = await ws.resolveWorkspaceFromCwd();
+  const activeId = workspace
+    ? await ws.getActiveProjectId(workspace.id)
+    : undefined;
+
   return {
     dryRun: hasFlag("dry-run"),
     maxTasks: flag("max") ? parseInt(flag("max")!) : undefined,
     skipValidation: hasFlag("skip-validation"),
     noSync: hasFlag("no-sync"),
+    workspaceId: workspace?.id,
+    projectId: activeId,
   };
 }
 
 async function cmdRun() {
   const configPath = await resolveConfigPath();
   const config = await loadConfig(configPath);
+  const opts = await makeRunnerOpts();
   const runner = new Runner(config, {
-    ...makeRunnerOpts(),
+    ...opts,
     taskFilter: flag("task"),
   });
 
@@ -566,7 +581,8 @@ async function cmdRun() {
 async function cmdRunNext() {
   const configPath = await resolveConfigPath();
   const config = await loadConfig(configPath);
-  const runner = new Runner(config, makeRunnerOpts());
+  const opts = await makeRunnerOpts();
+  const runner = new Runner(config, opts);
   await runner.runNext();
 }
 
@@ -578,8 +594,9 @@ async function cmdRunTask(taskId: string) {
 
   const configPath = await resolveConfigPath();
   const config = await loadConfig(configPath);
+  const opts = await makeRunnerOpts();
   const runner = new Runner(config, {
-    ...makeRunnerOpts(),
+    ...opts,
     taskFilter: taskId,
   });
 
@@ -687,6 +704,76 @@ async function cmdReportSession() {
       `  [${entry.timestamp.slice(0, 19)}] ${entry.action.padEnd(10)} ${entry.taskId ?? ""} ${entry.detail}`
     );
   }
+}
+
+async function cmdNoteShow(taskId: string) {
+  if (!taskId) {
+    log.error("Usage: qap note show <task-id>");
+    return;
+  }
+  const { store } = await loadState();
+  const taskState = store.getTask(taskId);
+  if (!taskState) {
+    log.error(`Task ${taskId} not found.`);
+    return;
+  }
+  if (taskState.notes.length === 0) {
+    log.info(`No notes for ${taskId}.`);
+    return;
+  }
+  console.log(`\nNotes for ${taskId}:\n`);
+  for (const n of taskState.notes) {
+    console.log(`  ${n}`);
+  }
+}
+
+async function cmdSteer(subArgs: string[]) {
+  const sub = subArgs[0];
+
+  if (sub === "show") {
+    const ws = new WorkspaceManager();
+    const workspace = await ws.resolveWorkspaceFromCwd();
+    if (!workspace) {
+      log.error("No workspace found.");
+      return;
+    }
+    const activeId = await ws.getActiveProjectId(workspace.id);
+    if (!activeId) {
+      log.error("No active project.");
+      return;
+    }
+    const content = await ws.readSteering(workspace.id, activeId);
+    if (!content) {
+      log.info("No project steering notes yet.");
+      return;
+    }
+    console.log(content);
+    return;
+  }
+
+  if (sub === "project") {
+    const text = subArgs.slice(1).join(" ");
+    if (!text) {
+      log.error("Usage: qap steer project <text>");
+      return;
+    }
+    const ws = new WorkspaceManager();
+    const workspace = await ws.resolveWorkspaceFromCwd();
+    if (!workspace) {
+      log.error("No workspace found.");
+      return;
+    }
+    const activeId = await ws.getActiveProjectId(workspace.id);
+    if (!activeId) {
+      log.error("No active project.");
+      return;
+    }
+    await ws.appendSteering(workspace.id, activeId, text);
+    log.success("Steering note added.");
+    return;
+  }
+
+  log.error("Usage: qap steer [project <text> | show]");
 }
 
 async function cmdReportProject() {

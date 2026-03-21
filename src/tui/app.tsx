@@ -36,6 +36,23 @@ export function App() {
     });
   }, []);
 
+  // Auto-refresh polling (every 3s) for live execution visibility
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadTuiState().then((s) => {
+        if (s) {
+          setState((prev) => ({
+            ...s,
+            // Preserve user's active view and logs
+            activeView: prev.activeView,
+            logs: prev.logs,
+          }));
+        }
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Global keybindings — all state access via functional setState
   useKeyboard(useCallback((key: { name?: string; ctrl?: boolean }) => {
     if (key.name === "escape") {

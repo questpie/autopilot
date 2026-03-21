@@ -45,12 +45,18 @@ export async function handleCommand(
     case "status":
       return cmdStatus(currentState);
 
+    case "note":
+      return cmdNote(parts.slice(1), currentState);
+
+    case "steer":
+      return cmdSteer(parts.slice(1), currentState);
+
     case "refresh":
       return cmdRefresh();
 
     case "help":
       return {
-        log: `[${timestamp()}] Commands: /project [init|import|list|use <id>], /sessions, /session show <id>, /run, /run-task <id>, /status, /refresh, /help`,
+        log: `[${timestamp()}] Commands: /project [init|import|list|use <id>], /sessions, /session show <id>, /run, /run-task <id>, /status, /note [show] <task-id> [text], /steer [project <text>|show], /refresh, /help`,
       };
 
     default:
@@ -239,10 +245,12 @@ async function cmdRun(
     const runner = new Runner(config, {
       dryRun: args.includes("--dry-run"),
       maxTasks: 1,
+      workspaceId: currentState.workspace?.id,
+      projectId: currentState.activeProject?.id,
     });
 
     runner.runNext().then(async () => {
-      // State will refresh on next /refresh
+      // Auto-refresh will pick up changes
     });
 
     return {
@@ -276,10 +284,12 @@ async function cmdRunTask(
     const runner = new Runner(config, {
       dryRun: args.includes("--dry-run"),
       taskFilter: taskId,
+      workspaceId: currentState.workspace?.id,
+      projectId: currentState.activeProject?.id,
     });
 
     runner.run().then(async () => {
-      // State will refresh on next /refresh
+      // Auto-refresh will pick up changes
     });
 
     return {
@@ -305,6 +315,102 @@ async function cmdRefresh(): Promise<CommandResult> {
     newState: newState ?? undefined,
     log: `[${timestamp()}] Refreshed`,
   };
+}
+
+async function cmdNote(
+  args: string[],
+  currentState: TuiState
+): Promise<CommandResult> {
+  if (!currentState.configPath) {
+    return { log: `[${timestamp()}] No active config` };
+  }
+
+  const sub = args[0]?.toLowerCase();
+
+  if (sub === "show") {
+    const taskId = args[1];
+    if (!taskId) return { log: `[${timestamp()}] Usage: /note show <task-id>` };
+
+    try {
+      const { loadConfig } = await import("../config/loader.js");
+      const { Store } = await import("../storage/store.js");
+      const config = await loadConfig(currentState.configPath);
+      const store = new Store(config.project.rootDir, config.project.id);
+      await store.load();
+      for (const task of config.tasks) store.initTask(task.id);
+
+      const taskState = store.getTask(taskId);
+      if (!taskState) return { log: `[${timestamp()}] Task "${taskId}" not found` };
+      if (taskState.notes.length === 0) return { log: `[${timestamp()}] No notes for ${taskId}` };
+
+      const listing = taskState.notes.map((n) => `  ${n}`).join("\n");
+      return { log: `[${timestamp()}] Notes for ${taskId}:\n${listing}` };
+    } catch (err) {
+      return { log: `[${timestamp()}] Error: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  // /note <task-id> <text>
+  const taskId = args[0];
+  const text = args.slice(1).join(" ");
+  if (!taskId || !text) {
+    return { log: `[${timestamp()}] Usage: /note <task-id> <text> or /note show <task-id>` };
+  }
+
+  try {
+    const { loadConfig } = await import("../config/loader.js");
+    const { Store } = await import("../storage/store.js");
+    const config = await loadConfig(currentState.configPath);
+    const store = new Store(config.project.rootDir, config.project.id);
+    await store.load();
+    for (const task of config.tasks) store.initTask(task.id);
+
+    const taskState = store.getTask(taskId);
+    if (!taskState) return { log: `[${timestamp()}] Task "${taskId}" not found` };
+
+    taskState.notes.push(`[${new Date().toISOString()}] ${text}`);
+    store.setTask(taskId, taskState);
+    await store.save();
+
+    return { log: `[${timestamp()}] Note added to ${taskId}` };
+  } catch (err) {
+    return { log: `[${timestamp()}] Error: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+async function cmdSteer(
+  args: string[],
+  currentState: TuiState
+): Promise<CommandResult> {
+  if (!currentState.workspace || !currentState.activeProject) {
+    return { log: `[${timestamp()}] No active project` };
+  }
+
+  const sub = args[0]?.toLowerCase();
+  const ws = new WorkspaceManager();
+
+  if (sub === "show") {
+    const content = await ws.readSteering(
+      currentState.workspace.id,
+      currentState.activeProject.id
+    );
+    if (!content) return { log: `[${timestamp()}] No project steering notes yet` };
+    return { log: `[${timestamp()}] Steering:\n${content}` };
+  }
+
+  if (sub === "project") {
+    const text = args.slice(1).join(" ");
+    if (!text) return { log: `[${timestamp()}] Usage: /steer project <text>` };
+
+    await ws.appendSteering(
+      currentState.workspace.id,
+      currentState.activeProject.id,
+      text
+    );
+    return { log: `[${timestamp()}] Steering note added` };
+  }
+
+  return { log: `[${timestamp()}] Usage: /steer [project <text>|show]` };
 }
 
 // ── Helpers ──

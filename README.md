@@ -85,6 +85,12 @@ Execution:
   qap run-next                  Run just the next ready task
   qap run-task <id>             Run a specific task
 
+Steering:
+  qap note <task> <text>        Add a note to a task
+  qap note show <task>          Show notes for a task
+  qap steer project <text>      Add project steering note
+  qap steer show                Show project steering notes
+
 Options:
   --config <path>               Config file (auto-detected from workspace)
   --dry-run                     Preview without side effects
@@ -239,6 +245,78 @@ All data is stored locally under `~/.qap/`:
 ```
 
 The workspace ID is derived from the repo root path. You never need to know or type it — `qap` resolves it from your current directory.
+
+## Sessions
+
+A session records the full lifecycle of a single execution run. Each `qap run` or `qap run-task` creates a session that tracks:
+
+- `id`, `projectId`, `workspaceId` — identity
+- `startedAt`, `finishedAt` — timing
+- `status` — `running`, `completed`, `failed`, `aborted`
+- `provider` — which agent provider was used
+- `currentTaskId` — task currently being executed
+- `lastEventAt` — timestamp of the most recent event
+- `tasksCompleted`, `tasksFailed` — counters updated progressively
+- `eventLogPath`, `changelogPath` — paths to detailed logs
+- `notes` — session-level steering notes
+
+Sessions are updated **progressively** during execution, not just at the end. The TUI polls session state every 3 seconds to show live progress.
+
+## Steering Notes
+
+Steering notes let you inject guidance into the AI agent's prompt at runtime. There are three levels:
+
+### Project Steering
+
+Persistent notes that apply to every task in the project.
+
+```bash
+qap steer project "Focus on type safety, avoid any-casts"
+qap steer show
+```
+
+Stored in: `~/.qap/workspaces/<ws-id>/projects/<prj-id>/steering.md`
+
+### Task Notes
+
+Notes attached to a specific task. These are injected when that task runs.
+
+```bash
+qap note <task-id> "Use the new auth middleware from PR #42"
+qap note show <task-id>
+```
+
+### Session Notes
+
+Notes stored in the session record, injected during the current run.
+
+### Steering Precedence
+
+When rendering a prompt, steering notes are injected in this order:
+1. Project steering (broadest)
+2. Task notes (task-specific)
+3. Session notes (run-specific)
+
+All three are included in the `# Steering Notes` section of the execution prompt.
+
+## Live Monitoring
+
+The TUI auto-refreshes every 3 seconds during execution:
+
+- **Execution panel** — shows current running session, progress, active task
+- **Task counts** — ready, in-progress, done, failed
+- **Recent events** — last event timestamp
+
+No manual `/refresh` needed. The TUI detects running sessions automatically.
+
+### TUI Steering Commands
+
+| Command | Description |
+|---------|-------------|
+| `/note <task-id> <text>` | Add a note to a task |
+| `/note show <task-id>` | Show notes for a task |
+| `/steer project <text>` | Add project steering note |
+| `/steer show` | Show project steering notes |
 
 ## Task Model
 

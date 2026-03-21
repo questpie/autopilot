@@ -4,6 +4,7 @@ import { ProjectPicker } from "./project-picker.js";
 import { TasksPanel } from "./tasks-panel.js";
 import { SessionsPanel } from "./sessions-panel.js";
 import { LogPanel } from "./log-panel.js";
+import { RunPanel } from "./run-panel.js";
 import type { TuiState } from "../state.js";
 
 interface MainContentProps {
@@ -62,7 +63,12 @@ export function MainContent({
     );
   }
 
-  // Default: project view with tasks (also used as backdrop for help overlay)
+  // Default: project view with tasks + run panel
+  const runPanelH = Math.min(Math.floor(mainH * 0.3), 8);
+  const rightContentH = mainH - runPanelH;
+  const rightTopH = Math.floor(rightContentH * 0.5);
+  const rightBottomH = rightContentH - rightTopH;
+
   return (
     <box width={width} height={mainH} flexDirection="row">
       <box width={leftW} height={mainH} flexDirection="column">
@@ -80,9 +86,16 @@ export function MainContent({
       </box>
 
       <box width={rightW} height={mainH} flexDirection="column">
+        <RunPanel
+          width={rightW}
+          height={runPanelH}
+          runningSession={state.runningSession}
+          inProgressTasks={state.inProgressTasks}
+          taskCounts={state.taskCounts}
+        />
         <TasksPanel
           width={rightW}
-          height={topPanelH}
+          height={rightTopH}
           title="READY"
           tasks={state.readyTasks}
           emptyText="No ready tasks"
@@ -90,7 +103,7 @@ export function MainContent({
         />
         <TasksPanel
           width={rightW}
-          height={bottomPanelH}
+          height={rightBottomH}
           title="COMPLETED / FAILED"
           tasks={state.completedTasks}
           emptyText="No completed tasks"

@@ -8,7 +8,7 @@ import type {
 } from "./types.js";
 import { transition } from "./state.js";
 import { findNextTask, findReadyTasks, whatUnblocks } from "./readiness.js";
-import { renderPrompt } from "../prompts/renderer.js";
+import { renderPrompt, type SteeringContext } from "../prompts/renderer.js";
 import { ProviderRunner } from "../runners/provider.js";
 import { ClaudeRunner, DEFAULT_CLAUDE_CONFIG } from "../runners/claude.js";
 import { CodexRunner, DEFAULT_CODEX_CONFIG } from "../runners/codex.js";
@@ -18,6 +18,8 @@ import { LinearReporter } from "../reporters/linear.js";
 import { LiveStatusWriter } from "../reporters/live-status.js";
 import { EventLog } from "../reporters/events.js";
 import { log } from "../utils/logger.js";
+import { WorkspaceManager } from "../workspace/manager.js";
+import type { SessionMeta } from "../workspace/types.js";
 
 export interface RunnerOptions {
   dryRun?: boolean;
@@ -25,6 +27,8 @@ export interface RunnerOptions {
   maxTasks?: number;
   skipValidation?: boolean;
   noSync?: boolean;
+  workspaceId?: string;
+  projectId?: string;
 }
 
 export class Runner {
@@ -35,8 +39,11 @@ export class Runner {
   private liveStatus: LiveStatusWriter;
   private events: EventLog;
   private tasksCompleted = 0;
+  private tasksFailed = 0;
   private stopRequested = false;
   private syncEnabled: boolean;
+  private session: SessionMeta | null = null;
+  private wsManager: WorkspaceManager;
 
   constructor(
     private config: ProjectConfig,
@@ -82,6 +89,66 @@ export class Runner {
       permissionProfile: config.execution.defaultPermissionProfile,
       enabled: this.syncEnabled,
     });
+
+    this.wsManager = new WorkspaceManager();
+  }
+
+  private async initSession(): Promise<void> {
+    const wsId = this.opts.workspaceId;
+    const prjId = this.opts.projectId;
+    if (!wsId || !prjId) return;
+
+    const protoDir = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
+    this.session = {
+      id: this.store.getSessionId(),
+      projectId: prjId,
+      workspaceId: wsId,
+      startedAt: new Date().toISOString(),
+      status: "running",
+      provider: this.config.execution.defaultProvider,
+      taskCount: this.config.tasks.length,
+      tasksCompleted: 0,
+      tasksFailed: 0,
+      notes: [],
+      eventLogPath: `${protoDir}/events.jsonl`,
+      changelogPath: this.config.reporting?.sessionLogFile ??
+        `${this.config.project.rootDir}/.autopilot-changelog.md`,
+    };
+    await this.wsManager.saveSession(wsId, prjId, this.session);
+  }
+
+  private async updateSession(
+    patch: Partial<SessionMeta>
+  ): Promise<void> {
+    if (!this.session || !this.opts.workspaceId || !this.opts.projectId) return;
+    Object.assign(this.session, patch);
+    this.session.lastEventAt = new Date().toISOString();
+    await this.wsManager.saveSession(
+      this.opts.workspaceId,
+      this.opts.projectId,
+      this.session
+    );
+  }
+
+  private async buildSteering(taskId: string): Promise<SteeringContext> {
+    const ctx: SteeringContext = {};
+    const wsId = this.opts.workspaceId;
+    const prjId = this.opts.projectId;
+
+    if (wsId && prjId) {
+      ctx.projectSteering = await this.wsManager.readSteering(wsId, prjId);
+    }
+
+    const taskState = this.store.getTask(taskId);
+    if (taskState && taskState.notes.length > 0) {
+      ctx.taskNotes = taskState.notes;
+    }
+
+    if (this.session && this.session.notes.length > 0) {
+      ctx.sessionNotes = this.session.notes;
+    }
+
+    return ctx;
   }
 
   requestStop(): void {
@@ -100,6 +167,7 @@ export class Runner {
     await this.store.save();
 
     if (!this.opts.dryRun) {
+      await this.initSession();
       await this.liveStatus.write(this.config, this.store, "run-start");
       await this.events.emit({
         ts: new Date().toISOString(),
@@ -309,6 +377,7 @@ export class Runner {
       provider,
       profile,
     });
+    await this.updateSession({ currentTaskId: task.id });
 
     // Branch isolation
     if (task.branchName) {
@@ -335,11 +404,13 @@ export class Runner {
         { currentTask: task, provider, profile }
       );
 
+      const steering = await this.buildSteering(task.id);
       const implPrompt = await renderPrompt(
         this.config,
         task,
         "implement",
-        this.store.getAllTasks()
+        this.store.getAllTasks(),
+        steering
       );
 
       const implResult = await runner.run(implPrompt, {
@@ -414,6 +485,11 @@ export class Runner {
           taskState,
           implResult
         );
+        this.tasksFailed++;
+        await this.updateSession({
+          tasksFailed: this.tasksFailed,
+          currentTaskId: undefined,
+        });
         return;
       }
     }
@@ -547,6 +623,12 @@ export class Runner {
       agentProvider: provider,
     });
     await this.store.save();
+
+    this.tasksCompleted++;
+    await this.updateSession({
+      tasksCompleted: this.tasksCompleted,
+      currentTaskId: undefined,
+    });
   }
 
   private async runValidation(
@@ -565,11 +647,13 @@ export class Runner {
 
     log.task(task.id, "validating", `${label} validation...`);
 
+    const valSteering = await this.buildSteering(task.id);
     const prompt = await renderPrompt(
       this.config,
       task,
       mode,
-      this.store.getAllTasks()
+      this.store.getAllTasks(),
+      valSteering
     );
 
     const result = await runner.run(prompt, {
@@ -604,6 +688,11 @@ export class Runner {
       this.store.setTask(task.id, taskState);
       await this.store.save();
       log.task(task.id, "failed", `${label} validation failed.`);
+      this.tasksFailed++;
+      await this.updateSession({
+        tasksFailed: this.tasksFailed,
+        currentTaskId: undefined,
+      });
       return false;
     }
 
@@ -775,6 +864,16 @@ export class Runner {
       detail: `${done}/${total} done, ${failed} failed, ${blocked} blocked`,
     });
     await this.store.save();
+
+    // Close session record
+    const sessionStatus = failed > 0 ? "failed" : "completed";
+    await this.updateSession({
+      finishedAt: new Date().toISOString(),
+      status: sessionStatus as SessionMeta["status"],
+      tasksCompleted: done,
+      tasksFailed: failed,
+      currentTaskId: undefined,
+    });
   }
 
   getStore(): Store {

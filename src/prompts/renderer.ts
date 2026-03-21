@@ -8,6 +8,12 @@ import type {
 } from "../core/types.js";
 import { checkReadiness } from "../core/readiness.js";
 
+export interface SteeringContext {
+  projectSteering?: string | null;
+  taskNotes?: string[];
+  sessionNotes?: string[];
+}
+
 /**
  * Render a complete prompt for an agent, combining all context sources.
  */
@@ -15,9 +21,31 @@ export async function renderPrompt(
   config: ProjectConfig,
   task: TaskConfig,
   mode: PromptMode,
-  states: Record<string, TaskRunState>
+  states: Record<string, TaskRunState>,
+  steering?: SteeringContext
 ): Promise<string> {
   const parts: string[] = [];
+
+  // 0. Steering notes (project → task → session precedence)
+  if (steering) {
+    const steeringParts: string[] = [];
+    if (steering.projectSteering) {
+      steeringParts.push(`## Project Steering\n\n${steering.projectSteering}`);
+    }
+    if (steering.taskNotes && steering.taskNotes.length > 0) {
+      steeringParts.push(
+        `## Task Notes\n\n${steering.taskNotes.map((n) => `- ${n}`).join("\n")}`
+      );
+    }
+    if (steering.sessionNotes && steering.sessionNotes.length > 0) {
+      steeringParts.push(
+        `## Session Notes\n\n${steering.sessionNotes.map((n) => `- ${n}`).join("\n")}`
+      );
+    }
+    if (steeringParts.length > 0) {
+      parts.push(`# Steering Notes\n\n${steeringParts.join("\n\n")}`);
+    }
+  }
 
   // 1. Shared context
   const sharedCtx = await loadFileOrEmpty(config.prompts.sharedContext);
