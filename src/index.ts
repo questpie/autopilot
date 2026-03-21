@@ -33,6 +33,8 @@ import { checkForUpdate, getCurrentVersion } from "./update/checker.js";
 import { loadSettings } from "./update/settings.js";
 import { printUpdateBanner } from "./update/notify.js";
 import { applyUpdate, applyUpdateInBackground } from "./update/updater.js";
+import type { LogViewMode } from "./events/aggregator.js";
+import { aggregateEvents, formatEntry } from "./events/aggregator.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -148,6 +150,19 @@ async function main() {
     return cmdLogs();
   }
 
+  // Session subcommands
+  if (command === "session") {
+    return cmdSessionCli();
+  }
+
+  // Say / Interrupt
+  if (command === "say") {
+    return cmdSay();
+  }
+  if (command === "interrupt") {
+    return cmdInterrupt();
+  }
+
   // Engine commands (require config)
   switch (command) {
     case "status":
@@ -249,67 +264,79 @@ async function cmdUpdate(): Promise<void> {
 }
 
 function printHelp() {
-  console.log(`
-\x1b[38;2;183;0;255m■\x1b[0m \x1b[1mQUESTPIE AUTOPILOT\x1b[0m — local-first workflow engine for coding agents
+  const P = "\x1b[38;2;183;0;255m"; // purple
+  const B = "\x1b[1m"; // bold
+  const D = "\x1b[2m"; // dim
+  const R = "\x1b[0m"; // reset
 
-Usage: qap [command] [options]
+  console.log(`
+${P}■${R} ${B}QUESTPIE AUTOPILOT${R} — local-first workflow engine for coding agents
+
+${B}Usage:${R} qap [command] [options]
 
   qap                           Open terminal UI (default)
   qap ui                        Open terminal UI
 
-Project Management:
+${B}Session & Monitoring:${R}
+  qap session list              List sessions for active project
+  qap session show <id>         Show session details
+  qap session latest            Show most recent session
+  qap session current           Show running session
+  qap logs                      Show session logs ${D}(conversation view, latest session)${R}
+  qap logs --follow             Tail live session events
+  qap logs --session <id>       Logs for a specific session
+  qap logs --view <mode>        View mode: conversation, activity, raw
+  qap logs --all                Show all sessions ${D}(aggregate)${R}
+  qap say <text>                Send message to running session
+  qap interrupt [reason]        Interrupt running session
+
+${B}Project:${R}
   qap project init              Initialize new project (AI-assisted)
   qap project import            Import existing project artifacts
   qap project list              List projects in current workspace
   qap project use <id>          Set active project
 
-Workspace Management:
+${B}Workspace:${R}
   qap workspace add <path>      Register a repo as a workspace
   qap workspace list            List all known workspaces
   qap workspace show            Show current workspace info
 
-Updates:
-  qap update                    Check for new version
-  qap update --check            Force version check (ignore throttle)
-  qap update --apply            Download and install latest version
-
-Live Monitoring:
-  qap logs                      Show session events (latest session)
-  qap logs --follow             Tail live session events
-  qap logs --session <id>       Show events for a specific session
-
-Execution:
+${B}Execution:${R}
   qap status                    Show project status
   qap next                      Show next ready task(s)
   qap list                      List all tasks with states
   qap show <id>                 Show task or epic details
-  qap prompt <id> --mode <m>    Render prompt for a task
   qap run [--max <n>]           Run autonomous loop
   qap run-next                  Run just the next ready task
   qap run-task <id>             Run a specific task
   qap start <task>              Mark task as in_progress
   qap mark <task> <state>       Manually set task state
+
+${B}Notes & Steering:${R}
   qap note <task> <text>        Add a note to a task
   qap note show <task>          Show notes for a task
   qap steer project <text>      Add project steering note
   qap steer show                Show project steering notes
-  qap validate readiness        Check all dependency readiness
+
+${B}Reports:${R}
   qap report session            Show session changelog
   qap report project            Show project summary
-  qap report task <id>          Show detailed validation report for a task
+  qap report task <id>          Show validation report for a task
+  qap validate readiness        Check dependency readiness
 
-Options:
+${B}Updates:${R}
+  qap update                    Check for new version
+  qap update --apply            Download and install latest
+
+${B}Options:${R}
   --config <path>               Config file (auto-detected from workspace)
   --dry-run                     Show what would run (zero side effects)
   --no-sync                     Disable Linear sync
   --max <n>                     Max tasks to run in loop
   --skip-validation             Skip validation steps
-  --mode <mode>                 Prompt mode
 
-Behavior:
-  \`qap\` auto-detects the workspace from your current directory.
-  If a workspace has one project, it loads automatically.
-  If multiple projects exist, the TUI shows a project picker.
+${D}qap auto-detects the workspace from your current directory.${R}
+${D}If a workspace has one project, it loads automatically.${R}
 `);
 }
 
@@ -813,126 +840,432 @@ async function cmdSteer(subArgs: string[]) {
 }
 
 async function cmdLogs(): Promise<void> {
+  if (hasFlag("help") || args[1] === "--help") {
+    console.log(`
+\x1b[1mqap logs\x1b[0m — View session event logs
+
+\x1b[1mUsage:\x1b[0m
+  qap logs                         Conversation view, current/latest session
+  qap logs --follow                Tail live events
+  qap logs --session <id>          Specific session (supports partial ID)
+  qap logs --view <mode>           View mode: conversation, activity, raw
+  qap logs --all                   Aggregate all sessions
+
+\x1b[1mView modes:\x1b[0m
+  conversation   Assistant messages + system notifications (default)
+  activity       Tool calls, phase transitions, validations
+  raw            Full event stream, no aggregation
+
+\x1b[1mExamples:\x1b[0m
+  qap logs --follow --view activity
+  qap logs --session a1b2c3d4 --view raw
+`);
+    return;
+  }
+
   const follow = hasFlag("follow") || hasFlag("f");
+  const viewMode = (flag("view") ?? "conversation") as LogViewMode;
+  const showAll = hasFlag("all");
   const ws = new WorkspaceManager();
   const workspace = await ws.resolveWorkspaceFromCwd();
 
   if (!workspace) {
     log.error("No workspace found for current directory.");
+    log.info("Run: qap workspace add .");
     return;
   }
 
   const activeId = await ws.getActiveProjectId(workspace.id);
   if (!activeId) {
-    log.error("No active project. Use `qap project use <id>`.");
+    log.error("No active project.");
+    log.info("Run: qap project use <id>");
     return;
   }
 
   const sessions = await ws.listSessions(workspace.id, activeId);
-  const targetSessionId = flag("session");
-
-  // Find session: explicit --session, or latest running, or latest
-  let targetSession = targetSessionId
-    ? sessions.find((s) => s.id === targetSessionId || s.id.startsWith(targetSessionId))
-    : sessions.find((s) => s.status === "running") ?? sessions[0];
-
-  if (!targetSession) {
+  if (sessions.length === 0) {
     log.error("No sessions found.");
+    log.info("Run: qap run or qap run-task <id> to create a session.");
     return;
   }
 
-  // Build event log path
-  const eventsPath = targetSession.sessionEventsPath;
-  if (!eventsPath) {
-    // Fallback: try standard path
-    const { sessionEventLogPath } = await import("./events/session-log.js");
-    const fallbackPath = sessionEventLogPath(workspace.id, activeId, targetSession.id);
-    const { existsSync } = await import("node:fs");
-    if (!existsSync(fallbackPath)) {
-      log.error("No session events file found. Run with SDK backend to generate events.");
+  // Resolve target session(s)
+  const targetSessionId = flag("session");
+  let targetSessions: typeof sessions;
+
+  if (showAll) {
+    targetSessions = sessions;
+  } else if (targetSessionId) {
+    const found = sessions.find(
+      (s) => s.id === targetSessionId || s.id.startsWith(targetSessionId)
+    );
+    if (!found) {
+      const similar = sessions
+        .filter((s) => s.id.toLowerCase().includes(targetSessionId.toLowerCase()))
+        .slice(0, 3);
+      if (similar.length > 0) {
+        log.error(`Session "${targetSessionId}" not found. Did you mean: ${similar.map((s) => s.id.slice(0, 8)).join(", ")}?`);
+      } else {
+        log.error(`Session "${targetSessionId}" not found.`);
+        log.info(`Available: ${sessions.slice(0, 5).map((s) => s.id.slice(0, 8)).join(", ")}`);
+      }
       return;
     }
-    targetSession = { ...targetSession, sessionEventsPath: fallbackPath };
+    targetSessions = [found];
+  } else {
+    // Default: current running, or latest
+    const running = sessions.find((s) => s.status === "running");
+    targetSessions = [running ?? sessions[0]!];
   }
 
+  // Resolve event log paths
   const { SessionEventLog } = await import("./events/session-log.js");
-  const sessionLog = new SessionEventLog(targetSession.sessionEventsPath!);
+  const { sessionEventLogPath } = await import("./events/session-log.js");
+
+  for (const session of targetSessions) {
+    if (!session.sessionEventsPath) {
+      const fallbackPath = sessionEventLogPath(workspace.id, activeId, session.id);
+      if (existsSync(fallbackPath)) {
+        session.sessionEventsPath = fallbackPath;
+      }
+    }
+  }
+
+  const validSessions = targetSessions.filter((s) => s.sessionEventsPath);
+  if (validSessions.length === 0) {
+    log.error("No session events found. Run with SDK backend to generate events.");
+    return;
+  }
+
+  const target = validSessions[0]!;
+  const sessionLog = new SessionEventLog(target.sessionEventsPath!);
+
+  // Header
+  const modeLabel = viewMode.toUpperCase();
+  console.log(
+    `\x1b[38;2;183;0;255m■\x1b[0m Session ${target.id.slice(0, 8)} — ${target.status} — ${modeLabel}`
+  );
+  console.log();
 
   if (!follow) {
-    // One-shot: print all events
+    // One-shot: aggregate and print
     const events = await sessionLog.readAll();
     if (events.length === 0) {
       log.info("No events in session log.");
       return;
     }
-    for (const event of events) {
-      printEvent(event);
+    const entries = aggregateEvents(events, viewMode);
+    for (const entry of entries) {
+      console.log(formatEntry(entry));
+    }
+    console.log();
+    log.info(`${entries.length} entries (${events.length} raw events)`);
+    if (target.status === "running") {
+      log.info(`Tip: qap logs --follow --session ${target.id.slice(0, 8)}`);
     }
     return;
   }
 
-  // Follow mode: tail events
-  log.info(`Following session ${targetSession.id.slice(0, 8)} events... (Ctrl+C to stop)`);
+  // Follow mode: tail with aggregation
+  log.info(`Following session ${target.id.slice(0, 8)}... (Ctrl+C to stop)`);
 
-  const ac = sessionLog.tail((event) => {
-    printEvent(event);
-  });
+  if (viewMode === "raw") {
+    // Raw mode: stream events 1:1
+    const ac = sessionLog.tail((event) => {
+      const entries = aggregateEvents([event], "raw");
+      for (const entry of entries) {
+        console.log(formatEntry(entry));
+      }
+    });
 
-  // Stop on SIGINT
-  process.on("SIGINT", () => {
-    ac.abort();
-    process.exit(0);
-  });
+    process.on("SIGINT", () => {
+      ac.abort();
+      process.exit(0);
+    });
+  } else {
+    // Aggregated follow: batch events and aggregate
+    let buffer: import("./events/types.js").ProviderEvent[] = [];
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const flush = () => {
+      if (buffer.length === 0) return;
+      const entries = aggregateEvents(buffer, viewMode);
+      for (const entry of entries) {
+        console.log(formatEntry(entry));
+      }
+      buffer = [];
+    };
+
+    const ac = sessionLog.tail((event) => {
+      buffer.push(event);
+      if (flushTimer) clearTimeout(flushTimer);
+      flushTimer = setTimeout(flush, 150);
+    });
+
+    process.on("SIGINT", () => {
+      flush();
+      ac.abort();
+      process.exit(0);
+    });
+  }
 
   // Keep alive
   await new Promise(() => {});
 }
 
-function printEvent(event: any): void {
-  const ts = event.ts?.slice(11, 19) ?? "";
-  const type = event.type ?? "unknown";
-  const payload = event.payload ?? {};
+// ── Session CLI ──────────────────────────────────────────────
 
-  switch (type) {
-    case "session-start":
-      console.log(`\x1b[36m[${ts}]\x1b[0m \x1b[1mSESSION START\x1b[0m${payload.sdkSessionId ? ` (${payload.sdkSessionId})` : ""}`);
-      break;
-    case "session-end":
-      console.log(`\x1b[36m[${ts}]\x1b[0m \x1b[1mSESSION END\x1b[0m ${payload.reason ?? ""} (${((payload.duration ?? 0) / 1000).toFixed(1)}s)`);
-      break;
-    case "assistant-text-delta":
-      process.stdout.write(payload.text ?? "");
-      break;
-    case "assistant-message":
-      console.log(`\x1b[37m[${ts}]\x1b[0m ${(payload.text ?? "").slice(0, 120)}`);
-      break;
-    case "tool-call-start":
-      console.log(`\x1b[33m[${ts}]\x1b[0m \x1b[1m▸ ${payload.toolName}\x1b[0m${payload.toolId ? ` (${payload.toolId.slice(0, 8)})` : ""}`);
-      break;
-    case "tool-call-end":
-      console.log(`\x1b[32m[${ts}]\x1b[0m \x1b[1m✓ ${payload.toolName}\x1b[0m`);
-      break;
-    case "tool-call-fail":
-      console.log(`\x1b[31m[${ts}]\x1b[0m \x1b[1m✗ ${payload.toolName}\x1b[0m: ${payload.error?.slice(0, 100) ?? ""}`);
-      break;
-    case "notification":
-      console.log(`\x1b[34m[${ts}]\x1b[0m ${payload.message ?? ""}`);
-      break;
-    case "subagent-start":
-      console.log(`\x1b[35m[${ts}]\x1b[0m SUBAGENT START ${payload.agentId ?? ""}`);
-      break;
-    case "subagent-stop":
-      console.log(`\x1b[35m[${ts}]\x1b[0m SUBAGENT STOP ${payload.agentId ?? ""}`);
-      break;
-    case "result":
-      console.log(`\x1b[32m[${ts}]\x1b[0m \x1b[1mRESULT\x1b[0m (${payload.stopReason ?? ""}): ${(payload.text ?? "").slice(0, 200)}`);
-      break;
-    case "error":
-      console.log(`\x1b[31m[${ts}]\x1b[0m \x1b[1mERROR\x1b[0m: ${payload.message ?? ""}`);
-      break;
-    default:
-      console.log(`\x1b[90m[${ts}]\x1b[0m ${type}: ${JSON.stringify(payload).slice(0, 100)}`);
+async function cmdSessionCli(): Promise<void> {
+  const sub = args[1];
+
+  if (!sub || sub === "--help" || sub === "-h" || sub === "help") {
+    console.log(`
+\x1b[1mqap session\x1b[0m — Session management
+
+\x1b[1mUsage:\x1b[0m
+  qap session list              List sessions for active project
+  qap session show <id>         Show session details (supports partial ID)
+  qap session latest            Show most recent session
+  qap session current           Show currently running session
+
+\x1b[1mExamples:\x1b[0m
+  qap session list
+  qap session show a1b2c3d4
+  qap session latest
+`);
+    return;
   }
+
+  const ws = new WorkspaceManager();
+  const workspace = await ws.resolveWorkspaceFromCwd();
+  if (!workspace) {
+    log.error("No workspace found.");
+    log.info("Run: qap workspace add .");
+    return;
+  }
+
+  const activeId = await ws.getActiveProjectId(workspace.id);
+  if (!activeId) {
+    log.error("No active project.");
+    log.info("Run: qap project use <id>");
+    return;
+  }
+
+  const sessions = await ws.listSessions(workspace.id, activeId);
+
+  switch (sub) {
+    case "list":
+    case "ls": {
+      if (sessions.length === 0) {
+        log.info("No sessions yet.");
+        log.info("Run: qap run or qap run-task <id> to create one.");
+        return;
+      }
+      console.log(
+        `\x1b[38;2;183;0;255m■\x1b[0m \x1b[1mSessions\x1b[0m (${sessions.length})\n`
+      );
+      console.log(
+        `  ${"ID".padEnd(10)} ${"Status".padEnd(12)} ${"Action".padEnd(10)} ${"Started".padEnd(21)} ${"Duration".padEnd(10)} Tasks`
+      );
+      for (const s of sessions.slice(0, 20)) {
+        const icon = statusIcon(s.status);
+        const color = statusColor(s.status);
+        const dur = formatSessionDuration(s);
+        console.log(
+          `  ${color}${icon}${"\x1b[0m"} ${s.id.slice(0, 8).padEnd(9)} ${color}${s.status.padEnd(12)}${"\x1b[0m"} ${(s.triggerAction ?? "—").padEnd(10)} ${s.startedAt.slice(0, 19).padEnd(21)} ${dur.padEnd(10)} ${s.tasksCompleted}/${s.taskCount}${s.tasksFailed > 0 ? ` (${s.tasksFailed} failed)` : ""}`
+        );
+      }
+      console.log();
+      log.info("Use: qap session show <id> for details");
+      return;
+    }
+
+    case "show": {
+      const id = args[2];
+      if (!id) {
+        log.error("Usage: qap session show <id>");
+        return;
+      }
+      const session = sessions.find(
+        (s) => s.id === id || s.id.startsWith(id)
+      );
+      if (!session) {
+        const similar = sessions
+          .filter((s) => s.id.toLowerCase().includes(id.toLowerCase()))
+          .slice(0, 3);
+        if (similar.length > 0) {
+          log.error(`Session "${id}" not found. Did you mean: ${similar.map((s) => s.id.slice(0, 8)).join(", ")}?`);
+        } else {
+          log.error(`Session "${id}" not found.`);
+        }
+        return;
+      }
+      printSessionDetail(session);
+      return;
+    }
+
+    case "latest": {
+      if (sessions.length === 0) {
+        log.info("No sessions yet.");
+        return;
+      }
+      printSessionDetail(sessions[0]!);
+      return;
+    }
+
+    case "current": {
+      const running = sessions.find((s) => s.status === "running");
+      if (!running) {
+        log.info("No running session.");
+        if (sessions.length > 0) {
+          log.info(`Latest: ${sessions[0]!.id.slice(0, 8)} (${sessions[0]!.status})`);
+          log.info("Use: qap session latest");
+        }
+        return;
+      }
+      printSessionDetail(running);
+      return;
+    }
+
+    default: {
+      // Try to treat as session ID
+      const session = sessions.find(
+        (s) => s.id === sub || s.id.startsWith(sub)
+      );
+      if (session) {
+        printSessionDetail(session);
+        return;
+      }
+      log.error(`Unknown subcommand: ${sub}`);
+      log.info("Usage: qap session [list|show <id>|latest|current]");
+    }
+  }
+}
+
+function printSessionDetail(s: import("./workspace/types.js").SessionMeta): void {
+  const icon = statusIcon(s.status);
+  const color = statusColor(s.status);
+  const dur = formatSessionDuration(s);
+
+  console.log(
+    `\n\x1b[38;2;183;0;255m■\x1b[0m Session ${s.id.slice(0, 8)}`
+  );
+  console.log(
+    `  ${color}${icon} ${s.status.toUpperCase()}\x1b[0m (${dur})\n`
+  );
+  console.log(`  ${"ID".padEnd(16)} ${s.id}`);
+  console.log(`  ${"Started".padEnd(16)} ${s.startedAt.slice(0, 19).replace("T", " ")}`);
+  if (s.finishedAt) {
+    console.log(`  ${"Finished".padEnd(16)} ${s.finishedAt.slice(0, 19).replace("T", " ")}`);
+  }
+  console.log(`  ${"Provider".padEnd(16)} ${s.provider}`);
+  if (s.backend) console.log(`  ${"Backend".padEnd(16)} ${s.backend}`);
+  if (s.triggerAction) console.log(`  ${"Triggered by".padEnd(16)} ${s.triggerAction}`);
+  if (s.currentTaskId) console.log(`  ${"Current task".padEnd(16)} \x1b[36m${s.currentTaskId}\x1b[0m`);
+  if (s.currentPhase) console.log(`  ${"Phase".padEnd(16)} ${s.currentPhase}`);
+  if (s.activeTool) console.log(`  ${"Active tool".padEnd(16)} ${s.activeTool}`);
+
+  console.log();
+  console.log(`  \x1b[1mTasks\x1b[0m  \x1b[32m${s.tasksCompleted} completed\x1b[0m  \x1b[31m${s.tasksFailed} failed\x1b[0m  ${s.taskCount} total`);
+
+  if (s.notes && s.notes.length > 0) {
+    console.log(`\n  \x1b[1mNotes\x1b[0m`);
+    for (const note of s.notes) {
+      console.log(`    ${note}`);
+    }
+  }
+
+  console.log();
+  if (s.status === "running") {
+    log.info(`Next: qap logs --follow --session ${s.id.slice(0, 8)}`);
+  } else {
+    log.info(`Next: qap logs --session ${s.id.slice(0, 8)}`);
+  }
+}
+
+function statusIcon(status: string): string {
+  switch (status) {
+    case "completed": return "\u2713";
+    case "failed": return "\u2717";
+    case "running": return "\u25B8";
+    case "aborted": return "#";
+    default: return "\u00B7";
+  }
+}
+
+function statusColor(status: string): string {
+  switch (status) {
+    case "completed": return "\x1b[32m";
+    case "failed": return "\x1b[31m";
+    case "running": return "\x1b[36m";
+    case "aborted": return "\x1b[33m";
+    default: return "\x1b[90m";
+  }
+}
+
+function formatSessionDuration(s: import("./workspace/types.js").SessionMeta): string {
+  if (!s.finishedAt) return s.status === "running" ? "running" : "\u2014";
+  const ms = new Date(s.finishedAt).getTime() - new Date(s.startedAt).getTime();
+  return ms < 60000 ? `${(ms / 1000).toFixed(0)}s` : `${(ms / 60000).toFixed(1)}m`;
+}
+
+// ── Say / Interrupt ─────────────────────────────────────────
+
+async function cmdSay(): Promise<void> {
+  const text = args.slice(1).join(" ");
+  if (!text) {
+    log.error("Usage: qap say <message>");
+    log.info("Send a message to the running session.");
+    return;
+  }
+
+  const ws = new WorkspaceManager();
+  const workspace = await ws.resolveWorkspaceFromCwd();
+  if (!workspace) { log.error("No workspace found."); return; }
+
+  const activeId = await ws.getActiveProjectId(workspace.id);
+  if (!activeId) { log.error("No active project."); return; }
+
+  const sessions = await ws.listSessions(workspace.id, activeId);
+  const running = sessions.find((s) => s.status === "running");
+
+  if (running) {
+    // Save as session note (live messaging not yet supported by backends)
+    await ws.addSessionNote(workspace.id, activeId, running.id, `[user-message] ${text}`);
+    log.success(`Message saved to session ${running.id.slice(0, 8)}.`);
+    log.info("Note: Will be applied on next step (live input not yet supported).");
+  } else {
+    log.warn("No running session. Saving as project steering note.");
+    await ws.appendSteering(workspace.id, activeId, `[user-message] ${text}`);
+    log.success("Saved as steering note. Will be included in next session.");
+  }
+}
+
+async function cmdInterrupt(): Promise<void> {
+  const reason = args.slice(1).join(" ") || "User requested interrupt";
+
+  const ws = new WorkspaceManager();
+  const workspace = await ws.resolveWorkspaceFromCwd();
+  if (!workspace) { log.error("No workspace found."); return; }
+
+  const activeId = await ws.getActiveProjectId(workspace.id);
+  if (!activeId) { log.error("No active project."); return; }
+
+  const sessions = await ws.listSessions(workspace.id, activeId);
+  const running = sessions.find((s) => s.status === "running");
+
+  if (!running) {
+    log.info("No running session to interrupt.");
+    return;
+  }
+
+  // Save interrupt note and update session status
+  await ws.addSessionNote(workspace.id, activeId, running.id, `[interrupt] ${reason}`);
+  running.status = "aborted";
+  running.finishedAt = new Date().toISOString();
+  await ws.saveSession(workspace.id, activeId, running);
+  log.success(`Session ${running.id.slice(0, 8)} interrupted.`);
+  log.info(`Reason: ${reason}`);
 }
 
 async function cmdReportTask(taskId: string) {

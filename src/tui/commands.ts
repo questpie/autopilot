@@ -57,17 +57,23 @@ export async function handleCommand(
     case "steer":
       return cmdSteer(parts.slice(1), currentState);
 
+    case "say":
+      return cmdSay(parts.slice(1), currentState);
+
+    case "interrupt":
+      return cmdInterruptSession(parts.slice(1), currentState);
+
     case "refresh":
       return cmdRefresh();
 
     case "help":
       return {
-        log: `[${timestamp()}] Commands: /project, /sessions, /session [show|latest|current], /run, /run-next, /run-task <id>, /retry <id>, /status, /note, /steer, /refresh, /help | Views: 1=project 2=sessions 3=logs 4=help`,
+        log: `[${timestamp()}] Commands: /project, /sessions, /session, /run, /run-task <id>, /retry <id>, /say <text>, /interrupt, /status, /note, /steer, /refresh, /help | Views: 1=project 2=sessions 3=logs [c/a/r] 4=help`,
       };
 
     default:
       return {
-        log: `[${timestamp()}] Unknown command: ${action}. Type /help for available commands.`,
+        log: `[${timestamp()}] Unknown: "${action}". Try /help for commands.`,
       };
   }
 }
@@ -573,6 +579,88 @@ async function cmdSteer(
   }
 
   return { log: `[${timestamp()}] Usage: /steer [project <text>|show]` };
+}
+
+async function cmdSay(
+  args: string[],
+  currentState: TuiState
+): Promise<CommandResult> {
+  const text = args.join(" ");
+  if (!text) return { log: `[${timestamp()}] Usage: /say <message>` };
+
+  if (!currentState.workspace || !currentState.activeProject) {
+    return { log: `[${timestamp()}] No active project` };
+  }
+
+  const ws = new WorkspaceManager();
+  const sessions = await ws.listSessions(
+    currentState.workspace.id,
+    currentState.activeProject.id
+  );
+  const running = sessions.find((s) => s.status === "running");
+
+  if (running) {
+    await ws.addSessionNote(
+      currentState.workspace.id,
+      currentState.activeProject.id,
+      running.id,
+      `[user-message] ${text}`
+    );
+    return {
+      log: `[${timestamp()}] Message saved to session ${running.id.slice(0, 8)}. Will apply on next step.`,
+    };
+  }
+
+  // No running session — save as steering note
+  await ws.appendSteering(
+    currentState.workspace.id,
+    currentState.activeProject.id,
+    `[user-message] ${text}`
+  );
+  return {
+    log: `[${timestamp()}] No running session. Saved as steering note for next session.`,
+  };
+}
+
+async function cmdInterruptSession(
+  args: string[],
+  currentState: TuiState
+): Promise<CommandResult> {
+  if (!currentState.workspace || !currentState.activeProject) {
+    return { log: `[${timestamp()}] No active project` };
+  }
+
+  const ws = new WorkspaceManager();
+  const sessions = await ws.listSessions(
+    currentState.workspace.id,
+    currentState.activeProject.id
+  );
+  const running = sessions.find((s) => s.status === "running");
+
+  if (!running) {
+    return { log: `[${timestamp()}] No running session to interrupt` };
+  }
+
+  const reason = args.join(" ") || "User requested interrupt";
+  await ws.addSessionNote(
+    currentState.workspace.id,
+    currentState.activeProject.id,
+    running.id,
+    `[interrupt] ${reason}`
+  );
+  running.status = "aborted";
+  running.finishedAt = new Date().toISOString();
+  await ws.saveSession(
+    currentState.workspace.id,
+    currentState.activeProject.id,
+    running
+  );
+
+  const newState = await loadTuiState();
+  return {
+    newState: newState ?? undefined,
+    log: `[${timestamp()}] Session ${running.id.slice(0, 8)} interrupted: ${reason}`,
+  };
 }
 
 // ── Helpers ──

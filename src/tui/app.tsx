@@ -38,10 +38,11 @@ export function App() {
         if (s) {
           setState((prev) => ({
             ...s,
-            // Preserve user's active view, logs, and selected session
+            // Preserve user's active view, logs, selected session, and log view mode
             activeView: prev.activeView,
             logs: prev.logs,
             selectedSession: prev.selectedSession,
+            logViewMode: prev.logViewMode,
           }));
         }
       });
@@ -63,6 +64,17 @@ export function App() {
       loadTuiState().then((s) => {
         if (s) setState(s);
       });
+    }
+
+    // Log view mode toggle (c/a/r) — only in logs view
+    if (key.name === "c") {
+      setState((prev) => prev.activeView === "logs" ? { ...prev, logViewMode: "conversation" } : prev);
+    }
+    if (key.name === "a") {
+      setState((prev) => prev.activeView === "logs" ? { ...prev, logViewMode: "activity" } : prev);
+    }
+    if (key.name === "r") {
+      setState((prev) => prev.activeView === "logs" ? { ...prev, logViewMode: "raw" } : prev);
     }
 
     const tab = key.name ? TAB_MAP[key.name] : undefined;

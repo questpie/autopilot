@@ -1,10 +1,21 @@
 import { BRAND } from "../brand.js";
 import type { SessionMeta } from "../../workspace/types.js";
+import type { AggregatedEntry } from "../../events/aggregator.js";
 
 interface SessionDetailPanelProps {
   width: number;
   height: number;
   session: SessionMeta;
+  /** Condensed activity entries for the session */
+  activityEntries?: AggregatedEntry[];
+  /** Validation findings summary */
+  validationSummary?: string;
+  /** Remediation history */
+  remediationHistory?: Array<{
+    attempt: number;
+    result: string;
+    timestamp: string;
+  }>;
 }
 
 function statusColor(status: string): string {
@@ -25,15 +36,15 @@ function statusColor(status: string): string {
 function statusIcon(status: string): string {
   switch (status) {
     case "completed":
-      return "✓";
+      return "\u2713";
     case "failed":
-      return "✗";
+      return "\u2717";
     case "running":
-      return "▸";
+      return "\u25B8";
     case "aborted":
       return "#";
     default:
-      return "·";
+      return "\u00B7";
   }
 }
 
@@ -50,6 +61,9 @@ export function SessionDetailPanel({
   width,
   height,
   session,
+  activityEntries,
+  validationSummary,
+  remediationHistory,
 }: SessionDetailPanelProps) {
   const s = session;
   const duration =
@@ -57,7 +71,7 @@ export function SessionDetailPanel({
       ? `${((new Date(s.finishedAt).getTime() - new Date(s.startedAt).getTime()) / 1000).toFixed(1)}s`
       : s.status === "running"
         ? "running..."
-        : "—";
+        : "\u2014";
 
   return (
     <box
@@ -89,7 +103,7 @@ export function SessionDetailPanel({
             <Row label="Finished" value={s.finishedAt.slice(0, 19).replace("T", " ")} />
           )}
           <Row label="Provider" value={s.provider} color={BRAND.info} />
-          {s.backend && <Row label="Backend" value={s.backend} />}
+          {s.backend && <Row label="Backend" value={s.backend} color={s.backend === "sdk" ? BRAND.success : BRAND.fgDim} />}
           {s.triggerAction && (
             <Row label="Triggered by" value={s.triggerAction} color={BRAND.purple} />
           )}
@@ -152,6 +166,49 @@ export function SessionDetailPanel({
           </box>
         )}
 
+        {/* Validation findings */}
+        {validationSummary && (
+          <box flexDirection="column" paddingLeft={1} paddingTop={1}>
+            <text fg={BRAND.purple}>
+              <strong>VALIDATION</strong>
+            </text>
+            <text fg={BRAND.warning}>{validationSummary}</text>
+          </box>
+        )}
+
+        {/* Remediation history */}
+        {remediationHistory && remediationHistory.length > 0 && (
+          <box flexDirection="column" paddingLeft={1} paddingTop={1}>
+            <text fg={BRAND.purple}>
+              <strong>REMEDIATION</strong>
+            </text>
+            {remediationHistory.map((r, i) => (
+              <box key={i} flexDirection="row" gap={1}>
+                <text fg={BRAND.fgDim}>{`#${r.attempt}`}</text>
+                <text fg={r.result === "pass" ? BRAND.success : BRAND.warning}>{r.result}</text>
+                <text fg={BRAND.fgDim}>{r.timestamp.slice(0, 19)}</text>
+              </box>
+            ))}
+          </box>
+        )}
+
+        {/* Recent activity */}
+        {activityEntries && activityEntries.length > 0 && (
+          <box flexDirection="column" paddingLeft={1} paddingTop={1}>
+            <text fg={BRAND.purple}>
+              <strong>ACTIVITY</strong>
+            </text>
+            {activityEntries.slice(-10).map((entry, i) => (
+              <box key={i} flexDirection="row" gap={1}>
+                <text fg={BRAND.fgDim}>{`[${entry.ts}]`}</text>
+                <text fg={entry.kind === "error" ? BRAND.error : entry.kind === "assistant" ? BRAND.fg : BRAND.fgDim}>
+                  {entry.text.slice(0, 80)}
+                </text>
+              </box>
+            ))}
+          </box>
+        )}
+
         {/* Notes */}
         {s.notes && s.notes.length > 0 && (
           <box flexDirection="column" paddingLeft={1} paddingTop={1}>
@@ -176,10 +233,12 @@ export function SessionDetailPanel({
           </box>
         )}
 
-        {/* Navigation hint */}
+        {/* Actions hint */}
         <box paddingLeft={1} paddingTop={1}>
           <text fg={BRAND.fgMuted}>
-            {"Press 2 or /sessions to go back"}
+            {s.status === "running"
+              ? "/say <msg> send message · /interrupt stop · Esc back"
+              : "Esc or 2 to go back · 3 for logs"}
           </text>
         </box>
       </scrollbox>

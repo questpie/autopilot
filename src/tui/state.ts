@@ -2,6 +2,7 @@ import { WorkspaceManager } from "../workspace/manager.js";
 import type { WorkspaceMeta, ProjectMeta, SessionMeta } from "../workspace/types.js";
 import { checkForUpdate } from "../update/checker.js";
 import { getUpdateStatusText } from "../update/notify.js";
+import type { LogViewMode } from "../events/aggregator.js";
 
 // ── TUI State ───────────────────────────────────────────────
 
@@ -63,6 +64,10 @@ export interface TuiState {
   selectedSession: SessionMeta | null;
   /** All task entries (for autocomplete and retry) */
   allTasks: TaskEntry[];
+  /** Log view mode: conversation, activity, raw */
+  logViewMode: LogViewMode;
+  /** Raw provider events for aggregation in TUI */
+  rawSessionEvents?: import("../events/types.js").ProviderEvent[];
 }
 
 export function createInitialState(): TuiState {
@@ -91,6 +96,7 @@ export function createInitialState(): TuiState {
     runningSession: null,
     selectedSession: null,
     allTasks: [],
+    logViewMode: "conversation",
   };
 }
 
@@ -252,6 +258,7 @@ export async function loadTuiState(): Promise<TuiState | null> {
   // Detect running session and load live events
   let runningSession: RunningSession | null = null;
   let sessionEvents: string[] = [];
+  let rawSessionEvents: import("../events/types.js").ProviderEvent[] | undefined;
   const runningS = sessions.find((s) => s.status === "running");
   if (runningS) {
     runningSession = {
@@ -274,6 +281,8 @@ export async function loadTuiState(): Promise<TuiState | null> {
         const { SessionEventLog } = await import("../events/session-log.js");
         const sessionLog = new SessionEventLog(runningS.sessionEventsPath);
         const events = await sessionLog.readAll();
+        // Store raw events for aggregation in TUI
+        rawSessionEvents = events.slice(-200);
         // Take last 50 events, format for display
         sessionEvents = events.slice(-50).map((e) => {
           const ts = e.ts?.slice(11, 19) ?? "";
@@ -348,5 +357,7 @@ export async function loadTuiState(): Promise<TuiState | null> {
     runningSession,
     selectedSession: null,
     allTasks,
+    logViewMode: "conversation",
+    rawSessionEvents,
   };
 }

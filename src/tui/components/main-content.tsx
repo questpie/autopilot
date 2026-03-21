@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { BRAND } from "../brand.js";
 import { ProjectPanel } from "./project-panel.js";
 import { ProjectPicker } from "./project-picker.js";
@@ -7,6 +8,8 @@ import { SessionDetailPanel } from "./session-detail-panel.js";
 import { LogPanel } from "./log-panel.js";
 import { RunPanel } from "./run-panel.js";
 import type { TuiState } from "../state.js";
+import { aggregateEvents } from "../../events/aggregator.js";
+import type { ProviderEvent } from "../../events/types.js";
 
 interface MainContentProps {
   state: TuiState;
@@ -19,6 +22,20 @@ interface MainContentProps {
   onSessionSelect?: (sessionId: string) => void;
 }
 
+/**
+ * Parse raw session event strings back into minimal ProviderEvent objects
+ * for aggregation. This is a best-effort conversion from the display strings
+ * stored in state.sessionEvents.
+ */
+function parseSessionEventsForAggregation(
+  rawEvents: string[],
+  _mode: TuiState["logViewMode"]
+) {
+  // sessionEvents are already formatted strings — we aggregate from raw events
+  // when available. For now, return the strings as-is for the fallback path.
+  return rawEvents;
+}
+
 export function MainContent({
   state,
   width,
@@ -29,6 +46,25 @@ export function MainContent({
   bottomPanelH,
   onSessionSelect,
 }: MainContentProps) {
+  // Compute aggregated entries for the log panel based on view mode
+  const aggregatedEntries = useMemo(() => {
+    if (state.rawSessionEvents && state.rawSessionEvents.length > 0) {
+      return aggregateEvents(state.rawSessionEvents, state.logViewMode);
+    }
+    return undefined;
+  }, [state.rawSessionEvents, state.logViewMode]);
+
+  // Activity entries for session detail
+  const activityEntries = useMemo(() => {
+    if (state.rawSessionEvents && state.rawSessionEvents.length > 0) {
+      return aggregateEvents(state.rawSessionEvents, "activity").slice(-15);
+    }
+    return undefined;
+  }, [state.rawSessionEvents]);
+
+  // Session ID for log panel header
+  const logSessionId = state.runningSession?.id ?? state.selectedSession?.id;
+
   if (state.needsProjectPicker) {
     return (
       <box width={width} height={mainH} flexDirection="row">
@@ -49,6 +85,7 @@ export function MainContent({
           width={width}
           height={mainH}
           session={state.selectedSession}
+          activityEntries={activityEntries}
         />
       </box>
     );
@@ -68,17 +105,16 @@ export function MainContent({
   }
 
   if (state.activeView === "logs") {
-    // Show session events if available, otherwise show general logs
-    const logsToShow = state.sessionEvents.length > 0
-      ? state.sessionEvents
-      : state.logs;
     return (
       <box width={width} height={mainH} flexDirection="row">
         <LogPanel
           width={width}
           height={mainH}
-          logs={logsToShow}
-          title={state.sessionEvents.length > 0 ? " SESSION EVENTS " : " LOG "}
+          logs={state.sessionEvents.length > 0 ? state.sessionEvents : state.logs}
+          title={` LOG${logSessionId ? ` ${logSessionId.slice(0, 8)}` : ""} ${state.logViewMode.toUpperCase()} `}
+          viewMode={state.logViewMode}
+          aggregatedEntries={aggregatedEntries}
+          sessionId={logSessionId}
         />
       </box>
     );
@@ -104,6 +140,9 @@ export function MainContent({
           height={bottomPanelH}
           logs={state.sessionEvents.length > 0 ? state.sessionEvents : state.logs}
           title={state.sessionEvents.length > 0 ? " EVENTS " : " LOG "}
+          viewMode={state.logViewMode}
+          aggregatedEntries={aggregatedEntries}
+          sessionId={logSessionId}
         />
       </box>
 

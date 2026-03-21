@@ -75,7 +75,7 @@ export interface NotificationEvent extends ProviderEventBase {
 
 export interface SubagentStartEvent extends ProviderEventBase {
   type: "subagent-start";
-  payload: { agentId: string; agentType?: string };
+  payload: { agentId: string; agentType?: string; description?: string };
 }
 
 export interface SubagentStopEvent extends ProviderEventBase {

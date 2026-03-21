@@ -27,6 +27,8 @@ const COMMAND_DEFS: CommandDef[] = [
   { command: "/status", description: "Show task counts" },
   { command: "/note", args: "<task-id> <text>", description: "Add note to task" },
   { command: "/note show", args: "<task-id>", description: "Show task notes" },
+  { command: "/say", args: "<text>", description: "Send message to session" },
+  { command: "/interrupt", args: "[reason]", description: "Interrupt running session" },
   { command: "/steer project", args: "<text>", description: "Add steering note" },
   { command: "/steer show", description: "Show steering notes" },
   { command: "/refresh", description: "Reload state" },
