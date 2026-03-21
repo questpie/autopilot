@@ -24,6 +24,8 @@ export interface ImportOptions {
   provider?: "claude" | "codex";
   prompts?: string;
   linearIssue?: string;
+  /** Allow degraded import (AI/generic fallback) even when backlog.json is absent */
+  degradedImport?: boolean;
 }
 
 /**
@@ -72,6 +74,7 @@ function buildInitPrompt(opts: {
   repoRoot: string;
   projectId: string;
   projectName: string;
+  provider: string;
   outputDir: string;
   planContent?: string | null;
   validatedPlanContent?: string | null;
@@ -95,7 +98,7 @@ Create the following files in the output directory:
 1. \`autopilot.config.ts\` — A valid TypeScript config file.
 2. \`handoff.md\` — A summary of what was analyzed, tasks/epics created, key decisions, gaps/assumptions.
 
-${configShapeInstructions(opts.projectId, opts.projectName, opts.projectName.includes("codex") ? "codex" : "claude")}
+${configShapeInstructions(opts.projectId, opts.projectName, opts.provider)}
 
 ## Rules
 - Only create/update files inside the output directory
@@ -131,6 +134,7 @@ function buildImportPrompt(opts: {
   repoRoot: string;
   projectId: string;
   projectName: string;
+  provider: string;
   outputDir: string;
   promptFiles: string[];
   linearIssue?: string;
@@ -154,7 +158,7 @@ Create the following files in the output directory:
 1. \`autopilot.config.ts\` — A valid TypeScript config that references the imported prompts.
 2. \`handoff.md\` — Import summary.
 
-${configShapeInstructions(opts.projectId, opts.projectName, "claude")}
+${configShapeInstructions(opts.projectId, opts.projectName, opts.provider)}
 
 ## Rules
 - Only create/update files inside the output directory
@@ -403,6 +407,34 @@ export default config;
 }
 
 /**
+ * Filter prompt files for degraded import — exclude non-task files.
+ * Only numbered task/phase prompts are kept. Shared context, READMEs,
+ * plan docs, backlog manifests, and generic docs are excluded.
+ */
+const NON_TASK_PATTERNS = [
+  /^readme/i,
+  /^shared[-_]?context/i,
+  /^00[-_]/,
+  /^backlog\.json$/i,
+  /^project\.manifest\.json$/i,
+  /^v\d+[-_]/i,               // plan docs like v3-execution-plan.md
+  /[-_]plan\./i,              // *-plan.md, *_plan.md
+  /^changelog/i,
+  /^handoff/i,
+  /^\./, // hidden files
+];
+
+function filterTaskPromptFiles(files: string[]): string[] {
+  return files.filter((f) => {
+    const name = basename(f);
+    // Only .md files
+    if (!name.endsWith(".md")) return false;
+    // Exclude known non-task patterns
+    return !NON_TASK_PATTERNS.some((p) => p.test(name));
+  });
+}
+
+/**
  * Validate a generated config by loading it through the real loader.
  * Returns true if valid, false if broken.
  */
@@ -471,6 +503,7 @@ export async function initProject(opts: InitOptions): Promise<{
     repoRoot,
     projectId,
     projectName,
+    provider,
     outputDir,
     planContent,
     validatedPlanContent,
@@ -621,27 +654,43 @@ export async function importProject(
     log.info(`Copied ${promptFiles.length} prompt file(s)`);
   }
 
-  // ── Strategy: backlog.json > AI > generic fallback ────────
+  // ── Strategy: backlog.json (hard-fail) > degraded (AI > fallback) ────
   const configPath = `${outputDir}/autopilot.config.ts`;
-  let importMode: "backlog" | "ai" | "fallback" = "fallback";
+  let importMode: "backlog" | "ai" | "degraded" = "degraded";
 
-  // 1. Try backlog manifest (issue-level import)
-  const backlog = promptsDir ? await detectBacklog(promptsDir) : null;
-  if (backlog) {
-    log.info(`Compiling backlog: ${backlog.tasks.length} tasks, ${backlog.epics.length} epics`);
-    const compiled = compileBacklogToConfig(backlog, repoRoot, outputDir, provider);
-    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", compiled);
-    importMode = "backlog";
+  // 1. Detect backlog manifest — hard-fail if present but invalid
+  let backlog: Awaited<ReturnType<typeof detectBacklog>> = null;
+  if (promptsDir) {
+    try {
+      backlog = await detectBacklog(promptsDir);
+    } catch (err) {
+      // backlog.json exists but is invalid — hard fail, never silently degrade
+      await ws.deleteProject(workspace.id, projectId);
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Invalid backlog.json in ${promptsDir}: ${msg}\n` +
+        `Fix the backlog manifest or use --degraded-import to skip it.`
+      );
+    }
   }
 
-  // 2. Try AI-assisted import (only if no backlog)
-  if (!backlog) {
+  if (backlog) {
+    // Backlog found and valid — compile deterministically
+    log.info(`Compiling backlog: ${backlog.manifest.tasks.length} tasks, ${backlog.manifest.epics.length} epics`);
+    const compiled = compileBacklogToConfig(backlog.manifest, repoRoot, outputDir, provider);
+    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", compiled);
+    importMode = "backlog";
+  } else if (opts.degradedImport) {
+    // No backlog — degraded mode explicitly requested
+    log.warn("No backlog manifest found — using degraded import (AI/fallback)...");
+
     const prompt = buildImportPrompt({
       repoRoot,
       projectId,
       projectName,
+      provider,
       outputDir,
-      promptFiles,
+      promptFiles: filterTaskPromptFiles(promptFiles),
       linearIssue: opts.linearIssue,
       repoFiles: repoFiles.slice(0, 30),
     });
@@ -650,60 +699,52 @@ export async function importProject(
     if (result.success && existsSync(configPath)) {
       importMode = "ai";
     }
-  }
 
-  // 3. Generic fallback if nothing produced a config
-  if (!existsSync(configPath)) {
-    log.warn("No backlog and AI unavailable — generating phase-level fallback...");
-    const fallbackConfig = generateFallbackConfig(
-      projectId,
-      projectName,
-      repoRoot,
-      provider,
-      promptFiles,
-      outputDir
+    // Generic fallback if AI didn't produce config
+    if (!existsSync(configPath)) {
+      log.warn("AI unavailable — generating degraded fallback config...");
+      const fallbackConfig = generateFallbackConfig(
+        projectId,
+        projectName,
+        repoRoot,
+        provider,
+        filterTaskPromptFiles(promptFiles),
+        outputDir
+      );
+      await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", fallbackConfig);
+    }
+  } else {
+    // No backlog, no --degraded-import flag — fail
+    await ws.deleteProject(workspace.id, projectId);
+    throw new Error(
+      `No backlog.json found in ${promptsDir ?? "prompts directory"}.\n` +
+      `Create a backlog.json manifest or use --degraded-import for AI/fallback import.`
     );
-    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", fallbackConfig);
-    importMode = "fallback";
   }
 
-  // Validate generated config — replace with fallback if broken
+  // Validate generated config
   const configValid = await validateGeneratedConfig(configPath);
   if (!configValid) {
-    log.warn(`${importMode} config is invalid — replacing with phase-level fallback...`);
-    const fallbackConfig = generateFallbackConfig(
-      projectId,
-      projectName,
-      repoRoot,
-      provider,
-      promptFiles,
-      outputDir
+    await ws.deleteProject(workspace.id, projectId);
+    throw new Error(
+      `Generated config for "${projectId}" failed validation. ` +
+      (importMode === "backlog"
+        ? `Check backlog.json for errors.`
+        : `AI-generated config is invalid. Fix prompts or provide a backlog.json.`)
     );
-    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", fallbackConfig);
-    importMode = "fallback";
-
-    // Validate fallback too
-    const fallbackValid = await validateGeneratedConfig(configPath);
-    if (!fallbackValid) {
-      throw new Error(
-        `Failed to generate a valid config for project "${projectId}". Config validation failed.`
-      );
-    }
   }
 
+  // Write handoff
   const handoffExists = existsSync(`${outputDir}/handoff.md`);
   if (!handoffExists) {
     const details = [
       `Repo: ${repoRoot}`,
       `Provider: ${provider}`,
       `Prompt files: ${promptFiles.length}`,
-      `Import mode: ${importMode}${importMode === "backlog" ? ` (${backlog!.tasks.length} tasks)` : ""}`,
+      `Import mode: ${importMode}${importMode === "backlog" ? ` (${backlog!.manifest.tasks.length} tasks)` : ""}`,
       opts.linearIssue
         ? `Linear issue: ${opts.linearIssue}`
         : "No Linear context",
-      configValid
-        ? "Config validated successfully"
-        : "Config was invalid — used fallback",
     ];
     const handoff = generateFallbackHandoff(
       projectId,

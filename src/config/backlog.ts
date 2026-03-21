@@ -50,21 +50,19 @@ export interface BacklogTask {
 
 // ── Loader ──────────────────────────────────────────────────
 
+/**
+ * Load and validate a backlog manifest. Throws on invalid manifest.
+ * Returns null only if the file does not exist.
+ */
 export async function loadBacklog(
   path: string
 ): Promise<BacklogManifest | null> {
   if (!existsSync(path)) return null;
 
-  try {
-    const raw = await readFile(path, "utf-8");
-    const manifest: BacklogManifest = JSON.parse(raw);
-    validateManifest(manifest);
-    return manifest;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log.warn(`Failed to load backlog manifest: ${msg}`);
-    return null;
-  }
+  const raw = await readFile(path, "utf-8");
+  const manifest: BacklogManifest = JSON.parse(raw);
+  validateManifest(manifest);
+  return manifest;
 }
 
 function validateManifest(m: BacklogManifest): void {
@@ -92,6 +90,26 @@ function validateManifest(m: BacklogManifest): void {
         throw new Error(`Task ${task.id} depends on unknown task ${dep}`);
       }
     }
+  }
+
+  // Cycle detection via DFS
+  const visited = new Set<string>();
+  const inStack = new Set<string>();
+  const taskMap = new Map(m.tasks.map((t) => [t.id, t]));
+
+  function dfs(id: string): void {
+    if (inStack.has(id)) throw new Error(`Dependency cycle involving ${id}`);
+    if (visited.has(id)) return;
+    inStack.add(id);
+    for (const dep of taskMap.get(id)?.dependsOn ?? []) {
+      dfs(dep);
+    }
+    inStack.delete(id);
+    visited.add(id);
+  }
+
+  for (const task of m.tasks) {
+    dfs(task.id);
   }
 }
 
@@ -187,17 +205,22 @@ export default config;
 
 /**
  * Try to detect a backlog.json in a prompts directory.
+ * Returns { manifest, fileName } if found, null if no manifest file exists.
+ * Throws if file exists but is invalid (hard-fail policy).
  */
 export async function detectBacklog(
   promptsDir: string
-): Promise<BacklogManifest | null> {
+): Promise<{ manifest: BacklogManifest; fileName: string } | null> {
   const candidates = ["backlog.json", "project.manifest.json"];
   for (const name of candidates) {
     const path = resolve(promptsDir, name);
+    if (!existsSync(path)) continue;
+
+    // File exists — must be valid or we hard-fail
     const manifest = await loadBacklog(path);
     if (manifest) {
       log.info(`Found backlog manifest: ${name}`);
-      return manifest;
+      return { manifest, fileName: name };
     }
   }
   return null;

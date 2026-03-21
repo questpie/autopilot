@@ -24,6 +24,7 @@ Options:
   --validated-plan <file>       Validated plan for init
   --prompts <dir>               Prompt directory for import
   --linear-issue <url>          Linear issue for import
+  --degraded-import             Allow AI/fallback import (no backlog.json)
   --help                        Show this help
 `);
 }
@@ -94,11 +95,12 @@ Options:
   --provider <claude|codex>     Agent provider (default: claude)
   --prompts <dir>               Directory containing prompt files
   --linear-issue <url>          Linear issue URL for context
+  --degraded-import             Allow AI/fallback import when no backlog.json
   --help                        Show this help
 
-The import command takes existing prompt files or issue context and
-generates a local project workspace. An AI agent normalizes the
-artifacts into the format QUESTPIE Autopilot needs.
+Import uses backlog.json as machine truth when present. If backlog.json
+exists but is invalid, the import fails hard. Without backlog.json,
+import requires --degraded-import to proceed with AI/fallback mode.
 `);
     return;
   }
@@ -110,6 +112,7 @@ artifacts into the format QUESTPIE Autopilot needs.
     | "codex";
   const prompts = flagValue(args, "prompts");
   const linearIssue = flagValue(args, "linear-issue");
+  const degradedImport = args.includes("--degraded-import");
 
   try {
     const { meta, workspaceId } = await importProject({
@@ -118,6 +121,7 @@ artifacts into the format QUESTPIE Autopilot needs.
       provider,
       prompts,
       linearIssue,
+      degradedImport,
     });
 
     log.divider();

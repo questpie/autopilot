@@ -411,15 +411,34 @@ describe("Backlog manifest — load and validate", () => {
     expect(manifest).toBeNull();
   });
 
-  test("loadBacklog rejects invalid manifest (unknown epic ref)", async () => {
+  test("loadBacklog throws on invalid manifest (unknown epic ref)", async () => {
     const bad = {
       ...MINI_BACKLOG,
       tasks: [{ id: "T-1", title: "x", epicId: "NOPE", kind: "implementation", track: "main" }],
     };
     const path = `${TEST_HOME}/bad-backlog.json`;
     await writeFile(path, JSON.stringify(bad));
-    const manifest = await loadBacklog(path);
-    expect(manifest).toBeNull();
+    await expect(loadBacklog(path)).rejects.toThrow("unknown epic");
+  });
+
+  test("loadBacklog throws on cyclic dependencies", async () => {
+    const cyclic: BacklogManifest = {
+      ...MINI_BACKLOG,
+      tasks: [
+        { id: "A", title: "a", epicId: "EPIC-A", dependsOn: ["B"] },
+        { id: "B", title: "b", epicId: "EPIC-A", dependsOn: ["A"] },
+      ],
+    };
+    const path = `${TEST_HOME}/cyclic-backlog.json`;
+    await writeFile(path, JSON.stringify(cyclic));
+    await expect(loadBacklog(path)).rejects.toThrow("cycle");
+  });
+
+  test("detectBacklog throws when backlog.json exists but is invalid", async () => {
+    const dir = `${TEST_HOME}/bad-prompts`;
+    await mkdir(dir, { recursive: true });
+    await writeFile(`${dir}/backlog.json`, '{ "version": 1, "epics": [], "tasks": [] }');
+    await expect(detectBacklog(dir)).rejects.toThrow();
   });
 
   test("detectBacklog finds backlog.json in prompts dir", async () => {
@@ -427,9 +446,10 @@ describe("Backlog manifest — load and validate", () => {
     await mkdir(dir, { recursive: true });
     await writeFile(`${dir}/backlog.json`, JSON.stringify(MINI_BACKLOG));
 
-    const manifest = await detectBacklog(dir);
-    expect(manifest).not.toBeNull();
-    expect(manifest!.project.id).toBe("test-backlog");
+    const result = await detectBacklog(dir);
+    expect(result).not.toBeNull();
+    expect(result!.manifest.project.id).toBe("test-backlog");
+    expect(result!.fileName).toBe("backlog.json");
   });
 });
 

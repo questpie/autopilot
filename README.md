@@ -109,7 +109,7 @@ qap project import --help
 Run `qap` to open the terminal UI.
 
 ```
-┌── ■ QUESTPIE AUTOPILOT v0.2.0 │ WS my-repo │ PRJ v3-rollout ── 12T 3R 5D 0F ──┐
+┌── ■ QUESTPIE AUTOPILOT v0.4.0 │ WS my-repo │ PRJ v3-rollout ── 12T 3R 5D 0F ──┐
 │ [PROJECT]  SESSIONS   LOGS   HELP                                                │
 ├─ PROJECT ─────────────┬─ READY ─────────────────────────────────────────────────-─┤
 │ Name    v3-rollout     │ ● TASK-007  [main] Implement auth module                │
@@ -159,40 +159,44 @@ Run `qap` to open the terminal UI.
 | `Ctrl+L` | Refresh state |
 | `Ctrl+C` | Exit |
 
-## AI-Assisted Setup
+## Project Setup
 
-Project setup is AI-assisted by default. You point Autopilot at your repo and context, and a Claude agent generates the project workspace.
+### Backlog-Driven Import (Recommended)
+
+Place a `backlog.json` alongside your prompt files. This is the primary import path — deterministic, no AI needed:
+
+```bash
+qap project import \
+  --name v3-rollout \
+  --prompts /path/to/prompt-directory
+```
+
+The `backlog.json` defines real issue IDs, dependencies, epic groupings, and prompt file mappings. When present, it is compiled directly into a qap-native config. If it exists but is invalid, the import **fails hard** — it never silently downgrades.
+
+See [Backlog Manifest](#backlog-manifest) for the format.
+
+### Degraded Import (AI/Fallback)
+
+Without a `backlog.json`, import requires the `--degraded-import` flag:
+
+```bash
+qap project import \
+  --name my-feature \
+  --prompts ./prompts \
+  --degraded-import
+```
+
+In degraded mode, an AI agent attempts to generate the config from prompt files. If the agent is unavailable, a minimal fallback config is created with generic task IDs.
 
 ### Initialize from Planning Artifacts
 
 ```bash
 qap project init \
-  --repo /path/to/repo \
   --name my-feature \
-  --plan /path/to/plan.md \
-  --provider claude
+  --plan /path/to/plan.md
 ```
 
-### Import Existing Prompts
-
-```bash
-qap project import \
-  --repo /path/to/repo \
-  --name v3-rollout \
-  --prompts /path/to/prompt-directory \
-  --provider claude
-```
-
-The agent reads your repo structure and artifacts, then generates:
-- `autopilot.config.ts` — task graph with dependencies
-- `handoff.md` — setup summary
-- prompt templates for each task
-
-If the AI agent is unavailable, a fallback config is generated automatically.
-
-The project name is always an explicit input (`--name`) or inferred from context — never hardcoded to the repo basename.
-
-### Manual Config (Fallback)
+### Manual Config
 
 Advanced users can hand-author `autopilot.config.ts` and pass it with `--config`:
 
@@ -222,6 +226,46 @@ const config: ProjectConfig = {
 
 export default config;
 ```
+
+## Backlog Manifest
+
+A `backlog.json` file placed in the prompts directory defines the full task graph:
+
+```json
+{
+  "version": 1,
+  "project": {
+    "id": "my-project",
+    "name": "My Project",
+    "tracker": { "provider": "linear", "projectId": "MY_PROJECT" }
+  },
+  "sharedContext": "00-shared-context.md",
+  "epics": [
+    { "id": "EPIC-A", "title": "Phase A", "track": "main" }
+  ],
+  "tasks": [
+    {
+      "id": "QUE-100",
+      "title": "Gate PoC",
+      "epicId": "EPIC-A",
+      "kind": "poc",
+      "track": "gate",
+      "promptFile": "01-phase-a.md"
+    },
+    {
+      "id": "QUE-101",
+      "title": "Main implementation",
+      "epicId": "EPIC-A",
+      "kind": "implementation",
+      "track": "main",
+      "dependsOn": ["QUE-100"],
+      "promptFile": "01-phase-a.md"
+    }
+  ]
+}
+```
+
+When `backlog.json` is present, `qap project import` compiles it directly into a qap-native config. No AI agent is spawned. If the manifest is invalid (bad JSON, missing fields, dependency cycles), the import fails immediately.
 
 ## Local Storage Layout
 

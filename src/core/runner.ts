@@ -329,11 +329,13 @@ export class Runner {
 
     // ── Dry run ─────────────────────────────────────────────
     if (this.opts.dryRun) {
+      const steering = await this.buildSteering(task.id);
       const prompt = await renderPrompt(
         this.config,
         task,
         "implement",
-        this.store.getAllTasks()
+        this.store.getAllTasks(),
+        steering
       );
       log.info(
         `[DRY RUN] Would send ${prompt.length} chars to ${provider} [${profile}]`
