@@ -1,6 +1,6 @@
 {
   "name": "@questpie/autopilot",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Local-first workflow engine for coding agents",
   "type": "module",
   "private": false,
