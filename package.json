@@ -24,11 +24,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/questpie/questpie-autopilot.git"
+    "url": "git+https://github.com/questpie/autopilot.git"
   },
-  "homepage": "https://github.com/questpie/questpie-autopilot#readme",
+  "homepage": "https://github.com/questpie/autopilot#readme",
   "bugs": {
-    "url": "https://github.com/questpie/questpie-autopilot/issues"
+    "url": "https://github.com/questpie/autopilot/issues"
   },
   "publishConfig": {
     "access": "public"
