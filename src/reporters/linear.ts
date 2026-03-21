@@ -4,6 +4,8 @@ import type {
   AgentResult,
   ProjectConfig,
   PermissionProfile,
+  TrackerSyncResult,
+  TrackerSyncOutcome,
 } from "../core/types.js";
 import type { ProviderRunner } from "../runners/provider.js";
 import { log } from "../utils/logger.js";
@@ -14,6 +16,9 @@ import { log } from "../utils/logger.js";
  * Instead of calling the Linear API directly, we delegate Linear operations
  * to the coding agent (Claude/Codex) which has Linear MCP access.
  * No API key, no SDK, no auth config needed.
+ *
+ * Returns structured TrackerSyncResult for every operation so callers
+ * can distinguish success / noop / unavailable / failed / unverified.
  */
 export class LinearReporter {
   private enabled: boolean;
@@ -31,7 +36,6 @@ export class LinearReporter {
       enabled?: boolean;
     }
   ) {
-    // enabled can be overridden by agentConfig.enabled (--no-sync, --dry-run)
     const trackerEnabled =
       config?.provider === "linear" && (config?.enabled ?? true);
     this.enabled =
@@ -45,13 +49,18 @@ export class LinearReporter {
     this.permissionProfile = agentConfig?.permissionProfile ?? "safe";
   }
 
-  async syncTaskStart(task: TaskConfig): Promise<void> {
-    if (!this.enabled) return;
-
+  async syncTaskStart(task: TaskConfig): Promise<TrackerSyncResult> {
     const issueId = extractIssueId(task);
-    if (!issueId) return;
+    if (!this.enabled) {
+      return syncResult("noop", issueId, "start", "sync disabled");
+    }
+    if (!issueId) {
+      return syncResult("noop", null, "start", "no issue ID found");
+    }
 
-    await this.delegateToAgent(
+    return this.delegateAndParse(
+      issueId,
+      "start",
       `Update the Linear issue ${issueId} status to "In Progress". ` +
         `Use your Linear MCP tools. Only update the status, nothing else. ` +
         `Output only: "Done: <issue-id> → In Progress" or "Error: <reason>"`
@@ -62,11 +71,14 @@ export class LinearReporter {
     task: TaskConfig,
     state: TaskRunState,
     result: AgentResult
-  ): Promise<void> {
-    if (!this.enabled) return;
-
+  ): Promise<TrackerSyncResult> {
     const issueId = extractIssueId(task);
-    if (!issueId) return;
+    if (!this.enabled) {
+      return syncResult("noop", issueId, "done", "sync disabled");
+    }
+    if (!issueId) {
+      return syncResult("noop", null, "done", "no issue ID found");
+    }
 
     const lastRun = state.runs[state.runs.length - 1];
     const status = result.success ? "Done" : "Failed";
@@ -84,7 +96,9 @@ export class LinearReporter {
 
     const linearStatus = mapStateToLinearStatus(state.state);
 
-    await this.delegateToAgent(
+    return this.delegateAndParse(
+      issueId,
+      "done",
       `Do two things with Linear issue ${issueId} using your Linear MCP tools:\n` +
         `1. Update its status to "${linearStatus}"\n` +
         `2. Add a comment with this content:\n${commentBody}\n\n` +
@@ -97,8 +111,13 @@ export class LinearReporter {
     done: number;
     failed: number;
     blocked: number;
-  }): Promise<void> {
-    if (!this.enabled || !this.projectId) return;
+  }): Promise<TrackerSyncResult> {
+    if (!this.enabled) {
+      return syncResult("noop", null, "summary", "sync disabled");
+    }
+    if (!this.projectId) {
+      return syncResult("noop", null, "summary", "no project ID");
+    }
 
     const body = [
       `**Autopilot Session Summary**`,
@@ -109,7 +128,9 @@ export class LinearReporter {
       `- Remaining: ${stats.total - stats.done - stats.failed - stats.blocked}`,
     ].join("\\n");
 
-    await this.delegateToAgent(
+    return this.delegateAndParse(
+      this.projectId,
+      "summary",
       `Find the parent/umbrella issue for the project "${this.projectId}" in Linear ` +
         `and add a comment with this progress summary:\n${body}\n\n` +
         `Use your Linear MCP tools. Output only: "Done: summary posted" or "Error: <reason>"`
@@ -120,15 +141,21 @@ export class LinearReporter {
     return this.enabled;
   }
 
-  private async delegateToAgent(
+  /**
+   * Core delegation: run agent, then parse output to determine real outcome.
+   */
+  private async delegateAndParse(
+    issueId: string,
+    action: string,
     prompt: string
-  ): Promise<string | null> {
+  ): Promise<TrackerSyncResult> {
     if (!this.runner) {
-      log.warn("[Linear] No agent runner attached — skipping sync.");
-      return null;
+      const r = syncResult("unavailable", issueId, action, "no agent runner attached");
+      logSyncResult(r);
+      return r;
     }
 
-    log.info("[Linear] Delegating to agent...");
+    log.info(`[Linear] Delegating ${action} for ${issueId}...`);
 
     try {
       const result = await this.runner.run(prompt, {
@@ -137,27 +164,137 @@ export class LinearReporter {
         permissionProfile: this.permissionProfile,
       });
 
-      if (result.success) {
-        log.success(
-          `[Linear] ${result.output.trim().slice(0, 200)}`
-        );
-        return result.output;
-      }
-
-      log.warn(
-        `[Linear] Agent sync failed (non-fatal): ${result.error?.slice(0, 200)}`
-      );
-      return null;
+      const outcome = classifyAgentOutput(result.success, result.output, result.error);
+      const r: TrackerSyncResult = {
+        ...outcome,
+        issueId,
+        action,
+        rawOutput: result.output?.slice(0, 500),
+      };
+      logSyncResult(r);
+      return r;
     } catch (err) {
-      log.warn(
-        `[Linear] Sync error (non-fatal): ${err instanceof Error ? err.message : err}`
-      );
-      return null;
+      const msg = err instanceof Error ? err.message : String(err);
+      const r = syncResult("failed", issueId, action, `exception: ${msg}`);
+      logSyncResult(r);
+      return r;
     }
   }
 }
 
-function extractIssueId(task: TaskConfig): string | null {
+// ── Output Classification ──────────────────────────────────
+
+/**
+ * Parse agent output to determine real sync outcome.
+ * We look for explicit success/error markers rather than trusting exit code alone.
+ */
+export function classifyAgentOutput(
+  exitSuccess: boolean,
+  output: string,
+  error?: string
+): { outcome: TrackerSyncOutcome; reason: string } {
+  const text = (output ?? "").trim();
+  const lower = text.toLowerCase();
+
+  // Agent process failed
+  if (!exitSuccess) {
+    // Check for known unavailability patterns
+    if (isToolUnavailable(lower, error)) {
+      return { outcome: "unavailable", reason: "Linear MCP tools not available" };
+    }
+    return { outcome: "failed", reason: error?.slice(0, 200) ?? "agent exited with non-zero" };
+  }
+
+  // Agent succeeded (exit 0) — now verify the output indicates actual mutation
+
+  // Check for tool unavailability even on exit 0
+  if (isToolUnavailable(lower, error)) {
+    return { outcome: "unavailable", reason: "Linear MCP tools not available" };
+  }
+
+  // Explicit success markers from our prompt format
+  if (lower.includes("done:") && !lower.includes("error:")) {
+    return { outcome: "success", reason: extractDoneLine(text) };
+  }
+
+  // Explicit error in output
+  if (lower.includes("error:")) {
+    const errorLine = extractErrorLine(text);
+    // Check for "already" patterns = noop
+    if (lower.includes("already")) {
+      return { outcome: "noop", reason: errorLine };
+    }
+    return { outcome: "failed", reason: errorLine };
+  }
+
+  // Agent mentions "already" = noop
+  if (lower.includes("already in") || lower.includes("already set") || lower.includes("no change")) {
+    return { outcome: "noop", reason: "issue already in desired state" };
+  }
+
+  // Agent completed but no clear success/error marker
+  // This is the key fix: we don't trust exit code 0 alone
+  return {
+    outcome: "unverified",
+    reason: "agent completed but no confirmed mutation marker in output",
+  };
+}
+
+function isToolUnavailable(lower: string, error?: string): boolean {
+  const combined = lower + " " + (error?.toLowerCase() ?? "");
+  return (
+    combined.includes("mcp") && combined.includes("not available") ||
+    combined.includes("mcp") && combined.includes("not found") ||
+    combined.includes("no tools") ||
+    combined.includes("tool_not_found") ||
+    combined.includes("no mcp") ||
+    combined.includes("could not find") && combined.includes("linear")
+  );
+}
+
+function extractDoneLine(text: string): string {
+  const line = text.split("\n").find((l) => l.trim().toLowerCase().startsWith("done:"));
+  return line?.trim() ?? "Done";
+}
+
+function extractErrorLine(text: string): string {
+  const line = text.split("\n").find((l) => l.trim().toLowerCase().startsWith("error:"));
+  return line?.trim() ?? "Unknown error";
+}
+
+// ── Helpers ────────────────────────────────────────────────
+
+function syncResult(
+  outcome: TrackerSyncOutcome,
+  issueId: string | null,
+  action: string,
+  reason: string
+): TrackerSyncResult {
+  return { outcome, issueId, action, reason };
+}
+
+function logSyncResult(r: TrackerSyncResult): void {
+  const tag = `[Linear] ${r.outcome}: ${r.reason}`;
+  switch (r.outcome) {
+    case "success":
+      log.success(tag);
+      break;
+    case "noop":
+      log.info(tag);
+      break;
+    case "unavailable":
+      log.warn(tag);
+      break;
+    case "failed":
+      log.warn(tag);
+      break;
+    case "unverified":
+      log.warn(tag);
+      break;
+  }
+}
+
+export function extractIssueId(task: TaskConfig): string | null {
   if (task.issueUrl) {
     const match = task.issueUrl.match(/issue\/([A-Z]+-\d+)/);
     if (match) return match[1]!;

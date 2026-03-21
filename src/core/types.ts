@@ -206,6 +206,7 @@ export interface TaskRunState {
   validationHistory: ValidationFindings[];
   remediationAttempts: number;
   remediationHistory: RemediationRecord[];
+  lastTrackerSync?: TrackerSyncResult;
 }
 
 export interface RunState {
@@ -224,6 +225,22 @@ export interface ChangelogEntry {
   action: string;
   detail: string;
   agentProvider?: AgentProvider;
+}
+
+// ── Tracker Sync ────────────────────────────────────────────
+export type TrackerSyncOutcome =
+  | "success"
+  | "noop"
+  | "unavailable"
+  | "failed"
+  | "unverified";
+
+export interface TrackerSyncResult {
+  outcome: TrackerSyncOutcome;
+  issueId: string | null;
+  action: string;
+  reason: string;
+  rawOutput?: string;
 }
 
 // ── Agent Result ─────────────────────────────────────────────

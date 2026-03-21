@@ -7,6 +7,7 @@ import type {
   PermissionProfile,
   PromptMode,
   ValidationFindings,
+  TrackerSyncResult,
 } from "./types.js";
 import { transition } from "./state.js";
 import { findNextTask, findReadyTasks, whatUnblocks } from "./readiness.js";
@@ -104,6 +105,7 @@ export class Runner {
   private tasksCompleted = 0;
   private tasksFailed = 0;
   private stopRequested = false;
+  private skipFinalize = false;
   private syncEnabled: boolean;
   private session: SessionMeta | null = null;
   private wsManager: WorkspaceManager;
@@ -286,9 +288,9 @@ export class Runner {
       await this.runLoop();
     }
 
-    if (!this.opts.dryRun) {
+    if (!this.opts.dryRun && !this.skipFinalize) {
       await this.finalize();
-    } else {
+    } else if (this.opts.dryRun) {
       log.divider();
       log.info("[DRY RUN] No state changes persisted.");
     }
@@ -375,6 +377,7 @@ export class Runner {
     const task = this.config.tasks.find((t) => t.id === taskId);
     if (!task) {
       log.error(`Task ${taskId} not found.`);
+      this.skipFinalize = true;
       return;
     }
 
@@ -382,8 +385,9 @@ export class Runner {
     const state = this.store.getTask(taskId);
     if (state && !["todo", "ready"].includes(state.state)) {
       log.warn(
-        `Task ${taskId} is in state "${state.state}", not ready.`
+        `Task ${taskId} is in state "${state.state}", not ready. Skipping execution and sync.`
       );
+      this.skipFinalize = true;
       return;
     }
 
@@ -448,7 +452,8 @@ export class Runner {
     await this.store.save();
 
     await this.changelog.logTaskStart(task);
-    await this.linear.syncTaskStart(task);
+    const startSync = await this.linear.syncTaskStart(task);
+    await this.emitSyncEvent(task.id, startSync);
     await this.liveStatus.write(
       this.config,
       this.store,
@@ -569,11 +574,15 @@ export class Runner {
           error: implResult.error,
           duration: implResult.duration,
         });
-        await this.linear.syncTaskDone(
+        const failSync = await this.linear.syncTaskDone(
           task,
           taskState,
           implResult
         );
+        await this.emitSyncEvent(task.id, failSync);
+        taskState.lastTrackerSync = failSync;
+        this.store.setTask(task.id, taskState);
+        await this.store.save();
         this.tasksFailed++;
         await this.updateSession({
           tasksFailed: this.tasksFailed,
@@ -706,13 +715,16 @@ export class Runner {
       unlocked: newlyUnlocked,
       diffSummary: diffSummary ?? undefined,
     });
-    await this.linear.syncTaskDone(task, taskState, {
+    const doneSync = await this.linear.syncTaskDone(task, taskState, {
       success: true,
       output: "",
       exitCode: 0,
       duration: 0,
       record: taskState.runs[taskState.runs.length - 1]!,
     });
+    await this.emitSyncEvent(task.id, doneSync);
+    taskState.lastTrackerSync = doneSync;
+    this.store.setTask(task.id, taskState);
 
     if (newlyUnlocked.length > 0) {
       log.task(
@@ -1176,7 +1188,8 @@ export class Runner {
     );
 
     await this.changelog.logSummary(total, done, failed, blocked);
-    await this.linear.syncSummary({ total, done, failed, blocked });
+    const summarySync = await this.linear.syncSummary({ total, done, failed, blocked });
+    await this.emitSyncEvent(undefined, summarySync);
     await this.liveStatus.write(this.config, this.store, "run-stop");
     await this.events.emit({
       ts: new Date().toISOString(),
@@ -1196,11 +1209,32 @@ export class Runner {
     });
   }
 
+  private async emitSyncEvent(
+    taskId: string | undefined,
+    sync: TrackerSyncResult
+  ): Promise<void> {
+    await this.changelog.logTrackerSync(taskId, sync);
+    await this.events.emit({
+      ts: new Date().toISOString(),
+      event: "tracker-sync",
+      taskId,
+      detail: sync.action,
+      syncOutcome: sync.outcome,
+      syncIssueId: sync.issueId ?? undefined,
+      syncAction: sync.action,
+      syncReason: sync.reason,
+    });
+  }
+
   getStore(): Store {
     return this.store;
   }
 
   getConfig(): ProjectConfig {
     return this.config;
+  }
+
+  getSession(): SessionMeta | null {
+    return this.session;
   }
 }

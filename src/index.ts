@@ -35,6 +35,9 @@ import { printUpdateBanner } from "./update/notify.js";
 import { applyUpdate, applyUpdateInBackground } from "./update/updater.js";
 import type { LogViewMode } from "./events/aggregator.js";
 import { aggregateEvents, formatEntry } from "./events/aggregator.js";
+import { SessionEventLog, sessionEventLogPath } from "./events/session-log.js";
+import type { ProviderEvent } from "./events/types.js";
+import type { SessionMeta } from "./workspace/types.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -306,9 +309,9 @@ ${B}Execution:${R}
   qap next                      Show next ready task(s)
   qap list                      List all tasks with states
   qap show <id>                 Show task or epic details
-  qap run [--max <n>]           Run autonomous loop
-  qap run-next                  Run just the next ready task
-  qap run-task <id>             Run a specific task
+  qap run                       Run autonomous loop ${D}(follows session by default)${R}
+  qap run-next                  Run next ready task ${D}(follows session by default)${R}
+  qap run-task <id>             Run a specific task ${D}(follows session by default)${R}
   qap start <task>              Mark task as in_progress
   qap mark <task> <state>       Manually set task state
 
@@ -334,6 +337,8 @@ ${B}Options:${R}
   --no-sync                     Disable Linear sync
   --max <n>                     Max tasks to run in loop
   --skip-validation             Skip validation steps
+  --detach                      Run without following session logs
+  --view <mode>                 Follow view mode: conversation, activity, raw
 
 ${D}qap auto-detects the workspace from your current directory.${R}
 ${D}If a workspace has one project, it loads automatically.${R}
@@ -558,6 +563,14 @@ async function cmdShow(id: string) {
       }
     }
 
+    if (state.lastTrackerSync) {
+      const s = state.lastTrackerSync;
+      console.log(`\nTracker Sync: ${s.outcome}`);
+      console.log(`  Action: ${s.action}`);
+      if (s.issueId) console.log(`  Issue: ${s.issueId}`);
+      console.log(`  Reason: ${s.reason}`);
+    }
+
     return;
   }
 
@@ -625,7 +638,242 @@ async function makeRunnerOpts() {
   };
 }
 
+/**
+ * Follow a specific session's event log in real-time.
+ * Returns an object with abort() to stop following.
+ * Resolves when the session finishes (polls session status).
+ */
+function startSessionFollow(
+  session: SessionMeta,
+  wsId: string,
+  prjId: string,
+  viewMode: LogViewMode = "conversation"
+): { promise: Promise<void>; abort: () => void } {
+  const eventsPath =
+    session.sessionEventsPath ??
+    sessionEventLogPath(wsId, prjId, session.id);
+  const sessionLog = new SessionEventLog(eventsPath);
+  const ws = new WorkspaceManager();
+
+  const modeLabel = viewMode.toUpperCase();
+  console.log(
+    `\x1b[38;2;183;0;255m■\x1b[0m Starting session ${session.id.slice(0, 8)}${session.currentTaskId ? ` for ${session.currentTaskId}` : ""}...`
+  );
+  console.log(
+    `  \x1b[2mView: ${modeLabel} | Ctrl+C to detach\x1b[0m`
+  );
+  console.log();
+
+  let aborted = false;
+
+  if (viewMode === "raw") {
+    const ac = sessionLog.tail((event) => {
+      const entries = aggregateEvents([event], "raw");
+      for (const entry of entries) {
+        console.log(formatEntry(entry));
+      }
+    });
+
+    const promise = (async () => {
+      // Poll session status until it's no longer running
+      while (!aborted) {
+        await new Promise((r) => setTimeout(r, 1000));
+        try {
+          const sessions = await ws.listSessions(wsId, prjId);
+          const current = sessions.find((s) => s.id === session.id);
+          if (current && current.status !== "running") {
+            // Give a moment for final events to flush
+            await new Promise((r) => setTimeout(r, 500));
+            break;
+          }
+        } catch {
+          // Keep polling
+        }
+      }
+      ac.abort();
+    })();
+
+    return {
+      promise,
+      abort: () => {
+        aborted = true;
+        ac.abort();
+      },
+    };
+  }
+
+  // Aggregated follow (conversation/activity)
+  let buffer: ProviderEvent[] = [];
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flush = () => {
+    if (buffer.length === 0) return;
+    const entries = aggregateEvents(buffer, viewMode);
+    for (const entry of entries) {
+      console.log(formatEntry(entry));
+    }
+    buffer = [];
+  };
+
+  const ac = sessionLog.tail((event) => {
+    buffer.push(event);
+    if (flushTimer) clearTimeout(flushTimer);
+    flushTimer = setTimeout(flush, 150);
+  });
+
+  const promise = (async () => {
+    while (!aborted) {
+      await new Promise((r) => setTimeout(r, 1000));
+      try {
+        const sessions = await ws.listSessions(wsId, prjId);
+        const current = sessions.find((s) => s.id === session.id);
+        if (current && current.status !== "running") {
+          await new Promise((r) => setTimeout(r, 500));
+          flush();
+          break;
+        }
+      } catch {
+        // Keep polling
+      }
+    }
+    ac.abort();
+  })();
+
+  return {
+    promise,
+    abort: () => {
+      aborted = true;
+      flush();
+      ac.abort();
+    },
+  };
+}
+
+/**
+ * Print a short summary after a session finishes.
+ */
+async function printSessionEndSummary(
+  sessionId: string,
+  wsId: string,
+  prjId: string
+): Promise<void> {
+  const ws = new WorkspaceManager();
+  const sessions = await ws.listSessions(wsId, prjId);
+  const session = sessions.find((s) => s.id === sessionId);
+
+  console.log();
+  if (session) {
+    const icon = statusIcon(session.status);
+    const color = statusColor(session.status);
+    const dur = formatSessionDuration(session);
+    console.log(
+      `${color}${icon}\x1b[0m Session ${session.id.slice(0, 8)} ${color}${session.status}\x1b[0m (${dur})`
+    );
+    console.log(
+      `  \x1b[32m${session.tasksCompleted} completed\x1b[0m  \x1b[31m${session.tasksFailed} failed\x1b[0m  ${session.taskCount} total`
+    );
+  }
+
+  console.log();
+  log.info(`Logs: qap logs --session ${sessionId.slice(0, 8)}`);
+}
+
+/**
+ * Run a runner with follow/detach behavior.
+ * - Default: follow session logs in real-time
+ * - --detach: just run and print session ID
+ * - --view <mode>: set follow view mode
+ */
+async function runWithFollow(
+  runner: import("./core/runner.js").Runner,
+  runFn: () => Promise<void>
+): Promise<void> {
+  const detach = hasFlag("detach") || hasFlag("d");
+  const viewMode = (flag("view") ?? "conversation") as LogViewMode;
+
+  if (detach) {
+    // Start the run, print session info, return
+    // We need to kick off the run and then print the session ID once available
+    const runPromise = runFn();
+
+    // Wait a moment for session to initialize
+    await new Promise((r) => setTimeout(r, 300));
+    const session = runner.getSession();
+    if (session) {
+      console.log(
+        `\x1b[38;2;183;0;255m■\x1b[0m Session ${session.id.slice(0, 8)} started (detached)`
+      );
+      log.info(`Follow: qap logs --follow --session ${session.id.slice(0, 8)}`);
+    }
+    await runPromise;
+    return;
+  }
+
+  // Follow mode (default)
+  const opts = await makeRunnerOpts();
+  const wsId = opts.workspaceId;
+  const prjId = opts.projectId;
+
+  // Start the run
+  const runPromise = runFn();
+
+  // Wait for session to be initialized
+  let session: SessionMeta | null = null;
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    session = runner.getSession();
+    if (session) break;
+  }
+
+  if (!session || !wsId || !prjId) {
+    // No session (dry-run or no workspace) — just await the run
+    await runPromise;
+    return;
+  }
+
+  // Start following
+  const follow = startSessionFollow(session, wsId, prjId, viewMode);
+
+  // Handle Ctrl+C: detach from follow but let the run continue in background
+  const sigintHandler = () => {
+    follow.abort();
+    console.log();
+    log.info(`Detached. Session ${session!.id.slice(0, 8)} continues in background.`);
+    log.info(`Re-attach: qap logs --follow --session ${session!.id.slice(0, 8)}`);
+    // Remove handler so next Ctrl+C actually kills
+    process.removeListener("SIGINT", sigintHandler);
+  };
+  process.on("SIGINT", sigintHandler);
+
+  // Wait for both run and follow to complete
+  await runPromise;
+  await follow.promise;
+  process.removeListener("SIGINT", sigintHandler);
+
+  // Print end summary
+  await printSessionEndSummary(session.id, wsId, prjId);
+}
+
 async function cmdRun() {
+  if (hasFlag("help")) {
+    console.log(`
+\x1b[1mqap run\x1b[0m — Run autonomous task loop
+
+\x1b[1mUsage:\x1b[0m
+  qap run                        Run and follow session logs (default)
+  qap run --detach               Run without following logs
+  qap run --view <mode>          Follow with view mode: conversation, activity, raw
+  qap run --max <n>              Limit tasks to run
+
+\x1b[1mExamples:\x1b[0m
+  qap run                        Run all ready tasks, follow live output
+  qap run --view activity        Follow with activity view
+  qap run --detach               Start run, print session ID, return
+  qap run --max 3 --detach       Run up to 3 tasks detached
+`);
+    return;
+  }
+
   const configPath = await resolveConfigPath();
   const config = await loadConfig(configPath);
   const opts = await makeRunnerOpts();
@@ -638,20 +886,52 @@ async function cmdRun() {
     runner.requestStop();
   });
 
-  await runner.run();
+  await runWithFollow(runner, () => runner.run());
 }
 
 async function cmdRunNext() {
+  if (hasFlag("help")) {
+    console.log(`
+\x1b[1mqap run-next\x1b[0m — Run next ready task
+
+\x1b[1mUsage:\x1b[0m
+  qap run-next                   Run and follow session logs (default)
+  qap run-next --detach          Run without following logs
+  qap run-next --view <mode>     Follow with view mode: conversation, activity, raw
+
+\x1b[1mExamples:\x1b[0m
+  qap run-next                   Run next task, follow live output
+  qap run-next --view activity   Follow with activity view
+  qap run-next --detach          Start next task detached
+`);
+    return;
+  }
+
   const configPath = await resolveConfigPath();
   const config = await loadConfig(configPath);
   const opts = await makeRunnerOpts();
   const runner = new Runner(config, opts);
-  await runner.runNext();
+
+  await runWithFollow(runner, () => runner.runNext());
 }
 
 async function cmdRunTask(taskId: string) {
-  if (!taskId) {
-    log.error("Usage: qap run-task <task-id>");
+  if (!taskId || hasFlag("help")) {
+    console.log(`
+\x1b[1mqap run-task\x1b[0m — Run a specific task
+
+\x1b[1mUsage:\x1b[0m
+  qap run-task <id>              Run and follow session logs (default)
+  qap run-task <id> --detach     Run without following logs
+  qap run-task <id> --view <m>   Follow with view mode: conversation, activity, raw
+
+\x1b[1mExamples:\x1b[0m
+  qap run-task QUE-256           Run task, follow live output
+  qap run-task QUE-256 --follow  Same as above (follow is default)
+  qap run-task QUE-256 --detach  Start task detached
+  qap run-task QUE-256 --view activity
+`);
+    if (!taskId) return;
     return;
   }
 
@@ -667,7 +947,7 @@ async function cmdRunTask(taskId: string) {
     runner.requestStop();
   });
 
-  await runner.run();
+  await runWithFollow(runner, () => runner.run());
 }
 
 async function cmdStart(taskId: string) {
@@ -919,9 +1199,6 @@ async function cmdLogs(): Promise<void> {
   }
 
   // Resolve event log paths
-  const { SessionEventLog } = await import("./events/session-log.js");
-  const { sessionEventLogPath } = await import("./events/session-log.js");
-
   for (const session of targetSessions) {
     if (!session.sessionEventsPath) {
       const fallbackPath = sessionEventLogPath(workspace.id, activeId, session.id);

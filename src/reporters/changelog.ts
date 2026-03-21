@@ -3,6 +3,7 @@ import type {
   TaskConfig,
   TaskRunState,
   AgentResult,
+  TrackerSyncResult,
 } from "../core/types.js";
 
 /**
@@ -87,6 +88,18 @@ export class ChangelogReporter {
     if (unlocked.length === 0) return;
     await this.append(
       `**${this.ts()}** UNLOCKED by ${taskId}: ${unlocked.join(", ")}`
+    );
+  }
+
+  async logTrackerSync(
+    taskId: string | undefined,
+    sync: TrackerSyncResult
+  ): Promise<void> {
+    const tag = sync.outcome.toUpperCase();
+    const issue = sync.issueId ? ` ${sync.issueId}` : "";
+    const taskTag = taskId ? ` ${taskId}` : "";
+    await this.append(
+      `**${this.ts()}** SYNC ${tag}${taskTag}${issue} — ${sync.action}: ${sync.reason}`
     );
   }
 

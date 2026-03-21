@@ -16,6 +16,10 @@ export interface AutopilotEvent {
   detail?: string;
   validationSummary?: string;
   validationRecommendation?: string;
+  syncOutcome?: string;
+  syncIssueId?: string;
+  syncAction?: string;
+  syncReason?: string;
 }
 
 /**
