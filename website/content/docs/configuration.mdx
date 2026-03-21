@@ -1,0 +1,88 @@
+---
+title: Configuration
+description: How to configure QUESTPIE Autopilot — config file format and local storage layout.
+---
+
+# Configuration
+
+## Config File
+
+The primary config is `autopilot.config.ts`, typically AI-generated during `qap project init`:
+
+```typescript
+import type { ProjectConfig } from "@questpie/autopilot/core/types";
+
+const config: ProjectConfig = {
+  project: { id: "my-project", name: "My Project", rootDir: "." },
+  execution: {
+    mode: "autonomous",
+    defaultProvider: "claude",
+    defaultPermissionProfile: "elevated",
+  },
+  prompts: { templatesDir: "./prompts" },
+  epics: [
+    { id: "EPIC-001", title: "Core Feature", track: "main" },
+  ],
+  tasks: [
+    {
+      id: "TASK-001",
+      title: "Set up schema",
+      epicId: "EPIC-001",
+      kind: "implementation",
+      track: "gate",
+      promptFile: "./prompts/001-schema.md",
+    },
+    {
+      id: "TASK-002",
+      title: "Implement API",
+      epicId: "EPIC-001",
+      kind: "implementation",
+      track: "main",
+      dependsOn: ["TASK-001"],
+      promptFile: "./prompts/002-api.md",
+    },
+  ],
+};
+
+export default config;
+```
+
+## Local Storage Layout
+
+All data is stored locally under `~/.qap/`:
+
+```
+~/.qap/
+  workspaces/
+    <workspace-id>/
+      workspace.json                 # Workspace metadata + active project
+      projects/
+        <project-id>/
+          project.json               # Project metadata
+          autopilot.config.ts        # Task graph and execution config
+          handoff.md                 # Setup summary
+          steering.md               # Project steering notes
+          prompts/                   # Task prompt templates
+          planning/                  # Planning artifacts
+          source/                    # Source references
+          sessions/                  # Run history
+            <session-id>.json
+```
+
+The workspace ID is derived from the repo root path. You never need to know or type it — `qap` resolves it from your current directory.
+
+## Provider Configuration
+
+| Provider | Binary | Permission Profiles |
+|----------|--------|-------------------|
+| Claude Code | `claude` | safe, elevated, max |
+| Codex | `codex` | safe, elevated, max |
+
+Set the default provider in your config:
+
+```typescript
+execution: {
+  defaultProvider: "claude",       // or "codex"
+  defaultPermissionProfile: "elevated",  // safe, elevated, max
+}
+```

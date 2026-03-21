@@ -1,0 +1,116 @@
+---
+title: Import Flow
+description: How qap project import works — backlog-driven vs degraded mode.
+---
+
+# Import Flow
+
+`qap project import` creates a project from existing artifacts. There are two import paths, with strict priority.
+
+## Backlog-Driven Import (Default)
+
+When a `backlog.json` file exists in the prompts directory, it is the **machine truth**. The import:
+
+1. Detects `backlog.json` in `--prompts` directory
+2. Validates the manifest (schema, references, cycles)
+3. Compiles it into a qap-native `autopilot.config.ts`
+4. Copies prompt files to the project workspace
+5. Validates the generated config via `loadConfig()`
+
+No AI agent is spawned. The result is deterministic.
+
+```bash
+qap project import \
+  --name questpie-v3 \
+  --prompts ./prompts   # must contain backlog.json
+```
+
+### Hard-Fail Policy
+
+If `backlog.json` **exists** but is invalid (bad JSON, missing fields, unknown epic references, dependency cycles), the import **fails immediately** with a clear error. It never silently falls back to AI or generic mode.
+
+```
+Error: Invalid backlog.json in ./prompts: Task QUE-101 depends on unknown task QUE-999
+Fix the backlog manifest or use --degraded-import to skip it.
+```
+
+## Degraded Import
+
+Without a `backlog.json`, you must explicitly opt in to degraded mode:
+
+```bash
+qap project import \
+  --name my-feature \
+  --prompts ./prompts \
+  --degraded-import
+```
+
+In degraded mode, the import tries two fallback strategies:
+
+1. **AI-assisted** — spawns a Claude agent to generate the config from prompt files
+2. **Generic fallback** — creates a minimal config with `TASK-xxx` IDs derived from prompt filenames
+
+### File Filtering
+
+Degraded mode filters non-task files from the prompt directory. Only numbered phase/task prompt files (`.md`) are used. These are excluded:
+
+- `README.md`, `readme.md`
+- `00-shared-context.md` (shared context prefix)
+- `backlog.json`, `project.manifest.json`
+- Plan documents (`v3-execution-plan.md`, `*-plan.md`)
+- `changelog.md`, `handoff.md`
+- Hidden files (`.anything`)
+
+### Without `--degraded-import`
+
+If there's no `backlog.json` and no `--degraded-import` flag, the import fails:
+
+```
+Error: No backlog.json found in ./prompts.
+Create a backlog.json manifest or use --degraded-import for AI/fallback import.
+```
+
+## Import Priority Summary
+
+| Condition | Behavior |
+|-----------|----------|
+| `backlog.json` present + valid | Compile deterministically |
+| `backlog.json` present + invalid | **Hard fail** |
+| No `backlog.json` + `--degraded-import` | AI → generic fallback |
+| No `backlog.json` + no flag | **Hard fail** |
+
+## What Gets Created
+
+After a successful import:
+
+```
+~/.qap/workspaces/<ws-id>/projects/<project-id>/
+  project.json           # Project metadata
+  autopilot.config.ts    # Compiled config (from backlog or AI)
+  handoff.md             # Import summary
+  state.json             # Initial empty run state
+  prompts/               # Copied prompt files
+  steering.md            # (created on first steer command)
+  sessions/              # (populated on first run)
+```
+
+## End-to-End Example
+
+```bash
+# 1. Navigate to your repo
+cd /path/to/repo
+
+# 2. Import with backlog
+qap project import \
+  --name v3-rollout \
+  --prompts ./.claude/v3-prompts
+
+# 3. Verify
+qap project list
+qap status
+qap next
+qap show QUE-238
+
+# 4. Dry-run a task
+qap run-task QUE-238 --dry-run --no-sync
+```

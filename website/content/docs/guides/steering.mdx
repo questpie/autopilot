@@ -1,0 +1,96 @@
+---
+title: Steering Notes
+description: Inject runtime guidance into agent prompts — project, task, and session level.
+---
+
+# Steering Notes
+
+Steering notes let you inject guidance into the AI agent's prompt at runtime without editing the config or prompt files.
+
+## Three Levels
+
+### Project Steering
+
+Persistent notes that apply to **every task** in the project. Use for project-wide constraints.
+
+```bash
+qap steer project "Focus on type safety, avoid any-casts"
+qap steer project "If validate fails on unrelated issue, stop and report"
+qap steer show
+```
+
+Stored in: `~/.qap/workspaces/<ws-id>/projects/<prj-id>/steering.md`
+
+### Task Notes
+
+Notes attached to a **specific task**. Injected only when that task runs.
+
+```bash
+qap note QUE-238 "Use the new auth middleware from PR #42"
+qap note QUE-238 "Keep scope to hook contract enhancement only"
+qap note show QUE-238
+```
+
+Stored in: task run state (`state.json`)
+
+### Session Notes
+
+Notes stored in the session record. Injected during the current run only.
+
+Managed via TUI or programmatically through the session API.
+
+## Injection Order
+
+When rendering a prompt, steering notes are injected **before all other content** in this order:
+
+```
+# Steering Notes
+
+## Project Steering
+<all project steering notes>
+
+## Task Notes
+- <note 1>
+- <note 2>
+
+## Session Notes
+- <note 1>
+
+---
+
+# Shared Context
+<shared context file content>
+
+---
+
+# Epic: QUE-222
+...
+
+# Task: QUE-238
+...
+```
+
+Project steering is broadest (every task sees it). Task notes are specific. Session notes are ephemeral.
+
+## Verifying Injection
+
+Use `--dry-run` to confirm steering appears in the rendered prompt:
+
+```bash
+# Add steering
+qap steer project "Prefer small PRs over large ones"
+qap note QUE-238 "Check bulk metadata semantics"
+
+# Verify
+qap run-task QUE-238 --dry-run --no-sync
+```
+
+The dry-run output shows the full prompt including steering notes at the top.
+
+## When to Use What
+
+| Level | Scope | Persistence | Use For |
+|-------|-------|-------------|---------|
+| Project steering | All tasks | Permanent until removed | Architecture constraints, coding style, global rules |
+| Task notes | One task | Permanent | Task-specific context, PR references, clarifications |
+| Session notes | Current run | Session lifetime | Temporary guidance for a specific execution run |

@@ -1,0 +1,43 @@
+---
+title: Introduction
+description: QUESTPIE Autopilot — local-first workflow engine for coding agents.
+---
+
+# QUESTPIE Autopilot
+
+Local-first workflow engine for coding agents.
+
+Run structured software delivery loops from your terminal — plan, execute, validate, and monitor tasks driven by Claude Code or Codex.
+
+## What is Autopilot?
+
+Autopilot answers these questions for your project:
+
+- What is ready now?
+- What is blocked and why?
+- What should run next?
+- What prompt should be sent to the agent?
+- What validation should happen?
+- What changed during the run?
+
+## Core Principles
+
+- **Local-first** — all state stored locally, no cloud dependency
+- **AI-managed by default** — project setup is AI-assisted, manual config is fallback
+- **Explicit state** — clear state transitions, not implicit
+- **TUI is first-class** — not an afterthought
+- **CLI scriptable** — every operation works from shell
+- **Provider-agnostic** — Claude Code and Codex today, more tomorrow
+
+## Quick Install
+
+```bash
+bun add -g @questpie/autopilot
+```
+
+```bash
+cd /path/to/your/repo
+qap
+```
+
+That's it. Autopilot auto-detects your workspace and opens the TUI.

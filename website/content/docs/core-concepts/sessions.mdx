@@ -1,0 +1,42 @@
+---
+title: Sessions
+description: A session records the full lifecycle of a single execution run.
+---
+
+# Sessions
+
+A session records the full lifecycle of a single execution run. Each `qap run` or `qap run-task` creates a session that tracks:
+
+- **Identity** — `id`, `projectId`, `workspaceId`
+- **Timing** — `startedAt`, `finishedAt`
+- **Status** — `running`, `completed`, `failed`, `aborted`
+- **Provider** — which agent provider was used
+- **Progress** — `currentTaskId`, `tasksCompleted`, `tasksFailed`
+- **Logs** — `eventLogPath`, `changelogPath`
+- **Notes** — session-level steering notes
+
+## Progressive Updates
+
+Sessions are updated **progressively** during execution, not just at the end. The TUI polls session state every 3 seconds to show live progress.
+
+## Live Monitoring
+
+The TUI auto-refreshes during execution:
+
+- **Execution panel** — shows current running session, progress, active task
+- **Task counts** — ready, in-progress, done, failed
+- **Recent events** — last event timestamp
+
+No manual `/refresh` needed. The TUI detects running sessions automatically.
+
+## Session Commands
+
+```bash
+# In TUI
+/sessions              # Show session history
+/session show <id>     # Show session details
+
+# From CLI
+qap run                # Start a new session
+qap run-task <id>      # Run a specific task in a new session
+```

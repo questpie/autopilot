@@ -1,0 +1,92 @@
+---
+title: CLI Reference
+description: Complete reference for all qap commands, TUI slash commands, and keyboard shortcuts.
+---
+
+# CLI Reference
+
+## Main Commands
+
+```
+qap                           Open terminal UI (default)
+qap ui                        Open terminal UI
+```
+
+## Project Management
+
+```
+qap project init              Initialize new project (AI-assisted)
+qap project import            Import existing project artifacts
+qap project list              List projects in current workspace
+qap project use <id>          Set active project
+```
+
+## Workspace Management
+
+```
+qap workspace add <path>      Register a repo as a workspace
+qap workspace list             List all known workspaces
+qap workspace show             Show current workspace info
+```
+
+## Execution
+
+```
+qap status                    Show project status
+qap next                      Show next ready task(s)
+qap list                      List all tasks with states
+qap show <id>                 Show task or epic details
+qap run [--max <n>]           Run autonomous loop
+qap run-next                  Run just the next ready task
+qap run-task <id>             Run a specific task
+```
+
+## Steering
+
+```
+qap note <task> <text>        Add a note to a task
+qap note show <task>          Show notes for a task
+qap steer project <text>      Add project steering note
+qap steer show                Show project steering notes
+```
+
+## Options
+
+```
+--config <path>               Config file (auto-detected from workspace)
+--dry-run                     Preview without side effects
+--help                        Show help for any command
+```
+
+## TUI Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/project init` | Initialize new project (AI-assisted) |
+| `/project import` | Import existing artifacts |
+| `/project use <id>` | Switch active project |
+| `/project list` | List all projects |
+| `/sessions` | Show session history |
+| `/session show <id>` | Show session details |
+| `/run` | Run next ready task |
+| `/run-task <id>` | Run a specific task |
+| `/status` | Show task counts |
+| `/refresh` | Reload project state |
+| `/note <task-id> <text>` | Add a note to a task |
+| `/note show <task-id>` | Show notes for a task |
+| `/steer project <text>` | Add project steering note |
+| `/steer show` | Show project steering notes |
+| `/help` | Toggle help overlay |
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `1` | Project tab |
+| `2` | Sessions tab |
+| `3` | Logs tab |
+| `4` | Help tab |
+| `Enter` | Submit command |
+| `ESC` | Close help / clear input |
+| `Ctrl+L` | Refresh state |
+| `Ctrl+C` | Exit |

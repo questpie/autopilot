@@ -1,0 +1,28 @@
+---
+title: Workspace
+description: A workspace is a repo root — the top-level container for projects.
+---
+
+# Workspace
+
+A workspace is a repo root. When you run `qap` from inside a repo, Autopilot resolves the workspace automatically from your current directory. You never need to manage workspace IDs manually.
+
+One workspace can contain multiple projects.
+
+## Workspace Commands
+
+```bash
+qap workspace add <path>      # Register a repo as a workspace
+qap workspace list             # List all known workspaces
+qap workspace show             # Show current workspace info
+```
+
+## Storage
+
+The workspace ID is derived from the repo root path. All workspace data lives under:
+
+```
+~/.qap/workspaces/<workspace-id>/
+  workspace.json                 # Workspace metadata + active project
+  projects/                      # All projects in this workspace
+```

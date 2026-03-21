@@ -1,0 +1,52 @@
+---
+title: Installation & Quick Start
+description: Get up and running with QUESTPIE Autopilot in under a minute.
+---
+
+# Installation & Quick Start
+
+## Requirements
+
+- [Bun](https://bun.sh) >= 1.3
+
+## Install
+
+```bash
+bun add -g @questpie/autopilot
+```
+
+## Quick Start
+
+```bash
+# Navigate to your repo
+cd /path/to/your/repo
+
+# Open the terminal UI — workspace is auto-detected from cwd
+qap
+
+# Or set up a project first
+qap project init --name my-feature
+qap project import --name v3-rollout --prompts ./prompts
+
+# Check status from CLI
+qap status
+qap next
+```
+
+## Default Flow
+
+```
+1. cd /path/to/repo
+2. qap
+3. Workspace auto-detected from cwd
+4. If one project exists → loads automatically
+5. If multiple projects → project picker shown
+6. You're in the TUI — run tasks, check status, monitor progress
+```
+
+Every subcommand supports `--help` with no side effects:
+
+```bash
+qap project init --help
+qap project import --help
+```
