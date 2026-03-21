@@ -1,0 +1,47 @@
+{
+  "name": "@questpie/autopilot",
+  "version": "0.1.0",
+  "description": "Local-first workflow engine for coding agents",
+  "type": "module",
+  "private": false,
+  "keywords": [
+    "ai",
+    "agent",
+    "agents",
+    "workflow",
+    "cli",
+    "orchestration",
+    "autopilot",
+    "claude",
+    "codex"
+  ],
+  "bin": {
+    "autopilot": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit",
+    "check": "bun test && bun run typecheck",
+    "pack:dry": "npm pack --dry-run"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "typescript": "^5.8"
+  },
+  "license": "MIT",
+  "packageManager": "bun@1.3.0",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "ROADMAP.md",
+    "SPEC.md",
+    "LICENSE"
+  ]
+}

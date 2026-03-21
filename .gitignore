@@ -1,0 +1,12 @@
+node_modules
+bun.lock
+*.tgz
+
+.claude/
+.autopilot-state.json
+LIVE_STATUS.md
+events.jsonl
+.autopilot-session.md
+.autopilot-project-changelog.md
+projects/*/.autopilot-session.md
+projects/*/.autopilot-project-changelog.md
