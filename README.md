@@ -15,207 +15,230 @@ bun add -g @questpie/autopilot
 ## Quick Start
 
 ```bash
-# Open the terminal UI
+# Navigate to your repo
+cd /path/to/your/repo
+
+# Open the terminal UI — workspace is auto-detected from cwd
 qap
 
 # Or set up a project first
-qap project init --repo /path/to/your/repo
-qap project import --repo /path/to/repo --prompts /path/to/prompts
+qap project init --name my-feature
+qap project import --name v3-rollout --prompts ./prompts
 
 # Check status from CLI
 qap status
 qap next
-
-# Run a task
-qap run-task TASK-001
 ```
 
-## What It Does
+## Core Concepts
 
-Autopilot turns a backlog of tasks into a structured execution loop:
+### Workspace
 
-1. **Plan** — define tasks, dependencies, and prompts
-2. **Execute** — agents (Claude Code, Codex) run tasks autonomously
-3. **Validate** — primary and secondary validation per task
-4. **Monitor** — watch progress from the TUI or CLI
+A workspace is a repo root. When you run `qap` from inside a repo, Autopilot resolves the workspace automatically from your current directory. You never need to manage workspace IDs manually.
 
-### What You Get
+One workspace can contain multiple projects.
 
-- Task DAG with dependency tracking and readiness engine
-- Autonomous execution loop with retry policies
-- Claude Code and Codex CLI runners
-- Per-task validation steps
-- Local state persistence and event logging
-- Terminal UI for real-time monitoring
-- AI-assisted project setup
+### Project
 
-## Terminal UI
+A project is a specific initiative inside a workspace. For example, a repo `questpie` might have projects like `v3-rollout`, `admin-cleanup`, and `perf-audit` — each with its own task graph, prompts, state, and sessions.
 
-Run `qap` with no arguments to open the TUI.
+Projects are created via `qap project init` or `qap project import`. If a workspace has exactly one project, it loads automatically. If there are multiple, the TUI shows a project picker.
+
+### Session
+
+A session is a run history record for a project. Each time Autopilot executes tasks, it creates a session that tracks what ran, what succeeded, and what failed.
+
+## Default Flow
 
 ```
-┌── ■ QUESTPIE AUTOPILOT v0.1.0 ── PROJECT my-project ── 12T 3R 5D 0F ───┐
-├─ PROJECT ─────────────┬─ READY ─────────────────────────────────────────┤
-│ Name    my-project     │ ● TASK-007  [main] Implement auth module       │
-│ ID      my-project     │ ● TASK-008  [main] Add API endpoints           │
-│ Provider claude        │ ● TASK-012  [sidecar] Write integration tests  │
-│ Repo    /path/to/repo  │                                                │
-├─ LOG ─────────────────┼─ COMPLETED / FAILED ────────────────────────────┤
-│ Project loaded         │ ✓ TASK-001  [gate] Initial setup               │
-│ 12 tasks | 3 ready     │ ✓ TASK-002  [main] Database schema             │
-│                        │ ✗ TASK-005  [main] Failed: timeout             │
-├────────────────────────┴─────────────────────────────────────────────────┤
-│ ▸ Type a command... (/help)  ESC clear · Ctrl+C exit                    │
-└──────────────────────────────────────────────────────────────────────────┘
+1. cd /path/to/repo
+2. qap
+3. Workspace auto-detected from cwd
+4. If one project exists → loads automatically
+5. If multiple projects → project picker shown
+6. You're in the TUI — run tasks, check status, monitor progress
 ```
 
-### TUI Commands
-
-| Command | Description |
-|---------|-------------|
-| `/init [path]` | Initialize new project from repo |
-| `/project import [path]` | Import existing artifacts |
-| `/project use <id>` | Switch active project |
-| `/project list` | List all projects |
-| `/run` | Run next ready task |
-| `/run-task <id>` | Run a specific task |
-| `/status` | Show task counts |
-| `/refresh` | Reload project state |
-| `/help` | Show help |
-
-### Keyboard
-
-| Key | Action |
-|-----|--------|
-| `Enter` | Submit command |
-| `ESC` | Clear input / close help |
-| `Ctrl+C` | Exit |
-| `Ctrl+L` | Refresh state |
-
-## CLI Reference
+## CLI Overview
 
 ```
 qap                           Open terminal UI (default)
 qap ui                        Open terminal UI
 
-qap project init              Initialize new project (AI-assisted)
-qap project import            Import existing artifacts
-qap project list              List all local projects
-qap project use <id>          Set active project
+Project Management:
+  qap project init              Initialize new project (AI-assisted)
+  qap project import            Import existing project artifacts
+  qap project list              List projects in current workspace
+  qap project use <id>          Set active project
 
-qap status                    Show project status
-qap next                      Show next ready task(s)
-qap list                      List all tasks with states
-qap show <id>                 Show task or epic details
-qap run [--max <n>]           Run autonomous loop
-qap run-next                  Run just the next ready task
-qap run-task <id>             Run a specific task
-qap prompt <id> --mode <m>    Render prompt for a task
+Workspace Management:
+  qap workspace add <path>      Register a repo as a workspace
+  qap workspace list            List all known workspaces
+  qap workspace show            Show current workspace info
 
-qap start <task>              Mark task as in_progress
-qap mark <task> <state>       Set task state
-qap note <task> <text>        Add a note
-qap validate readiness        Check dependency graph
-qap report session            Show session changelog
-qap report project            Show project summary
+Execution:
+  qap status                    Show project status
+  qap next                      Show next ready task(s)
+  qap list                      List all tasks with states
+  qap show <id>                 Show task or epic details
+  qap run [--max <n>]           Run autonomous loop
+  qap run-next                  Run just the next ready task
+  qap run-task <id>             Run a specific task
 
-qap update                    Check for new version
-qap update --check            Force check (bypass throttle)
-qap update --apply            Download and install latest
+Options:
+  --config <path>               Config file (auto-detected from workspace)
+  --dry-run                     Preview without side effects
+  --help                        Show help for any command
 ```
 
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `--config <path>` | Config file (auto-detected from active project) |
-| `--dry-run` | Preview without side effects |
-| `--no-sync` | Disable Linear tracker sync |
-| `--max <n>` | Max tasks to run in loop |
-| `--skip-validation` | Skip validation steps |
-
-## Project Setup
-
-### AI-Assisted (Primary Path)
-
-Point Autopilot at your repo and let Claude generate the project workspace:
+Every subcommand supports `--help` with no side effects:
 
 ```bash
-# From planning artifacts
+qap project init --help
+qap project import --help
+```
+
+## TUI Overview
+
+Run `qap` to open the terminal UI.
+
+```
+┌── ■ QUESTPIE AUTOPILOT v0.2.0 │ WS my-repo │ PRJ v3-rollout ── 12T 3R 5D 0F ──┐
+│ [PROJECT]  SESSIONS   LOGS   HELP                                                │
+├─ PROJECT ─────────────┬─ READY ─────────────────────────────────────────────────-─┤
+│ Name    v3-rollout     │ ● TASK-007  [main] Implement auth module                │
+│ ID      v3-rollout     │ ● TASK-008  [main] Add API endpoints                    │
+│ Provider claude        │ ● TASK-012  [sidecar] Write integration tests           │
+│ Repo    /path/to/repo  │                                                         │
+├─ LOG ─────────────────┼─ COMPLETED / FAILED ────────────────────────────────────-─┤
+│ Project loaded         │ ✓ TASK-001  [gate] Initial setup                        │
+│ 12 tasks | 3 ready     │ ✓ TASK-002  [main] Database schema                      │
+│                        │ ✗ TASK-005  [main] Failed: timeout                      │
+├────────────────────────┴──────────────────────────────────────────────────────────┤
+│ ▸ Type a command... (/help)  ESC clear · Ctrl+C exit                             │
+└───────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tab Navigation
+
+| Key | View |
+|-----|------|
+| `1` | Project — active project info + task panels |
+| `2` | Sessions — run history for the active project |
+| `3` | Logs — full log output |
+| `4` | Help — command reference overlay |
+
+### TUI Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/project init` | Initialize new project (AI-assisted) |
+| `/project import` | Import existing artifacts |
+| `/project use <id>` | Switch active project |
+| `/project list` | List all projects |
+| `/sessions` | Show session history |
+| `/session show <id>` | Show session details |
+| `/run` | Run next ready task |
+| `/run-task <id>` | Run a specific task |
+| `/status` | Show task counts |
+| `/refresh` | Reload project state |
+| `/help` | Toggle help overlay |
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Submit command |
+| `ESC` | Close help / clear input |
+| `Ctrl+L` | Refresh state |
+| `Ctrl+C` | Exit |
+
+## AI-Assisted Setup
+
+Project setup is AI-assisted by default. You point Autopilot at your repo and context, and a Claude agent generates the project workspace.
+
+### Initialize from Planning Artifacts
+
+```bash
 qap project init \
   --repo /path/to/repo \
+  --name my-feature \
   --plan /path/to/plan.md \
   --provider claude
+```
 
-# From existing prompts
+### Import Existing Prompts
+
+```bash
 qap project import \
   --repo /path/to/repo \
+  --name v3-rollout \
   --prompts /path/to/prompt-directory \
   --provider claude
 ```
 
-This creates a workspace at `~/.qap/projects/<project-id>/` with:
+The agent reads your repo structure and artifacts, then generates:
+- `autopilot.config.ts` — task graph with dependencies
+- `handoff.md` — setup summary
+- prompt templates for each task
 
-```
-project.json           Project metadata
-autopilot.config.ts    Execution config (tasks, epics, deps)
-handoff.md             Setup summary
-prompts/               Task prompt files
-state.json             Runtime state
-```
+If the AI agent is unavailable, a fallback config is generated automatically.
+
+The project name is always an explicit input (`--name`) or inferred from context — never hardcoded to the repo basename.
 
 ### Manual Config (Fallback)
 
-Create `autopilot.config.ts` anywhere and pass it with `--config`:
+Advanced users can hand-author `autopilot.config.ts` and pass it with `--config`:
 
 ```typescript
 import type { ProjectConfig } from "@questpie/autopilot/core/types";
 
 const config: ProjectConfig = {
-  project: {
-    id: "my-project",
-    name: "My Project",
-    rootDir: ".",
-  },
+  project: { id: "my-project", name: "My Project", rootDir: "." },
   execution: {
     mode: "autonomous",
     defaultProvider: "claude",
     defaultPermissionProfile: "elevated",
-    stopOnFailure: true,
   },
-  prompts: {
-    templatesDir: "./prompts",
-  },
-  epics: [
-    { id: "EPIC-001", title: "Core Features", track: "main" },
-  ],
+  prompts: { templatesDir: "./prompts" },
+  epics: [{ id: "EPIC-001", title: "Core", track: "main" }],
   tasks: [
     {
       id: "TASK-001",
-      title: "Set up database schema",
+      title: "Set up schema",
       epicId: "EPIC-001",
       kind: "implementation",
       track: "gate",
-      promptFile: "./prompts/001-db-schema.md",
-      acceptanceCriteria: [
-        "Migration runs without errors",
-        "All tables created with correct types",
-      ],
-    },
-    {
-      id: "TASK-002",
-      title: "Implement user API",
-      epicId: "EPIC-001",
-      kind: "implementation",
-      track: "main",
-      dependsOn: ["TASK-001"],
-      promptFile: "./prompts/002-user-api.md",
+      promptFile: "./prompts/001-schema.md",
     },
   ],
 };
 
 export default config;
 ```
+
+## Local Storage Layout
+
+All data is stored locally under `~/.qap/`:
+
+```
+~/.qap/
+  workspaces/
+    <workspace-id>/
+      workspace.json                 # Workspace metadata + active project
+      projects/
+        <project-id>/
+          project.json               # Project metadata
+          autopilot.config.ts        # Task graph and execution config
+          handoff.md                 # Setup summary
+          prompts/                   # Task prompt templates
+          planning/                  # Planning artifacts
+          source/                    # Source references
+          sessions/                  # Run history
+            <session-id>.json
+```
+
+The workspace ID is derived from the repo root path. You never need to know or type it — `qap` resolves it from your current directory.
 
 ## Task Model
 
@@ -226,9 +249,9 @@ todo → ready → in_progress → implemented → validated_primary
   → validated_secondary → committed → done
 ```
 
-Tasks can also be `blocked` or `failed`, with recovery paths back to `todo`/`ready`.
+Tasks can also be `blocked` or `failed`, with recovery paths.
 
-### Dependencies & Tracks
+### Dependencies and Tracks
 
 - `dependsOn` — tasks that must complete first
 - `track` — priority: `gate` > `main` > `sidecar`
@@ -250,69 +273,14 @@ Tasks can also be `blocked` or `failed`, with recovery paths back to `todo`/`rea
 | Claude Code | `claude` | safe, elevated, max |
 | Codex | `codex` | safe, elevated, max |
 
-## Updates
+## Current Limitations
 
-Autopilot includes a simple, local-first self-update system.
-
-### How It Works
-
-- On startup, `qap` checks the npm registry for a newer version (at most once per 24 hours)
-- If an update is available, a one-line banner is shown — never blocking
-- Network failures are silently ignored
-
-### Manual Update
-
-```bash
-# Check for updates
-qap update
-
-# Force check (ignores throttle)
-qap update --check
-
-# Apply update
-qap update --apply
-
-# Or update directly via Bun
-bun add -g @questpie/autopilot@latest
-```
-
-### Auto-Update (Opt-In)
-
-Enable automatic background updates in `~/.qap/settings.json`:
-
-```json
-{
-  "update": {
-    "checkOnStart": true,
-    "autoUpdate": true,
-    "checkIntervalHours": 24
-  }
-}
-```
-
-When `autoUpdate` is `true`, the update runs in the background and never kills the running process. On next startup you'll see:
-
-```
-Updated to x.y.z — restart qap to use the new version
-```
-
-### Settings
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `update.checkOnStart` | `true` | Check for updates on CLI startup |
-| `update.autoUpdate` | `false` | Auto-install updates in background |
-| `update.checkIntervalHours` | `24` | Minimum hours between checks |
-
-Update metadata is cached at `~/.qap/meta/update.json`.
-
-## Philosophy
-
-- **Local-first** — your workspace is the source of truth
-- **Tracker-optional** — Linear sync is a mirror, not a dependency
-- **Model-agnostic** — swap providers without changing config
-- **Artifact-driven** — prompts, plans, and validation are files
-- **Developer-controlled** — you decide what runs, when, and how
+- TUI only — no web UI or remote cockpit
+- CLI-based agent runners only — no SDK integration yet
+- Session browser shows metadata — no full replay
+- Planning workflow is thin — no multi-agent validation
+- No distributed or multi-machine execution
+- Linear sync is optional and one-directional
 
 ## Development
 
