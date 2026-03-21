@@ -17,8 +17,12 @@ export function baseOptions(): BaseLayoutProps {
 		},
 		links: [
 			{
-				text: "QuestPie Docs",
-				url: "https://questpie.com/docs",
+				text: "Docs",
+				url: "/docs",
+			},
+			{
+				text: "QUESTPIE",
+				url: "https://questpie.com",
 				external: true,
 			},
 			{

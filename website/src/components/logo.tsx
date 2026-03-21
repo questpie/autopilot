@@ -1,16 +1,17 @@
 export function Logo({ className }: { className?: string }) {
 	return (
-		<div className={className}>
+		<div className={`flex items-center gap-2 ${className ?? ""}`}>
 			<img
-				src="/autopilot/logo/horizontal-lockup-light.svg"
-				alt="QUESTPIE"
-				className="h-6 w-auto dark:hidden"
+				src="/autopilot/logo/symbol-light.svg"
+				alt=""
+				className="h-5 w-auto dark:hidden"
 			/>
 			<img
-				src="/autopilot/logo/horizontal-lockup-dark.svg"
-				alt="QUESTPIE"
-				className="hidden h-6 w-auto dark:block"
+				src="/autopilot/logo/symbol-dark.svg"
+				alt=""
+				className="hidden h-5 w-auto dark:block"
 			/>
+			<span className="text-sm font-semibold tracking-tight">Autopilot</span>
 		</div>
 	);
 }
