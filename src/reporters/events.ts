@@ -14,6 +14,8 @@ export interface AutopilotEvent {
   unlocked?: string[];
   diffSummary?: string;
   detail?: string;
+  validationSummary?: string;
+  validationRecommendation?: string;
 }
 
 /**

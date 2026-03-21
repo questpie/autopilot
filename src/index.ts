@@ -179,6 +179,7 @@ async function main() {
     case "report":
       if (args[1] === "session") return cmdReportSession();
       if (args[1] === "project") return cmdReportProject();
+      if (args[1] === "task") return cmdReportTask(args[2]);
       break;
     default:
       printHelp();
@@ -285,6 +286,7 @@ Execution:
   qap validate readiness        Check all dependency readiness
   qap report session            Show session changelog
   qap report project            Show project summary
+  qap report task <id>          Show detailed validation report for a task
 
 Options:
   --config <path>               Config file (auto-detected from workspace)
@@ -493,6 +495,30 @@ async function cmdShow(id: string) {
 
     if (state.error) {
       console.log(`Error: ${state.error}`);
+    }
+
+    if (state.lastValidation) {
+      const v = state.lastValidation;
+      console.log(`\nLast Validation: ${v.passed ? "PASS" : "FAIL"} (${v.mode})`);
+      console.log(`  Summary: ${v.summary}`);
+      if (v.findings.length > 0) {
+        console.log(`  Findings:`);
+        for (const f of v.findings) {
+          console.log(`    - ${f}`);
+        }
+      }
+      if (v.recommendation) {
+        console.log(`  Recommendation: ${v.recommendation}`);
+      }
+    }
+
+    if (state.remediationAttempts > 0) {
+      console.log(`Remediation Attempts: ${state.remediationAttempts}`);
+      for (const r of state.remediationHistory ?? []) {
+        console.log(
+          `  #${r.attempt} ${r.result} (${r.timestamp.slice(0, 19)})`
+        );
+      }
     }
 
     return;
@@ -774,6 +800,51 @@ async function cmdSteer(subArgs: string[]) {
   }
 
   log.error("Usage: qap steer [project <text> | show]");
+}
+
+async function cmdReportTask(taskId: string) {
+  if (!taskId) {
+    log.error("Usage: qap report task <task-id>");
+    return;
+  }
+  const { config, store } = await loadState();
+  const task = config.tasks.find((t) => t.id === taskId);
+  if (!task) {
+    log.error(`Task ${taskId} not found.`);
+    return;
+  }
+  const state = store.getTask(taskId)!;
+
+  console.log(`\nValidation Report: ${taskId}`);
+  console.log(`Title: ${task.title}`);
+  console.log(`State: ${state.state}`);
+
+  if (!state.validationHistory || state.validationHistory.length === 0) {
+    console.log("\nNo validation history.");
+    return;
+  }
+
+  console.log(`\nValidation History (${state.validationHistory.length} entries):`);
+  for (const v of state.validationHistory) {
+    console.log(`\n  [${v.timestamp.slice(0, 19)}] ${v.passed ? "PASS" : "FAIL"} (${v.mode})`);
+    console.log(`  Summary: ${v.summary}`);
+    if (v.findings.length > 0) {
+      console.log(`  Findings:`);
+      for (const f of v.findings) {
+        console.log(`    - ${f}`);
+      }
+    }
+    if (v.recommendation) {
+      console.log(`  Recommendation: ${v.recommendation}`);
+    }
+  }
+
+  if (state.remediationHistory && state.remediationHistory.length > 0) {
+    console.log(`\nRemediation History (${state.remediationHistory.length} attempts):`);
+    for (const r of state.remediationHistory) {
+      console.log(`  #${r.attempt} ${r.result} (${r.timestamp.slice(0, 19)}) — ${r.findings.summary}`);
+    }
+  }
 }
 
 async function cmdReportProject() {

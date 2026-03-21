@@ -35,6 +35,12 @@ export class Store {
     try {
       const raw = await readFile(this.filePath, "utf-8");
       this.state = JSON.parse(raw);
+      // Migrate existing task states to include new fields
+      for (const task of Object.values(this.state.tasks)) {
+        if (!task.validationHistory) task.validationHistory = [];
+        if (task.remediationAttempts == null) task.remediationAttempts = 0;
+        if (!task.remediationHistory) task.remediationHistory = [];
+      }
     } catch {
       this.state = this.emptyState();
     }
@@ -66,6 +72,9 @@ export class Store {
         notes: [],
         runs: [],
         retries: 0,
+        validationHistory: [],
+        remediationAttempts: 0,
+        remediationHistory: [],
       };
     }
     return this.state.tasks[id]!;

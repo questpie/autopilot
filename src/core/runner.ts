@@ -5,10 +5,11 @@ import type {
   AgentProvider,
   PermissionProfile,
   PromptMode,
+  ValidationFindings,
 } from "./types.js";
 import { transition } from "./state.js";
 import { findNextTask, findReadyTasks, whatUnblocks } from "./readiness.js";
-import { renderPrompt, type SteeringContext } from "../prompts/renderer.js";
+import { renderPrompt, type SteeringContext, type RemediationContext } from "../prompts/renderer.js";
 import { ProviderRunner } from "../runners/provider.js";
 import { ClaudeRunner, DEFAULT_CLAUDE_CONFIG } from "../runners/claude.js";
 import { CodexRunner, DEFAULT_CODEX_CONFIG } from "../runners/codex.js";
@@ -29,6 +30,60 @@ export interface RunnerOptions {
   noSync?: boolean;
   workspaceId?: string;
   projectId?: string;
+}
+
+/**
+ * Parse structured validation findings from agent output.
+ * Expects format: Result: PASS|FAIL, Summary: ..., Issues: ..., Recommendation: ...
+ */
+export function parseValidationFindings(
+  output: string,
+  mode: PromptMode,
+  passed: boolean
+): ValidationFindings {
+  const lines = output.split("\n");
+
+  let summary = "";
+  const findings: string[] = [];
+  let recommendation = "";
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("Summary:")) {
+      summary = trimmed.slice("Summary:".length).trim();
+    } else if (trimmed.startsWith("Issues:")) {
+      const issueText = trimmed.slice("Issues:".length).trim();
+      if (issueText && issueText.toLowerCase() !== "none") {
+        // Split comma-separated or collect as single finding
+        if (issueText.includes(",")) {
+          findings.push(...issueText.split(",").map((s) => s.trim()).filter(Boolean));
+        } else {
+          findings.push(issueText);
+        }
+      }
+    } else if (trimmed.startsWith("- ") && findings.length > 0) {
+      // Continuation list items after Issues:
+      findings.push(trimmed.slice(2).trim());
+    } else if (trimmed.startsWith("Recommendation:")) {
+      recommendation = trimmed.slice("Recommendation:".length).trim();
+    }
+  }
+
+  // Fallback summary from Result line
+  if (!summary) {
+    const resultLine = lines.find((l) => l.trim().startsWith("Result:"));
+    summary = resultLine?.trim() ?? (passed ? "Validation passed" : "Validation failed");
+  }
+
+  return {
+    mode,
+    passed,
+    summary,
+    findings,
+    recommendation,
+    rawOutput: output.slice(0, 5000),
+    timestamp: new Date().toISOString(),
+  };
 }
 
 export class Runner {
@@ -498,8 +553,13 @@ export class Runner {
 
     if (!implSuccess) return;
 
-    // ── Validations ──────────────────────────────────────────
+    // ── Validations (with bounded remediation) ─────────────────
     if (!this.opts.skipValidation) {
+      const remediationEnabled =
+        this.config.execution.remediationOnValidationFail ?? true;
+      const maxRemediationAttempts =
+        this.config.execution.maxRemediationAttempts ?? 1;
+
       const v1 = await this.runValidation(
         task,
         runner,
@@ -507,7 +567,22 @@ export class Runner {
         timeout,
         profile
       );
-      if (!v1) return;
+      if (!v1) {
+        // Attempt remediation if enabled
+        if (remediationEnabled) {
+          const remediated = await this.runRemediationLoop(
+            task,
+            runner,
+            "validate-primary",
+            timeout,
+            profile,
+            maxRemediationAttempts
+          );
+          if (!remediated) return;
+        } else {
+          return;
+        }
+      }
 
       const v2 = await this.runValidation(
         task,
@@ -670,11 +745,19 @@ export class Runner {
     const passed =
       result.success && !result.output.includes("Result: FAIL");
 
+    // Parse and persist validation findings
+    const findings = parseValidationFindings(result.output, mode, passed);
+    taskState.lastValidation = findings;
+    taskState.validationHistory = taskState.validationHistory ?? [];
+    taskState.validationHistory.push(findings);
+
     await this.changelog.logValidation(
       task.id,
       mode,
       passed,
-      result.output
+      result.output,
+      findings.summary,
+      findings.recommendation
     );
     await this.events.emit({
       ts: new Date().toISOString(),
@@ -682,14 +765,16 @@ export class Runner {
       taskId: task.id,
       detail: mode,
       duration: result.duration,
+      validationSummary: findings.summary,
+      validationRecommendation: findings.recommendation,
     });
 
     if (!passed) {
       taskState = transition(taskState, "failed");
-      taskState.error = `${label} validation failed`;
+      taskState.error = `${label} validation failed: ${findings.summary}`;
       this.store.setTask(task.id, taskState);
       await this.store.save();
-      log.task(task.id, "failed", `${label} validation failed.`);
+      log.task(task.id, "failed", `${label} validation failed: ${findings.summary}`);
       this.tasksFailed++;
       await this.updateSession({
         tasksFailed: this.tasksFailed,
@@ -703,6 +788,170 @@ export class Runner {
     await this.store.save();
     log.task(task.id, targetState, `${label} validation passed.`);
     return true;
+  }
+
+  /**
+   * Bounded remediation loop: fix validation findings, then re-validate.
+   * Returns true if remediation + re-validation succeeded.
+   */
+  private async runRemediationLoop(
+    task: TaskConfig,
+    runner: ProviderRunner,
+    validationMode: PromptMode,
+    timeout: number,
+    profile: PermissionProfile,
+    maxAttempts: number
+  ): Promise<boolean> {
+    let taskState = this.store.getTask(task.id)!;
+    const lastFindings = taskState.lastValidation;
+
+    if (!lastFindings || lastFindings.passed) return true;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      log.task(
+        task.id,
+        "remediating",
+        `Remediation attempt ${attempt}/${maxAttempts}...`
+      );
+
+      // Reset task state from failed back to in_progress for remediation
+      taskState = this.store.getTask(task.id)!;
+      taskState.state = "in_progress";
+      taskState.error = undefined;
+      taskState.remediationAttempts = (taskState.remediationAttempts ?? 0) + 1;
+      this.store.setTask(task.id, taskState);
+      this.tasksFailed--; // Undo the fail count from runValidation
+      await this.store.save();
+
+      await this.changelog.logMessage(
+        `REMEDIATE ${task.id} — attempt ${attempt}/${maxAttempts}`
+      );
+      await this.events.emit({
+        ts: new Date().toISOString(),
+        event: "remediation-start",
+        taskId: task.id,
+        detail: `attempt ${attempt}/${maxAttempts}`,
+      });
+
+      // Build remediation prompt with validation findings context
+      const steering = await this.buildSteering(task.id);
+      const diffSummary = await this.captureDiffSummary();
+
+      const remediationCtx: RemediationContext = {
+        validationFindings: lastFindings.findings,
+        validationSummary: lastFindings.summary,
+        validationRecommendation: lastFindings.recommendation,
+        diffSummary: diffSummary ?? undefined,
+      };
+
+      const remPrompt = await renderPrompt(
+        this.config,
+        task,
+        "remediate",
+        this.store.getAllTasks(),
+        steering,
+        remediationCtx
+      );
+
+      const remResult = await runner.run(remPrompt, {
+        cwd: this.config.project.rootDir,
+        timeout,
+        permissionProfile: profile,
+      });
+
+      taskState = this.store.getTask(task.id)!;
+      taskState.runs.push(remResult.record);
+
+      if (!remResult.success) {
+        // Remediation implementation itself failed
+        taskState.remediationHistory = taskState.remediationHistory ?? [];
+        taskState.remediationHistory.push({
+          attempt,
+          findings: lastFindings,
+          result: "failure",
+          timestamp: new Date().toISOString(),
+        });
+        taskState = transition(taskState, "failed");
+        taskState.error = `Remediation attempt ${attempt} failed: ${remResult.error}`;
+        this.store.setTask(task.id, taskState);
+        await this.store.save();
+        this.tasksFailed++;
+
+        await this.events.emit({
+          ts: new Date().toISOString(),
+          event: "remediation-failed",
+          taskId: task.id,
+          error: remResult.error,
+          detail: `attempt ${attempt}/${maxAttempts}`,
+        });
+        await this.changelog.logMessage(
+          `REMEDIATE FAIL ${task.id} — attempt ${attempt}: ${remResult.error?.slice(0, 120) ?? "unknown error"}`
+        );
+        await this.updateSession({
+          tasksFailed: this.tasksFailed,
+          currentTaskId: undefined,
+        });
+        return false;
+      }
+
+      // Remediation succeeded — transition to implemented and re-validate
+      taskState = transition(taskState, "implemented");
+      this.store.setTask(task.id, taskState);
+      await this.store.save();
+
+      await this.changelog.logMessage(
+        `REMEDIATE OK ${task.id} — attempt ${attempt}, re-validating...`
+      );
+
+      // Re-run validation
+      const revalidated = await this.runValidation(
+        task,
+        runner,
+        validationMode,
+        timeout,
+        profile
+      );
+
+      taskState = this.store.getTask(task.id)!;
+      taskState.remediationHistory = taskState.remediationHistory ?? [];
+      taskState.remediationHistory.push({
+        attempt,
+        findings: taskState.lastValidation ?? lastFindings,
+        result: revalidated ? "success" : "failure",
+        timestamp: new Date().toISOString(),
+      });
+      this.store.setTask(task.id, taskState);
+      await this.store.save();
+
+      if (revalidated) {
+        await this.events.emit({
+          ts: new Date().toISOString(),
+          event: "remediation-success",
+          taskId: task.id,
+          detail: `attempt ${attempt}/${maxAttempts}`,
+        });
+        log.task(
+          task.id,
+          "remediated",
+          `Remediation succeeded on attempt ${attempt}.`
+        );
+        return true;
+      }
+
+      log.task(
+        task.id,
+        "failed",
+        `Remediation attempt ${attempt} did not fix validation issues.`
+      );
+    }
+
+    // All remediation attempts exhausted
+    log.task(
+      task.id,
+      "failed",
+      `All ${maxAttempts} remediation attempts exhausted.`
+    );
+    return false;
   }
 
   /** Returns true if passed, false if failed */

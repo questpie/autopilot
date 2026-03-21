@@ -56,11 +56,18 @@ export class ChangelogReporter {
     taskId: string,
     mode: string,
     passed: boolean,
-    _output: string
+    _output: string,
+    summary?: string,
+    recommendation?: string
   ): Promise<void> {
-    await this.append(
-      `**${this.ts()}** VALIDATE ${passed ? "PASS" : "FAIL"} ${taskId} (${mode})`
-    );
+    let line = `**${this.ts()}** VALIDATE ${passed ? "PASS" : "FAIL"} ${taskId} (${mode})`;
+    if (!passed && summary) {
+      line += ` — ${summary}`;
+    }
+    if (!passed && recommendation) {
+      line += ` [${recommendation}]`;
+    }
+    await this.append(line);
   }
 
   async logDiffSummary(

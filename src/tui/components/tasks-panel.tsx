@@ -72,15 +72,26 @@ export function TasksPanel({
       ) : (
         <scrollbox>
           {tasks.map((task) => (
-            <box key={task.id} flexDirection="row" gap={1}>
-              <text fg={stateColor(task.state)}>
-                {stateIcon(task.state)}
-              </text>
-              <text fg={BRAND.purple}>
-                <strong>{task.id.padEnd(10)}</strong>
-              </text>
-              <text fg={BRAND.fgDim}>{`[${task.track}]`}</text>
-              <text fg={BRAND.fg}>{task.title}</text>
+            <box key={task.id} flexDirection="column">
+              <box flexDirection="row" gap={1}>
+                <text fg={stateColor(task.state)}>
+                  {stateIcon(task.state)}
+                </text>
+                <text fg={BRAND.purple}>
+                  <strong>{task.id.padEnd(10)}</strong>
+                </text>
+                <text fg={BRAND.fgDim}>{`[${task.track}]`}</text>
+                <text fg={BRAND.fg}>{task.title}</text>
+              </box>
+              {task.state === "failed" && task.validationSummary ? (
+                <box paddingLeft={3}>
+                  <text fg={BRAND.error}>
+                    {"  ↳ "}{task.validationSummary}
+                    {task.validationRecommendation ? ` [${task.validationRecommendation}]` : ""}
+                    {task.remediationAttempts ? ` (${task.remediationAttempts} remediation)` : ""}
+                  </text>
+                </box>
+              ) : null}
             </box>
           ))}
         </scrollbox>

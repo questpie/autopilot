@@ -14,6 +14,9 @@ export interface TaskEntry {
   track: string;
   kind: string;
   epicId: string;
+  validationSummary?: string;
+  validationRecommendation?: string;
+  remediationAttempts?: number;
 }
 
 export interface TaskCounts {
@@ -189,39 +192,57 @@ export async function loadTuiState(): Promise<TuiState | null> {
       const allStates = store.getAllTasks();
       const ready = findReadyTasks(config.tasks, allStates);
 
-      readyTasks = ready.map((t) => ({
-        id: t.id,
-        title: t.title,
-        state: allStates[t.id]?.state ?? "todo",
-        track: t.track,
-        kind: t.kind,
-        epicId: t.epicId,
-      }));
+      readyTasks = ready.map((t) => {
+        const ts = allStates[t.id];
+        return {
+          id: t.id,
+          title: t.title,
+          state: ts?.state ?? "todo",
+          track: t.track,
+          kind: t.kind,
+          epicId: t.epicId,
+          validationSummary: ts?.lastValidation?.summary,
+          validationRecommendation: ts?.lastValidation?.recommendation,
+          remediationAttempts: ts?.remediationAttempts,
+        };
+      });
 
       completedTasks = config.tasks
         .filter((t) => {
           const s = allStates[t.id]?.state;
           return s === "done" || s === "committed" || s === "failed";
         })
-        .map((t) => ({
-          id: t.id,
-          title: t.title,
-          state: allStates[t.id]?.state ?? "todo",
-          track: t.track,
-          kind: t.kind,
-          epicId: t.epicId,
-        }));
+        .map((t) => {
+          const ts = allStates[t.id];
+          return {
+            id: t.id,
+            title: t.title,
+            state: ts?.state ?? "todo",
+            track: t.track,
+            kind: t.kind,
+            epicId: t.epicId,
+            validationSummary: ts?.lastValidation?.summary,
+            validationRecommendation: ts?.lastValidation?.recommendation,
+            remediationAttempts: ts?.remediationAttempts,
+          };
+        });
 
       inProgressTasks = config.tasks
         .filter((t) => allStates[t.id]?.state === "in_progress")
-        .map((t) => ({
-          id: t.id,
-          title: t.title,
-          state: "in_progress",
-          track: t.track,
-          kind: t.kind,
-          epicId: t.epicId,
-        }));
+        .map((t) => {
+          const ts = allStates[t.id];
+          return {
+            id: t.id,
+            title: t.title,
+            state: "in_progress",
+            track: t.track,
+            kind: t.kind,
+            epicId: t.epicId,
+            validationSummary: ts?.lastValidation?.summary,
+            validationRecommendation: ts?.lastValidation?.recommendation,
+            remediationAttempts: ts?.remediationAttempts,
+          };
+        });
 
       const states = config.tasks.map((t) => allStates[t.id]?.state ?? "todo");
       taskCounts = {

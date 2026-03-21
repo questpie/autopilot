@@ -184,6 +184,44 @@ Task-level:
 - primary validation
 - secondary validation
 
+### Validation Findings
+
+Each validation run produces structured `ValidationFindings`:
+- `mode` — which validation step
+- `passed` — boolean
+- `summary` — one-line description
+- `findings` — list of specific issues
+- `recommendation` — `proceed`, `fix-and-retry`, or `block`
+- `rawOutput` — truncated agent output
+
+Findings are persisted in `TaskRunState.lastValidation` and `TaskRunState.validationHistory[]`.
+
+### Bounded Remediation Loop
+
+After primary validation failure:
+1. Extract findings from validation output
+2. Send remediation prompt (original task + findings + diff)
+3. Re-validate
+4. Fail hard after `maxRemediationAttempts` (default: 1)
+
+Configuration:
+- `execution.remediationOnValidationFail` (default: `true`)
+- `execution.maxRemediationAttempts` (default: `1`)
+
+Safety bounds:
+- No infinite self-healing loops
+- Agent error during remediation = immediate task failure
+- `stopOnFailure` respects remediation failures
+
+### Inspecting Failed Tasks
+
+CLI:
+- `qap show <task-id>` — shows last validation summary
+- `qap report task <task-id>` — full validation + remediation history
+
+TUI:
+- Failed tasks show validation summary inline
+
 Later extensions:
 - epic validation
 - global validation

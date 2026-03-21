@@ -3,7 +3,7 @@ import { transition, canTransition, nextStates, InvalidTransitionError } from ".
 import type { TaskRunState } from "../src/core/types.js";
 
 function makeTask(state: TaskRunState["state"] = "todo"): TaskRunState {
-  return { id: "T-1", state, notes: [], runs: [], retries: 0 };
+  return { id: "T-1", state, notes: [], runs: [], retries: 0, validationHistory: [], remediationAttempts: 0, remediationHistory: [] };
 }
 
 describe("state machine", () => {

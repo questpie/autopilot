@@ -395,6 +395,69 @@ Tasks can also be `blocked` or `failed`, with recovery paths.
 | Claude Code | `claude` | safe, elevated, max |
 | Codex | `codex` | safe, elevated, max |
 
+## Validation Findings & Remediation
+
+### Validation Findings
+
+When a task fails validation, structured findings are extracted and persisted:
+
+- **Summary** — one-line description of the failure
+- **Findings** — specific issues found
+- **Recommendation** — `proceed`, `fix-and-retry`, or `block`
+
+Findings are stored in `TaskRunState.lastValidation` and `TaskRunState.validationHistory[]`.
+
+### Inspecting Failed Tasks
+
+```bash
+# Quick view — shows last validation summary inline
+qap show <task-id>
+
+# Detailed report — full validation + remediation history
+qap report task <task-id>
+```
+
+The TUI also shows validation summaries inline for failed tasks in the completed/failed panel.
+
+### Bounded Remediation Loop
+
+After a primary validation failure, Autopilot can automatically attempt to fix the issues:
+
+1. Parse validation findings from the failed validation
+2. Send a remediation prompt to the agent with the original task context + validation findings + current diff
+3. Re-run the failed validation step
+4. If still failing, stop (bounded — no infinite loops)
+
+**Configuration:**
+
+```typescript
+execution: {
+  // Enable/disable automatic remediation (default: true)
+  remediationOnValidationFail: true,
+  // Max remediation attempts per task (default: 1)
+  maxRemediationAttempts: 1,
+}
+```
+
+**Bounds:**
+- Default: 1 remediation attempt per task
+- Maximum configurable: any number, but recommended ≤ 2
+- After exhausting attempts, the task fails hard
+- If remediation itself fails (agent error), the task fails immediately
+- With `stopOnFailure: true`, the entire run stops after a failed task
+
+### Event Log
+
+Validation events now include:
+- `validationSummary` — one-line fail reason
+- `validationRecommendation` — agent's recommendation
+
+Remediation events: `remediation-start`, `remediation-success`, `remediation-failed`.
+
+### Changelog
+
+Validation entries include the fail reason and recommendation, not just PASS/FAIL.
+
 ## Current Limitations
 
 - TUI only — no web UI or remote cockpit

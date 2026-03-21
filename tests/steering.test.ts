@@ -24,7 +24,7 @@ const minimalConfig: ProjectConfig = {
 };
 
 const states: Record<string, TaskRunState> = {
-  T1: { id: "T1", state: "ready", notes: [], runs: [], retries: 0 },
+  T1: { id: "T1", state: "ready", notes: [], runs: [], retries: 0, validationHistory: [], remediationAttempts: 0, remediationHistory: [] },
 };
 
 describe("Prompt steering injection", () => {

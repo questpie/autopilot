@@ -24,7 +24,7 @@ function task(
 }
 
 function state(id: string, s: TaskRunState["state"] = "todo"): TaskRunState {
-  return { id, state: s, notes: [], runs: [], retries: 0 };
+  return { id, state: s, notes: [], runs: [], retries: 0, validationHistory: [], remediationAttempts: 0, remediationHistory: [] };
 }
 
 describe("readiness", () => {

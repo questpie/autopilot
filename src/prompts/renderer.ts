@@ -14,6 +14,13 @@ export interface SteeringContext {
   sessionNotes?: string[];
 }
 
+export interface RemediationContext {
+  validationFindings: string[];
+  validationSummary: string;
+  validationRecommendation: string;
+  diffSummary?: string;
+}
+
 /**
  * Render a complete prompt for an agent, combining all context sources.
  */
@@ -22,7 +29,8 @@ export async function renderPrompt(
   task: TaskConfig,
   mode: PromptMode,
   states: Record<string, TaskRunState>,
-  steering?: SteeringContext
+  steering?: SteeringContext,
+  remediation?: RemediationContext
 ): Promise<string> {
   const parts: string[] = [];
 
@@ -82,10 +90,28 @@ export async function renderPrompt(
     }
   }
 
-  // 6. Mode-specific instructions
+  // 6. Remediation context (only for remediate mode)
+  if (mode === "remediate" && remediation) {
+    const remParts: string[] = [
+      "# Remediation Context",
+      "",
+      `**Validation Summary:** ${remediation.validationSummary}`,
+      "",
+      "**Validation Findings:**",
+      ...remediation.validationFindings.map((f) => `- ${f}`),
+      "",
+      `**Recommendation:** ${remediation.validationRecommendation}`,
+    ];
+    if (remediation.diffSummary) {
+      remParts.push("", "**Current Diff:**", "```", remediation.diffSummary, "```");
+    }
+    parts.push(remParts.join("\n"));
+  }
+
+  // 7. Mode-specific instructions
   parts.push(renderModeInstructions(mode, task));
 
-  // 7. Output format
+  // 8. Output format
   parts.push(renderOutputFormat(mode));
 
   return parts.join("\n\n---\n\n");
@@ -200,11 +226,23 @@ function renderModeInstructions(mode: PromptMode, task: TaskConfig): string {
         "- All tests pass",
         "- No broken imports or missing exports",
       ].join("\n");
+
+    case "remediate":
+      return [
+        "# Instructions: Remediation",
+        "",
+        "Fix ONLY the issues identified in the validation findings above.",
+        "- Do NOT add new features or refactor unrelated code.",
+        "- Do NOT expand scope beyond fixing the specific validation failures.",
+        "- Focus on the validation findings and recommendation.",
+        "- After fixing, verify the fix addresses each finding.",
+        "- Keep changes minimal and targeted.",
+      ].join("\n");
   }
 }
 
 function renderOutputFormat(mode: PromptMode): string {
-  if (mode === "implement") {
+  if (mode === "implement" || mode === "remediate") {
     return [
       "# Required Output Format",
       "",
@@ -224,6 +262,7 @@ function renderOutputFormat(mode: PromptMode): string {
     "At the end of your validation, output:",
     "```",
     "Result: PASS | FAIL",
+    "Summary: <one-line summary of validation result>",
     "Issues: <list of issues found, or none>",
     "Recommendation: <proceed | fix-and-retry | block>",
     "```",

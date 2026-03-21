@@ -61,7 +61,8 @@ export type PromptMode =
   | "validate-primary"
   | "validate-secondary"
   | "validate-epic"
-  | "validate-global";
+  | "validate-global"
+  | "remediate";
 
 export type AgentProvider = "claude" | "codex";
 
@@ -127,6 +128,10 @@ export interface ProjectConfig {
     validateCommand?: string;
     /** What to do when validateCommand fails: "warn" = log + continue, "block" = fail task */
     validateCommandPolicy?: "warn" | "block";
+    /** Enable automatic remediation after validation failure */
+    remediationOnValidationFail?: boolean;
+    /** Maximum remediation attempts per task (default: 1) */
+    maxRemediationAttempts?: number;
   };
   tracker?: {
     provider: "linear";
@@ -146,6 +151,25 @@ export interface ProjectConfig {
   };
   epics: EpicConfig[];
   tasks: TaskConfig[];
+}
+
+// ── Validation Findings ─────────────────────────────────────
+export interface ValidationFindings {
+  mode: PromptMode;
+  passed: boolean;
+  summary: string;
+  findings: string[];
+  recommendation: string;
+  rawOutput: string;
+  timestamp: string;
+}
+
+// ── Remediation Record ──────────────────────────────────────
+export interface RemediationRecord {
+  attempt: number;
+  findings: ValidationFindings;
+  result: "success" | "failure";
+  timestamp: string;
 }
 
 // ── Runtime State ────────────────────────────────────────────
@@ -173,6 +197,10 @@ export interface TaskRunState {
   runs: AgentRunRecord[];
   error?: string;
   retries: number;
+  lastValidation?: ValidationFindings;
+  validationHistory: ValidationFindings[];
+  remediationAttempts: number;
+  remediationHistory: RemediationRecord[];
 }
 
 export interface RunState {
