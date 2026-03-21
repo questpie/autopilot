@@ -120,9 +120,9 @@ export class Runner {
       `${config.project.rootDir}/.autopilot-changelog.md`;
     this.changelog = new ChangelogReporter(logFile);
 
-    // Initialize provider runners
-    const claudeConfig = config.agents?.claude ?? DEFAULT_CLAUDE_CONFIG;
-    const codexConfig = config.agents?.codex ?? DEFAULT_CODEX_CONFIG;
+    // Initialize provider runners (merge with defaults so binary is never undefined)
+    const claudeConfig = { ...DEFAULT_CLAUDE_CONFIG, ...(config.agents?.claude ?? {}) };
+    const codexConfig = { ...DEFAULT_CODEX_CONFIG, ...(config.agents?.codex ?? {}) };
 
     this.runners = {
       claude: new ClaudeRunner(claudeConfig),
