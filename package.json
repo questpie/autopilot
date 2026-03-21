@@ -4,20 +4,45 @@
   "description": "Local-first workflow engine for coding agents",
   "type": "module",
   "private": false,
+  "author": "QUESTPIE",
+  "license": "MIT",
+  "packageManager": "bun@1.3.0",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
   "keywords": [
     "ai",
     "agent",
     "agents",
     "workflow",
     "cli",
+    "tui",
+    "planning",
     "orchestration",
-    "autopilot",
     "claude",
     "codex"
   ],
-  "bin": {
-    "autopilot": "./src/index.ts"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/questpie/questpie-autopilot.git"
   },
+  "homepage": "https://github.com/questpie/questpie-autopilot#readme",
+  "bugs": {
+    "url": "https://github.com/questpie/questpie-autopilot/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "qap": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "ROADMAP.md",
+    "SPEC.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "bun run src/index.ts",
     "test": "bun test",
@@ -28,20 +53,5 @@
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "typescript": "^5.8"
-  },
-  "license": "MIT",
-  "packageManager": "bun@1.3.0",
-  "engines": {
-    "bun": ">=1.3.0"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "files": [
-    "src",
-    "README.md",
-    "ROADMAP.md",
-    "SPEC.md",
-    "LICENSE"
-  ]
+  }
 }
