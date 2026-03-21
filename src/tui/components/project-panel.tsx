@@ -1,13 +1,19 @@
 import { BRAND } from "../brand.js";
-import type { ProjectMeta } from "../../workspace/types.js";
+import type { WorkspaceMeta, ProjectMeta } from "../../workspace/types.js";
 
 interface ProjectPanelProps {
   width: number;
   height: number;
+  workspace: WorkspaceMeta | null;
   project: ProjectMeta | null;
 }
 
-export function ProjectPanel({ width, height, project }: ProjectPanelProps) {
+export function ProjectPanel({
+  width,
+  height,
+  workspace,
+  project,
+}: ProjectPanelProps) {
   if (!project) {
     return (
       <box
@@ -24,7 +30,15 @@ export function ProjectPanel({ width, height, project }: ProjectPanelProps) {
       >
         <text fg={BRAND.fgDim}>No project selected</text>
         <text fg={BRAND.fgMuted}>{""}</text>
-        <text fg={BRAND.purple}>Type /init to create a project</text>
+        {workspace ? (
+          <>
+            <text fg={BRAND.fgDim}>
+              {"Workspace: "}{workspace.name}
+            </text>
+            <text fg={BRAND.fgMuted}>{""}</text>
+          </>
+        ) : null}
+        <text fg={BRAND.purple}>Type /project init to create a project</text>
         <text fg={BRAND.purple}>{"  or /project import to import one"}</text>
       </box>
     );
@@ -65,6 +79,12 @@ export function ProjectPanel({ width, height, project }: ProjectPanelProps) {
         <text fg={BRAND.fgDim}>{"Mode    "}</text>
         <text fg={BRAND.fg}>{project.source?.mode ?? "—"}</text>
       </box>
+      {workspace ? (
+        <box flexDirection="row" gap={1}>
+          <text fg={BRAND.fgDim}>{"Workspace"}</text>
+          <text fg={BRAND.fgMuted}>{workspace.name}</text>
+        </box>
+      ) : null}
     </box>
   );
 }

@@ -7,10 +7,12 @@ interface HelpOverlayProps {
 }
 
 const COMMANDS = [
-  ["/init [repo-path]", "Initialize a new project from repo"],
-  ["/project import [repo]", "Import existing project artifacts"],
+  ["/project init [--repo path]", "Initialize a new project (AI-assisted)"],
+  ["/project import [--repo path]", "Import existing project artifacts"],
   ["/project use <id>", "Switch active project"],
   ["/project list", "List all projects"],
+  ["/sessions", "Show session history"],
+  ["/session show <id>", "Show session details"],
   ["/run", "Run next ready task"],
   ["/run-task <id>", "Run a specific task"],
   ["/status", "Show task counts"],
@@ -19,12 +21,15 @@ const COMMANDS = [
 ] as const;
 
 const KEYS = [
+  ["1-4", "Switch tabs (Project/Sessions/Logs/Help)"],
+  ["Ctrl+L", "Refresh state"],
   ["ESC", "Close help / cancel"],
   ["Enter", "Submit command"],
+  ["Ctrl+C", "Exit"],
 ] as const;
 
 export function HelpOverlay({ width, height }: HelpOverlayProps) {
-  const boxW = Math.min(60, width - 4);
+  const boxW = Math.min(64, width - 4);
 
   return (
     <box
@@ -49,24 +54,24 @@ export function HelpOverlay({ width, height }: HelpOverlayProps) {
         gap={1}
       >
         <text fg={BRAND.purple}>
-          <strong>COMMANDS</strong>
+          <strong>SLASH COMMANDS</strong>
         </text>
         {COMMANDS.map(([cmd, desc]) => (
           <box key={cmd} flexDirection="row">
             <text fg={BRAND.fg}>
-              <strong>{cmd.padEnd(24)}</strong>
+              <strong>{cmd.padEnd(30)}</strong>
             </text>
             <text fg={BRAND.fgDim}>{desc}</text>
           </box>
         ))}
 
         <text fg={BRAND.purple}>
-          <strong>{"\nKEYS"}</strong>
+          <strong>{"\nKEYBOARD"}</strong>
         </text>
         {KEYS.map(([key, desc]) => (
           <box key={key} flexDirection="row">
             <text fg={BRAND.fg}>
-              <strong>{key.padEnd(24)}</strong>
+              <strong>{key.padEnd(30)}</strong>
             </text>
             <text fg={BRAND.fgDim}>{desc}</text>
           </box>

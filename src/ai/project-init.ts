@@ -335,29 +335,33 @@ ${details.map((d) => `- ${d}`).join("\n")}
 1. Review \`autopilot.config.ts\` and adjust task definitions
 2. Add prompt files to the \`prompts/\` directory
 3. Run \`qap project use ${projectId}\` to activate this project
-4. Run \`qap ui\` or \`qap status\` to check project state
+4. Run \`qap\` to open the TUI and start working
 `;
 }
 
 // ── Public API ──────────────────────────────────────────────
 
-export async function initProject(opts: InitOptions): Promise<ProjectMeta> {
+export async function initProject(opts: InitOptions): Promise<{
+  meta: ProjectMeta;
+  workspaceId: string;
+}> {
   const ws = new WorkspaceManager();
   await ws.ensureRoot();
 
   const repoRoot = resolve(opts.repo);
+  const workspace = await ws.ensureWorkspace(repoRoot);
   const projectName = opts.name ?? basename(repoRoot);
   const projectId = slugify(projectName);
   const provider = opts.provider ?? "claude";
-  const outputDir = getProjectDir(projectId);
+  const outputDir = getProjectDir(workspace.id, projectId);
 
-  if (await ws.projectExists(projectId)) {
+  if (await ws.projectExists(workspace.id, projectId)) {
     throw new Error(
-      `Project "${projectId}" already exists. Use a different name or delete it first.`
+      `Project "${projectId}" already exists in workspace "${workspace.name}". Use a different name or delete it first.`
     );
   }
 
-  log.info(`Initializing project "${projectName}" (${projectId})...`);
+  log.info(`Initializing project "${projectName}" (${projectId}) in workspace "${workspace.name}"...`);
 
   // Scan repo for context
   const repoFiles = await scanDir(repoRoot);
@@ -382,7 +386,7 @@ export async function initProject(opts: InitOptions): Promise<ProjectMeta> {
   };
 
   // Save project meta first (creates directories)
-  await ws.saveProject(meta);
+  await ws.saveProject(workspace.id, meta);
 
   // Try AI-assisted init
   const prompt = buildInitPrompt({
@@ -409,7 +413,7 @@ export async function initProject(opts: InitOptions): Promise<ProjectMeta> {
       [],
       outputDir
     );
-    await ws.writeProjectFile(projectId, "autopilot.config.ts", fallbackConfig);
+    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", fallbackConfig);
   }
 
   const handoffExists = existsSync(`${outputDir}/handoff.md`);
@@ -428,11 +432,12 @@ export async function initProject(opts: InitOptions): Promise<ProjectMeta> {
       "init",
       details
     );
-    await ws.writeProjectFile(projectId, "handoff.md", handoff);
+    await ws.writeProjectFile(workspace.id, projectId, "handoff.md", handoff);
   }
 
   // Initialize empty state
   await ws.writeProjectFile(
+    workspace.id,
     projectId,
     "state.json",
     JSON.stringify(
@@ -450,31 +455,32 @@ export async function initProject(opts: InitOptions): Promise<ProjectMeta> {
   );
 
   // Set as active project
-  await ws.setActiveProject(projectId);
+  await ws.setActiveProject(workspace.id, projectId);
 
   log.success(`Project "${projectName}" initialized at ${outputDir}`);
-  return meta;
+  return { meta, workspaceId: workspace.id };
 }
 
 export async function importProject(
   opts: ImportOptions
-): Promise<ProjectMeta> {
+): Promise<{ meta: ProjectMeta; workspaceId: string }> {
   const ws = new WorkspaceManager();
   await ws.ensureRoot();
 
   const repoRoot = resolve(opts.repo);
+  const workspace = await ws.ensureWorkspace(repoRoot);
   const projectName = opts.name ?? basename(repoRoot);
   const projectId = slugify(projectName);
   const provider = opts.provider ?? "claude";
-  const outputDir = getProjectDir(projectId);
+  const outputDir = getProjectDir(workspace.id, projectId);
 
-  if (await ws.projectExists(projectId)) {
+  if (await ws.projectExists(workspace.id, projectId)) {
     throw new Error(
-      `Project "${projectId}" already exists. Use a different name or delete it first.`
+      `Project "${projectId}" already exists in workspace "${workspace.name}". Use a different name or delete it first.`
     );
   }
 
-  log.info(`Importing project "${projectName}" (${projectId})...`);
+  log.info(`Importing project "${projectName}" (${projectId}) into workspace "${workspace.name}"...`);
 
   // Scan for prompt files
   const promptsDir = opts.prompts ? resolve(opts.prompts) : null;
@@ -499,7 +505,7 @@ export async function importProject(
   };
 
   // Save project meta (creates directories)
-  await ws.saveProject(meta);
+  await ws.saveProject(workspace.id, meta);
 
   // Copy prompt files to project workspace
   if (promptFiles.length > 0) {
@@ -536,7 +542,7 @@ export async function importProject(
       promptFiles,
       outputDir
     );
-    await ws.writeProjectFile(projectId, "autopilot.config.ts", fallbackConfig);
+    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", fallbackConfig);
   }
 
   const handoffExists = existsSync(`${outputDir}/handoff.md`);
@@ -558,11 +564,12 @@ export async function importProject(
       "import",
       details
     );
-    await ws.writeProjectFile(projectId, "handoff.md", handoff);
+    await ws.writeProjectFile(workspace.id, projectId, "handoff.md", handoff);
   }
 
   // Initialize empty state
   await ws.writeProjectFile(
+    workspace.id,
     projectId,
     "state.json",
     JSON.stringify(
@@ -580,8 +587,8 @@ export async function importProject(
   );
 
   // Set as active project
-  await ws.setActiveProject(projectId);
+  await ws.setActiveProject(workspace.id, projectId);
 
   log.success(`Project "${projectName}" imported at ${outputDir}`);
-  return meta;
+  return { meta, workspaceId: workspace.id };
 }

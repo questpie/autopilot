@@ -20,8 +20,19 @@ import {
   cmdProjectImport,
   cmdProjectList,
   cmdProjectUse,
+  printProjectHelp,
 } from "./commands/project.js";
+import {
+  cmdWorkspaceAdd,
+  cmdWorkspaceList,
+  cmdWorkspaceShow,
+  printWorkspaceHelp,
+} from "./commands/workspace.js";
 import type { PromptMode, TaskState } from "./core/types.js";
+import { checkForUpdate, getCurrentVersion } from "./update/checker.js";
+import { loadSettings } from "./update/settings.js";
+import { printUpdateBanner } from "./update/notify.js";
+import { applyUpdate, applyUpdateInBackground } from "./update/updater.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -43,15 +54,23 @@ async function resolveConfigPath(): Promise<string> {
   // Check local autopilot.config.ts
   if (existsSync("./autopilot.config.ts")) return "./autopilot.config.ts";
 
-  // Check active project workspace
+  // Check active project in CWD workspace
   const ws = new WorkspaceManager();
-  const activePath = await ws.getActiveConfigPath();
-  if (activePath) return activePath;
+  const workspace = await ws.resolveWorkspaceFromCwd();
+  if (workspace) {
+    const activePath = await ws.getActiveConfigPath(workspace.id);
+    if (activePath) return activePath;
+  }
 
   return "./autopilot.config.ts";
 }
 
 async function main() {
+  // Non-blocking update check on startup (for non-update commands)
+  if (command !== "update") {
+    startupUpdateCheck();
+  }
+
   // `qap` with no args or `qap ui` → launch TUI
   if (!command || command === "ui") {
     if (hasFlag("help")) {
@@ -72,6 +91,13 @@ async function main() {
   if (command === "project") {
     const sub = args[1];
     const subArgs = args.slice(2);
+
+    // No subcommand or help flag on project itself
+    if (!sub || sub === "--help" || sub === "-h" || sub === "help") {
+      printProjectHelp();
+      return;
+    }
+
     switch (sub) {
       case "init":
         return cmdProjectInit(subArgs);
@@ -79,21 +105,42 @@ async function main() {
         return cmdProjectImport(subArgs);
       case "list":
       case "ls":
-        return cmdProjectList();
+        return cmdProjectList(subArgs);
       case "use":
         return cmdProjectUse(subArgs);
       default:
-        console.log(`
-qap project <command>
-
-Commands:
-  init      Initialize a new project workspace (AI-assisted)
-  import    Import existing project artifacts (AI-assisted)
-  list      List all local projects
-  use <id>  Set active project
-`);
+        printProjectHelp();
         return;
     }
+  }
+
+  // Workspace management subcommands
+  if (command === "workspace") {
+    const sub = args[1];
+    const subArgs = args.slice(2);
+
+    if (!sub || sub === "--help" || sub === "-h" || sub === "help") {
+      printWorkspaceHelp();
+      return;
+    }
+
+    switch (sub) {
+      case "add":
+        return cmdWorkspaceAdd(subArgs);
+      case "list":
+      case "ls":
+        return cmdWorkspaceList();
+      case "show":
+        return cmdWorkspaceShow();
+      default:
+        printWorkspaceHelp();
+        return;
+    }
+  }
+
+  // Update commands
+  if (command === "update") {
+    return cmdUpdate();
   }
 
   // Engine commands (require config)
@@ -135,6 +182,63 @@ Commands:
   }
 }
 
+// ── Update ──────────────────────────────────────────────────
+
+/**
+ * Fire-and-forget update check on startup.
+ * Never blocks, never throws. Prints banner if update available.
+ */
+function startupUpdateCheck(): void {
+  loadSettings()
+    .then((settings) => {
+      if (!settings.update.checkOnStart) return;
+      return checkForUpdate().then((result) => {
+        printUpdateBanner(result);
+        // Auto-update if opted in
+        if (
+          settings.update.autoUpdate &&
+          result.updateAvailable &&
+          !result.updateApplied
+        ) {
+          applyUpdateInBackground();
+        }
+      });
+    })
+    .catch(() => {
+      // Silently ignore — never block startup
+    });
+}
+
+async function cmdUpdate(): Promise<void> {
+  const forceCheck = hasFlag("check");
+  const forceApply = hasFlag("apply");
+
+  if (forceApply) {
+    log.info("Applying update...");
+    const result = await applyUpdate();
+    if (result.success) {
+      log.success(
+        `Updated to ${result.version ?? "latest"}. Restart qap to use the new version.`
+      );
+    } else {
+      log.error(`Update failed: ${result.error}`);
+    }
+    return;
+  }
+
+  // Default: check (--check is explicit but also default behavior)
+  const result = await checkForUpdate(true);
+  if (result.updateAvailable && result.latestVersion) {
+    log.info(
+      `Update available: ${result.currentVersion} → ${result.latestVersion}`
+    );
+    log.info(`Run: bun add -g @questpie/autopilot@latest`);
+    log.info(`Or:  qap update --apply`);
+  } else {
+    log.success(`You're on the latest version (${result.currentVersion})`);
+  }
+}
+
 function printHelp() {
   console.log(`
 \x1b[38;2;183;0;255m■\x1b[0m \x1b[1mQUESTPIE AUTOPILOT\x1b[0m — local-first workflow engine for coding agents
@@ -147,8 +251,18 @@ Usage: qap [command] [options]
 Project Management:
   qap project init              Initialize new project (AI-assisted)
   qap project import            Import existing project artifacts
-  qap project list              List all local projects
+  qap project list              List projects in current workspace
   qap project use <id>          Set active project
+
+Workspace Management:
+  qap workspace add <path>      Register a repo as a workspace
+  qap workspace list            List all known workspaces
+  qap workspace show            Show current workspace info
+
+Updates:
+  qap update                    Check for new version
+  qap update --check            Force version check (ignore throttle)
+  qap update --apply            Download and install latest version
 
 Execution:
   qap status                    Show project status
@@ -167,12 +281,17 @@ Execution:
   qap report project            Show project summary
 
 Options:
-  --config <path>               Config file (auto-detected from active project)
+  --config <path>               Config file (auto-detected from workspace)
   --dry-run                     Show what would run (zero side effects)
   --no-sync                     Disable Linear sync
   --max <n>                     Max tasks to run in loop
   --skip-validation             Skip validation steps
   --mode <mode>                 Prompt mode
+
+Behavior:
+  \`qap\` auto-detects the workspace from your current directory.
+  If a workspace has one project, it loads automatically.
+  If multiple projects exist, the TUI shows a project picker.
 `);
 }
 

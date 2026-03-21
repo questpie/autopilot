@@ -1,7 +1,11 @@
 import { WorkspaceManager } from "../workspace/manager.js";
-import type { ProjectMeta } from "../workspace/types.js";
+import type { WorkspaceMeta, ProjectMeta, SessionMeta } from "../workspace/types.js";
+import { checkForUpdate } from "../update/checker.js";
+import { getUpdateStatusText } from "../update/notify.js";
 
 // ── TUI State ───────────────────────────────────────────────
+
+export type TuiView = "project" | "sessions" | "logs" | "help";
 
 export interface TaskEntry {
   id: string;
@@ -22,17 +26,26 @@ export interface TaskCounts {
 }
 
 export interface TuiState {
+  workspace: WorkspaceMeta | null;
   activeProject: ProjectMeta | null;
+  projects: ProjectMeta[];
+  sessions: SessionMeta[];
   readyTasks: TaskEntry[];
   completedTasks: TaskEntry[];
   taskCounts: TaskCounts;
   logs: string[];
   configPath: string | null;
+  activeView: TuiView;
+  needsProjectPicker: boolean;
+  updateStatus: string | null;
 }
 
 export function createInitialState(): TuiState {
   return {
+    workspace: null,
     activeProject: null,
+    projects: [],
+    sessions: [],
     readyTasks: [],
     completedTasks: [],
     taskCounts: {
@@ -45,35 +58,94 @@ export function createInitialState(): TuiState {
     },
     logs: ["QUESTPIE Autopilot started", "Type /help for commands"],
     configPath: null,
+    activeView: "project",
+    needsProjectPicker: false,
+    updateStatus: null,
   };
 }
 
 export async function loadTuiState(): Promise<TuiState | null> {
   const ws = new WorkspaceManager();
-  const activeId = await ws.getActiveProjectId();
+  const workspace = await ws.resolveWorkspaceFromCwd();
 
-  if (!activeId) {
+  if (!workspace) {
     return {
       ...createInitialState(),
       logs: [
-        "No active project",
-        "Use /init or /project import to create one",
-        "Or use /project use <id> to select one",
+        "No workspace found for current directory",
+        "Use /project init or /project import to create one",
+        "Or run: qap workspace add .",
       ],
     };
   }
 
-  const project = await ws.loadProject(activeId);
-  if (!project) {
+  const projects = await ws.listProjects(workspace.id);
+
+  // No projects — show empty state
+  if (projects.length === 0) {
     return {
       ...createInitialState(),
-      logs: [`Project "${activeId}" not found`, "Use /project list to see available projects"],
+      workspace,
+      projects: [],
+      logs: [
+        `Workspace: ${workspace.name}`,
+        `Repo: ${workspace.repoRoot}`,
+        "No projects yet",
+        "Use /project init or /project import to create one",
+      ],
     };
   }
 
-  const configPath = await ws.getActiveConfigPath();
+  // Multiple projects without an active one — show picker
+  const activeId = workspace.activeProject;
+  let activeProject: ProjectMeta | null = null;
 
-  // Try loading tasks from config if available
+  if (activeId) {
+    activeProject = projects.find((p) => p.id === activeId) ?? null;
+  }
+
+  if (!activeProject && projects.length === 1) {
+    // Auto-select single project
+    activeProject = projects[0]!;
+    await ws.setActiveProject(workspace.id, activeProject.id);
+  }
+
+  const needsProjectPicker = !activeProject && projects.length > 1;
+
+  if (needsProjectPicker) {
+    return {
+      ...createInitialState(),
+      workspace,
+      projects,
+      needsProjectPicker: true,
+      logs: [
+        `Workspace: ${workspace.name}`,
+        `${projects.length} projects found — select one:`,
+        ...projects.map((p, i) => `  ${i + 1}. ${p.id} (${p.provider})`),
+        "Use /project use <id> to select",
+      ],
+    };
+  }
+
+  if (!activeProject) {
+    return {
+      ...createInitialState(),
+      workspace,
+      projects,
+      logs: [
+        `Workspace: ${workspace.name}`,
+        "No active project",
+        "Use /project init or /project import to create one",
+      ],
+    };
+  }
+
+  // Load sessions
+  const sessions = await ws.listSessions(workspace.id, activeProject.id);
+
+  // Load config + tasks
+  const configPath = await ws.getActiveConfigPath(workspace.id);
+
   let readyTasks: TaskEntry[] = [];
   let completedTasks: TaskEntry[] = [];
   let taskCounts: TaskCounts = {
@@ -125,7 +197,6 @@ export async function loadTuiState(): Promise<TuiState | null> {
           epicId: t.epicId,
         }));
 
-      // Compute counts
       const states = config.tasks.map((t) => allStates[t.id]?.state ?? "todo");
       taskCounts = {
         total: config.tasks.length,
@@ -135,23 +206,43 @@ export async function loadTuiState(): Promise<TuiState | null> {
         failed: states.filter((s) => s === "failed").length,
         blocked: states.filter((s) => s === "blocked").length,
       };
-    } catch (err) {
-      // Config loading may fail if no tasks defined yet — that's ok
+    } catch {
+      // Config loading may fail if no tasks defined yet
     }
   }
 
+  // Non-blocking update check
+  let updateStatus: string | null = null;
+  try {
+    const updateResult = await checkForUpdate();
+    updateStatus = getUpdateStatusText(updateResult);
+  } catch {
+    // Never fail TUI load for update check
+  }
+
+  const logs = [
+    `Workspace: ${workspace.name}`,
+    `Project: ${activeProject.name}`,
+    `Provider: ${activeProject.provider}`,
+    `Repo: ${activeProject.repoRoot}`,
+    configPath ? `Config: ${configPath}` : "No config — run /project init to set up",
+    `${taskCounts.total} tasks | ${taskCounts.ready} ready | ${taskCounts.done} done`,
+    `${sessions.length} session(s)`,
+  ];
+  if (updateStatus) logs.push(updateStatus);
+
   return {
-    activeProject: project,
+    workspace,
+    activeProject,
+    projects,
+    sessions,
     readyTasks,
     completedTasks,
     taskCounts,
-    logs: [
-      `Project: ${project.name}`,
-      `Provider: ${project.provider}`,
-      `Repo: ${project.repoRoot}`,
-      configPath ? `Config: ${configPath}` : "No config — run /init to set up",
-      `${taskCounts.total} tasks | ${taskCounts.ready} ready | ${taskCounts.done} done`,
-    ],
+    logs,
     configPath,
+    activeView: "project",
+    needsProjectPicker: false,
+    updateStatus,
   };
 }

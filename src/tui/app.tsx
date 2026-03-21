@@ -1,21 +1,33 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useKeyboard, useTerminalDimensions, useRenderer } from "@opentui/react";
 import { BRAND } from "./brand.js";
 import { Header } from "./components/header.js";
 import { ProjectPanel } from "./components/project-panel.js";
+import { ProjectPicker } from "./components/project-picker.js";
 import { TasksPanel } from "./components/tasks-panel.js";
+import { SessionsPanel } from "./components/sessions-panel.js";
 import { LogPanel } from "./components/log-panel.js";
 import { CommandInput } from "./components/command-input.js";
 import { HelpOverlay } from "./components/help-overlay.js";
-import type { TuiState } from "./state.js";
+import { MainContent } from "./components/main-content.js";
+import type { TuiState, TuiView } from "./state.js";
 import { createInitialState, loadTuiState } from "./state.js";
 import { handleCommand } from "./commands.js";
 
+const TAB_MAP: Record<string, TuiView> = {
+  "1": "project",
+  "2": "sessions",
+  "3": "logs",
+  "4": "help",
+};
+
 export function App() {
   const { width, height } = useTerminalDimensions();
-  const renderer = useRenderer();
   const [state, setState] = useState<TuiState>(createInitialState);
-  const [showHelp, setShowHelp] = useState(false);
+
+  // Ref to always have latest state for async command handler
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   // Load project state on mount
   useEffect(() => {
@@ -24,47 +36,61 @@ export function App() {
     });
   }, []);
 
-  // Global keybindings
-  useKeyboard((key) => {
-    if (key.name === "escape" && showHelp) {
-      setShowHelp(false);
+  // Global keybindings — all state access via functional setState
+  useKeyboard(useCallback((key: { name?: string; ctrl?: boolean }) => {
+    if (key.name === "escape") {
+      setState((prev) =>
+        prev.activeView === "help" ? { ...prev, activeView: "project" } : prev
+      );
     }
-    // Ctrl+L refreshes state
+
     if (key.ctrl && key.name === "l") {
       loadTuiState().then((s) => {
         if (s) setState(s);
       });
     }
-  });
 
-  const onCommand = useCallback(
-    async (cmd: string) => {
-      if (cmd === "/help") {
-        setShowHelp((v) => !v);
-        return;
-      }
+    const tab = key.name ? TAB_MAP[key.name] : undefined;
+    if (tab) {
+      setState((prev) => ({ ...prev, activeView: tab }));
+    }
+  }, []));
 
+  // Stable command handler — uses ref for current state, functional setState for updates
+  const onCommand = useCallback(async (cmd: string) => {
+    if (cmd === "/help") {
       setState((prev) => ({
         ...prev,
-        logs: [...prev.logs, `> ${cmd}`].slice(-100),
+        activeView: prev.activeView === "help" ? "project" : "help",
       }));
+      return;
+    }
 
-      const result = await handleCommand(cmd, state);
-      if (result.newState) {
-        setState(result.newState);
-      }
-      if (result.log) {
-        setState((prev) => ({
-          ...prev,
-          logs: [...prev.logs, result.log!].slice(-100),
-        }));
-      }
-    },
-    [state]
-  );
+    setState((prev) => ({
+      ...prev,
+      logs: [...prev.logs, `> ${cmd}`].slice(-100),
+    }));
+
+    const result = await handleCommand(cmd, stateRef.current);
+
+    if (result.newState) {
+      setState(result.newState);
+    }
+    if (result.log) {
+      setState((prev) => ({
+        ...prev,
+        logs: [...prev.logs, result.log!].slice(-100),
+      }));
+    }
+  }, []);
+
+  // Stable close handler for help overlay
+  const closeHelp = useCallback(() => {
+    setState((prev) => ({ ...prev, activeView: "project" }));
+  }, []);
 
   // Layout calculations
-  const headerH = 3;
+  const headerH = 4;
   const inputH = 3;
   const mainH = height - headerH - inputH;
   const leftW = Math.floor(width * 0.4);
@@ -79,59 +105,32 @@ export function App() {
       backgroundColor={BRAND.bg}
       flexDirection="column"
     >
-      {/* Header bar */}
       <Header
         width={width}
+        workspace={state.workspace}
         project={state.activeProject}
         taskCounts={state.taskCounts}
+        activeView={state.activeView}
+        updateStatus={state.updateStatus}
       />
 
-      {/* Main content area */}
-      <box width={width} height={mainH} flexDirection="row">
-        {/* Left column */}
-        <box width={leftW} height={mainH} flexDirection="column">
-          <ProjectPanel
-            width={leftW}
-            height={topPanelH}
-            project={state.activeProject}
-          />
-          <LogPanel
-            width={leftW}
-            height={bottomPanelH}
-            logs={state.logs}
-          />
-        </box>
+      <MainContent
+        state={state}
+        width={width}
+        mainH={mainH}
+        leftW={leftW}
+        rightW={rightW}
+        topPanelH={topPanelH}
+        bottomPanelH={bottomPanelH}
+      />
 
-        {/* Right column */}
-        <box width={rightW} height={mainH} flexDirection="column">
-          <TasksPanel
-            width={rightW}
-            height={topPanelH}
-            title="READY"
-            tasks={state.readyTasks}
-            emptyText="No ready tasks"
-            statusColor={BRAND.success}
-          />
-          <TasksPanel
-            width={rightW}
-            height={bottomPanelH}
-            title="COMPLETED / FAILED"
-            tasks={state.completedTasks}
-            emptyText="No completed tasks"
-            statusColor={BRAND.fgDim}
-          />
-        </box>
-      </box>
-
-      {/* Command input */}
       <CommandInput width={width} onSubmit={onCommand} />
 
-      {/* Help overlay */}
-      {showHelp && (
+      {state.activeView === "help" && (
         <HelpOverlay
           width={width}
           height={height}
-          onClose={() => setShowHelp(false)}
+          onClose={closeHelp}
         />
       )}
     </box>

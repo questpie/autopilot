@@ -118,6 +118,10 @@ qap note <task> <text>        Add a note
 qap validate readiness        Check dependency graph
 qap report session            Show session changelog
 qap report project            Show project summary
+
+qap update                    Check for new version
+qap update --check            Force check (bypass throttle)
+qap update --apply            Download and install latest
 ```
 
 ### Options
@@ -245,6 +249,62 @@ Tasks can also be `blocked` or `failed`, with recovery paths back to `todo`/`rea
 |----------|--------|-------------------|
 | Claude Code | `claude` | safe, elevated, max |
 | Codex | `codex` | safe, elevated, max |
+
+## Updates
+
+Autopilot includes a simple, local-first self-update system.
+
+### How It Works
+
+- On startup, `qap` checks the npm registry for a newer version (at most once per 24 hours)
+- If an update is available, a one-line banner is shown — never blocking
+- Network failures are silently ignored
+
+### Manual Update
+
+```bash
+# Check for updates
+qap update
+
+# Force check (ignores throttle)
+qap update --check
+
+# Apply update
+qap update --apply
+
+# Or update directly via Bun
+bun add -g @questpie/autopilot@latest
+```
+
+### Auto-Update (Opt-In)
+
+Enable automatic background updates in `~/.qap/settings.json`:
+
+```json
+{
+  "update": {
+    "checkOnStart": true,
+    "autoUpdate": true,
+    "checkIntervalHours": 24
+  }
+}
+```
+
+When `autoUpdate` is `true`, the update runs in the background and never kills the running process. On next startup you'll see:
+
+```
+Updated to x.y.z — restart qap to use the new version
+```
+
+### Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `update.checkOnStart` | `true` | Check for updates on CLI startup |
+| `update.autoUpdate` | `false` | Auto-install updates in background |
+| `update.checkIntervalHours` | `24` | Minimum hours between checks |
+
+Update metadata is cached at `~/.qap/meta/update.json`.
 
 ## Philosophy
 
