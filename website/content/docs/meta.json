@@ -2,13 +2,9 @@
 	"title": "Documentation",
 	"pages": [
 		"index",
-		"---Getting Started---",
 		"getting-started",
-		"---Core Concepts---",
 		"core-concepts",
-		"---Guides---",
 		"guides",
-		"---Reference---",
 		"reference",
 		"cli-reference",
 		"configuration",
