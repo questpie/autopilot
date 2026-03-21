@@ -46,6 +46,7 @@ export function App() {
             // Preserve user's active view and logs
             activeView: prev.activeView,
             logs: prev.logs,
+            // Use fresh session events from state reload
           }));
         }
       });

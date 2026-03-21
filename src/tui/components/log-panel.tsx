@@ -4,9 +4,10 @@ interface LogPanelProps {
   width: number;
   height: number;
   logs: string[];
+  title?: string;
 }
 
-export function LogPanel({ width, height, logs }: LogPanelProps) {
+export function LogPanel({ width, height, logs, title }: LogPanelProps) {
   return (
     <box
       width={width}
@@ -14,7 +15,7 @@ export function LogPanel({ width, height, logs }: LogPanelProps) {
       border
       borderStyle="single"
       borderColor={BRAND.border}
-      title=" LOG "
+      title={title ?? " LOG "}
       titleAlignment="left"
       backgroundColor={BRAND.card}
       flexDirection="column"

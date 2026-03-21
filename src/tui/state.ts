@@ -36,6 +36,10 @@ export interface RunningSession {
   tasksFailed: number;
   taskCount: number;
   lastEventAt?: string;
+  sessionEventsPath?: string;
+  currentPhase?: string;
+  activeTool?: string;
+  backend?: string;
 }
 
 export interface TuiState {
@@ -48,6 +52,8 @@ export interface TuiState {
   inProgressTasks: TaskEntry[];
   taskCounts: TaskCounts;
   logs: string[];
+  /** Live session events (from provider event stream) */
+  sessionEvents: string[];
   configPath: string | null;
   activeView: TuiView;
   needsProjectPicker: boolean;
@@ -73,6 +79,7 @@ export function createInitialState(): TuiState {
       blocked: 0,
     },
     logs: ["QUESTPIE Autopilot started", "Type /help for commands"],
+    sessionEvents: [],
     configPath: null,
     activeView: "project",
     needsProjectPicker: false,
@@ -258,8 +265,9 @@ export async function loadTuiState(): Promise<TuiState | null> {
     }
   }
 
-  // Detect running session
+  // Detect running session and load live events
   let runningSession: RunningSession | null = null;
+  let sessionEvents: string[] = [];
   const runningS = sessions.find((s) => s.status === "running");
   if (runningS) {
     runningSession = {
@@ -270,7 +278,52 @@ export async function loadTuiState(): Promise<TuiState | null> {
       tasksFailed: runningS.tasksFailed,
       taskCount: runningS.taskCount,
       lastEventAt: runningS.lastEventAt,
+      sessionEventsPath: runningS.sessionEventsPath,
+      currentPhase: runningS.currentPhase,
+      activeTool: runningS.activeTool,
+      backend: runningS.backend,
     };
+
+    // Load recent session events for live display
+    if (runningS.sessionEventsPath) {
+      try {
+        const { SessionEventLog } = await import("../events/session-log.js");
+        const sessionLog = new SessionEventLog(runningS.sessionEventsPath);
+        const events = await sessionLog.readAll();
+        // Take last 50 events, format for display
+        sessionEvents = events.slice(-50).map((e) => {
+          const ts = e.ts?.slice(11, 19) ?? "";
+          switch (e.type) {
+            case "session-start":
+              return `[${ts}] SESSION START`;
+            case "session-end":
+              return `[${ts}] SESSION END (${((e.payload as any).duration ?? 0) / 1000}s)`;
+            case "assistant-message":
+              return `[${ts}] ${((e.payload as any).text ?? "").slice(0, 80)}`;
+            case "tool-call-start":
+              return `[${ts}] ▸ ${(e.payload as any).toolName}`;
+            case "tool-call-end":
+              return `[${ts}] ✓ ${(e.payload as any).toolName}`;
+            case "tool-call-fail":
+              return `[${ts}] ✗ ${(e.payload as any).toolName}: ${((e.payload as any).error ?? "").slice(0, 60)}`;
+            case "notification":
+              return `[${ts}] ${(e.payload as any).message ?? ""}`;
+            case "subagent-start":
+              return `[${ts}] SUBAGENT ▸ ${(e.payload as any).agentId}`;
+            case "subagent-stop":
+              return `[${ts}] SUBAGENT ✓ ${(e.payload as any).agentId}`;
+            case "result":
+              return `[${ts}] RESULT: ${((e.payload as any).text ?? "").slice(0, 80)}`;
+            case "error":
+              return `[${ts}] ERROR: ${((e.payload as any).message ?? "").slice(0, 80)}`;
+            default:
+              return `[${ts}] ${e.type}`;
+          }
+        });
+      } catch {
+        // Events not available yet
+      }
+    }
   }
 
   // Non-blocking update check
@@ -303,6 +356,7 @@ export async function loadTuiState(): Promise<TuiState | null> {
     inProgressTasks,
     taskCounts,
     logs,
+    sessionEvents,
     configPath,
     activeView: "project",
     needsProjectPicker: false,

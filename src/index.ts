@@ -143,6 +143,11 @@ async function main() {
     return cmdUpdate();
   }
 
+  // Logs command (reads session events)
+  if (command === "logs") {
+    return cmdLogs();
+  }
+
   // Engine commands (require config)
   switch (command) {
     case "status":
@@ -267,6 +272,11 @@ Updates:
   qap update                    Check for new version
   qap update --check            Force version check (ignore throttle)
   qap update --apply            Download and install latest version
+
+Live Monitoring:
+  qap logs                      Show session events (latest session)
+  qap logs --follow             Tail live session events
+  qap logs --session <id>       Show events for a specific session
 
 Execution:
   qap status                    Show project status
@@ -800,6 +810,129 @@ async function cmdSteer(subArgs: string[]) {
   }
 
   log.error("Usage: qap steer [project <text> | show]");
+}
+
+async function cmdLogs(): Promise<void> {
+  const follow = hasFlag("follow") || hasFlag("f");
+  const ws = new WorkspaceManager();
+  const workspace = await ws.resolveWorkspaceFromCwd();
+
+  if (!workspace) {
+    log.error("No workspace found for current directory.");
+    return;
+  }
+
+  const activeId = await ws.getActiveProjectId(workspace.id);
+  if (!activeId) {
+    log.error("No active project. Use `qap project use <id>`.");
+    return;
+  }
+
+  const sessions = await ws.listSessions(workspace.id, activeId);
+  const targetSessionId = flag("session");
+
+  // Find session: explicit --session, or latest running, or latest
+  let targetSession = targetSessionId
+    ? sessions.find((s) => s.id === targetSessionId || s.id.startsWith(targetSessionId))
+    : sessions.find((s) => s.status === "running") ?? sessions[0];
+
+  if (!targetSession) {
+    log.error("No sessions found.");
+    return;
+  }
+
+  // Build event log path
+  const eventsPath = targetSession.sessionEventsPath;
+  if (!eventsPath) {
+    // Fallback: try standard path
+    const { sessionEventLogPath } = await import("./events/session-log.js");
+    const fallbackPath = sessionEventLogPath(workspace.id, activeId, targetSession.id);
+    const { existsSync } = await import("node:fs");
+    if (!existsSync(fallbackPath)) {
+      log.error("No session events file found. Run with SDK backend to generate events.");
+      return;
+    }
+    targetSession = { ...targetSession, sessionEventsPath: fallbackPath };
+  }
+
+  const { SessionEventLog } = await import("./events/session-log.js");
+  const sessionLog = new SessionEventLog(targetSession.sessionEventsPath!);
+
+  if (!follow) {
+    // One-shot: print all events
+    const events = await sessionLog.readAll();
+    if (events.length === 0) {
+      log.info("No events in session log.");
+      return;
+    }
+    for (const event of events) {
+      printEvent(event);
+    }
+    return;
+  }
+
+  // Follow mode: tail events
+  log.info(`Following session ${targetSession.id.slice(0, 8)} events... (Ctrl+C to stop)`);
+
+  const ac = sessionLog.tail((event) => {
+    printEvent(event);
+  });
+
+  // Stop on SIGINT
+  process.on("SIGINT", () => {
+    ac.abort();
+    process.exit(0);
+  });
+
+  // Keep alive
+  await new Promise(() => {});
+}
+
+function printEvent(event: any): void {
+  const ts = event.ts?.slice(11, 19) ?? "";
+  const type = event.type ?? "unknown";
+  const payload = event.payload ?? {};
+
+  switch (type) {
+    case "session-start":
+      console.log(`\x1b[36m[${ts}]\x1b[0m \x1b[1mSESSION START\x1b[0m${payload.sdkSessionId ? ` (${payload.sdkSessionId})` : ""}`);
+      break;
+    case "session-end":
+      console.log(`\x1b[36m[${ts}]\x1b[0m \x1b[1mSESSION END\x1b[0m ${payload.reason ?? ""} (${((payload.duration ?? 0) / 1000).toFixed(1)}s)`);
+      break;
+    case "assistant-text-delta":
+      process.stdout.write(payload.text ?? "");
+      break;
+    case "assistant-message":
+      console.log(`\x1b[37m[${ts}]\x1b[0m ${(payload.text ?? "").slice(0, 120)}`);
+      break;
+    case "tool-call-start":
+      console.log(`\x1b[33m[${ts}]\x1b[0m \x1b[1m▸ ${payload.toolName}\x1b[0m${payload.toolId ? ` (${payload.toolId.slice(0, 8)})` : ""}`);
+      break;
+    case "tool-call-end":
+      console.log(`\x1b[32m[${ts}]\x1b[0m \x1b[1m✓ ${payload.toolName}\x1b[0m`);
+      break;
+    case "tool-call-fail":
+      console.log(`\x1b[31m[${ts}]\x1b[0m \x1b[1m✗ ${payload.toolName}\x1b[0m: ${payload.error?.slice(0, 100) ?? ""}`);
+      break;
+    case "notification":
+      console.log(`\x1b[34m[${ts}]\x1b[0m ${payload.message ?? ""}`);
+      break;
+    case "subagent-start":
+      console.log(`\x1b[35m[${ts}]\x1b[0m SUBAGENT START ${payload.agentId ?? ""}`);
+      break;
+    case "subagent-stop":
+      console.log(`\x1b[35m[${ts}]\x1b[0m SUBAGENT STOP ${payload.agentId ?? ""}`);
+      break;
+    case "result":
+      console.log(`\x1b[32m[${ts}]\x1b[0m \x1b[1mRESULT\x1b[0m (${payload.stopReason ?? ""}): ${(payload.text ?? "").slice(0, 200)}`);
+      break;
+    case "error":
+      console.log(`\x1b[31m[${ts}]\x1b[0m \x1b[1mERROR\x1b[0m: ${payload.message ?? ""}`);
+      break;
+    default:
+      console.log(`\x1b[90m[${ts}]\x1b[0m ${type}: ${JSON.stringify(payload).slice(0, 100)}`);
+  }
 }
 
 async function cmdReportTask(taskId: string) {

@@ -52,12 +52,17 @@ export function MainContent({
   }
 
   if (state.activeView === "logs") {
+    // Show session events if available, otherwise show general logs
+    const logsToShow = state.sessionEvents.length > 0
+      ? state.sessionEvents
+      : state.logs;
     return (
       <box width={width} height={mainH} flexDirection="row">
         <LogPanel
           width={width}
           height={mainH}
-          logs={state.logs}
+          logs={logsToShow}
+          title={state.sessionEvents.length > 0 ? " SESSION EVENTS " : " LOG "}
         />
       </box>
     );
@@ -81,7 +86,8 @@ export function MainContent({
         <LogPanel
           width={leftW}
           height={bottomPanelH}
-          logs={state.logs}
+          logs={state.sessionEvents.length > 0 ? state.sessionEvents : state.logs}
+          title={state.sessionEvents.length > 0 ? " EVENTS " : " LOG "}
         />
       </box>
 

@@ -3,6 +3,7 @@ import type {
   TaskConfig,
   TaskRunState,
   AgentProvider,
+  AgentResult,
   PermissionProfile,
   PromptMode,
   ValidationFindings,
@@ -13,11 +14,15 @@ import { renderPrompt, type SteeringContext, type RemediationContext } from "../
 import { ProviderRunner } from "../runners/provider.js";
 import { ClaudeRunner, DEFAULT_CLAUDE_CONFIG } from "../runners/claude.js";
 import { CodexRunner, DEFAULT_CODEX_CONFIG } from "../runners/codex.js";
+import { ClaudeSdkRunner } from "../runners/claude-sdk.js";
+import type { StreamingRunOptions } from "../runners/streaming.js";
 import { Store } from "../storage/store.js";
 import { ChangelogReporter } from "../reporters/changelog.js";
 import { LinearReporter } from "../reporters/linear.js";
 import { LiveStatusWriter } from "../reporters/live-status.js";
 import { EventLog } from "../reporters/events.js";
+import { SessionEventLog, sessionEventLogPath } from "../events/session-log.js";
+import type { ProviderEventSink } from "../events/types.js";
 import { log } from "../utils/logger.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { SessionMeta } from "../workspace/types.js";
@@ -88,17 +93,21 @@ export function parseValidationFindings(
 
 export class Runner {
   private runners: Record<AgentProvider, ProviderRunner>;
+  private claudeSdkRunner: ClaudeSdkRunner | null = null;
   private store: Store;
   private changelog: ChangelogReporter;
   private linear: LinearReporter;
   private liveStatus: LiveStatusWriter;
   private events: EventLog;
+  private sessionEventLog: SessionEventLog | null = null;
+  private sessionEventSink: ProviderEventSink | null = null;
   private tasksCompleted = 0;
   private tasksFailed = 0;
   private stopRequested = false;
   private syncEnabled: boolean;
   private session: SessionMeta | null = null;
   private wsManager: WorkspaceManager;
+  private useClaudeSdk: boolean;
 
   constructor(
     private config: ProjectConfig,
@@ -119,6 +128,12 @@ export class Runner {
       claude: new ClaudeRunner(claudeConfig),
       codex: new CodexRunner(codexConfig),
     };
+
+    // Initialize Claude SDK runner if backend=sdk
+    this.useClaudeSdk = claudeConfig.backend === "sdk";
+    if (this.useClaudeSdk) {
+      this.claudeSdkRunner = new ClaudeSdkRunner(claudeConfig);
+    }
 
     // Sync is disabled by: --no-sync, --dry-run, or tracker.enabled=false
     this.syncEnabled =
@@ -154,8 +169,15 @@ export class Runner {
     if (!wsId || !prjId) return;
 
     const protoDir = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
+    const sessId = this.store.getSessionId();
+
+    // Initialize per-session event log
+    const eventsPath = sessionEventLogPath(wsId, prjId, sessId);
+    this.sessionEventLog = new SessionEventLog(eventsPath);
+    this.sessionEventSink = this.sessionEventLog.createSink();
+
     this.session = {
-      id: this.store.getSessionId(),
+      id: sessId,
       projectId: prjId,
       workspaceId: wsId,
       startedAt: new Date().toISOString(),
@@ -168,6 +190,8 @@ export class Runner {
       eventLogPath: `${protoDir}/events.jsonl`,
       changelogPath: this.config.reporting?.sessionLogFile ??
         `${this.config.project.rootDir}/.autopilot-changelog.md`,
+      sessionEventsPath: eventsPath,
+      backend: this.useClaudeSdk ? "sdk" : "cli",
     };
     await this.wsManager.saveSession(wsId, prjId, this.session);
   }
@@ -470,11 +494,14 @@ export class Runner {
         steering
       );
 
-      const implResult = await runner.run(implPrompt, {
-        cwd: this.config.project.rootDir,
-        timeout,
-        permissionProfile: profile,
-      });
+      const implResult = await this.runProvider(
+        provider,
+        runner,
+        implPrompt,
+        { cwd: this.config.project.rootDir, timeout, permissionProfile: profile },
+        task.id,
+        "implement"
+      );
 
       taskState.runs.push(implResult.record);
 
@@ -708,6 +735,35 @@ export class Runner {
     });
   }
 
+  /**
+   * Route execution through SDK runner or CLI runner based on config.
+   * SDK runner gets the event sink for streaming; CLI runner uses existing path.
+   */
+  private async runProvider(
+    provider: AgentProvider,
+    cliRunner: ProviderRunner,
+    prompt: string,
+    opts: { cwd: string; timeout: number; permissionProfile: PermissionProfile },
+    taskId: string,
+    phase: string
+  ): Promise<AgentResult> {
+    // Use SDK runner for claude if configured
+    if (provider === "claude" && this.claudeSdkRunner) {
+      // Update session metadata
+      await this.updateSession({ currentPhase: phase });
+
+      return this.claudeSdkRunner.runStreaming(prompt, {
+        ...opts,
+        sink: this.sessionEventSink ?? undefined,
+        taskId,
+        phase,
+      });
+    }
+
+    // Fallback: CLI runner (existing behavior)
+    return cliRunner.run(prompt, opts);
+  }
+
   private async runValidation(
     task: TaskConfig,
     runner: ProviderRunner,
@@ -733,11 +789,15 @@ export class Runner {
       valSteering
     );
 
-    const result = await runner.run(prompt, {
-      cwd: this.config.project.rootDir,
-      timeout,
-      permissionProfile: profile,
-    });
+    const provider = task.provider ?? this.config.execution.defaultProvider;
+    const result = await this.runProvider(
+      provider,
+      runner,
+      prompt,
+      { cwd: this.config.project.rootDir, timeout, permissionProfile: profile },
+      task.id,
+      mode
+    );
 
     let taskState = this.store.getTask(task.id)!;
     taskState.runs.push(result.record);
@@ -853,11 +913,15 @@ export class Runner {
         remediationCtx
       );
 
-      const remResult = await runner.run(remPrompt, {
-        cwd: this.config.project.rootDir,
-        timeout,
-        permissionProfile: profile,
-      });
+      const remProvider = task.provider ?? this.config.execution.defaultProvider;
+      const remResult = await this.runProvider(
+        remProvider,
+        runner,
+        remPrompt,
+        { cwd: this.config.project.rootDir, timeout, permissionProfile: profile },
+        task.id,
+        "remediate"
+      );
 
       taskState = this.store.getTask(task.id)!;
       taskState.runs.push(remResult.record);

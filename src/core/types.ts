@@ -70,6 +70,9 @@ export type PermissionProfile = "safe" | "elevated" | "max";
 
 export type ExecutionMode = "prompt-only" | "autonomous";
 
+// ── Provider Backend ─────────────────────────────────────────
+export type ProviderBackend = "cli" | "sdk";
+
 // ── Provider Config ──────────────────────────────────────────
 export interface ProviderConfig {
   binary: string;
@@ -77,6 +80,8 @@ export interface ProviderConfig {
   defaultArgs?: string[];
   timeoutMs?: number;
   permissionProfiles?: Record<PermissionProfile, string[]>;
+  /** Backend to use: "cli" (spawn binary) or "sdk" (Agent SDK). Default: "cli" */
+  backend?: ProviderBackend;
 }
 
 // ── Task Config ──────────────────────────────────────────────

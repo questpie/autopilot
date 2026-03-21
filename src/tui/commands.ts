@@ -56,7 +56,7 @@ export async function handleCommand(
 
     case "help":
       return {
-        log: `[${timestamp()}] Commands: /project [init|import|list|use <id>], /sessions, /session show <id>, /run, /run-task <id>, /status, /note [show] <task-id> [text], /steer [project <text>|show], /refresh, /help`,
+        log: `[${timestamp()}] Commands: /project [init|import|list|use <id>], /sessions, /session show <id>, /run, /run-task <id>, /status, /note [show] <task-id> [text], /steer [project <text>|show], /refresh, /help | Views: 1=project 2=sessions 3=logs`,
       };
 
     default:

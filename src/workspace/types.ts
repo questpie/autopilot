@@ -42,6 +42,18 @@ export interface SessionMeta {
   eventLogPath?: string;
   changelogPath?: string;
   notes: string[];
+  /** Current execution phase (implement, validate-primary, etc.) */
+  currentPhase?: string;
+  /** Currently active tool name */
+  activeTool?: string;
+  /** Last assistant text update (truncated) */
+  lastAssistantUpdate?: string;
+  /** Path to the per-session provider events JSONL */
+  sessionEventsPath?: string;
+  /** SDK session ID if using Agent SDK backend */
+  sdkSessionId?: string;
+  /** Provider backend used: "cli" or "sdk" */
+  backend?: string;
 }
 
 // ── Constants ──
