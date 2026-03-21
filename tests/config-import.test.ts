@@ -3,6 +3,12 @@ import { WorkspaceManager } from "../src/workspace/manager.js";
 import { getProjectDir } from "../src/workspace/types.js";
 import { loadConfig } from "../src/config/loader.js";
 import { Store } from "../src/storage/store.js";
+import {
+  loadBacklog,
+  compileBacklogToConfig,
+  detectBacklog,
+  type BacklogManifest,
+} from "../src/config/backlog.js";
 import { rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve, relative } from "node:path";
@@ -363,5 +369,224 @@ export default config;
 
     const configPath = `${outputDir}/autopilot.config.ts`;
     await expect(loadConfig(configPath)).rejects.toThrow();
+  });
+});
+
+// ── Backlog Manifest Import ──
+
+const MINI_BACKLOG: BacklogManifest = {
+  version: 1,
+  project: {
+    id: "test-backlog",
+    name: "Test Backlog Project",
+    tracker: { provider: "linear", projectId: "TEST" },
+  },
+  sharedContext: "shared.md",
+  epics: [
+    { id: "EPIC-A", title: "Phase A", track: "main" },
+    { id: "EPIC-B", title: "Sidecar B", track: "sidecar" },
+  ],
+  tasks: [
+    { id: "QUE-100", title: "Gate task", epicId: "EPIC-A", kind: "poc", track: "gate" },
+    { id: "QUE-101", title: "Main impl", epicId: "EPIC-A", kind: "implementation", track: "main", dependsOn: ["QUE-100"] },
+    { id: "QUE-102", title: "Follow-up", epicId: "EPIC-A", kind: "implementation", track: "main", dependsOn: ["QUE-101"] },
+    { id: "QUE-200", title: "Sidecar cleanup", epicId: "EPIC-B", kind: "cleanup", track: "sidecar" },
+  ],
+};
+
+describe("Backlog manifest — load and validate", () => {
+  test("loadBacklog parses valid manifest", async () => {
+    const path = `${TEST_HOME}/backlog.json`;
+    await mkdir(TEST_HOME, { recursive: true });
+    await writeFile(path, JSON.stringify(MINI_BACKLOG));
+
+    const manifest = await loadBacklog(path);
+    expect(manifest).not.toBeNull();
+    expect(manifest!.tasks.length).toBe(4);
+    expect(manifest!.epics.length).toBe(2);
+  });
+
+  test("loadBacklog returns null for missing file", async () => {
+    const manifest = await loadBacklog(`${TEST_HOME}/nope.json`);
+    expect(manifest).toBeNull();
+  });
+
+  test("loadBacklog rejects invalid manifest (unknown epic ref)", async () => {
+    const bad = {
+      ...MINI_BACKLOG,
+      tasks: [{ id: "T-1", title: "x", epicId: "NOPE", kind: "implementation", track: "main" }],
+    };
+    const path = `${TEST_HOME}/bad-backlog.json`;
+    await writeFile(path, JSON.stringify(bad));
+    const manifest = await loadBacklog(path);
+    expect(manifest).toBeNull();
+  });
+
+  test("detectBacklog finds backlog.json in prompts dir", async () => {
+    const dir = `${TEST_HOME}/prompts`;
+    await mkdir(dir, { recursive: true });
+    await writeFile(`${dir}/backlog.json`, JSON.stringify(MINI_BACKLOG));
+
+    const manifest = await detectBacklog(dir);
+    expect(manifest).not.toBeNull();
+    expect(manifest!.project.id).toBe("test-backlog");
+  });
+});
+
+describe("Backlog manifest — compile to config", () => {
+  test("compileBacklogToConfig produces loadable qap-native config", async () => {
+    const projectId = "backlog-compile";
+    const ws = new WorkspaceManager();
+    const workspace = await ws.ensureWorkspace(TEST_REPO);
+    await ws.saveProject(workspace.id, {
+      id: projectId,
+      name: projectId,
+      repoRoot: TEST_REPO,
+      provider: "claude",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const outputDir = getProjectDir(workspace.id, projectId);
+    const compiled = compileBacklogToConfig(MINI_BACKLOG, TEST_REPO, outputDir);
+    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", compiled);
+
+    const configPath = `${outputDir}/autopilot.config.ts`;
+    const config = await loadConfig(configPath);
+
+    // Real issue IDs preserved
+    expect(config.tasks.map((t) => t.id)).toEqual(["QUE-100", "QUE-101", "QUE-102", "QUE-200"]);
+    expect(config.epics.map((e) => e.id)).toEqual(["EPIC-A", "EPIC-B"]);
+    // No generic TASK-xxx
+    expect(config.tasks.every((t) => !t.id.startsWith("TASK-"))).toBe(true);
+  });
+
+  test("compiled config preserves dependencies", async () => {
+    const projectId = "backlog-deps";
+    const ws = new WorkspaceManager();
+    const workspace = await ws.ensureWorkspace(TEST_REPO);
+    await ws.saveProject(workspace.id, {
+      id: projectId,
+      name: projectId,
+      repoRoot: TEST_REPO,
+      provider: "claude",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const outputDir = getProjectDir(workspace.id, projectId);
+    const compiled = compileBacklogToConfig(MINI_BACKLOG, TEST_REPO, outputDir);
+    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", compiled);
+
+    const configPath = `${outputDir}/autopilot.config.ts`;
+    const config = await loadConfig(configPath);
+
+    const que101 = config.tasks.find((t) => t.id === "QUE-101");
+    expect(que101!.dependsOn).toEqual(["QUE-100"]);
+
+    const que102 = config.tasks.find((t) => t.id === "QUE-102");
+    expect(que102!.dependsOn).toEqual(["QUE-101"]);
+
+    const que200 = config.tasks.find((t) => t.id === "QUE-200");
+    expect(que200!.dependsOn).toBeUndefined();
+  });
+
+  test("compiled config respects dependency graph in findReadyTasks", async () => {
+    const projectId = "backlog-ready";
+    const ws = new WorkspaceManager();
+    const workspace = await ws.ensureWorkspace(TEST_REPO);
+    await ws.saveProject(workspace.id, {
+      id: projectId,
+      name: projectId,
+      repoRoot: TEST_REPO,
+      provider: "claude",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const outputDir = getProjectDir(workspace.id, projectId);
+    const compiled = compileBacklogToConfig(MINI_BACKLOG, TEST_REPO, outputDir);
+    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", compiled);
+
+    const configPath = `${outputDir}/autopilot.config.ts`;
+    const config = await loadConfig(configPath);
+
+    const store = new Store(config.project.rootDir, config.project.id);
+    await store.load();
+    for (const task of config.tasks) store.initTask(task.id);
+
+    const { findReadyTasks } = await import("../src/core/readiness.js");
+    const ready = findReadyTasks(config.tasks, store.getAllTasks());
+
+    // Only tasks with no unmet deps should be ready
+    const readyIds = ready.map((t) => t.id);
+    expect(readyIds).toContain("QUE-100"); // gate, no deps
+    expect(readyIds).toContain("QUE-200"); // sidecar, no deps
+    expect(readyIds).not.toContain("QUE-101"); // blocked by QUE-100
+    expect(readyIds).not.toContain("QUE-102"); // blocked by QUE-101
+  });
+
+  test("compiled config show/next works with real issue IDs", async () => {
+    const projectId = "backlog-show";
+    const ws = new WorkspaceManager();
+    const workspace = await ws.ensureWorkspace(TEST_REPO);
+    await ws.saveProject(workspace.id, {
+      id: projectId,
+      name: projectId,
+      repoRoot: TEST_REPO,
+      provider: "claude",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const outputDir = getProjectDir(workspace.id, projectId);
+    const compiled = compileBacklogToConfig(MINI_BACKLOG, TEST_REPO, outputDir);
+    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", compiled);
+
+    const configPath = `${outputDir}/autopilot.config.ts`;
+    const config = await loadConfig(configPath);
+
+    // show: can find by real issue ID
+    const que100 = config.tasks.find((t) => t.id === "QUE-100");
+    expect(que100).toBeDefined();
+    expect(que100!.title).toBe("Gate task");
+    expect(que100!.kind).toBe("poc");
+    expect(que100!.track).toBe("gate");
+
+    // next: returns gate task first (highest priority)
+    const store = new Store(config.project.rootDir, config.project.id);
+    await store.load();
+    for (const task of config.tasks) store.initTask(task.id);
+
+    const { findNextTask } = await import("../src/core/readiness.js");
+    const next = findNextTask(config.tasks, store.getAllTasks());
+    expect(next).not.toBeNull();
+    expect(next!.id).toBe("QUE-100"); // gate > main > sidecar
+  });
+
+  test("compiled config has no generic TASK-001 IDs", async () => {
+    const projectId = "backlog-no-generic";
+    const ws = new WorkspaceManager();
+    const workspace = await ws.ensureWorkspace(TEST_REPO);
+    await ws.saveProject(workspace.id, {
+      id: projectId,
+      name: projectId,
+      repoRoot: TEST_REPO,
+      provider: "claude",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const outputDir = getProjectDir(workspace.id, projectId);
+    const compiled = compileBacklogToConfig(MINI_BACKLOG, TEST_REPO, outputDir);
+
+    // Check raw content — no TASK-xxx anywhere
+    expect(compiled).not.toContain("TASK-001");
+    expect(compiled).not.toContain("TASK-");
+    expect(compiled).toContain("QUE-100");
+    expect(compiled).toContain("QUE-101");
+    // No banned imports
+    expect(compiled).not.toContain("@anthropic-ai/claude-code");
+    expect(compiled).not.toContain("defineConfig");
   });
 });

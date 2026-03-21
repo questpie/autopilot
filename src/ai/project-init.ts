@@ -5,6 +5,7 @@ import { WorkspaceManager } from "../workspace/manager.js";
 import { getProjectDir } from "../workspace/types.js";
 import type { ProjectMeta } from "../workspace/types.js";
 import { loadConfig } from "../config/loader.js";
+import { detectBacklog, compileBacklogToConfig } from "../config/backlog.js";
 import { log } from "../utils/logger.js";
 
 // ── AI-Assisted Project Init/Import ─────────────────────────
@@ -620,23 +621,40 @@ export async function importProject(
     log.info(`Copied ${promptFiles.length} prompt file(s)`);
   }
 
-  // Try AI-assisted import
-  const prompt = buildImportPrompt({
-    repoRoot,
-    projectId,
-    projectName,
-    outputDir,
-    promptFiles,
-    linearIssue: opts.linearIssue,
-    repoFiles: repoFiles.slice(0, 30),
-  });
-
-  const result = await spawnInitAgent(prompt, outputDir);
-
-  // Fallback if AI didn't produce config
+  // ── Strategy: backlog.json > AI > generic fallback ────────
   const configPath = `${outputDir}/autopilot.config.ts`;
+  let importMode: "backlog" | "ai" | "fallback" = "fallback";
+
+  // 1. Try backlog manifest (issue-level import)
+  const backlog = promptsDir ? await detectBacklog(promptsDir) : null;
+  if (backlog) {
+    log.info(`Compiling backlog: ${backlog.tasks.length} tasks, ${backlog.epics.length} epics`);
+    const compiled = compileBacklogToConfig(backlog, repoRoot, outputDir, provider);
+    await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", compiled);
+    importMode = "backlog";
+  }
+
+  // 2. Try AI-assisted import (only if no backlog)
+  if (!backlog) {
+    const prompt = buildImportPrompt({
+      repoRoot,
+      projectId,
+      projectName,
+      outputDir,
+      promptFiles,
+      linearIssue: opts.linearIssue,
+      repoFiles: repoFiles.slice(0, 30),
+    });
+
+    const result = await spawnInitAgent(prompt, outputDir);
+    if (result.success && existsSync(configPath)) {
+      importMode = "ai";
+    }
+  }
+
+  // 3. Generic fallback if nothing produced a config
   if (!existsSync(configPath)) {
-    log.warn("AI agent did not produce config — generating fallback...");
+    log.warn("No backlog and AI unavailable — generating phase-level fallback...");
     const fallbackConfig = generateFallbackConfig(
       projectId,
       projectName,
@@ -646,12 +664,13 @@ export async function importProject(
       outputDir
     );
     await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", fallbackConfig);
+    importMode = "fallback";
   }
 
   // Validate generated config — replace with fallback if broken
   const configValid = await validateGeneratedConfig(configPath);
   if (!configValid) {
-    log.warn("AI-generated config is invalid — replacing with fallback...");
+    log.warn(`${importMode} config is invalid — replacing with phase-level fallback...`);
     const fallbackConfig = generateFallbackConfig(
       projectId,
       projectName,
@@ -661,12 +680,13 @@ export async function importProject(
       outputDir
     );
     await ws.writeProjectFile(workspace.id, projectId, "autopilot.config.ts", fallbackConfig);
+    importMode = "fallback";
 
     // Validate fallback too
     const fallbackValid = await validateGeneratedConfig(configPath);
     if (!fallbackValid) {
       throw new Error(
-        `Failed to generate a valid config for project "${projectId}". Both AI and fallback configs are invalid.`
+        `Failed to generate a valid config for project "${projectId}". Config validation failed.`
       );
     }
   }
@@ -677,15 +697,13 @@ export async function importProject(
       `Repo: ${repoRoot}`,
       `Provider: ${provider}`,
       `Prompt files: ${promptFiles.length}`,
+      `Import mode: ${importMode}${importMode === "backlog" ? ` (${backlog!.tasks.length} tasks)` : ""}`,
       opts.linearIssue
         ? `Linear issue: ${opts.linearIssue}`
         : "No Linear context",
-      result.success
-        ? "AI agent completed successfully"
-        : "AI agent unavailable — used fallback config",
       configValid
         ? "Config validated successfully"
-        : "AI config was invalid — used fallback",
+        : "Config was invalid — used fallback",
     ];
     const handoff = generateFallbackHandoff(
       projectId,
