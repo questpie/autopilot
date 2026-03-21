@@ -2,116 +2,269 @@
 
 Local-first workflow engine for coding agents.
 
-QUESTPIE Autopilot helps you turn software delivery into a structured loop:
-- plan
-- import or create a project workspace
-- run agents against real tasks
-- validate outputs
-- monitor progress from a terminal UI
-
-It is built for developers who want more than chat and copy-paste.
-
-## What It Does
-
-Autopilot gives you:
-- a local project workspace
-- task readiness and dependency tracking
-- agent execution with Claude Code CLI or Codex CLI
-- validation steps and run history
-- local state, logs, and event streams
-- a terminal UI for monitoring and control
+Run structured software delivery loops from your terminal — plan, execute, validate, and monitor tasks driven by Claude Code or Codex.
 
 ## Install
 
-Bun is required.
+Requires [Bun](https://bun.sh) >= 1.3.
 
 ```bash
 bun add -g @questpie/autopilot
 ```
 
-## Core Experience
-
-The intended default flow is:
+## Quick Start
 
 ```bash
+# Open the terminal UI
 qap
-```
 
-That should open the terminal UI.
+# Or set up a project first
+qap project init --repo /path/to/your/repo
+qap project import --repo /path/to/repo --prompts /path/to/prompts
 
-You can also use the CLI directly:
-
-```bash
-qap --help
-qap ui
-qap project init
-qap project import
-qap project list
-qap project use
+# Check status from CLI
 qap status
 qap next
-qap run
+
+# Run a task
 qap run-task TASK-001
 ```
 
+## What It Does
+
+Autopilot turns a backlog of tasks into a structured execution loop:
+
+1. **Plan** — define tasks, dependencies, and prompts
+2. **Execute** — agents (Claude Code, Codex) run tasks autonomously
+3. **Validate** — primary and secondary validation per task
+4. **Monitor** — watch progress from the TUI or CLI
+
+### What You Get
+
+- Task DAG with dependency tracking and readiness engine
+- Autonomous execution loop with retry policies
+- Claude Code and Codex CLI runners
+- Per-task validation steps
+- Local state persistence and event logging
+- Terminal UI for real-time monitoring
+- AI-assisted project setup
+
+## Terminal UI
+
+Run `qap` with no arguments to open the TUI.
+
+```
+┌── ■ QUESTPIE AUTOPILOT v0.1.0 ── PROJECT my-project ── 12T 3R 5D 0F ───┐
+├─ PROJECT ─────────────┬─ READY ─────────────────────────────────────────┤
+│ Name    my-project     │ ● TASK-007  [main] Implement auth module       │
+│ ID      my-project     │ ● TASK-008  [main] Add API endpoints           │
+│ Provider claude        │ ● TASK-012  [sidecar] Write integration tests  │
+│ Repo    /path/to/repo  │                                                │
+├─ LOG ─────────────────┼─ COMPLETED / FAILED ────────────────────────────┤
+│ Project loaded         │ ✓ TASK-001  [gate] Initial setup               │
+│ 12 tasks | 3 ready     │ ✓ TASK-002  [main] Database schema             │
+│                        │ ✗ TASK-005  [main] Failed: timeout             │
+├────────────────────────┴─────────────────────────────────────────────────┤
+│ ▸ Type a command... (/help)  ESC clear · Ctrl+C exit                    │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### TUI Commands
+
+| Command | Description |
+|---------|-------------|
+| `/init [path]` | Initialize new project from repo |
+| `/project import [path]` | Import existing artifacts |
+| `/project use <id>` | Switch active project |
+| `/project list` | List all projects |
+| `/run` | Run next ready task |
+| `/run-task <id>` | Run a specific task |
+| `/status` | Show task counts |
+| `/refresh` | Reload project state |
+| `/help` | Show help |
+
+### Keyboard
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Submit command |
+| `ESC` | Clear input / close help |
+| `Ctrl+C` | Exit |
+| `Ctrl+L` | Refresh state |
+
+## CLI Reference
+
+```
+qap                           Open terminal UI (default)
+qap ui                        Open terminal UI
+
+qap project init              Initialize new project (AI-assisted)
+qap project import            Import existing artifacts
+qap project list              List all local projects
+qap project use <id>          Set active project
+
+qap status                    Show project status
+qap next                      Show next ready task(s)
+qap list                      List all tasks with states
+qap show <id>                 Show task or epic details
+qap run [--max <n>]           Run autonomous loop
+qap run-next                  Run just the next ready task
+qap run-task <id>             Run a specific task
+qap prompt <id> --mode <m>    Render prompt for a task
+
+qap start <task>              Mark task as in_progress
+qap mark <task> <state>       Set task state
+qap note <task> <text>        Add a note
+qap validate readiness        Check dependency graph
+qap report session            Show session changelog
+qap report project            Show project summary
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--config <path>` | Config file (auto-detected from active project) |
+| `--dry-run` | Preview without side effects |
+| `--no-sync` | Disable Linear tracker sync |
+| `--max <n>` | Max tasks to run in loop |
+| `--skip-validation` | Skip validation steps |
+
 ## Project Setup
 
-Autopilot is designed around AI-assisted project setup.
+### AI-Assisted (Primary Path)
 
-Instead of manually authoring internal project files, the tool should be able to:
-- read your repo
-- read planning or prompt artifacts
-- read optional tracker context
-- create the local project workspace it needs
+Point Autopilot at your repo and let Claude generate the project workspace:
 
-## Current Status
+```bash
+# From planning artifacts
+qap project init \
+  --repo /path/to/repo \
+  --plan /path/to/plan.md \
+  --provider claude
 
-Autopilot is in active alpha development.
+# From existing prompts
+qap project import \
+  --repo /path/to/repo \
+  --prompts /path/to/prompt-directory \
+  --provider claude
+```
 
-Today, the core engine already has:
-- task state machine
-- readiness engine
-- local state persistence
-- event logging
-- Claude Code CLI runner
-- Codex CLI runner
-- targeted task execution
-- dry-run support
+This creates a workspace at `~/.qap/projects/<project-id>/` with:
 
-## First Public Alpha
+```
+project.json           Project metadata
+autopilot.config.ts    Execution config (tasks, epics, deps)
+handoff.md             Setup summary
+prompts/               Task prompt files
+state.json             Runtime state
+```
 
-The first public alpha is focused on three things:
-- terminal UI
-- project management
-- planning workflow
+### Manual Config (Fallback)
 
-In practical terms, that means:
-- `qap` opens a usable TUI
-- projects can be initialized or imported locally
-- planning exists as a real workflow, even if still minimal
+Create `autopilot.config.ts` anywhere and pass it with `--config`:
+
+```typescript
+import type { ProjectConfig } from "@questpie/autopilot/core/types";
+
+const config: ProjectConfig = {
+  project: {
+    id: "my-project",
+    name: "My Project",
+    rootDir: ".",
+  },
+  execution: {
+    mode: "autonomous",
+    defaultProvider: "claude",
+    defaultPermissionProfile: "elevated",
+    stopOnFailure: true,
+  },
+  prompts: {
+    templatesDir: "./prompts",
+  },
+  epics: [
+    { id: "EPIC-001", title: "Core Features", track: "main" },
+  ],
+  tasks: [
+    {
+      id: "TASK-001",
+      title: "Set up database schema",
+      epicId: "EPIC-001",
+      kind: "implementation",
+      track: "gate",
+      promptFile: "./prompts/001-db-schema.md",
+      acceptanceCriteria: [
+        "Migration runs without errors",
+        "All tables created with correct types",
+      ],
+    },
+    {
+      id: "TASK-002",
+      title: "Implement user API",
+      epicId: "EPIC-001",
+      kind: "implementation",
+      track: "main",
+      dependsOn: ["TASK-001"],
+      promptFile: "./prompts/002-user-api.md",
+    },
+  ],
+};
+
+export default config;
+```
+
+## Task Model
+
+### States
+
+```
+todo → ready → in_progress → implemented → validated_primary
+  → validated_secondary → committed → done
+```
+
+Tasks can also be `blocked` or `failed`, with recovery paths back to `todo`/`ready`.
+
+### Dependencies & Tracks
+
+- `dependsOn` — tasks that must complete first
+- `track` — priority: `gate` > `main` > `sidecar`
+- `kind` — type: `implementation`, `validation`, `cleanup`, `migration`, `poc`
+
+### Execution Loop
+
+1. Compute ready queue from dependency graph
+2. Select highest-priority task
+3. Render prompt from template + context
+4. Spawn agent (Claude Code or Codex CLI)
+5. Capture result, run validation
+6. Persist state, emit events, recompute queue
+
+## Providers
+
+| Provider | Binary | Permission Profiles |
+|----------|--------|-------------------|
+| Claude Code | `claude` | safe, elevated, max |
+| Codex | `codex` | safe, elevated, max |
 
 ## Philosophy
 
-Autopilot is intentionally:
-- local-first
-- tracker-optional
-- model-agnostic
-- artifact-driven
-- developer-controlled
+- **Local-first** — your workspace is the source of truth
+- **Tracker-optional** — Linear sync is a mirror, not a dependency
+- **Model-agnostic** — swap providers without changing config
+- **Artifact-driven** — prompts, plans, and validation are files
+- **Developer-controlled** — you decide what runs, when, and how
 
-Your local workspace is the source of truth.
-External systems are optional integrations.
+## Development
 
-## Roadmap
+```bash
+git clone https://github.com/questpie/questpie-autopilot.git
+cd questpie-autopilot
+bun install
+bun test
+bun run typecheck
+bun run src/index.ts --help
+```
 
-Near-term:
-- `qap` default TUI
-- local project workspaces
-- AI-assisted project init/import
-- OpenTUI-based cockpit
+## License
 
-Later:
-- richer planning flows
-- stronger validation workflows
-- SDK-backed runners
-- remote monitoring and control
+MIT

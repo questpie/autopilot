@@ -14,6 +14,13 @@ import {
 import { renderPrompt } from "./prompts/renderer.js";
 import { Store } from "./storage/store.js";
 import { log } from "./utils/logger.js";
+import { WorkspaceManager } from "./workspace/manager.js";
+import {
+  cmdProjectInit,
+  cmdProjectImport,
+  cmdProjectList,
+  cmdProjectUse,
+} from "./commands/project.js";
 import type { PromptMode, TaskState } from "./core/types.js";
 
 const args = process.argv.slice(2);
@@ -28,9 +35,68 @@ function hasFlag(name: string): boolean {
   return args.includes(`--${name}`);
 }
 
-const configPath = flag("config") ?? "./autopilot.config.ts";
+async function resolveConfigPath(): Promise<string> {
+  // Explicit --config flag takes priority
+  const explicit = flag("config");
+  if (explicit) return explicit;
+
+  // Check local autopilot.config.ts
+  if (existsSync("./autopilot.config.ts")) return "./autopilot.config.ts";
+
+  // Check active project workspace
+  const ws = new WorkspaceManager();
+  const activePath = await ws.getActiveConfigPath();
+  if (activePath) return activePath;
+
+  return "./autopilot.config.ts";
+}
 
 async function main() {
+  // `qap` with no args or `qap ui` → launch TUI
+  if (!command || command === "ui") {
+    if (hasFlag("help")) {
+      printHelp();
+      return;
+    }
+    const { launchTui } = await import("./tui/index.js");
+    return launchTui();
+  }
+
+  // Help
+  if (command === "--help" || command === "-h" || command === "help") {
+    printHelp();
+    return;
+  }
+
+  // Project management subcommands
+  if (command === "project") {
+    const sub = args[1];
+    const subArgs = args.slice(2);
+    switch (sub) {
+      case "init":
+        return cmdProjectInit(subArgs);
+      case "import":
+        return cmdProjectImport(subArgs);
+      case "list":
+      case "ls":
+        return cmdProjectList();
+      case "use":
+        return cmdProjectUse(subArgs);
+      default:
+        console.log(`
+qap project <command>
+
+Commands:
+  init      Initialize a new project workspace (AI-assisted)
+  import    Import existing project artifacts (AI-assisted)
+  list      List all local projects
+  use <id>  Set active project
+`);
+        return;
+    }
+  }
+
+  // Engine commands (require config)
   switch (command) {
     case "status":
       return cmdStatus();
@@ -71,40 +137,53 @@ async function main() {
 
 function printHelp() {
   console.log(`
-autopilot — autonomous DAG executor for software rollouts
+\x1b[38;2;183;0;255m■\x1b[0m \x1b[1mQUESTPIE AUTOPILOT\x1b[0m — local-first workflow engine for coding agents
 
-Usage: autopilot <command> [options]
+Usage: qap [command] [options]
 
-Commands:
-  status                       Show project status
-  next                         Show next ready task(s)
-  list                         List all tasks with states
-  show <id>                    Show task or epic details
-  prompt <id> --mode <mode>    Render prompt for a task
-  run [--max <n>] [--dry-run]  Run autonomous loop
-  run-next [--dry-run]         Run just the next ready task
-  run-task <id> [--dry-run]    Run a specific task
-  start <task>                 Mark task as in_progress
-  mark <task> <state>          Manually set task state
-  note <task> <text>           Add a note to a task
-  validate readiness           Check all dependency readiness
-  report session               Show session changelog
-  report project               Show project summary
+  qap                           Open terminal UI (default)
+  qap ui                        Open terminal UI
+
+Project Management:
+  qap project init              Initialize new project (AI-assisted)
+  qap project import            Import existing project artifacts
+  qap project list              List all local projects
+  qap project use <id>          Set active project
+
+Execution:
+  qap status                    Show project status
+  qap next                      Show next ready task(s)
+  qap list                      List all tasks with states
+  qap show <id>                 Show task or epic details
+  qap prompt <id> --mode <m>    Render prompt for a task
+  qap run [--max <n>]           Run autonomous loop
+  qap run-next                  Run just the next ready task
+  qap run-task <id>             Run a specific task
+  qap start <task>              Mark task as in_progress
+  qap mark <task> <state>       Manually set task state
+  qap note <task> <text>        Add a note to a task
+  qap validate readiness        Check all dependency readiness
+  qap report session            Show session changelog
+  qap report project            Show project summary
 
 Options:
-  --config <path>              Config file (default: ./autopilot.config.ts)
-  --dry-run                    Show what would run without executing (zero side effects)
-  --no-sync                    Disable Linear sync
-  --max <n>                    Max tasks to run in loop
-  --skip-validation            Skip validation steps
-  --mode <mode>                Prompt mode: implement, validate-primary, validate-secondary, validate-epic, validate-global
+  --config <path>               Config file (auto-detected from active project)
+  --dry-run                     Show what would run (zero side effects)
+  --no-sync                     Disable Linear sync
+  --max <n>                     Max tasks to run in loop
+  --skip-validation             Skip validation steps
+  --mode <mode>                 Prompt mode
 `);
 }
 
 // ── Helper: load config + store ──────────────────────────────
 async function loadState() {
-  if (!flag("config") && !existsSync(configPath)) {
-    throw new Error(`No config found at . Pass --config <path> or generate one via AI/app.`);
+  const configPath = await resolveConfigPath();
+
+  if (!existsSync(configPath)) {
+    throw new Error(
+      `No config found. Run \`qap project init\` or pass --config <path>.`
+    );
   }
 
   const config = await loadConfig(configPath);
@@ -351,6 +430,7 @@ function makeRunnerOpts() {
 }
 
 async function cmdRun() {
+  const configPath = await resolveConfigPath();
   const config = await loadConfig(configPath);
   const runner = new Runner(config, {
     ...makeRunnerOpts(),
@@ -365,6 +445,7 @@ async function cmdRun() {
 }
 
 async function cmdRunNext() {
+  const configPath = await resolveConfigPath();
   const config = await loadConfig(configPath);
   const runner = new Runner(config, makeRunnerOpts());
   await runner.runNext();
@@ -372,10 +453,11 @@ async function cmdRunNext() {
 
 async function cmdRunTask(taskId: string) {
   if (!taskId) {
-    log.error("Usage: autopilot run-task <task-id>");
+    log.error("Usage: qap run-task <task-id>");
     return;
   }
 
+  const configPath = await resolveConfigPath();
   const config = await loadConfig(configPath);
   const runner = new Runner(config, {
     ...makeRunnerOpts(),

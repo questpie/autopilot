@@ -3,12 +3,15 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/react",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": ".",
-    "noEmit": true
+    "noEmit": true,
+    "lib": ["ESNext", "DOM"]
   },
   "include": ["src", "tests", "projects"]
 }
