@@ -1,58 +1,94 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { describe, test, expect } from 'bun:test'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { writeFile, mkdir, rm } from 'fs/promises'
 import { ZodError } from 'zod'
-import { CompanySchema } from '../src/schemas'
 import { loadAndValidate } from '../src/validate'
+import { CompanySchema, ScheduleSchema } from '../src/schemas'
+
+const testDir = join(tmpdir(), 'autopilot-spec-test-' + Date.now())
 
 describe('loadAndValidate', () => {
-	let tmpDir: string
-
-	beforeAll(async () => {
-		tmpDir = await mkdtemp(join(tmpdir(), 'spec-test-'))
-	})
-
-	afterAll(async () => {
-		await rm(tmpDir, { recursive: true })
-	})
-
-	test('loads and validates valid YAML', async () => {
-		const yamlContent = `
-name: "QUESTPIE"
-slug: "questpie"
-description: "AI company"
+	test('loads and validates a valid YAML file', async () => {
+		await mkdir(testDir, { recursive: true })
+		const filePath = join(testDir, 'company.yaml')
+		await writeFile(
+			filePath,
+			`name: QUESTPIE s.r.o.
+slug: questpie
+description: AI company
 owner:
-  name: "Dominik"
-  email: "d@questpie.com"
-`
-		const filePath = join(tmpDir, 'company.yaml')
-		await writeFile(filePath, yamlContent)
+  name: Dominik
+  email: d@questpie.com
+`,
+		)
 
 		const result = await loadAndValidate(filePath, CompanySchema)
-		expect(result.name).toBe('QUESTPIE')
+		expect(result.name).toBe('QUESTPIE s.r.o.')
 		expect(result.slug).toBe('questpie')
-		expect(result.settings.max_concurrent_agents).toBe(6)
+		expect(result.owner.email).toBe('d@questpie.com')
+		expect(result.timezone).toBe('UTC')
+
+		await rm(testDir, { recursive: true, force: true })
+	})
+
+	test('applies defaults when loading YAML', async () => {
+		await mkdir(testDir, { recursive: true })
+		const filePath = join(testDir, 'schedule.yaml')
+		await writeFile(
+			filePath,
+			`id: daily-check
+agent: ops
+cron: "0 9 * * *"
+`,
+		)
+
+		const result = await loadAndValidate(filePath, ScheduleSchema)
+		expect(result.id).toBe('daily-check')
+		expect(result.timeout).toBe('5m')
+		expect(result.on_failure).toBe('alert_human')
+		expect(result.enabled).toBe(true)
+		expect(result.create_task).toBe(false)
+
+		await rm(testDir, { recursive: true, force: true })
 	})
 
 	test('throws ZodError for invalid YAML data', async () => {
-		const yamlContent = `
-name: "QUESTPIE"
-slug: "has spaces not allowed"
-description: "AI company"
+		await mkdir(testDir, { recursive: true })
+		const filePath = join(testDir, 'invalid-company.yaml')
+		await writeFile(
+			filePath,
+			`name: Test
+slug: "has spaces"
+description: test
 owner:
-  name: "Dominik"
-  email: "not-an-email"
-`
-		const filePath = join(tmpDir, 'invalid.yaml')
-		await writeFile(filePath, yamlContent)
+  name: Test
+  email: not-an-email
+`,
+		)
 
-		expect(loadAndValidate(filePath, CompanySchema)).rejects.toThrow(ZodError)
+		await expect(loadAndValidate(filePath, CompanySchema)).rejects.toThrow(ZodError)
+
+		await rm(testDir, { recursive: true, force: true })
 	})
 
-	test('throws for missing file', async () => {
-		expect(
-			loadAndValidate(join(tmpDir, 'nonexistent.yaml'), CompanySchema),
+	test('throws error for non-existent file', async () => {
+		await expect(
+			loadAndValidate('/tmp/nonexistent-file-xyz.yaml', CompanySchema),
 		).rejects.toThrow()
+	})
+
+	test('throws ZodError when required fields are missing', async () => {
+		await mkdir(testDir, { recursive: true })
+		const filePath = join(testDir, 'missing-fields.yaml')
+		await writeFile(
+			filePath,
+			`name: Test
+`,
+		)
+
+		await expect(loadAndValidate(filePath, CompanySchema)).rejects.toThrow(ZodError)
+
+		await rm(testDir, { recursive: true, force: true })
 	})
 })
