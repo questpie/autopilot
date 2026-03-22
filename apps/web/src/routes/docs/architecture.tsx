@@ -18,114 +18,104 @@ function Architecture() {
 				Four layers. Single process. Filesystem-native. SDK-first.
 			</p>
 
+			{/* ── 4-Layer Stack ───────────────────────────── */}
+
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				System Overview
+				4-Layer Stack
 			</h2>
-			<p className="text-ghost leading-relaxed mb-4">
-				QUESTPIE Autopilot uses an SDK-first architecture: CLI, dashboard,
-				and API are all thin consumers of the same SDK layer. No business
-				logic lives in the consumers.
-			</p>
-			<CodeBlock title="architecture">
+			<CodeBlock title="system overview">
 				{`┌───────────────────────────────────────────────────────────┐
-│                     CONSUMERS                              │
-│  CLI · Dashboard · Mobile · WhatsApp · External APIs       │
+│  LAYER 1 — HUMAN                                          │
+│  CLI · Dashboard · Mobile · WhatsApp · External APIs      │
+│  Thin consumers. No business logic.                       │
 └──────────────────────────┬────────────────────────────────┘
                            │ calls SDK functions
                            ▼
 ┌───────────────────────────────────────────────────────────┐
-│                     SDK LAYER                              │
-│                                                            │
-│  @questpie/autopilot-spec          Types, schemas, paths   │
-│  @questpie/autopilot-agents        Prompt templates        │
-│  @questpie/autopilot-orchestrator  Core runtime            │
-│    ├── fs/          YAML CRUD + write queue                │
-│    ├── workflow/    State machine engine                    │
-│    ├── context/     4-layer context assembler               │
-│    ├── agent/       Agent spawner (Claude Agent SDK)        │
-│    ├── scheduler/   Cron job runner                         │
-│    ├── watcher/     FS change detection                    │
-│    ├── webhook/     HTTP event receiver                    │
-│    ├── session/     Agent session streaming                 │
-│    ├── notifier/    Transport dispatcher                   │
-│    └── server.ts    Composes everything                    │
+│  LAYER 2 — ORCHESTRATOR                                   │
+│  Single Bun process per company                           │
+│                                                           │
+│  Watcher → detects FS changes (new tasks, status moves)   │
+│  Workflow → state machine routing (YAML-defined steps)    │
+│  Context → 4-layer prompt assembly (identity+state+mem)   │
+│  Spawner → creates Claude Agent SDK sessions              │
+│  Scheduler → cron-based recurring agent jobs              │
+│  Webhook → HTTP event receiver (port 7777)                │
+│  Session → WebSocket streaming (port 7778)                │
+│  Notifier → transport dispatcher (email, Slack, etc.)     │
+│  Artifact → lazy cold-start preview server                │
+│  Skills → reusable knowledge packages                     │
+└──────────────────────────┬────────────────────────────────┘
+                           │ spawns
+                           ▼
+┌───────────────────────────────────────────────────────────┐
+│  LAYER 3 — AGENTS                                         │
+│  Claude Agent SDK sessions with tools + MCP servers       │
+│  Role-scoped FS access, sandboxed shell, custom MCP tools │
+│  8 default roles: CEO, strategist, planner, developer,    │
+│  reviewer, devops, designer, marketing                    │
 └──────────────────────────┬────────────────────────────────┘
                            │ reads/writes
                            ▼
 ┌───────────────────────────────────────────────────────────┐
-│                  STORAGE LAYER                             │
-│                                                            │
-│  Phase 1: Local filesystem (YAML/Markdown/JSON)            │
-│  Phase 2: Shared filesystem (NFS/EFS) for multi-node       │
-│  Phase 3: Optional SQLite backend (same schemas, faster)   │
-│                                                            │
-│  Write Queue (file-level semaphores)                       │
-│  Git versioning (audit trail)                              │
+│  LAYER 4 — STORAGE                                        │
+│  Local filesystem: YAML + Markdown + JSON                 │
+│  Write queue (file-level async mutex)                     │
+│  Git versioning for audit trail                           │
 └───────────────────────────────────────────────────────────┘`}
 			</CodeBlock>
 
+			{/* ── SDK-First ──────────────────────────────── */}
+
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				The Orchestrator
+				SDK-First Architecture
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				A single Bun process that coordinates everything. Each module
-				is small and focused — the entire orchestrator is ~1500 lines of
-				code total.
+				All business logic lives in the orchestrator SDK. CLI,
+				dashboard, and API are thin consumers that call the same
+				functions. No logic is duplicated across consumers.
 			</p>
-			<ul className="text-ghost leading-relaxed space-y-2">
-				<li>
-					<strong className="text-fg">FS Watcher</strong> — monitors the company
-					filesystem for changes using chokidar. Detects new tasks, status
-					changes, messages, and configuration updates.
-				</li>
-				<li>
-					<strong className="text-fg">Workflow Engine</strong> — state machine
-					(~300 LOC) that routes tasks through workflow steps. Reads YAML
-					workflows, checks transitions, handles reviews, timeouts, and
-					conditional routing.
-				</li>
-				<li>
-					<strong className="text-fg">Agent Spawner</strong> — creates Claude
-					sessions via the Claude Agent SDK. Injects assembled context,
-					configures tools and permissions, streams output.
-				</li>
-				<li>
-					<strong className="text-fg">Context Assembler</strong> — builds
-					role-scoped system prompts from 4 layers: identity, company state,
-					memory, and task context. Manages token budgets.
-				</li>
-				<li>
-					<strong className="text-fg">Memory Extractor</strong> — uses Claude
-					Haiku (~$0.004/session) to extract facts, decisions, and learnings
-					from completed sessions. Merges into persistent memory.
-				</li>
-				<li>
-					<strong className="text-fg">Cron Scheduler</strong> — runs recurring
-					agent tasks from schedules.yaml. Daily standups, health checks,
-					weekly metrics.
-				</li>
-				<li>
-					<strong className="text-fg">Webhook Server</strong> — receives
-					external events (GitHub push, Stripe events) on port 7777.
-					Verifies HMAC-SHA256 signatures.
-				</li>
-				<li>
-					<strong className="text-fg">Session Stream</strong> — WebSocket
-					server on port 7778. Powers{' '}
-					<code className="font-mono text-xs text-purple">
-						autopilot attach
-					</code>{' '}
-					for real-time agent observation.
-				</li>
-			</ul>
+			<CodeBlock title="consumer pattern">
+				{`// CLI — thin shell over SDK
+import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
+
+// Dashboard — same SDK, different UI
+import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
+
+// External API — same SDK, HTTP wrapper
+import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'`}
+			</CodeBlock>
+			<CodeBlock title="package dependency graph">
+				{`@questpie/autopilot-spec          (published)
+│  Zod schemas, types, path conventions
+│  Zero runtime deps except zod + yaml
+│
+├── @questpie/autopilot-agents    (internal)
+│   │  System prompt templates per role
+│   │  buildSystemPrompt() assembler
+│   │
+│   └── @questpie/autopilot-orchestrator  (internal)
+│       │  ALL business logic lives here
+│       │  FS ops, workflow, context, scheduler,
+│       │  watcher, webhooks, sessions, notifier
+│       │
+│       ├── @questpie/autopilot-cli   (published as @questpie/autopilot)
+│       │    Commander.js commands → calls orchestrator
+│       │
+│       └── @questpie/autopilot-dashboard  (future)
+│            React UI → calls orchestrator via API`}
+			</CodeBlock>
+
+			{/* ── Provider Abstraction ───────────────────── */}
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
 				Provider Abstraction
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				The agent spawner uses a provider abstraction layer. The
-				primary (and currently only) provider is the Claude Agent SDK.
-				This means agents get built-in infrastructure for free:
+				The agent spawner uses a provider abstraction. The primary
+				provider is the Claude Agent SDK. This gives agents built-in
+				infrastructure — file I/O, shell access, sub-agents, MCP
+				support, and lifecycle hooks — without building any of it.
 			</p>
 			<div className="overflow-x-auto mb-4">
 				<table className="w-full text-sm border-collapse">
@@ -148,7 +138,7 @@ function Architecture() {
 							<td className="py-2 pr-4 text-xs text-purple font-mono">
 								Read, Write, Edit, Glob, Grep
 							</td>
-							<td className="py-2 text-xs">FS scope enforcement</td>
+							<td className="py-2 text-xs">FS scope enforcement per role</td>
 						</tr>
 						<tr className="border-b border-border/50">
 							<td className="py-2 pr-4 text-xs">Shell</td>
@@ -178,7 +168,7 @@ function Architecture() {
 							</td>
 							<td className="py-2 text-xs">Custom primitives as MCP tools</td>
 						</tr>
-						<tr className="border-b border-border/50">
+						<tr>
 							<td className="py-2 pr-4 text-xs">Hooks</td>
 							<td className="py-2 pr-4 text-xs text-purple font-mono">
 								PreToolUse, PostToolUse, SessionEnd
@@ -189,14 +179,290 @@ function Architecture() {
 				</table>
 			</div>
 			<p className="text-ghost leading-relaxed mb-4">
-				Custom primitives (send_message, create_task, pin_to_board) are
-				exposed as MCP tools via{' '}
+				The Agent SDK supports both API key authentication and Claude
+				Max subscription. Set{' '}
+				<code className="font-mono text-xs text-purple">
+					ANTHROPIC_API_KEY
+				</code>{' '}
+				to either an API key or a Max session token.
+			</p>
+
+			{/* ── Module Map ─────────────────────────────── */}
+
+			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
+				Orchestrator Module Map
+			</h2>
+			<p className="text-ghost leading-relaxed mb-4">
+				The orchestrator is a single Bun process composed of focused
+				modules. Each module is small and independent.
+			</p>
+			<div className="overflow-x-auto mb-4">
+				<table className="w-full text-sm border-collapse">
+					<thead>
+						<tr className="border-b border-border">
+							<th className="text-left text-ghost font-mono text-xs py-2 pr-4">
+								Module
+							</th>
+							<th className="text-left text-ghost font-mono text-xs py-2 pr-4">
+								Export
+							</th>
+							<th className="text-left text-ghost font-mono text-xs py-2">
+								Responsibility
+							</th>
+						</tr>
+					</thead>
+					<tbody className="text-ghost">
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">fs/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								readYaml, writeYaml, createTask, listTasks, moveTask
+							</td>
+							<td className="py-2 text-xs">
+								YAML CRUD with write queue. File-level async mutex
+								prevents concurrent write corruption.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">workflow/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								WorkflowEngine
+							</td>
+							<td className="py-2 text-xs">
+								State machine engine. Reads YAML workflows, checks
+								transitions, handles reviews and conditional routing.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">context/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								ContextAssembler
+							</td>
+							<td className="py-2 text-xs">
+								Builds role-scoped system prompts from 4 layers:
+								identity, company state, memory, and task context.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">agent/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								AgentSpawner
+							</td>
+							<td className="py-2 text-xs">
+								Creates Claude Agent SDK sessions. Injects context,
+								configures tools/MCP, streams output.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">scheduler/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								Scheduler
+							</td>
+							<td className="py-2 text-xs">
+								Cron-based recurring agent tasks from schedules.yaml.
+								Standups, health checks, weekly metrics.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">watcher/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								FSWatcher
+							</td>
+							<td className="py-2 text-xs">
+								Monitors company filesystem via chokidar. Detects
+								new tasks, status changes, messages, config updates.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">webhook/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								WebhookServer
+							</td>
+							<td className="py-2 text-xs">
+								HTTP event receiver on port 7777. Verifies
+								HMAC-SHA256 signatures. GitHub, Stripe, etc.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">session/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								SessionManager
+							</td>
+							<td className="py-2 text-xs">
+								WebSocket server on port 7778. Powers{' '}
+								<code className="font-mono text-purple">autopilot attach</code>{' '}
+								for real-time observation.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">artifact/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								ArtifactRouter
+							</td>
+							<td className="py-2 text-xs">
+								Lazy cold-start server for agent-created previews.
+								React components, HTML pages, API docs.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">skills/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								loadSkillCatalog
+							</td>
+							<td className="py-2 text-xs">
+								Reusable knowledge packages. Loaded into context
+								assembly Layer 2 (company state).
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">api/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								API routes
+							</td>
+							<td className="py-2 text-xs">
+								HTTP API for dashboard and external consumers.
+								Status, activity feed, task management.
+							</td>
+						</tr>
+						<tr>
+							<td className="py-2 pr-4 text-xs text-fg">notifier/</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								Notifier
+							</td>
+							<td className="py-2 text-xs">
+								Transport dispatcher. Routes notifications to
+								email, Slack, webhooks based on config.
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+
+			{/* ── Data Flow ──────────────────────────────── */}
+
+			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
+				Data Flow: Intent to Completion
+			</h2>
+			<CodeBlock title="data flow">
+				{`Human: "Build a pricing page"
+  │
+  ▼
+CLI: autopilot ask "Build a pricing page"
+  │ Creates task in /tasks/backlog/ (type: intent, assigned: ceo)
+  ▼
+Watcher: detects new task file
+  │
+  ▼
+Orchestrator: routes to CEO agent
+  │ Context assembler builds 4-layer prompt:
+  │   Layer 1: Agent identity (role, personality, tools)
+  │   Layer 2: Company state (knowledge, team, projects)
+  │   Layer 3: Agent memory (facts, decisions, past sessions)
+  │   Layer 4: Task context (description, dependencies, history)
+  ▼
+CEO Agent Session:
+  │ Reads company knowledge, evaluates scope
+  │ Calls: create_task("Scope requirements") → sam
+  │ Calls: create_task("Plan implementation") → alex
+  │ Calls: create_task("Implement + Stripe")  → max
+  │ Calls: create_task("Review PR")           → riley
+  │ Sets dependencies: implement → plan → scope
+  ▼
+Watcher: detects new tasks
+  │
+  ▼
+Sam (strategist): writes spec
+  │ Calls: update_task(status: done)
+  ▼
+Workflow Engine: scope → plan transition
+  │ Activates Alex's task
+  ▼
+Alex (planner): writes plan
+  │ Calls: update_task(status: done)
+  ▼
+Max (developer): implements
+  │ Creates branch, writes code, runs tests
+  │ Creates PR, marks task done
+  ▼
+Riley (reviewer): reviews PR
+  │ Approves or requests changes
+  ▼
+Workflow Engine: human gate
+  │ Task moves to review, appears in inbox
+  ▼
+Human: autopilot tasks approve TASK-003
+  │ Task moves to done, workflow continues`}
+			</CodeBlock>
+
+			{/* ── Session Lifecycle ──────────────────────── */}
+
+			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
+				Session Lifecycle
+			</h2>
+			<ol className="text-ghost leading-relaxed space-y-2">
+				<li>
+					<strong className="text-fg">Trigger fires</strong> — task
+					assigned, cron schedule fires, webhook received, or agent
+					mentioned in a message
+				</li>
+				<li>
+					<strong className="text-fg">Concurrency check</strong> —
+					orchestrator enforces{' '}
+					<code className="font-mono text-xs text-purple">
+						max_concurrent_agents
+					</code>{' '}
+					limit. Excess tasks queue.
+				</li>
+				<li>
+					<strong className="text-fg">Context assembly</strong> —
+					4-layer system prompt built: identity + company state +
+					agent memory + task context
+				</li>
+				<li>
+					<strong className="text-fg">Agent spawned</strong> —
+					Claude Agent SDK session created with tools, MCP servers,
+					permission mode, and lifecycle hooks
+				</li>
+				<li>
+					<strong className="text-fg">Session streams</strong> —
+					output written to JSONL activity log + broadcast to
+					WebSocket subscribers
+				</li>
+				<li>
+					<strong className="text-fg">Primitives called</strong> —
+					each tool call (create_task, send_message, etc.) writes to
+					the filesystem through the write queue
+				</li>
+				<li>
+					<strong className="text-fg">Session ends</strong> —
+					completes naturally or times out after max turns
+				</li>
+				<li>
+					<strong className="text-fg">Memory extracted</strong> —
+					Claude Haiku summarizes session (~$0.004/call), merges
+					facts, decisions, and learnings into memory.yaml
+				</li>
+				<li>
+					<strong className="text-fg">Workflow routes</strong> —
+					engine checks transitions and spawns the next agent if
+					a downstream task is ready
+				</li>
+			</ol>
+
+			{/* ── Agent Spawning ─────────────────────────── */}
+
+			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
+				Agent Spawning Pattern
+			</h2>
+			<p className="text-ghost leading-relaxed mb-4">
+				Custom primitives (send_message, create_task, pin_to_board)
+				are exposed as MCP tools via{' '}
 				<code className="font-mono text-xs text-purple">
 					createSdkMcpServer
 				</code>
-				. The agent thinks they are just more tools in its toolbox.
+				. The agent sees them as native tools alongside Read, Write,
+				Edit, Bash, Glob, and Grep.
 			</p>
-			<CodeBlock title="agent-spawning-pattern.ts">
+			<CodeBlock title="agent-spawning.ts">
 				{`import { query, tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 
 // Custom primitives exposed as MCP tools
@@ -204,17 +470,14 @@ const autopilotTools = createSdkMcpServer({
   name: 'autopilot',
   tools: [
     tool('send_message', 'Send message to agent or channel', {
-      to: z.string(), content: z.string(), priority: z.string().optional()
-    }, async (args) => {
-      await sendChannelMessage(companyRoot, args.to, { ... })
-      return { content: [{ type: 'text', text: 'Message sent' }] }
-    }),
+      to: z.string(), content: z.string()
+    }, async (args) => { ... }),
     tool('create_task', 'Create a new task', { ... }, async (args) => { ... }),
     tool('pin_to_board', 'Pin item to dashboard', { ... }, async (args) => { ... }),
   ]
 })
 
-// Spawn agent using Claude Agent SDK
+// Spawn agent session
 async function spawnAgent(agent: Agent, task: Task, context: AssembledContext) {
   for await (const message of query({
     prompt: \`Work on task: \${task.title}\`,
@@ -237,17 +500,62 @@ async function spawnAgent(agent: Agent, task: Task, context: AssembledContext) {
 }`}
 			</CodeBlock>
 
+			{/* ── Filesystem Convention ──────────────────── */}
+
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Write Queue (Concurrent Safety)
+				Filesystem Convention
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				With 4-8 agents running concurrently, all reading and writing
-				YAML files, concurrent writes can cause lost updates. The write
-				queue solves this with file-level async mutexes.
+				Every company is a directory tree. No database required. The
+				filesystem IS the database. Git provides versioning and audit
+				trail.
+			</p>
+			<CodeBlock title="/company/ tree structure">
+				{`company.yaml               Company config (name, slug, timezone, model defaults)
+
+team/                      Agent definitions and orchestration rules
+├── agents.yaml            Agent roster (roles, tools, FS scope, triggers)
+├── workflows/             YAML workflow definitions (development, incident, etc.)
+├── schedules.yaml         Cron-based recurring agent jobs
+└── policies/              Approval gates, information sharing rules
+
+tasks/                     YAML task files organized by status
+├── backlog/               Queued work not yet started
+├── active/                Currently being worked on by an agent
+├── review/                Awaiting human review or approval
+├── blocked/               Stuck — needs human input or dependency
+└── done/                  Completed tasks (archived)
+
+knowledge/                 Company brain — agents read this for context
+├── brand/                 Brand guidelines, voice, tone
+├── technical/             Stack, conventions, architecture
+├── business/              Pricing, competitors, strategy
+├── legal/                 Compliance, terms, privacy
+└── integrations/          API docs for connected services
+
+projects/                  Code repos, design assets, marketing materials
+comms/                     Agent communication channels and DMs
+context/                   Agent memories, embedding indexes, snapshots
+secrets/                   Encrypted API keys (per-agent scoped)
+artifacts/                 Agent-created previews (React, HTML, docs)
+skills/                    Reusable knowledge packages for agents
+dashboard/                 Pin files for the dashboard UI
+logs/                      Activity feed, session logs, error logs`}
+			</CodeBlock>
+
+			{/* ── Write Queue ────────────────────────────── */}
+
+			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
+				Write Queue
+			</h2>
+			<p className="text-ghost leading-relaxed mb-4">
+				Multiple agents run concurrently, all reading and writing YAML
+				files. The write queue prevents lost updates with file-level
+				async mutexes. Two agents can write different task files
+				simultaneously, but writes to the same file are serialized.
 			</p>
 			<CodeBlock title="write-queue.ts">
-				{`// In-memory async mutex per file path
-class WriteQueue {
+				{`class WriteQueue {
   private locks = new Map<string, { queue: Array<() => void> }>()
 
   async withLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
@@ -271,43 +579,73 @@ async function updateTask(root: string, taskId: string, updates: Partial<Task>) 
   })
 }`}
 			</CodeBlock>
-			<p className="text-ghost leading-relaxed mb-4">
-				Key design decisions:
-			</p>
 			<ul className="text-ghost leading-relaxed space-y-1 text-sm">
 				<li>
-					<strong className="text-fg">File-level granularity</strong> — two
-					agents can write different tasks simultaneously
+					<strong className="text-fg">File-level granularity</strong> —
+					two agents can write different tasks simultaneously
 				</li>
 				<li>
-					<strong className="text-fg">In-process queue</strong> — one Bun
-					process per company, no distributed locking needed
+					<strong className="text-fg">In-process queue</strong> —
+					one Bun process per company, no distributed locking
 				</li>
 				<li>
 					<strong className="text-fg">Read-modify-write within lock</strong> —
 					prevents lost updates
 				</li>
 				<li>
-					<strong className="text-fg">No deadlocks possible</strong> — locks
-					are on individual files, no ordering dependencies
+					<strong className="text-fg">No deadlocks possible</strong> —
+					locks are per-file, no ordering dependencies
 				</li>
 			</ul>
 
+			{/* ── Integration Pattern ────────────────────── */}
+
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Artifact Serving (Lazy Cold Start)
+				Integration Pattern
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				Agents can create previewable artifacts — React components, HTML
-				pages, API docs — by writing files to{' '}
-				<code className="font-mono text-xs text-purple">/artifacts/</code>.
-				The artifact router serves them with zero idle cost, similar to
-				serverless functions.
+				No integration is hard-coded. Every external service follows
+				the same 3-part pattern. There is no "Linear module" or
+				"GitHub integration." Agents call APIs guided by knowledge
+				docs, using secrets managed by the orchestrator.
 			</p>
-			<CodeBlock title="artifact-flow">
-				{`Agent writes files to /artifacts/landing-v2/
+			<CodeBlock title="integration = secret + knowledge doc + primitive">
+				{`# 1. Secret — /secrets/linear.yaml
+service: linear
+type: api_token
+value: "lin_api_xxx"
+allowed_agents: [ceo, sam, max, riley]
+
+# 2. Knowledge Doc — /knowledge/integrations/linear.md
+# Contains: GraphQL endpoint, auth format, workspace ID,
+# team IDs, project mappings, common operations
+
+# 3. Primitive — agent calls http_request or MCP tool
+http_request({
+  method: "POST",
+  url: "https://api.linear.app/graphql",
+  secret_ref: "linear",                    # orchestrator injects API key
+  body: { query: "mutation { issueCreate(...) }" }
+})`}
+			</CodeBlock>
+
+			{/* ── Artifact Serving ───────────────────────── */}
+
+			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
+				Artifact Serving
+			</h2>
+			<p className="text-ghost leading-relaxed mb-4">
+				Agents create previewable artifacts (React components, HTML
+				pages, API docs) by writing to{' '}
+				<code className="font-mono text-xs text-purple">/artifacts/</code>.
+				The artifact router serves them with lazy cold start and
+				automatic idle shutdown.
+			</p>
+			<CodeBlock title="artifact lifecycle">
+				{`Agent writes to /artifacts/landing-v2/
   └── package.json, src/App.tsx, .artifact.yaml
 
-Request arrives → /artifacts/landing-v2/
+Request → /artifacts/landing-v2/
   ├── Process running? → Proxy to port → Reset idle timer
   └── Not running?     → Cold start:
                            1. Read .artifact.yaml
@@ -318,256 +656,18 @@ Request arrives → /artifacts/landing-v2/
                            6. Proxy request
                            7. Start idle timer (5min default)
 
-Idle timeout (5min, no requests) → Kill process → Free port
-Next request → Cold start again (~2-3s for Vite/Bun)`}
+Idle timeout → Kill process → Free port
+Next request → Cold start again (~2-3s)`}
 			</CodeBlock>
 			<CodeBlock title=".artifact.yaml">
 				{`name: landing-v2
-serve: "bun run dev --port {port}"    # {port} replaced by router
-build: "bun install"                   # Run once before first serve
-health: "/"                            # Health check path
-timeout: 5m                            # Idle timeout before shutdown`}
+serve: "bun run dev --port {port}"
+build: "bun install"
+health: "/"
+timeout: 5m`}
 			</CodeBlock>
 
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Skills System
-			</h2>
-			<p className="text-ghost leading-relaxed mb-4">
-				Skills are reusable knowledge packages that teach agents domain
-				expertise. They are markdown files loaded into the context
-				assembly layer. Think of them like Claude Code skills but for
-				company agents.
-			</p>
-			<CodeBlock title="/skills/ directory">
-				{`/skills/
-├── catalog.yaml                     # Index of all skills
-├── builtin/                         # Ships with Autopilot
-│   ├── document-creation.md         # Spec, ADR, plan templates
-│   ├── code-review-checklist.md     # Review best practices
-│   ├── release-notes.md             # Release note templates
-│   ├── api-design.md                # API design patterns
-│   └── testing-strategy.md          # Testing approaches
-├── project/                         # Company-specific skills
-│   ├── our-stack.md                 # Your tech stack conventions
-│   └── deployment-guide.md          # Your deploy process
-└── marketplace/                     # Installed from marketplace
-    └── stripe-integration/
-        ├── skill.yaml
-        └── content.md`}
-			</CodeBlock>
-			<p className="text-ghost leading-relaxed mb-4">
-				Skills are loaded into Layer 2 (Company State) of the context
-				assembly. The assembler lists available skills as metadata, and
-				agents can request full skill content when needed — keeping the
-				context window efficient.
-			</p>
-
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Integration Pattern
-			</h2>
-			<p className="text-ghost leading-relaxed mb-4">
-				No integration is hard-coded. All external service integrations
-				follow the same 3-part pattern. There is no "Linear sync module"
-				or "GitHub integration module." It is just agents calling APIs,
-				guided by knowledge docs.
-			</p>
-			<CodeBlock title="integration = secret + knowledge doc + primitive">
-				{`# 1. Secret — /company/secrets/linear.yaml
-service: linear
-type: api_token
-value: "lin_api_xxx"
-allowed_agents: [ceo, sam, max, riley]
-
-# 2. Knowledge Doc — /company/knowledge/integrations/linear.md
-# Contains: GraphQL endpoint, auth format, workspace ID,
-# team IDs, project mappings, common operations
-
-# 3. Primitive — agent calls http_request or MCP tool
-http_request({
-  method: "POST",
-  url: "https://api.linear.app/graphql",
-  secret_ref: "linear",                    # orchestrator auto-injects API key
-  body: { query: "mutation { issueCreate(...) }" }
-})`}
-			</CodeBlock>
-			<p className="text-ghost leading-relaxed mb-4">
-				See the{' '}
-				<a href="/docs/integrations" className="text-purple">
-					Integrations
-				</a>{' '}
-				page for the full guide.
-			</p>
-
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				FS Serving
-			</h2>
-			<p className="text-ghost leading-relaxed mb-4">
-				The entire company filesystem is browsable via HTTP. The
-				orchestrator's built-in Bun.serve handles static file serving
-				with content-type awareness:
-			</p>
-			<CodeBlock title="fs-serving">
-				{`# Knowledge docs are linkable and shareable
-http://localhost:7778/fs/knowledge/technical/conventions.md  → rendered HTML
-http://localhost:7778/fs/tasks/active/task-040.yaml          → formatted YAML
-http://localhost:7778/fs/projects/studio/docs/spec.md        → rendered markdown
-http://localhost:7778/fs/artifacts/landing-v2/               → iframe to :4100`}
-			</CodeBlock>
-			<p className="text-ghost leading-relaxed mb-4">
-				Agents can reference URLs in messages. The dashboard renders
-				knowledge as a documentation site. No separate docs tool needed —
-				the filesystem IS the docs.
-			</p>
-
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Filesystem Convention
-			</h2>
-			<CodeBlock title="/company/ structure">
-				{`team/          → Agent definitions, workflows, schedules, policies
-tasks/         → YAML task files organized by status (backlog/, active/, review/, blocked/, done/)
-comms/         → Agent communication channels and direct messages
-knowledge/     → Company brain — brand, technical, business, legal, integrations
-projects/      → Code repos, design assets, marketing materials
-infra/         → k8s manifests, monitoring configs, runbooks
-context/       → Agent memories, embedding indexes, snapshots
-secrets/       → Encrypted API keys and credentials (per-agent scoped)
-artifacts/     → Agent-created previews (React, HTML, docs)
-skills/        → Reusable knowledge packages for agents
-dashboard/     → Pin files for the dashboard UI
-logs/          → Activity feed, session streams, error logs, webhook logs`}
-			</CodeBlock>
-
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Data Flow: Intent to Completion
-			</h2>
-			<CodeBlock title="data-flow">
-				{`Human: "Build a pricing page"
-  │
-  ▼
-CLI: autopilot ask "Build a pricing page"
-  │ Creates task in /tasks/backlog/ assigned to CEO
-  ▼
-Watcher: detects new task file
-  │
-  ▼
-Orchestrator: routes to CEO agent
-  │ Context assembler builds 4-layer prompt
-  ▼
-CEO Agent Session:
-  │ Calls: create_task(scope), create_task(plan), create_task(implement)
-  │ Sets dependencies: implement depends_on plan depends_on scope
-  │ Assigns scope → sam (strategist)
-  ▼
-Watcher: detects new task assigned to sam
-  │
-  ▼
-Sam: writes spec → /projects/web-app/docs/pricing-spec.md
-  │ Calls: update_task(TASK-001, status: done)
-  ▼
-Workflow Engine: scope → plan transition
-  │ Assigns to alex (planner)
-  ▼
-Alex: writes plan → /projects/web-app/docs/pricing-plan.md
-  ▼
-... (continues through implement → review → merge → deploy)`}
-			</CodeBlock>
-
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Session Lifecycle
-			</h2>
-			<ol className="text-ghost leading-relaxed space-y-2">
-				<li>
-					<strong className="text-fg">Trigger fires</strong> — task assigned,
-					schedule fires, webhook received, agent mentioned
-				</li>
-				<li>
-					<strong className="text-fg">Concurrency check</strong> —
-					orchestrator enforces max_concurrent_agents limit
-				</li>
-				<li>
-					<strong className="text-fg">Context assembly</strong> — 4-layer
-					prompt built (identity + company state + memory + task context)
-				</li>
-				<li>
-					<strong className="text-fg">Agent spawned</strong> — Claude Agent
-					SDK session created with tools, MCP servers, and hooks
-				</li>
-				<li>
-					<strong className="text-fg">Session streams</strong> — output sent
-					to JSONL log + WebSocket subscribers
-				</li>
-				<li>
-					<strong className="text-fg">Primitives called</strong> — each tool
-					call writes to FS through the write queue
-				</li>
-				<li>
-					<strong className="text-fg">Session ends</strong> — completes
-					naturally or times out
-				</li>
-				<li>
-					<strong className="text-fg">Memory extracted</strong> — Haiku
-					summarizes session, merges facts/decisions into memory.yaml
-				</li>
-				<li>
-					<strong className="text-fg">Workflow routes</strong> — engine checks
-					transitions, spawns next agent if needed
-				</li>
-			</ol>
-
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Scaling Path
-			</h2>
-			<div className="space-y-4 mb-8">
-				<div className="border border-border p-4">
-					<h3 className="font-sans text-base font-bold text-white mb-2 mt-0">
-						<span className="text-purple font-mono mr-2">Phase 1</span>
-						Single Process (Current)
-					</h3>
-					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						One Bun process per company on local filesystem. Handles ~50
-						agent sessions/day, ~10K tasks. Good for self-hosted solo dev
-						shops. One pod = one company in k8s.
-					</p>
-				</div>
-				<div className="border border-border p-4">
-					<h3 className="font-sans text-base font-bold text-white mb-2 mt-0">
-						<span className="text-purple font-mono mr-2">Phase 2</span>
-						Multi-Tenant Cloud
-					</h3>
-					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						Each company in a k8s pod with PVC storage. Shared services
-						(PostgreSQL for auth/billing only, Redis for routing). One
-						node (4GB RAM) hosts ~30 companies at ~128MB each. Horizontal
-						scaling by adding pods.
-					</p>
-				</div>
-				<div className="border border-border p-4">
-					<h3 className="font-sans text-base font-bold text-white mb-2 mt-0">
-						<span className="text-purple font-mono mr-2">Phase 3</span>
-						Shared FS for Large Companies
-					</h3>
-					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						NFS/EFS/Ceph for companies with 100+ concurrent agents. Worker
-						pool with separate watcher, spawner, and API server processes.
-						FS-based or Redis queue for job distribution. File-based locks
-						via atomic rename for cross-process safety.
-					</p>
-				</div>
-				<div className="border border-border p-4">
-					<h3 className="font-sans text-base font-bold text-white mb-2 mt-0">
-						<span className="text-purple font-mono mr-2">Phase 4</span>
-						Optional SQLite Backend
-					</h3>
-					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						For companies with 100K+ tasks where FS listing is slow. Same
-						Zod schemas, same API, different storage backend. Configurable
-						in company.yaml:{' '}
-						<code className="font-mono text-xs text-purple">
-							storage_backend: sqlite
-						</code>
-					</p>
-				</div>
-			</div>
+			{/* ── Tech Stack ────────────────────────────── */}
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
 				Tech Stack
@@ -645,14 +745,14 @@ Alex: writes plan → /projects/web-app/docs/pricing-plan.md
 							<td className="py-2 text-xs">Simple, reliable</td>
 						</tr>
 						<tr className="border-b border-border/50">
-							<td className="py-2 pr-4 text-xs text-fg">Memory Extract</td>
+							<td className="py-2 pr-4 text-xs text-fg">Memory</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								Claude Haiku
 							</td>
 							<td className="py-2 text-xs">$0.004/session summarization</td>
 						</tr>
 						<tr className="border-b border-border/50">
-							<td className="py-2 pr-4 text-xs text-fg">HTTP Server</td>
+							<td className="py-2 pr-4 text-xs text-fg">HTTP</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								Bun.serve
 							</td>
@@ -671,36 +771,61 @@ Alex: writes plan → /projects/web-app/docs/pricing-plan.md
 				</table>
 			</div>
 
+			{/* ── Scaling Path ───────────────────────────── */}
+
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Package Architecture
+				Scaling Path
 			</h2>
-			<CodeBlock title="packages">
-				{`@questpie/autopilot-spec (published, external)
-  │  Zod schemas, types, path conventions
-  │  Zero runtime deps except zod + yaml
-  │  For plugin/integration authors
-  │
-@questpie/autopilot-agents (internal)
-  │  8 system prompt templates
-  │  buildSystemPrompt() assembler
-  │  Depends on: spec
-  │
-@questpie/autopilot-orchestrator (internal)
-  │  Core runtime — ALL business logic lives here
-  │  FS operations, workflow engine, context assembly,
-  │  scheduler, watcher, webhooks, sessions, notifier
-  │  Depends on: spec, agents
-  │
-@questpie/autopilot-cli (published as @questpie/autopilot)
-  │  Thin CLI shell — calls orchestrator functions
-  │  Commander.js commands
-  │  Depends on: orchestrator
-  │
-@questpie/autopilot-dashboard (future)
-     React web UI — calls orchestrator via API
-     Thin read/write layer over FS
-     Depends on: spec (types only)`}
-			</CodeBlock>
+			<div className="space-y-4 mb-8">
+				<div className="border border-border p-4">
+					<h3 className="font-sans text-base font-bold text-white mb-2 mt-0">
+						<span className="text-purple font-mono mr-2">Phase 1</span>
+						Single Process (Current)
+					</h3>
+					<p className="text-ghost leading-relaxed mb-0 text-sm">
+						One Bun process per company on local filesystem. Handles
+						~50 agent sessions/day, ~10K tasks. Good for self-hosted
+						solo dev shops. One pod = one company in k8s.
+					</p>
+				</div>
+				<div className="border border-border p-4">
+					<h3 className="font-sans text-base font-bold text-white mb-2 mt-0">
+						<span className="text-purple font-mono mr-2">Phase 2</span>
+						Multi-Tenant Cloud
+					</h3>
+					<p className="text-ghost leading-relaxed mb-0 text-sm">
+						Each company in a k8s pod with PVC storage. Shared
+						services (PostgreSQL for auth/billing only, Redis for
+						routing). One node (4GB RAM) hosts ~30 companies at
+						~128MB each.
+					</p>
+				</div>
+				<div className="border border-border p-4">
+					<h3 className="font-sans text-base font-bold text-white mb-2 mt-0">
+						<span className="text-purple font-mono mr-2">Phase 3</span>
+						Shared FS for Large Companies
+					</h3>
+					<p className="text-ghost leading-relaxed mb-0 text-sm">
+						NFS/EFS/Ceph for companies with 100+ concurrent agents.
+						Worker pool with separate watcher, spawner, and API
+						server processes. File-based locks via atomic rename.
+					</p>
+				</div>
+				<div className="border border-border p-4">
+					<h3 className="font-sans text-base font-bold text-white mb-2 mt-0">
+						<span className="text-purple font-mono mr-2">Phase 4</span>
+						Optional SQLite Backend
+					</h3>
+					<p className="text-ghost leading-relaxed mb-0 text-sm">
+						For companies with 100K+ tasks where FS listing is slow.
+						Same Zod schemas, same API, different storage backend.
+						Configurable in company.yaml:{' '}
+						<code className="font-mono text-xs text-purple">
+							storage_backend: sqlite
+						</code>
+					</p>
+				</div>
+			</div>
 		</article>
 	)
 }
