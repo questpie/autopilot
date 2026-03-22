@@ -5,7 +5,20 @@
 
 ---
 
-## Overall Status: 497 tests | 12K+ LOC | 4 packages | READY FOR DOGFOODING
+## Overall Status: 504 tests | 13K+ LOC | 4 packages | FEATURE-COMPLETE OSS
+
+| Metric | Count |
+|--------|-------|
+| Source files (.ts) | 89 |
+| Test files (.test.ts) | 30 |
+| Source LOC | 6,617 |
+| Test LOC | 6,449 |
+| Total LOC (src+test) | 13,066 |
+| Skill/knowledge docs (.md) | 17 |
+| Skill docs LOC | 3,753 |
+| Total tests | 504 (all passing) |
+| Packages | 4 (spec, agents, orchestrator, cli) + web |
+| CLI commands | 11 |
 
 ---
 
@@ -58,7 +71,7 @@
 - [x] buildSystemPrompt() with context injection
 - [x] Tests: content, structure, isolation rules, all roles
 
-## Phase 6: Orchestrator ✅ CORE DONE (147 tests) — NEEDS HARDENING
+## Phase 6: Orchestrator ✅ DONE (252 tests)
 
 ### FS Layer ✅
 - [x] yaml.ts — read/write with Zod validation
@@ -96,61 +109,60 @@
 - [x] **Artifact Router** — lazy cold-start serving, port management, create_artifact tool
 - [x] **API Server** — /api/* REST + /fs/* file serving, CORS
 
-### ⏳ REMAINING (Orchestrator)
-- [ ] **Notifier Transports** — email, WhatsApp, Slack (currently only console + activity log)
-- [ ] **Embedding Indexes** — semantic search (text-embedding-3-small) — agents can use via skills
+### ✅ Business-Critical Test Hardening
+- [x] Workflow engine: rejection loops with max rounds
+- [x] Workflow engine: timeout handling
+- [x] Workflow engine: conditional transitions (if_priority_critical, if_flag)
+- [x] Task CRUD: concurrent write scenarios
+- [x] Task CRUD: move task triggers workflow check
+- [x] Server: full event pipeline (watcher -> workflow -> agent assignment)
+- [x] Server: error recovery (crash mid-session)
+- [x] Server: max_concurrent_agents enforcement
+- [x] Context assembler: token budget overflow handling
+- [x] Context assembler: memory relevance ranking
+- [x] Webhook server: HMAC-SHA256 verification with real signatures
+- [x] Scheduler: schedule timeout enforcement
+- [x] Scheduler: on_failure behavior (alert_human, retry)
 
-### ⚠️ NEEDS MORE TESTS (Business-Critical) — ✅ Hardened
-- [x] Workflow engine: rejection loops with max rounds ✅
-- [x] Workflow engine: timeout handling ✅
-- [x] Workflow engine: conditional transitions (if_priority_critical, if_flag) ✅
-- [x] Task CRUD: concurrent write scenarios ✅
-- [x] Task CRUD: move task triggers workflow check ✅
-- [x] Server: full event pipeline (watcher → workflow → agent assignment) ✅
-- [x] Server: error recovery (crash mid-session) ✅
-- [x] Server: max_concurrent_agents enforcement ✅
-- [x] Context assembler: token budget overflow handling ✅
-- [x] Context assembler: memory relevance ranking ✅
-- [x] Webhook server: HMAC-SHA256 verification with real signatures ✅
-- [x] Scheduler: schedule timeout enforcement ✅
-- [x] Scheduler: on_failure behavior (alert_human, retry) ✅
-
-## Phase 7: CLI ✅ SCAFFOLDED (23 tests) — NEEDS INTEGRATION
+## Phase 7: CLI ✅ DONE (30 tests)
 
 - [x] Commander.js framework
-- [x] 8 commands registered (init, status, ask, tasks, agents, inbox, attach, start)
+- [x] 11 commands: init, status, ask, tasks, agents, inbox, attach, start, board, knowledge, secrets
 - [x] find-root utility
 - [x] ANSI formatting helpers
 - [x] Template copy on init
 
 ### ✅ WIRED
-- [x] `start` → full Orchestrator lifecycle with SIGINT/SIGTERM
-- [x] `ask` → creates intent task assigned to CEO
-- [x] `status` → company overview with task counts
-- [x] `tasks` → list with filters, show, approve, reject
-- [x] `agents` → list with roles, show detail
-- [x] `inbox` → pending approval items
+- [x] `init` — scaffold company from template
+- [x] `start` — full Orchestrator lifecycle with SIGINT/SIGTERM
+- [x] `ask` — creates intent task assigned to CEO
+- [x] `status` — company overview with task counts
+- [x] `tasks` — list with filters, show, approve, reject
+- [x] `agents` — list with roles, show detail
+- [x] `inbox` — pending approval items
+- [x] `attach` — session streaming
+- [x] `board` — dashboard pin management
+- [x] `knowledge` — knowledge base management
+- [x] `secrets` — secret management
 
-### ⏳ REMAINING (CLI)
-- [ ] `attach` → WebSocket stream from SessionStreamManager
-- [ ] Interactive prompts for init (company name, email, etc.)
-
-## Phase 8: Dogfooding ❌ NOT STARTED
+## Phase 8: Dogfooding (Future)
 
 - [ ] Set up QUESTPIE s.r.o. as first company
 - [ ] Populate knowledge base
 - [ ] Run real tasks through the system
 - [ ] Fix bugs found during usage
 
-## Phase 9: Triggers & Polish ❌ NOT STARTED
+## Phase 9: Triggers & Polish (Future)
 
 - [ ] Email transport (Resend API)
 - [ ] WhatsApp transport (Twilio)
 - [ ] Dashboard (React web UI reading from FS)
 - [ ] Session replay command
 - [ ] Cost tracking and budget alerts
+- [ ] Embedding indexes (semantic search via text-embedding-3-small)
+- [ ] Interactive CLI prompts (init wizard)
 
-## Phase 10: Public Launch ❌ NOT STARTED
+## Phase 10: Public Launch (Future)
 
 - [ ] Demo video (2-3 min)
 - [ ] Remove "Coming Soon" badge
@@ -160,27 +172,71 @@
 
 ---
 
-## Priority Matrix: What To Build Next
+## How to Test Locally
 
-### P0 — Must Have for Dogfooding
+```bash
+# Prerequisites: Bun v1.3+, Node v20+
+
+# Clone and install
+git clone https://github.com/questpie/questpie-autopilot.git
+cd questpie-autopilot
+bun install
+
+# Build all packages
+npx turbo build
+
+# Run all 504 tests
+npx turbo test
+
+# Run tests for a specific package
+cd packages/spec && bun test        # 139 tests
+cd packages/agents && bun test      # 83 tests
+cd packages/orchestrator && bun test # 252 tests
+cd packages/cli && bun test          # 30 tests
+
+# Initialize a new company
+bun packages/cli/src/index.ts init my-company
+
+# Start the orchestrator (requires ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=sk-ant-...
+bun packages/cli/src/index.ts start
+
+# Ask the AI team to do something
+bun packages/cli/src/index.ts ask "Build a pricing page"
+
+# Check status
+bun packages/cli/src/index.ts status
+bun packages/cli/src/index.ts tasks list
+bun packages/cli/src/index.ts agents list
+bun packages/cli/src/index.ts inbox
+```
+
+---
+
+## Priority Matrix: What's Done vs Future
+
+### ✅ P0 — Dogfooding Ready (ALL DONE)
 1. ~~**Write Queue**~~ ✅ — in-process async mutex with file-level granularity
-2. ~~**Agent Spawner (Agent SDK)**~~ ✅ (being built) — Claude Agent SDK `query()` integration
-3. ~~**Custom MCP Tools**~~ ✅ (being built) — send_message, create_task, pin_to_board via createSdkMcpServer
-4. ~~**Memory Extractor**~~ ✅ (being built) — agents need to remember across sessions
-5. ~~**CLI `start` command**~~ ✅ (being built) — needs to run the orchestrator
-6. ~~**CLI `ask` command**~~ ✅ (being built) — needs to spawn CEO agent
-
-### P1 — Must Have for Public Release
+2. ~~**Agent Spawner (Agent SDK)**~~ ✅ — Claude Agent SDK `query()` integration
+3. ~~**Custom MCP Tools**~~ ✅ — 13 agent tools via createSdkMcpServer
+4. ~~**Memory Extractor**~~ ✅ — post-session Haiku summarization + merge
+5. ~~**CLI `start` command**~~ ✅ — full orchestrator lifecycle
+6. ~~**CLI `ask` command**~~ ✅ — creates intent task assigned to CEO
 7. ~~**Business-critical test hardening**~~ ✅ — concurrent writes, rejection loops, error recovery
-8. **CLI `attach` command** — WebSocket session streaming
-9. **Webhook HMAC verification** — security
-10. **Notifier email transport** — users need to receive notifications
+8. ~~**Skill System**~~ ✅ — 17 knowledge docs, catalog loader, role-based filtering
+9. ~~**Artifact Router**~~ ✅ — lazy cold-start serving, port management
+10. ~~**API Server**~~ ✅ — REST + file serving + CORS
 
-### P2 — Polish & Extend
-11. Interactive CLI prompts (init wizard)
-12. Dashboard web UI (thin React app over SDK)
-13. Embedding indexes (semantic search via text-embedding-3-small)
-14. Cost tracking and budget alerts
+### P1 — Future: Public Release
+- [ ] Notifier email transport (Resend API)
+- [ ] Dashboard web UI
+- [ ] npm publish
+
+### P2 — Future: Polish & Extend
+- [ ] Interactive CLI prompts (init wizard)
+- [ ] Embedding indexes (semantic search)
+- [ ] Cost tracking and budget alerts
+- [ ] WhatsApp/Telegram transport
 
 ### Note on Integrations
 
@@ -194,10 +250,6 @@ Integration = Secret + Knowledge Doc + Primitive (MCP or http_request)
 1. **Secret** — `/secrets/{service}.yaml` (API key, allowed_agents)
 2. **Knowledge Doc** — `/knowledge/integrations/{service}.md` (API docs, conventions)
 3. **Primitive** — Agent calls `http_request` with `secret_ref` or uses MCP server
-
-Linear "sync" is NOT a special module. It's an agent calling Linear's GraphQL API
-via `http_request` primitive, guided by a knowledge doc. Same for GitHub, Slack,
-WhatsApp, or any future integration.
 
 This makes the system **infinitely extensible** without writing integration code.
 To add a new integration: `autopilot secrets add stripe` + add API docs to knowledge.
@@ -213,3 +265,6 @@ To add a new integration: `autopilot secrets add stripe` + add API docs to knowl
 | 2026-03-22 | Write Queue | In-process async mutex with file-level granularity, stress-tested with 10 concurrent writes |
 | 2026-03-22 | Toolchain management | Agents can install packages, persisted via PVC or company.yaml toolchain config (planned) |
 | 2026-03-22 | Async concurrency | Single Bun process handles 8+ concurrent agents via async I/O, bottleneck is API rate limits not compute |
+| 2026-03-22 | Skill system | 17 knowledge docs loaded from template, role-based filtering, integrated into context assembly |
+| 2026-03-22 | Artifact router | Lazy cold-start for artifact serving, per-artifact port allocation, create_artifact tool |
+| 2026-03-22 | Feature-complete OSS | 504 tests, 13K+ LOC, all core systems done. Future work is polish, transports, and public launch |

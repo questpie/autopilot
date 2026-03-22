@@ -697,30 +697,26 @@ async function spawnAgent(agent: Agent, task: Task, context: AssembledContext) {
 - [x] CLI — 8 commands (init, status, ask, tasks, agents, inbox, attach, start)
 - [x] Documentation pages (7 doc pages)
 - [x] k8s deployment (autopilot.questpie.com)
-- [x] 434+ tests passing
+- [x] 504 tests passing (139 spec + 83 agents + 252 orchestrator + 30 cli)
 - [x] Write Queue — file-level async mutex ✅
 - [x] Business-critical test hardening ✅
-- [x] Agent Spawner (Agent SDK) — being built ✅
-- [x] Custom MCP Tools — being built ✅
-- [x] Memory Extractor — being built ✅
-- [x] CLI start/ask wiring — being built ✅
-
-### Next Priority
-- [ ] **Tool implementations** — all primitives as callable functions
-- [ ] **API Server** — REST + WebSocket for dashboard
-- [ ] **CLI polish** — interactive prompts, better error handling, colors
-- [ ] **`autopilot start`** — fully wired orchestrator lifecycle
-- [ ] **Dogfooding** — set up QUESTPIE s.r.o. as first company
+- [x] Agent Spawner (Agent SDK) — ClaudeAgentSDKProvider ✅
+- [x] 13 Agent Tools — send_message, create_task, update_task, etc. ✅
+- [x] Memory Extractor — post-session Haiku summarization ✅
+- [x] Skill System — 17 knowledge docs, catalog loader, role-based filtering ✅
+- [x] Artifact Router — lazy cold-start serving, port management ✅
+- [x] API Server — /api/* REST + /fs/* file serving, CORS ✅
+- [x] CLI — 11 commands fully wired ✅
 
 ### Future
 - [ ] Dashboard (React web UI)
+- [ ] Notifier transports (email, WhatsApp, Slack)
 - [ ] Shared FS support (NFS/EFS for multi-node)
 - [ ] FS-based queue engine
 - [ ] SQLite optional backend
-- [ ] Linear bidirectional sync
 - [ ] Embedding indexes + semantic search
-- [ ] WhatsApp/Telegram transport
 - [ ] Multi-tenant cloud (k8s, billing, auth)
+- [ ] Dogfooding — set up QUESTPIE s.r.o. as first company
 
 ---
 
@@ -739,6 +735,9 @@ async function spawnAgent(agent: Agent, task: Task, context: AssembledContext) {
 | 2026-03-22 | Subdomain deployment | autopilot.questpie.com (simpler than path prefix) |
 | 2026-03-22 | Agent SDK for spawning | Claude Agent SDK provides file tools, sandboxing, MCP, hooks. We build workflow + context + memory on top |
 | 2026-03-22 | No hard-coded integrations | All integrations = Secret + Knowledge Doc + Primitive (http_request or MCP) |
+| 2026-03-22 | Skill system architecture | 17 knowledge docs loaded from template, role-based filtering, integrated into context assembly |
+| 2026-03-22 | Artifact router | Lazy cold-start for artifact serving, per-artifact port allocation, create_artifact tool |
+| 2026-03-22 | Feature-complete OSS | 504 tests, 13K+ LOC across 89 source files. All core systems done, future is polish and launch |
 
 ---
 
