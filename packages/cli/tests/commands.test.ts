@@ -36,8 +36,8 @@ describe('command registration', () => {
 		expect(commandNames).toContain('start')
 	})
 
-	it('has exactly 8 commands', () => {
-		expect(program.commands.length).toBe(8)
+	it('has exactly 12 commands', () => {
+		expect(program.commands.length).toBe(12)
 	})
 
 	it('has tasks subcommands', () => {
