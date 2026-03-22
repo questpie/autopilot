@@ -1,0 +1,12 @@
+{
+	"name": "@questpie/autopilot-spec",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "QUESTPIE Autopilot filesystem conventions, Zod schemas, and TypeScript types",
+	"main": "src/index.ts",
+	"scripts": {
+		"build": "echo 'placeholder'",
+		"test": "echo 'placeholder'"
+	}
+}

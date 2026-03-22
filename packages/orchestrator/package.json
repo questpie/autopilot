@@ -1,0 +1,12 @@
+{
+	"name": "@questpie/autopilot-orchestrator",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "QUESTPIE Autopilot orchestrator runtime",
+	"main": "src/index.ts",
+	"scripts": {
+		"build": "echo 'placeholder'",
+		"test": "echo 'placeholder'"
+	}
+}

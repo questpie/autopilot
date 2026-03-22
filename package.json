@@ -1,0 +1,18 @@
+{
+	"name": "questpie-autopilot",
+	"private": true,
+	"packageManager": "bun@1.3.0",
+	"workspaces": ["packages/*", "apps/*"],
+	"scripts": {
+		"dev": "turbo dev",
+		"build": "turbo build",
+		"test": "turbo test",
+		"lint": "biome check .",
+		"format": "biome format --write ."
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"turbo": "^2.7.3",
+		"typescript": "^5.9.3"
+	}
+}

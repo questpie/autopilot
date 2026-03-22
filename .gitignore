@@ -7,6 +7,8 @@ node_modules/
 # Build outputs
 dist/
 build/
+.output/
+.turbo/
 *.tsbuildinfo
 
 # Environment
@@ -28,8 +30,12 @@ Thumbs.db
 coverage/
 .nyc_output/
 
+# TanStack Router generated
+routeTree.gen.ts
+
 # Misc
 .cache/
 tmp/
 
 local_specs/*
+claude.md
