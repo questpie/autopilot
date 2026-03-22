@@ -15,7 +15,7 @@ COPY --from=pruner /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=pruner /app/out/full/ .
 WORKDIR /app/apps/web
-RUN DISABLE_PRERENDER=true BASE_PATH=/autopilot/ bun run build
+RUN DISABLE_PRERENDER=true bun run build
 
 # Stage 3: Run
 FROM oven/bun:1.3.0-alpine AS runner
