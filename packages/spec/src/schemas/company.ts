@@ -1,0 +1,63 @@
+import { z } from 'zod'
+
+export const NotificationChannelSchema = z.object({
+	type: z.enum(['email', 'whatsapp', 'slack', 'telegram', 'discord', 'push']),
+	address: z.string().optional(),
+	number: z.string().optional(),
+	webhook: z.string().url().optional(),
+	user: z.string().optional(),
+	enabled: z.boolean().default(true),
+})
+
+export const CompanyOwnerSchema = z.object({
+	name: z.string(),
+	email: z.string().email(),
+	notification_channels: z.array(NotificationChannelSchema).default([]),
+})
+
+export const CompanySettingsSchema = z.object({
+	auto_assign: z.boolean().default(true),
+	require_approval: z.array(z.string()).default(['merge', 'deploy', 'spend', 'publish']),
+	max_concurrent_agents: z.number().int().min(1).default(6),
+	agent_provider: z.string().default('anthropic'),
+	agent_model: z.string().default('claude-sonnet-4-20250514'),
+	budget: z
+		.object({
+			daily_token_limit: z.number().int().default(5_000_000),
+			alert_at: z.number().int().min(0).max(100).default(80),
+		})
+		.default({}),
+})
+
+export const IntegrationConfigSchema = z.object({
+	github: z
+		.object({
+			org: z.string(),
+			default_branch: z.string().default('main'),
+		})
+		.optional(),
+	linear: z
+		.object({
+			workspace: z.string(),
+			sync: z.enum(['none', 'one_way', 'bidirectional']).default('bidirectional'),
+		})
+		.optional(),
+	slack: z
+		.object({
+			workspace: z.string(),
+			bot_channel: z.string().optional(),
+		})
+		.optional(),
+})
+
+export const CompanySchema = z.object({
+	name: z.string(),
+	slug: z.string().regex(/^[a-z0-9-]+$/),
+	description: z.string(),
+	timezone: z.string().default('UTC'),
+	language: z.string().default('en'),
+	languages: z.array(z.string()).default(['en']),
+	owner: CompanyOwnerSchema,
+	settings: CompanySettingsSchema.default({}),
+	integrations: IntegrationConfigSchema.default({}),
+})

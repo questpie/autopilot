@@ -1,0 +1,21 @@
+import { z } from 'zod'
+import * as schemas from '../schemas'
+
+export type Company = z.infer<typeof schemas.CompanySchema>
+export type Agent = z.infer<typeof schemas.AgentSchema>
+export type Human = z.infer<typeof schemas.HumanSchema>
+export type Task = z.infer<typeof schemas.TaskSchema>
+export type TaskHistoryEntry = z.infer<typeof schemas.TaskHistoryEntrySchema>
+export type Blocker = z.infer<typeof schemas.BlockerSchema>
+export type Message = z.infer<typeof schemas.MessageSchema>
+export type Workflow = z.infer<typeof schemas.WorkflowSchema>
+export type WorkflowStep = z.infer<typeof schemas.WorkflowStepSchema>
+export type Schedule = z.infer<typeof schemas.ScheduleSchema>
+export type Webhook = z.infer<typeof schemas.WebhookSchema>
+export type Watcher = z.infer<typeof schemas.WatcherSchema>
+export type Threshold = z.infer<typeof schemas.ThresholdSchema>
+export type AgentMemory = z.infer<typeof schemas.AgentMemorySchema>
+export type Pin = z.infer<typeof schemas.PinSchema>
+export type SessionMeta = z.infer<typeof schemas.SessionMetaSchema>
+export type StreamChunk = z.infer<typeof schemas.StreamChunkSchema>
+export type Secret = z.infer<typeof schemas.SecretSchema>
