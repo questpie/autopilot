@@ -6,6 +6,7 @@ import { createAutopilotTools } from './tools'
 import type { ToolContext } from './tools'
 import type { AgentProvider, AgentEvent } from './provider'
 import { AnthropicProvider } from './providers/anthropic'
+import { ClaudeAgentSDKProvider } from './providers/claude-agent-sdk'
 
 /** Registry of available providers */
 const providers: Map<string, AgentProvider> = new Map()
@@ -28,6 +29,7 @@ export function getProvider(name: string): AgentProvider {
 
 // Register built-in providers
 registerProvider(new AnthropicProvider())
+registerProvider(new ClaudeAgentSDKProvider())
 
 export interface SpawnOptions {
 	companyRoot: string
