@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { cp, readFile, writeFile, access, readdir, stat } from 'node:fs/promises'
+import { cp, readFile, writeFile, access, readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { program } from '../program'
 import { header, success, dim, error, warning } from '../utils/format'
@@ -28,8 +28,8 @@ async function printTree(dir: string, prefix: string = '', isLast: boolean = tru
 program.addCommand(
 	new Command('init')
 		.description('Create a new QUESTPIE Autopilot company directory')
-		.argument('[name]', 'Company name', 'My Company')
-		.option('-f, --force', 'Overwrite existing directory')
+		.argument('[name]', 'Company name (used for directory and company.yaml)', 'My Company')
+		.option('-f, --force', 'Overwrite existing directory if it already exists')
 		.action(async (name: string, opts: { force?: boolean }) => {
 			try {
 				const slug = name
@@ -46,8 +46,8 @@ program.addCommand(
 				try {
 					await access(targetDir)
 					if (!opts.force) {
-						console.log(warning(`Directory already exists: ${targetDir}`))
-						console.log(dim('Use --force to overwrite.'))
+						console.error(warning(`Directory already exists: ${targetDir}`))
+						console.error(dim('Use --force to overwrite.'))
 						process.exit(1)
 					}
 					console.log(warning('Directory exists, overwriting...'))
@@ -59,9 +59,9 @@ program.addCommand(
 				try {
 					await access(TEMPLATE_DIR)
 				} catch {
-					console.log(error('Template directory not found.'))
-					console.log(dim(`Expected at: ${TEMPLATE_DIR}`))
-					console.log(dim('Make sure @questpie/autopilot is properly installed.'))
+					console.error(error('Template directory not found.'))
+					console.error(dim(`Expected at: ${TEMPLATE_DIR}`))
+					console.error(dim('Make sure @questpie/autopilot is properly installed.'))
 					process.exit(1)
 				}
 
@@ -91,8 +91,8 @@ program.addCommand(
 				console.log(`  ${dim('3.')} autopilot ask "Build me a landing page"`)
 				console.log(`  ${dim('4.')} autopilot start`)
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				console.log(error(`Failed to initialize company: ${message}`))
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),

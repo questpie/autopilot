@@ -6,7 +6,7 @@ import { header, success, dim, error } from '../utils/format'
 
 program.addCommand(
 	new Command('ask')
-		.description('Submit a high-level intent for the AI team')
+		.description('Submit a high-level intent for the AI team to execute')
 		.argument('<intent>', 'What you want done (natural language)')
 		.action(async (intent: string) => {
 			try {
@@ -36,13 +36,8 @@ program.addCommand(
 				console.log(dim('CEO agent will decompose your intent into tasks.'))
 				console.log(dim("Run 'autopilot attach ceo' to watch, or 'autopilot inbox' for updates."))
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to submit intent: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),

@@ -6,7 +6,7 @@ import { header, success, dim, error, warning } from '../utils/format'
 
 program.addCommand(
 	new Command('start')
-		.description('Start the Autopilot orchestrator')
+		.description('Start the Autopilot orchestrator daemon')
 		.option('-p, --port <port>', 'Webhook server port', '7777')
 		.action(async (opts: { port: string }) => {
 			try {
@@ -43,13 +43,8 @@ program.addCommand(
 				process.on('SIGINT', shutdown)
 				process.on('SIGTERM', shutdown)
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to start orchestrator: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),

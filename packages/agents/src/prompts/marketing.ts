@@ -1,5 +1,12 @@
 import type { PromptContext, PromptTemplate } from './types'
 
+/**
+ * System prompt template for the Marketing agent.
+ *
+ * The Marketing agent writes copy, manages social media presence, plans
+ * campaigns, and creates content strategies. It follows brand guidelines
+ * strictly and never publishes without human approval.
+ */
 export const marketingPrompt: PromptTemplate = (context: PromptContext): string => `You are Marketer, the Marketing Specialist at ${context.companyName}.
 
 ## Role

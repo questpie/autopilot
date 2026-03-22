@@ -12,12 +12,23 @@ import type { Notification } from './notifier'
 import { spawnAgent, extractMemory } from './agent'
 import { ApiServer } from './api'
 
+/** Configuration options for the {@link Orchestrator}. */
 export interface OrchestratorOptions {
+	/** Absolute path to the company root directory on disk. */
 	companyRoot: string
+	/** Port for the incoming-webhook HTTP server (default `7777`). */
 	webhookPort?: number
+	/** Port for the read-only REST API server (default `7778`). */
 	apiPort?: number
 }
 
+/**
+ * Top-level runtime that boots and coordinates every orchestrator subsystem.
+ *
+ * Lifecycle: call {@link start} to spin up the file-system watcher, cron
+ * scheduler, webhook server, and API server. Call {@link stop} to tear
+ * everything down gracefully.
+ */
 export class Orchestrator {
 	private watcher: Watcher | null = null
 	private scheduler: Scheduler | null = null
@@ -36,6 +47,12 @@ export class Orchestrator {
 		this.notifier = new Notifier({ companyRoot: options.companyRoot })
 	}
 
+	/**
+	 * Boot every subsystem (watcher, scheduler, webhook server, API server).
+	 *
+	 * The method is idempotent — calling it on an already-running orchestrator
+	 * is a no-op.
+	 */
 	async start(): Promise<void> {
 		if (this.running) {
 			console.log('[orchestrator] already running')
@@ -109,6 +126,7 @@ export class Orchestrator {
 		console.log('[orchestrator] startup complete')
 	}
 
+	/** Gracefully shut down all subsystems. */
 	async stop(): Promise<void> {
 		if (!this.running) return
 
@@ -154,14 +172,17 @@ export class Orchestrator {
 		console.log('[orchestrator] shutdown complete')
 	}
 
+	/** Return the shared session stream manager (used by `attach`). */
 	getStreamManager(): SessionStreamManager {
 		return this.streamManager
 	}
 
+	/** Return the workflow loader (used by the API layer). */
 	getWorkflowLoader(): WorkflowLoader {
 		return this.workflowLoader
 	}
 
+	/** Whether the orchestrator is currently running. */
 	isRunning(): boolean {
 		return this.running
 	}
@@ -224,6 +245,12 @@ export class Orchestrator {
 		}
 	}
 
+	/**
+	 * React to a task file changing on disk.
+	 *
+	 * Reads the task, evaluates its workflow (if any), and dispatches the
+	 * appropriate notification (assign, approve, complete, or error).
+	 */
 	async handleTaskChange(taskId: string): Promise<void> {
 		const root = this.options.companyRoot
 

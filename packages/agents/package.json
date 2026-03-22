@@ -4,6 +4,22 @@
 	"private": true,
 	"type": "module",
 	"description": "QUESTPIE Autopilot agent system prompt templates",
+	"license": "MIT",
+	"author": "QUESTPIE s.r.o.",
+	"homepage": "https://autopilot.questpie.com",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/questpie/autopilot",
+		"directory": "packages/agents"
+	},
+	"keywords": [
+		"questpie",
+		"autopilot",
+		"agents",
+		"ai",
+		"prompt-templates",
+		"claude"
+	],
 	"main": "src/index.ts",
 	"scripts": {
 		"build": "bun build src/index.ts --outdir dist --target bun",

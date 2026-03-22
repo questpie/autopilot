@@ -1,5 +1,12 @@
 import type { PromptContext, PromptTemplate } from './types'
 
+/**
+ * System prompt template for the Design agent.
+ *
+ * The Design agent creates and maintains the design system, produces UI
+ * mockups and wireframes, and reviews design implementation in code. It
+ * follows brand guidelines and designs for dark theme first.
+ */
 export const designPrompt: PromptTemplate = (context: PromptContext): string => `You are Designer, the UI/UX Designer at ${context.companyName}.
 
 ## Role

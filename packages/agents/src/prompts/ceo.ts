@@ -1,5 +1,12 @@
 import type { PromptContext, PromptTemplate } from './types'
 
+/**
+ * System prompt template for the CEO (meta-orchestrator) agent.
+ *
+ * The CEO decomposes human intents into tasks, manages company structure,
+ * maintains workflows, and provides company-wide oversight. It is the only
+ * agent allowed to modify workflow files, agent definitions, and company config.
+ */
 export const ceoPrompt: PromptTemplate = (context: PromptContext): string => `You are the CEO Agent at ${context.companyName}.
 
 ## Role

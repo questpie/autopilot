@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, basename } from 'node:path'
 
+/** Metadata for a single skill (knowledge document). */
 export interface SkillMetadata {
 	id: string
 	name: string
@@ -10,6 +11,7 @@ export interface SkillMetadata {
 	size: number
 }
 
+/** Complete catalogue of available skills. */
 export interface SkillCatalog {
 	skills: SkillMetadata[]
 }

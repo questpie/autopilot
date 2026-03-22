@@ -7,7 +7,7 @@ import { findCompanyRoot } from '../utils/find-root'
 import { header, dim, table, success, error, badge } from '../utils/format'
 
 const secretsCmd = new Command('secrets')
-	.description('Manage secrets')
+	.description('Manage secrets (API keys, tokens, credentials)')
 	.action(async () => {
 		try {
 			const root = await findCompanyRoot()
@@ -38,20 +38,15 @@ const secretsCmd = new Command('secrets')
 			console.log('')
 			console.log(dim(`${secrets.length} secret(s)`))
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err)
-			if (message.includes('company.yaml')) {
-				console.log(error('No company directory found.'))
-				console.log(dim("Run 'autopilot init' to create one first."))
-			} else {
-				console.log(error(`Failed to list secrets: ${message}`))
-			}
+			console.error(error(err instanceof Error ? err.message : String(err)))
+			console.error(dim('Run "autopilot --help" for usage information.'))
 			process.exit(1)
 		}
 	})
 
 secretsCmd.addCommand(
 	new Command('list')
-		.description('List all secrets (names only, not values)')
+		.description('List all secrets with metadata (names only, not values)')
 		.action(async () => {
 			try {
 				const root = await findCompanyRoot()
@@ -94,13 +89,8 @@ secretsCmd.addCommand(
 				console.log('')
 				console.log(dim(`${secrets.length} secret(s)`))
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to list secrets: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),
@@ -108,15 +98,16 @@ secretsCmd.addCommand(
 
 secretsCmd.addCommand(
 	new Command('add')
-		.description('Add a secret')
-		.argument('<name>', 'Secret name')
+		.description('Add a new secret')
+		.argument('<name>', 'Secret name (used as filename)')
 		.option('--value <value>', 'Secret value (API key, token)')
-		.option('--agents <agents>', 'Comma-separated allowed agent IDs')
-		.option('--type <type>', 'Secret type', 'api_token')
+		.option('--agents <agents>', 'Comma-separated list of allowed agent IDs')
+		.option('--type <type>', 'Secret type (e.g. api_token, oauth, ssh_key)', 'api_token')
 		.action(async (name: string, opts: { value?: string; agents?: string; type: string }) => {
 			try {
 				if (!opts.value) {
-					console.log(error('--value is required'))
+					console.error(error('--value is required'))
+					console.error(dim('Run "autopilot secrets add --help" for usage information.'))
 					process.exit(1)
 				}
 
@@ -136,13 +127,8 @@ secretsCmd.addCommand(
 				await writeYaml(filePath, secret)
 				console.log(success(`Secret '${name}' added.`))
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to add secret: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),
@@ -150,8 +136,8 @@ secretsCmd.addCommand(
 
 secretsCmd.addCommand(
 	new Command('remove')
-		.description('Remove a secret')
-		.argument('<name>', 'Secret name')
+		.description('Remove a secret by name')
+		.argument('<name>', 'Secret name to remove')
 		.action(async (name: string) => {
 			try {
 				const root = await findCompanyRoot()
@@ -161,17 +147,13 @@ secretsCmd.addCommand(
 					await rm(filePath)
 					console.log(success(`Secret '${name}' removed.`))
 				} catch {
-					console.log(error(`Secret not found: ${name}`))
+					console.error(error(`Secret not found: ${name}`))
+					console.error(dim('Use "autopilot secrets list" to see available secrets.'))
 					process.exit(1)
 				}
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to remove secret: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),

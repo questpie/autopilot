@@ -7,15 +7,23 @@ import type { ToolContext } from './tools'
 import type { AgentProvider, AgentEvent } from './provider'
 import { ClaudeAgentSDKProvider } from './providers/claude-agent-sdk'
 
-/** Registry of available providers */
+/** Registry of available agent providers, keyed by name. */
 const providers: Map<string, AgentProvider> = new Map()
 
-/** Register a provider */
+/**
+ * Register an {@link AgentProvider} so it can be resolved by name.
+ *
+ * Built-in providers are registered at module load time.
+ */
 export function registerProvider(provider: AgentProvider): void {
 	providers.set(provider.name, provider)
 }
 
-/** Get a provider by name */
+/**
+ * Look up a registered provider by name.
+ *
+ * @throws When no provider with the given name has been registered.
+ */
 export function getProvider(name: string): AgentProvider {
 	const provider = providers.get(name)
 	if (!provider) {
@@ -30,6 +38,7 @@ export function getProvider(name: string): AgentProvider {
 // Claude Agent SDK works with both API key and Max subscription
 registerProvider(new ClaudeAgentSDKProvider())
 
+/** Options required to spawn an agent session. */
 export interface SpawnOptions {
 	companyRoot: string
 	agent: Agent
@@ -40,6 +49,7 @@ export interface SpawnOptions {
 	trigger: { type: string; task_id?: string; schedule_id?: string }
 }
 
+/** Outcome of a completed agent session. */
 export interface SpawnResult {
 	sessionId: string
 	result?: string
@@ -47,6 +57,17 @@ export interface SpawnResult {
 	error?: string
 }
 
+/**
+ * Spawn a single agent session end-to-end.
+ *
+ * Steps:
+ * 1. Resolve the LLM provider from the agent or company config.
+ * 2. Assemble a multi-layer system prompt via {@link assembleContext}.
+ * 3. Create the autopilot tool-set.
+ * 4. Open a session stream for real-time `attach` subscriptions.
+ * 5. Log session start/end to the activity feed.
+ * 6. Delegate to the provider's `spawn()` for the actual LLM loop.
+ */
 export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	const { companyRoot, agent, company, allAgents, task, streamManager, trigger } = options
 	const sessionId = `session-${Date.now().toString(36)}-${agent.id}`

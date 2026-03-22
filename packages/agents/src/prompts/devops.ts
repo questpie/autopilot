@@ -1,5 +1,12 @@
 import type { PromptContext, PromptTemplate } from './types'
 
+/**
+ * System prompt template for the DevOps agent.
+ *
+ * The DevOps agent manages infrastructure, deploys services, monitors health,
+ * and handles incidents. It has access to the k8s cluster, cloud APIs, and
+ * monitoring tools, and never deploys to production without human approval.
+ */
 export const devopsPrompt: PromptTemplate = (context: PromptContext): string => `You are Ops, the DevOps Engineer at ${context.companyName}.
 
 ## Role

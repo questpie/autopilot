@@ -91,7 +91,7 @@ function shouldShow(entry: ActivityEntry, toolsOnly: boolean): boolean {
 
 program.addCommand(
 	new Command('attach')
-		.description('Attach to a live agent session (streams activity in real-time)')
+		.description('Attach to a live agent session and stream activity in real-time')
 		.argument('<agent>', 'Agent ID to attach to')
 		.option('--compact', 'One line per event (time + agent + summary)')
 		.option('--tools-only', 'Only show tool_call and tool_result events')
@@ -99,15 +99,15 @@ program.addCommand(
 			try {
 				await findCompanyRoot()
 			} catch {
-				console.log(error('No company directory found.'))
-				console.log(dim("Run 'autopilot init' to create one first."))
+				console.error(error('No company directory found.'))
+				console.error(dim('Run "autopilot init" to create one first.'))
 				process.exit(1)
 			}
 
 			const running = await checkOrchestrator()
 			if (!running) {
-				console.log(error('No orchestrator running.'))
-				console.log(dim('Start with: autopilot start'))
+				console.error(error('No orchestrator running.'))
+				console.error(dim('Start with: autopilot start'))
 				process.exit(1)
 			}
 
@@ -115,7 +115,7 @@ program.addCommand(
 			const toolsOnly = opts.toolsOnly ?? false
 
 			console.log('')
-			console.log(`\u{1F517} ${header(`Attached to ${agentId}`)} ${dim('(polling every 2s)')}`)
+			console.log(`${header(`Attached to ${agentId}`)} ${dim('(polling every 2s)')}`)
 			console.log(dim('   Press Ctrl+C to detach'))
 			console.log('')
 			printSeparator()
@@ -146,7 +146,7 @@ program.addCommand(
 				if (initial.length > 0) {
 					lastSeen = initial[initial.length - 1]!.at
 				}
-			} catch (err) {
+			} catch {
 				console.log(warning('Could not fetch initial activity, will keep polling...'))
 			}
 
@@ -191,24 +191,24 @@ program.addCommand(
 
 program.addCommand(
 	new Command('replay')
-		.description('Replay a session activity log')
+		.description('Replay a recorded agent activity log')
 		.argument('<agent>', 'Agent ID to replay activity for')
-		.option('--limit <n>', 'Number of entries to show', '50')
+		.option('--limit <n>', 'Maximum number of entries to show', '50')
 		.option('--compact', 'One line per event')
 		.option('--tools-only', 'Only show tool_call and tool_result events')
 		.action(async (agentId: string, opts: { limit?: string; compact?: boolean; toolsOnly?: boolean }) => {
 			try {
 				await findCompanyRoot()
 			} catch {
-				console.log(error('No company directory found.'))
-				console.log(dim("Run 'autopilot init' to create one first."))
+				console.error(error('No company directory found.'))
+				console.error(dim('Run "autopilot init" to create one first.'))
 				process.exit(1)
 			}
 
 			const running = await checkOrchestrator()
 			if (!running) {
-				console.log(error('No orchestrator running.'))
-				console.log(dim('Start with: autopilot start'))
+				console.error(error('No orchestrator running.'))
+				console.error(dim('Start with: autopilot start'))
 				process.exit(1)
 			}
 
@@ -217,7 +217,7 @@ program.addCommand(
 			const toolsOnly = opts.toolsOnly ?? false
 
 			console.log('')
-			console.log(`\u{1F4FC} ${header(`Replay for ${agentId}`)} ${dim(`(last ${limit} entries)`)}`)
+			console.log(`${header(`Replay for ${agentId}`)} ${dim(`(last ${limit} entries)`)}`)
 			console.log('')
 			printSeparator()
 
@@ -237,8 +237,8 @@ program.addCommand(
 				printSeparator()
 				console.log(dim(`${entries.length} entries`))
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				console.log(error(`Failed to fetch activity: ${message}`))
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),

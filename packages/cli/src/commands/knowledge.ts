@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path'
 import { loadSkillCatalog } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, dim, table, error, badge } from '../utils/format'
+import { header, dim, table, success, error, badge } from '../utils/format'
 
 async function buildTree(dir: string, prefix: string = ''): Promise<string[]> {
 	let entries: string[]
@@ -38,7 +38,7 @@ async function buildTree(dir: string, prefix: string = ''): Promise<string[]> {
 }
 
 const knowledgeCmd = new Command('knowledge')
-	.description('Manage knowledge documents')
+	.description('Manage knowledge documents and skill catalog')
 	.action(async () => {
 		// Default action: list
 		try {
@@ -58,20 +58,15 @@ const knowledgeCmd = new Command('knowledge')
 				console.log(`  ${line}`)
 			}
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err)
-			if (message.includes('company.yaml')) {
-				console.log(error('No company directory found.'))
-				console.log(dim("Run 'autopilot init' to create one first."))
-			} else {
-				console.log(error(`Failed to list knowledge: ${message}`))
-			}
+			console.error(error(err instanceof Error ? err.message : String(err)))
+			console.error(dim('Run "autopilot --help" for usage information.'))
 			process.exit(1)
 		}
 	})
 
 knowledgeCmd.addCommand(
 	new Command('list')
-		.description('List all knowledge docs (tree view)')
+		.description('List all knowledge documents in tree view')
 		.action(async () => {
 			try {
 				const root = await findCompanyRoot()
@@ -90,13 +85,8 @@ knowledgeCmd.addCommand(
 					console.log(`  ${line}`)
 				}
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to list knowledge: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),
@@ -104,8 +94,8 @@ knowledgeCmd.addCommand(
 
 knowledgeCmd.addCommand(
 	new Command('show')
-		.description('Print a knowledge doc')
-		.argument('<path>', 'Relative path within knowledge/')
+		.description('Print the contents of a knowledge document')
+		.argument('<path>', 'Relative path within knowledge/ directory')
 		.action(async (docPath: string) => {
 			try {
 				const root = await findCompanyRoot()
@@ -117,18 +107,13 @@ knowledgeCmd.addCommand(
 					console.log('')
 					console.log(content)
 				} catch {
-					console.log(error(`Knowledge doc not found: ${docPath}`))
-					console.log(dim('Use `autopilot knowledge list` to see available docs.'))
+					console.error(error(`Knowledge doc not found: ${docPath}`))
+					console.error(dim('Use "autopilot knowledge list" to see available docs.'))
 					process.exit(1)
 				}
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to show knowledge doc: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),
@@ -136,9 +121,9 @@ knowledgeCmd.addCommand(
 
 knowledgeCmd.addCommand(
 	new Command('add')
-		.description('Add a knowledge doc')
-		.argument('<path>', 'Relative path within knowledge/')
-		.option('--file <filepath>', 'Source file to copy')
+		.description('Add a knowledge document from file or stdin')
+		.argument('<path>', 'Relative path within knowledge/ directory')
+		.option('--file <filepath>', 'Source file to copy content from')
 		.action(async (docPath: string, opts: { file?: string }) => {
 			try {
 				const root = await findCompanyRoot()
@@ -158,15 +143,10 @@ knowledgeCmd.addCommand(
 
 				await mkdir(dirname(targetPath), { recursive: true })
 				await writeFile(targetPath, content, 'utf-8')
-				console.log(`Added knowledge/${docPath}`)
+				console.log(success(`Added knowledge/${docPath}`))
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to add knowledge doc: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),
@@ -174,7 +154,7 @@ knowledgeCmd.addCommand(
 
 knowledgeCmd.addCommand(
 	new Command('scan')
-		.description('Show skill catalog (parsed from knowledge/)')
+		.description('Parse knowledge/ and show the skill catalog')
 		.action(async () => {
 			try {
 				const root = await findCompanyRoot()
@@ -199,13 +179,8 @@ knowledgeCmd.addCommand(
 				console.log('')
 				console.log(dim(`${catalog.skills.length} skill(s)`))
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to scan skills: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),

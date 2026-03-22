@@ -1,3 +1,7 @@
+/**
+ * Canonical filesystem paths for all autopilot configuration and data files.
+ * All paths are relative to the project root.
+ */
 export const PATHS = {
 	// Root
 	COMPANY_CONFIG: '/company/company.yaml',
@@ -60,21 +64,54 @@ export const PATHS = {
 	DECISIONS_DIR: '/company/logs/decisions',
 } as const
 
-// Dynamic paths
+/**
+ * Returns the filesystem path for a task YAML file.
+ * @param status - Task status directory (e.g. 'backlog', 'active')
+ * @param id - Unique task identifier
+ */
 export const taskPath = (status: string, id: string) =>
 	`${PATHS.TASKS_DIR}/${status}/${id}.yaml`
 
+/**
+ * Returns the directory path for an agent's persistent memory.
+ * @param agentId - Unique agent identifier
+ */
 export const agentMemoryPath = (agentId: string) => `${PATHS.MEMORY_DIR}/${agentId}`
 
+/**
+ * Returns the directory path for a specific agent session.
+ * @param agentId - Unique agent identifier
+ * @param sessionId - Unique session identifier
+ */
 export const sessionPath = (agentId: string, sessionId: string) =>
 	`${PATHS.SESSIONS_DIR}/${agentId}/${sessionId}`
 
+/**
+ * Returns the directory path for a communication channel.
+ * @param channel - Channel name or identifier
+ */
 export const channelPath = (channel: string) => `${PATHS.CHANNELS_DIR}/${channel}`
 
+/**
+ * Returns the directory path for a project.
+ * @param project - Project name or identifier
+ */
 export const projectPath = (project: string) => `${PATHS.PROJECTS_DIR}/${project}`
 
+/**
+ * Returns the filesystem path for a workflow YAML file.
+ * @param id - Unique workflow identifier
+ */
 export const workflowPath = (id: string) => `${PATHS.WORKFLOWS_DIR}/${id}.yaml`
 
+/**
+ * Returns the filesystem path for a secret YAML file.
+ * @param name - Secret name
+ */
 export const secretPath = (name: string) => `${PATHS.SECRETS_DIR}/${name}.yaml`
 
+/**
+ * Returns the filesystem path for a dashboard pin YAML file.
+ * @param id - Unique pin identifier
+ */
 export const pinPath = (id: string) => `${PATHS.PINS_DIR}/${id}.yaml`

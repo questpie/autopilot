@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { PATHS } from '@questpie/autopilot-spec'
 
+/** A single entry in the append-only JSONL activity feed. */
 export interface ActivityEntry {
 	at: string
 	agent: string
@@ -26,6 +27,11 @@ function activityFilePath(companyRoot: string, date: string): string {
 	return join(resolvePath(companyRoot, PATHS.ACTIVITY_DIR), `${date}.jsonl`)
 }
 
+/**
+ * Append an entry to today's JSONL activity log.
+ *
+ * Each day gets its own file (`<date>.jsonl`) inside the activity directory.
+ */
 export async function appendActivity(
 	companyRoot: string,
 	entry: Omit<ActivityEntry, 'at'> & { at?: string },
@@ -51,6 +57,7 @@ export async function appendActivity(
 	return full
 }
 
+/** Filter options for {@link readActivity}. */
 export interface ReadActivityOptions {
 	date?: string
 	limit?: number
@@ -58,6 +65,11 @@ export interface ReadActivityOptions {
 	type?: string
 }
 
+/**
+ * Read activity entries from a day's JSONL file, with optional filters.
+ *
+ * Defaults to today. Returns an empty array if the file does not exist.
+ */
 export async function readActivity(
 	companyRoot: string,
 	options?: ReadActivityOptions,

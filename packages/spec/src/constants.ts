@@ -1,3 +1,4 @@
+/** Available roles that an agent can be assigned in the autopilot system. */
 export const AGENT_ROLES = [
 	'meta',
 	'strategist',
@@ -9,6 +10,7 @@ export const AGENT_ROLES = [
 	'design',
 ] as const
 
+/** Lifecycle statuses a task can transition through. */
 export const TASK_STATUSES = [
 	'draft',
 	'backlog',
@@ -20,6 +22,7 @@ export const TASK_STATUSES = [
 	'cancelled',
 ] as const
 
+/** Classification of task purpose within a workflow. */
 export const TASK_TYPES = [
 	'intent',
 	'planning',
@@ -31,10 +34,13 @@ export const TASK_TYPES = [
 	'human_required',
 ] as const
 
+/** Priority levels ordered from most to least urgent. */
 export const PRIORITIES = ['critical', 'high', 'medium', 'low'] as const
 
+/** Types of steps that can appear in a workflow definition. */
 export const WORKFLOW_STEP_TYPES = ['agent', 'human_gate', 'terminal', 'sub_workflow'] as const
 
+/** Events that can trigger an agent to execute. */
 export const TRIGGER_TYPES = [
 	'task_assigned',
 	'task_status_changed',
@@ -48,6 +54,7 @@ export const TRIGGER_TYPES = [
 	'agent_request',
 ] as const
 
+/** Supported message transport channels. */
 export const TRANSPORT_TYPES = [
 	'email',
 	'whatsapp',
@@ -58,8 +65,10 @@ export const TRANSPORT_TYPES = [
 	'cli',
 ] as const
 
+/** Visual indicator types for dashboard pins. */
 export const PIN_TYPES = ['info', 'warning', 'success', 'error', 'progress'] as const
 
+/** Lifecycle statuses of an agent session. */
 export const SESSION_STATUSES = [
 	'spawning',
 	'running',
@@ -70,6 +79,7 @@ export const SESSION_STATUSES = [
 	'timeout',
 ] as const
 
+/** Categories of actions that require human approval. */
 export const GATE_TYPES = [
 	'merge',
 	'deploy',

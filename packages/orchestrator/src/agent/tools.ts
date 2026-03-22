@@ -10,8 +10,9 @@ import { appendActivity } from '../fs/activity'
 import { readYamlUnsafe, writeYaml } from '../fs/yaml'
 import { loadSkillContent } from '../skills'
 
-// -- Tool definition types --
+// ─── Tool definition types ─────────────────────────────────────────────────
 
+/** A single tool that an agent can invoke during a session. */
 export interface ToolDefinition<T extends z.ZodType = z.ZodType> {
 	name: string
 	description: string
@@ -19,11 +20,13 @@ export interface ToolDefinition<T extends z.ZodType = z.ZodType> {
 	execute: (args: z.output<T>, context: ToolContext) => Promise<ToolResult>
 }
 
+/** Contextual data passed to every tool execution. */
 export interface ToolContext {
 	companyRoot: string
 	agentId: string
 }
 
+/** Structured result returned to the LLM after a tool call. */
 export interface ToolResult {
 	content: Array<{ type: 'text'; text: string }>
 	isError?: boolean
@@ -40,8 +43,16 @@ function defineTool<T extends z.ZodType>(
 	return { name, description, schema, execute }
 }
 
-// -- Autopilot tool definitions --
+// ─── Autopilot tool definitions ────────────────────────────────────────────
 
+/**
+ * Build the full set of autopilot tools available to agents.
+ *
+ * Includes: `send_message`, `create_task`, `update_task`, `add_blocker`,
+ * `pin_to_board`, `unpin_from_board`, `create_artifact`, `skill_request`,
+ * `search_knowledge`, `update_knowledge`, `http_request`, `ask_agent`,
+ * and `resolve_blocker`.
+ */
 export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 	// biome-ignore lint: generic variance is intentional
 	const tools: Array<ToolDefinition<any>> = [

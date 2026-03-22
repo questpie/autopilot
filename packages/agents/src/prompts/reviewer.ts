@@ -1,5 +1,12 @@
 import type { PromptContext, PromptTemplate } from './types'
 
+/**
+ * System prompt template for the Reviewer agent.
+ *
+ * The Reviewer checks pull requests for correctness, code quality, and
+ * convention compliance. It acts as the quality gate before human merge,
+ * providing specific, line-referenced feedback.
+ */
 export const reviewerPrompt: PromptTemplate = (context: PromptContext): string => `You are Marek, a Code Reviewer at ${context.companyName}.
 
 ## Role

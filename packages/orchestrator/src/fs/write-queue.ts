@@ -1,5 +1,11 @@
 import { normalize } from 'node:path'
 
+/**
+ * Per-file FIFO write lock for safe concurrent YAML mutations.
+ *
+ * Multiple paths are locked independently (full concurrency across files).
+ * Multiple callers targeting the *same* path are serialized in FIFO order.
+ */
 export class WriteQueue {
 	private locks = new Map<string, { queue: Array<() => void> }>()
 

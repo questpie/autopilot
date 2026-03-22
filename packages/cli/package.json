@@ -3,11 +3,20 @@
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
-	"description": "QUESTPIE Autopilot CLI",
+	"description": "QUESTPIE Autopilot CLI — AI-native company operating system",
 	"main": "src/index.ts",
 	"bin": {
 		"autopilot": "./bin/autopilot.ts"
 	},
+	"keywords": ["questpie", "autopilot", "cli", "ai", "agents"],
+	"homepage": "https://autopilot.questpie.com",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/questpie/autopilot",
+		"directory": "packages/cli"
+	},
+	"license": "MIT",
+	"author": "QUESTPIE s.r.o.",
 	"scripts": {
 		"build": "bun build src/index.ts --outdir dist --target bun",
 		"test": "bun test",

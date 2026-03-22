@@ -1,6 +1,14 @@
 {
 	"name": "questpie-autopilot",
 	"private": true,
+	"description": "AI-native company operating system",
+	"license": "MIT",
+	"author": "QUESTPIE s.r.o.",
+	"homepage": "https://autopilot.questpie.com",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/questpie/autopilot"
+	},
 	"packageManager": "bun@1.3.0",
 	"workspaces": ["packages/*", "apps/*"],
 	"scripts": {

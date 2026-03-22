@@ -3,8 +3,11 @@ import { readdir, stat } from 'node:fs/promises'
 import { loadCompany, loadAgents, listTasks, listPins, readActivity } from '../fs'
 import type { ListTasksOptions } from '../fs'
 
+/** Configuration for the read-only REST API server. */
 export interface ApiServerOptions {
+	/** Absolute path to the company root directory on disk. */
 	companyRoot: string
+	/** TCP port to listen on. */
 	port: number
 }
 
@@ -43,11 +46,24 @@ function errorResponse(error: string, status: number): Response {
 	return jsonResponse({ error }, status)
 }
 
+/**
+ * Lightweight read-only HTTP API that exposes company state for the CLI
+ * and web dashboard.
+ *
+ * Routes:
+ * - `GET /api/status`   -- company name, agent count, active tasks
+ * - `GET /api/tasks`    -- list tasks (query: `status`, `agent`)
+ * - `GET /api/agents`   -- list agents
+ * - `GET /api/pins`     -- list dashboard pins
+ * - `GET /api/activity` -- activity feed (query: `agent`, `limit`)
+ * - `GET /fs/*`         -- raw filesystem browser (path-traversal protected)
+ */
 export class ApiServer {
 	private server: ReturnType<typeof Bun.serve> | null = null
 
 	constructor(private options: ApiServerOptions) {}
 
+	/** Start the Bun HTTP server. */
 	async start(): Promise<void> {
 		this.server = Bun.serve({
 			port: this.options.port,
@@ -55,6 +71,7 @@ export class ApiServer {
 		})
 	}
 
+	/** Stop the Bun HTTP server. */
 	stop(): void {
 		if (this.server) {
 			this.server.stop()

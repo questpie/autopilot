@@ -5,7 +5,7 @@ import { findCompanyRoot } from '../utils/find-root'
 import { header, badge, dim, table, error } from '../utils/format'
 
 const agentsCmd = new Command('agents')
-	.description('List all agents')
+	.description('List all configured agents')
 	.action(async () => {
 		try {
 			const root = await findCompanyRoot()
@@ -26,21 +26,16 @@ const agentsCmd = new Command('agents')
 			console.log('')
 			console.log(dim(`${agents.length} agent(s)`))
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err)
-			if (message.includes('company.yaml')) {
-				console.log(error('No company directory found.'))
-				console.log(dim("Run 'autopilot init' to create one first."))
-			} else {
-				console.log(error(`Failed to load agents: ${message}`))
-			}
+			console.error(error(err instanceof Error ? err.message : String(err)))
+			console.error(dim('Run "autopilot --help" for usage information.'))
 			process.exit(1)
 		}
 	})
 
 agentsCmd.addCommand(
 	new Command('show')
-		.description('Show agent details')
-		.argument('<id>', 'Agent ID')
+		.description('Show detailed information about a specific agent')
+		.argument('<id>', 'Agent ID to inspect')
 		.action(async (id: string) => {
 			try {
 				const root = await findCompanyRoot()
@@ -48,8 +43,8 @@ agentsCmd.addCommand(
 				const agent = agents.find((a) => a.id === id)
 
 				if (!agent) {
-					console.log(error(`Agent not found: ${id}`))
-					console.log(dim('Use `autopilot agents` to list all agents.'))
+					console.error(error(`Agent not found: ${id}`))
+					console.error(dim('Use "autopilot agents" to list all agents.'))
 					process.exit(1)
 				}
 
@@ -87,13 +82,8 @@ agentsCmd.addCommand(
 					}
 				}
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to load agent: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),

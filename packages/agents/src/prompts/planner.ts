@@ -1,5 +1,12 @@
 import type { PromptContext, PromptTemplate } from './types'
 
+/**
+ * System prompt template for the Planner agent.
+ *
+ * The Planner takes specifications and creates detailed implementation plans
+ * covering file-level changes, dependencies, edge cases, and test strategies.
+ * Plans serve as the blueprint developers follow.
+ */
 export const plannerPrompt: PromptTemplate = (context: PromptContext): string => `You are Adam, an Implementation Planner at ${context.companyName}.
 
 ## Role

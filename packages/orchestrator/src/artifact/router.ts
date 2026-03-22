@@ -1,6 +1,7 @@
 import { join } from 'path'
 import { parse } from 'yaml'
 
+/** Configuration stored in `.artifact.yaml` inside each artifact directory. */
 export interface ArtifactConfig {
 	name: string
 	serve: string
@@ -9,6 +10,7 @@ export interface ArtifactConfig {
 	timeout?: string
 }
 
+/** Public view of a running artifact process. */
 export interface ArtifactProcess {
 	id: string
 	port: number
@@ -42,6 +44,14 @@ function parseTimeout(timeout: string): number {
 	}
 }
 
+/**
+ * Manages artifact dev-server processes with cold-start and idle-timeout.
+ *
+ * Each artifact is a directory under `<companyRoot>/artifacts/<id>/` with
+ * an `.artifact.yaml` config. The router allocates a port from a pool
+ * (4100-4199), runs the `build` + `serve` commands, waits for health, and
+ * tears the process down after an idle timeout.
+ */
 export class ArtifactRouter {
 	private processes: Map<string, RunningProcess> = new Map()
 	private idleTimers: Map<string, Timer> = new Map()
@@ -49,6 +59,12 @@ export class ArtifactRouter {
 
 	constructor(private companyRoot: string) {}
 
+	/**
+	 * Get the URL for an artifact, cold-starting it if necessary.
+	 *
+	 * Resets the idle timer on every call so frequently-accessed artifacts
+	 * stay alive.
+	 */
 	async route(artifactId: string): Promise<{ port: number; url: string }> {
 		let proc = this.processes.get(artifactId)
 		if (!proc) {
@@ -60,6 +76,7 @@ export class ArtifactRouter {
 		return { port: proc.port, url: `http://localhost:${proc.port}` }
 	}
 
+	/** Kill a running artifact process and release its port. */
 	async stop(artifactId: string): Promise<void> {
 		const proc = this.processes.get(artifactId)
 		if (!proc) return
@@ -76,11 +93,13 @@ export class ArtifactRouter {
 		}
 	}
 
+	/** Stop every running artifact process. */
 	async stopAll(): Promise<void> {
 		const ids = [...this.processes.keys()]
 		await Promise.all(ids.map((id) => this.stop(id)))
 	}
 
+	/** List all currently running artifact processes. */
 	list(): ArtifactProcess[] {
 		return [...this.processes.entries()].map(([id, proc]) => ({
 			id,

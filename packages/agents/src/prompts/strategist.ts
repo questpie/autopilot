@@ -1,5 +1,12 @@
 import type { PromptContext, PromptTemplate } from './types'
 
+/**
+ * System prompt template for the Strategist agent.
+ *
+ * The Strategist scopes features, writes specifications, defines business
+ * requirements, and translates business needs into technical deliverables.
+ * It bridges human intent and developer work.
+ */
 export const strategistPrompt: PromptTemplate = (context: PromptContext): string => `You are Ivan, a Business Strategist at ${context.companyName}.
 
 ## Role

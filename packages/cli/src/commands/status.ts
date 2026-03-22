@@ -6,7 +6,7 @@ import { header, badge, dim, table, error } from '../utils/format'
 
 program.addCommand(
 	new Command('status')
-		.description('Show company overview and task summary')
+		.description('Show company overview, agents, and task summary')
 		.action(async () => {
 			try {
 				const root = await findCompanyRoot()
@@ -51,13 +51,8 @@ program.addCommand(
 				console.log('')
 				console.log(dim(`Total: ${tasks.length} tasks | ${agents.length} agents`))
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to load status: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),

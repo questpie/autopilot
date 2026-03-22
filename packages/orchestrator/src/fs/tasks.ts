@@ -5,10 +5,13 @@ import { TaskSchema, taskPath, PATHS, TASK_STATUSES } from '@questpie/autopilot-
 import { readYaml, writeYaml, fileExists } from './yaml'
 import { writeQueue } from './write-queue'
 
+/** Resolved (validated) task object. */
 export type TaskOutput = z.output<typeof TaskSchema>
+
+/** One of the allowed task lifecycle statuses. */
 type TaskStatus = (typeof TASK_STATUSES)[number]
 
-/** Map task status to filesystem folder name */
+/** Maps each task status to the folder it lives in on disk. */
 const STATUS_FOLDER_MAP: Record<string, string> = {
 	draft: 'backlog',
 	backlog: 'backlog',
@@ -35,6 +38,14 @@ function now(): string {
 	return new Date().toISOString()
 }
 
+/**
+ * Create a new task YAML file on disk.
+ *
+ * A unique ID is generated when `taskData.id` is omitted.
+ * The file is written to the folder matching the task's initial status.
+ *
+ * @returns The validated task object that was persisted.
+ */
 export async function createTask(
 	companyRoot: string,
 	taskData: {
@@ -87,6 +98,11 @@ export async function createTask(
 	return task
 }
 
+/**
+ * Locate a task file across all status folders.
+ *
+ * @returns The folder name and absolute path, or `null` if not found.
+ */
 export async function findTask(
 	companyRoot: string,
 	taskId: string,
@@ -100,12 +116,25 @@ export async function findTask(
 	return null
 }
 
+/**
+ * Read and validate a task by ID.
+ *
+ * @returns The parsed task, or `null` if no file exists for this ID.
+ */
 export async function readTask(companyRoot: string, taskId: string): Promise<TaskOutput | null> {
 	const found = await findTask(companyRoot, taskId)
 	if (!found) return null
 	return readYaml(found.path, TaskSchema)
 }
 
+/**
+ * Apply partial updates to a task and append a history entry.
+ *
+ * The update is performed inside a per-file write lock so concurrent
+ * callers on the same task are serialized.
+ *
+ * @throws If the task does not exist.
+ */
 export async function updateTask(
 	companyRoot: string,
 	taskId: string,
@@ -155,6 +184,14 @@ export async function updateTask(
 	})
 }
 
+/**
+ * Change a task's status and move its YAML file to the matching folder.
+ *
+ * Automatically sets `started_at` on first move to `in_progress` and
+ * `completed_at` when the task reaches `done`.
+ *
+ * @throws If the task does not exist.
+ */
 export async function moveTask(
 	companyRoot: string,
 	taskId: string,
@@ -200,12 +237,19 @@ export async function moveTask(
 	})
 }
 
+/** Filter options for {@link listTasks}. All fields are optional. */
 export interface ListTasksOptions {
 	status?: string
 	agent?: string
 	project?: string
 }
 
+/**
+ * List all tasks, optionally filtered by status, agent, or project.
+ *
+ * Scans task folders on disk, validates each YAML file, and silently
+ * skips any that fail validation.
+ */
 export async function listTasks(
 	companyRoot: string,
 	options?: ListTasksOptions,

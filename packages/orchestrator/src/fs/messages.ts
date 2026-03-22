@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { MessageSchema, PATHS } from '@questpie/autopilot-spec'
 import { readYaml, writeYaml } from './yaml'
 
+/** Resolved (validated) message object. */
 export type MessageOutput = z.output<typeof MessageSchema>
 
 function generateMessageId(): string {
@@ -23,6 +24,12 @@ function now(): string {
 	return new Date().toISOString()
 }
 
+/**
+ * Persist a message to a channel directory.
+ *
+ * Each message is written to its own YAML file so concurrent sends never
+ * conflict (no read-modify-write cycle).
+ */
 export async function sendChannelMessage(
 	companyRoot: string,
 	channel: string,
@@ -54,6 +61,11 @@ export async function sendChannelMessage(
 	return msg
 }
 
+/**
+ * Persist a direct message between two parties.
+ *
+ * The directory name is the sorted pair of party IDs joined by `--`.
+ */
 export async function sendDirectMessage(
 	companyRoot: string,
 	from: string,
@@ -89,6 +101,11 @@ export async function sendDirectMessage(
 	return msg
 }
 
+/**
+ * Read messages from a channel, optionally limited to the most recent N.
+ *
+ * Messages are returned in chronological order (oldest first).
+ */
 export async function readChannelMessages(
 	companyRoot: string,
 	channel: string,

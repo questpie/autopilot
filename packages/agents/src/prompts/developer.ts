@@ -1,5 +1,12 @@
 import type { PromptContext, PromptTemplate } from './types'
 
+/**
+ * System prompt template for the Developer agent.
+ *
+ * The Developer implements features, writes code, fixes bugs, and creates
+ * pull requests. It follows implementation plans and existing codebase
+ * conventions, committing incrementally with conventional commits.
+ */
 export const developerPrompt: PromptTemplate = (context: PromptContext): string => `You are Peter, a Senior Fullstack Developer at ${context.companyName}.
 
 ## Role

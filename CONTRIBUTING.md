@@ -31,10 +31,10 @@ This is a Bun monorepo managed with Turbo.
 
 | Package | Path | Description |
 |---|---|---|
-| `@questpie/spec` | `packages/spec/` | Zod schemas, constants, path helpers, validators for all company filesystem formats (tasks, agents, workflows, messages, etc.) |
-| `@questpie/orchestrator` | `packages/orchestrator/` | Core engine — FS watcher, workflow engine, agent spawner, context assembler, memory extractor, cron scheduler, webhook server, session stream |
-| `@questpie/agents` | `packages/agents/` | Agent definitions, system prompt templates, primitive implementations, memory extraction logic |
-| `@questpie/autopilot` | `packages/cli/` | CLI interface — `autopilot init`, `start`, `ask`, `attach`, `inbox`, `agents`, `status`, `approve`, `reject` |
+| `@questpie/autopilot-spec` | `packages/spec/` | Zod schemas, constants, path helpers, validators for all company filesystem formats (tasks, agents, workflows, messages, etc.) |
+| `@questpie/autopilot-orchestrator` | `packages/orchestrator/` | Core engine — FS watcher, workflow engine, agent spawner, context assembler, memory extractor, cron scheduler, webhook server, session stream, write queue, API server |
+| `@questpie/autopilot-agents` | `packages/agents/` | Agent system prompt templates and prompt builder for all 8 agent roles |
+| `@questpie/autopilot` | `packages/cli/` | CLI interface — `autopilot init`, `start`, `ask`, `attach`, `inbox`, `agents`, `status`, `tasks` |
 | Landing page | `apps/web/` | TanStack Start landing page and documentation site with Tailwind CSS |
 
 ### Architecture Overview
@@ -44,14 +44,14 @@ packages/spec         — Pure data: schemas, types, constants, validators
     ↓
 packages/orchestrator — Runtime: watches files, runs workflows, spawns agents
     ↓
-packages/agents       — AI: prompt templates, primitive tool definitions
+packages/agents       — AI: prompt templates for all 8 agent roles
     ↓
 packages/cli          — Interface: human commands that talk to the orchestrator
 ```
 
 - `spec` has zero runtime dependencies — only Zod for schema definitions
 - `orchestrator` depends on `spec` for types and validation
-- `agents` depends on `spec` for schemas and `orchestrator` for runtime context
+- `agents` depends on `spec` for schemas (agent roles, types)
 - `cli` depends on all packages and ties everything together
 
 ## Running Tests
@@ -64,6 +64,7 @@ npx turbo test
 cd packages/spec && bun test
 cd packages/orchestrator && bun test
 cd packages/agents && bun test
+cd packages/cli && bun test
 
 # Run a specific test file
 bun test packages/orchestrator/tests/workflow-engine.test.ts
@@ -74,12 +75,13 @@ bun test --watch
 
 ### Current Test Counts
 
-| Package | Test files | Description |
-|---|---|---|
-| `packages/spec` | 4 | Schema validation, constants, path helpers |
-| `packages/orchestrator` | 11 | Workflow engine, scheduler, watcher, tasks, messages, context assembler, webhook server, session stream, pins, activity, YAML parsing |
-| `packages/agents` | 1 | System prompt generation |
-| `packages/cli` | 0 | Not yet implemented |
+| Package | Tests | Test files | Description |
+|---|---|---|---|
+| `packages/spec` | 139 | 4 | Schema validation, constants, path helpers |
+| `packages/agents` | 83 | 1 | System prompt generation for all roles |
+| `packages/orchestrator` | 252 | 21 | Workflow engine, scheduler, watcher, tasks, messages, context assembler, webhook server, session stream, pins, activity, YAML parsing, write queue, API server, agent tools, skills, artifact router |
+| `packages/cli` | 30 | 4 | Command parsing, output formatting, root finding |
+| **Total** | **504** | **30** | |
 
 ## Building
 
@@ -119,7 +121,7 @@ bun run format
 - Strict mode enabled
 - No `any` types — use `unknown` and narrow
 - Prefer `interface` over `type` for object shapes
-- Use Zod schemas (from `@questpie/spec`) for runtime validation
+- Use Zod schemas (from `@questpie/autopilot-spec`) for runtime validation
 - Export types explicitly
 
 ### File Organization
@@ -128,6 +130,60 @@ bun run format
 - Tests in `tests/` (at package root, not inside `src/`)
 - One module per file, named after what it exports
 - Index files (`index.ts`) only for public API re-exports
+
+## How to Add a New CLI Command
+
+1. Create a new file in `packages/cli/src/commands/` named after your command (e.g., `deploy.ts`).
+
+2. Export a function that handles the command. Follow the existing pattern — each command receives parsed arguments and an options object:
+
+```ts
+import type { AutopilotContext } from '../context'
+
+export async function deployCommand(ctx: AutopilotContext, args: string[]) {
+	// 1. Validate arguments
+	// 2. Call the orchestrator API or read/write the company filesystem
+	// 3. Print output using the formatting helpers from '../format'
+}
+```
+
+3. Register the command in `packages/cli/src/index.ts` by adding it to the command map.
+
+4. Add tests in `packages/cli/tests/` — at minimum, test argument parsing and expected output.
+
+5. Update the CLI help text if your command should appear in `autopilot --help`.
+
+## How to Add a New Agent Tool
+
+Agent tools (primitives) are the actions agents can perform during execution. To add a new tool:
+
+1. Define the tool schema in `packages/spec/src/schemas/` — add a Zod schema for the tool's input and output.
+
+2. Export the schema from `packages/spec/src/schemas/index.ts`.
+
+3. Implement the tool handler in `packages/orchestrator/src/agent/` — the handler receives validated input and returns the tool result:
+
+```ts
+import { z } from 'zod'
+
+export const MyToolInputSchema = z.object({
+	target: z.string(),
+	content: z.string(),
+})
+
+export type MyToolInput = z.infer<typeof MyToolInputSchema>
+
+export async function handleMyTool(input: MyToolInput): Promise<string> {
+	// Perform the action (write files, send messages, etc.)
+	// Return a result string the agent will see
+}
+```
+
+4. Register the tool in the agent tool registry so the orchestrator exposes it to agents.
+
+5. Add tests in `packages/orchestrator/tests/` covering success cases, validation errors, and edge cases.
+
+6. Update the relevant agent prompt templates in `packages/agents/src/prompts/` if agents need to know about the new tool.
 
 ## Commit Conventions
 

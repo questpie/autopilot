@@ -6,11 +6,15 @@ import { loadAgentMemory } from './memory-loader'
 import { getSkillsForRole } from '../skills'
 import { stringify as stringifyYaml } from 'yaml'
 
+/** The final output of the context assembly pipeline. */
 export interface AssembledContext {
+	/** Full system prompt ready to send to the LLM. */
 	systemPrompt: string
+	/** Rough token count (chars / 4). */
 	tokenEstimate: number
 }
 
+/** Input options for {@link assembleContext}. */
 export interface ContextOptions {
 	companyRoot: string
 	agent: Agent
@@ -67,6 +71,19 @@ function formatPins(
 	return pins.map((p) => `- [${p.type}] ${p.title}: ${p.content}`).join('\n')
 }
 
+/**
+ * Build a multi-layer system prompt for an agent session.
+ *
+ * Layers (each capped to a token budget):
+ * 1. **Identity** (~2K) -- role prompt from `@questpie/autopilot-agents`.
+ * 2. **Company state** (~5K) -- active tasks, messages, pins, team status.
+ * 3. **Agent memory** (~20K) -- persistent memory from `memory.yaml`.
+ * 4. **Task context** (~15K) -- detailed current-task information.
+ * 5. **Skills** (~1K) -- available skill catalogue entries.
+ *
+ * The whole prompt is then hard-truncated to {@link ContextOptions.maxTokens}
+ * (default 42 000).
+ */
 export async function assembleContext(options: ContextOptions): Promise<AssembledContext> {
 	const { companyRoot, agent, company, task, allAgents, maxTokens = DEFAULT_MAX_TOKENS } = options
 

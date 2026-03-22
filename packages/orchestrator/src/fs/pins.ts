@@ -5,6 +5,7 @@ import { PinSchema, PATHS, pinPath, PIN_TYPES } from '@questpie/autopilot-spec'
 import { readYaml, writeYaml, fileExists } from './yaml'
 import { writeQueue } from './write-queue'
 
+/** Resolved (validated) dashboard pin object. */
 export type PinOutput = z.output<typeof PinSchema>
 
 function generatePinId(): string {
@@ -19,6 +20,7 @@ function now(): string {
 	return new Date().toISOString()
 }
 
+/** Create a new dashboard pin and write it to disk. */
 export async function createPin(
 	companyRoot: string,
 	pinData: {
@@ -47,6 +49,7 @@ export async function createPin(
 	return pin
 }
 
+/** Delete a pin file from disk (no-op if already gone). */
 export async function removePin(companyRoot: string, pinId: string): Promise<void> {
 	const filePath = resolvePath(companyRoot, pinPath(pinId))
 	await writeQueue.withLock(filePath, async () => {
@@ -56,6 +59,7 @@ export async function removePin(companyRoot: string, pinId: string): Promise<voi
 	})
 }
 
+/** List all pins, optionally filtered by group. */
 export async function listPins(companyRoot: string, group?: string): Promise<PinOutput[]> {
 	const dirPath = resolvePath(companyRoot, PATHS.PINS_DIR)
 	let files: string[]
@@ -80,6 +84,11 @@ export async function listPins(companyRoot: string, group?: string): Promise<Pin
 	return pins
 }
 
+/**
+ * Apply partial updates to an existing pin.
+ *
+ * @throws If the pin does not exist.
+ */
 export async function updatePin(
 	companyRoot: string,
 	pinId: string,
