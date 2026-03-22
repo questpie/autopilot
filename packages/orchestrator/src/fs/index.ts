@@ -1,4 +1,5 @@
 export { readYaml, writeYaml, readYamlUnsafe, fileExists } from './yaml'
+export { WriteQueue, writeQueue } from './write-queue'
 export { createTask, readTask, updateTask, moveTask, listTasks, findTask } from './tasks'
 export type { ListTasksOptions, TaskOutput } from './tasks'
 export { sendChannelMessage, sendDirectMessage, readChannelMessages } from './messages'

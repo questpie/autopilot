@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { TaskSchema, taskPath, PATHS, TASK_STATUSES } from '@questpie/autopilot-spec'
 import { readYaml, writeYaml, fileExists } from './yaml'
+import { writeQueue } from './write-queue'
 
 export type TaskOutput = z.output<typeof TaskSchema>
 type TaskStatus = (typeof TASK_STATUSES)[number]
@@ -21,8 +22,9 @@ const STATUS_FOLDER_MAP: Record<string, string> = {
 
 const SEARCH_FOLDERS = ['backlog', 'active', 'review', 'blocked', 'done'] as const
 
+let taskCounter = 0
 function generateTaskId(): string {
-	return `task-${Date.now().toString(36)}`
+	return `task-${Date.now().toString(36)}${(taskCounter++).toString(36)}`
 }
 
 function resolvePath(companyRoot: string, relativePath: string): string {
@@ -128,27 +130,29 @@ export async function updateTask(
 	const found = await findTask(companyRoot, taskId)
 	if (!found) throw new Error(`Task not found: ${taskId}`)
 
-	const existing = await readYaml(found.path, TaskSchema)
-	const timestamp = now()
+	return writeQueue.withLock(found.path, async () => {
+		const existing = await readYaml(found.path, TaskSchema)
+		const timestamp = now()
 
-	const historyEntry = {
-		at: timestamp,
-		by: updatedBy,
-		action: 'updated',
-		note: Object.keys(updates).join(', '),
-	}
+		const historyEntry = {
+			at: timestamp,
+			by: updatedBy,
+			action: 'updated',
+			note: Object.keys(updates).join(', '),
+		}
 
-	const updated = TaskSchema.parse({
-		...existing,
-		...updates,
-		id: existing.id,
-		created_at: existing.created_at,
-		updated_at: timestamp,
-		history: [...existing.history, historyEntry],
+		const updated = TaskSchema.parse({
+			...existing,
+			...updates,
+			id: existing.id,
+			created_at: existing.created_at,
+			updated_at: timestamp,
+			history: [...existing.history, historyEntry],
+		})
+
+		await writeYaml(found.path, updated)
+		return updated
 	})
-
-	await writeYaml(found.path, updated)
-	return updated
 }
 
 export async function moveTask(
@@ -160,38 +164,40 @@ export async function moveTask(
 	const found = await findTask(companyRoot, taskId)
 	if (!found) throw new Error(`Task not found: ${taskId}`)
 
-	const existing = await readYaml(found.path, TaskSchema)
-	const timestamp = now()
-	const newFolder = STATUS_FOLDER_MAP[newStatus] ?? 'backlog'
+	return writeQueue.withLock(found.path, async () => {
+		const existing = await readYaml(found.path, TaskSchema)
+		const timestamp = now()
+		const newFolder = STATUS_FOLDER_MAP[newStatus] ?? 'backlog'
 
-	const historyEntry = {
-		at: timestamp,
-		by: movedBy,
-		action: 'status_changed',
-		from: existing.status,
-		to: newStatus,
-	}
+		const historyEntry = {
+			at: timestamp,
+			by: movedBy,
+			action: 'status_changed',
+			from: existing.status,
+			to: newStatus,
+		}
 
-	const updated = TaskSchema.parse({
-		...existing,
-		status: newStatus,
-		updated_at: timestamp,
-		started_at:
-			newStatus === 'in_progress' ? (existing.started_at ?? timestamp) : existing.started_at,
-		completed_at: newStatus === 'done' ? timestamp : existing.completed_at,
-		history: [...existing.history, historyEntry],
+		const updated = TaskSchema.parse({
+			...existing,
+			status: newStatus,
+			updated_at: timestamp,
+			started_at:
+				newStatus === 'in_progress' ? (existing.started_at ?? timestamp) : existing.started_at,
+			completed_at: newStatus === 'done' ? timestamp : existing.completed_at,
+			history: [...existing.history, historyEntry],
+		})
+
+		const newPath = resolvePath(companyRoot, taskPath(newFolder, taskId))
+
+		if (found.path !== newPath) {
+			await writeYaml(newPath, updated)
+			await rm(found.path)
+		} else {
+			await writeYaml(found.path, updated)
+		}
+
+		return updated
 	})
-
-	const newPath = resolvePath(companyRoot, taskPath(newFolder, taskId))
-
-	if (found.path !== newPath) {
-		await writeYaml(newPath, updated)
-		await rm(found.path)
-	} else {
-		await writeYaml(found.path, updated)
-	}
-
-	return updated
 }
 
 export interface ListTasksOptions {

@@ -1,3 +1,8 @@
+/**
+ * Messages are append-only — each message gets a unique file path based on its ID.
+ * No write queue is needed because there is no read-modify-write cycle:
+ * concurrent message sends create distinct files and never conflict.
+ */
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
