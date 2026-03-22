@@ -69,3 +69,93 @@ body {
 	color: var(--color-fg);
 	font-family: var(--font-sans);
 }
+
+.prose-autopilot {
+	max-width: 100%;
+	overflow-wrap: break-word;
+	word-break: break-word;
+}
+
+.prose-autopilot h1 {
+	font-size: 1.875rem;
+	font-weight: 900;
+	color: var(--color-fg);
+	margin-bottom: 0.5rem;
+}
+
+.prose-autopilot h2 {
+	font-size: 1.25rem;
+	font-weight: 700;
+	color: var(--color-fg);
+	margin-top: 2.5rem;
+	margin-bottom: 1rem;
+}
+
+.prose-autopilot h3 {
+	font-size: 1.125rem;
+	font-weight: 700;
+	color: var(--color-fg);
+	margin-top: 2rem;
+	margin-bottom: 0.75rem;
+}
+
+.prose-autopilot p {
+	color: var(--color-ghost);
+	line-height: 1.75;
+	margin-bottom: 1rem;
+}
+
+.prose-autopilot ul,
+.prose-autopilot ol {
+	color: var(--color-ghost);
+	line-height: 1.75;
+	padding-left: 1.5rem;
+}
+
+.prose-autopilot li {
+	margin-bottom: 0.25rem;
+}
+
+.prose-autopilot a {
+	color: var(--color-purple);
+	text-decoration: none;
+}
+
+.prose-autopilot a:hover {
+	color: var(--color-purple-light);
+}
+
+.prose-autopilot code {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	color: var(--color-purple);
+}
+
+.prose-autopilot strong {
+	color: var(--color-fg);
+}
+
+.prose-autopilot table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.875rem;
+}
+
+.prose-autopilot th {
+	text-align: left;
+	color: var(--color-ghost);
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	padding: 0.5rem 1rem 0.5rem 0;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.prose-autopilot td {
+	color: var(--color-ghost);
+	padding: 0.5rem 1rem 0.5rem 0;
+	border-bottom: 1px solid rgba(51, 51, 51, 0.5);
+}
+
+.prose-autopilot .overflow-x-auto {
+	-webkit-overflow-scrolling: touch;
+}
