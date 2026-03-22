@@ -1,44 +1,99 @@
 import { Command } from 'commander'
-import { cp, readFile, writeFile } from 'node:fs/promises'
+import { cp, readFile, writeFile, access, readdir, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { program } from '../program'
-import { header, success, dim } from '../utils/format'
+import { header, success, dim, error, warning } from '../utils/format'
 
 const CLI_ROOT = resolve(import.meta.dir, '..', '..')
 const TEMPLATE_DIR = resolve(CLI_ROOT, '..', '..', 'templates', 'solo-dev-shop')
+
+async function printTree(dir: string, prefix: string = '', isLast: boolean = true): Promise<void> {
+	const entries = await readdir(dir, { withFileTypes: true })
+	const filtered = entries.filter((e) => !e.name.startsWith('.'))
+	for (let i = 0; i < filtered.length; i++) {
+		const entry = filtered[i]!
+		const last = i === filtered.length - 1
+		const connector = last ? '└── ' : '├── '
+		const childPrefix = last ? '    ' : '│   '
+
+		if (entry.isDirectory()) {
+			console.log(`${prefix}${connector}${entry.name}/`)
+			await printTree(join(dir, entry.name), `${prefix}${childPrefix}`, last)
+		} else {
+			console.log(`${prefix}${connector}${dim(entry.name)}`)
+		}
+	}
+}
 
 program.addCommand(
 	new Command('init')
 		.description('Create a new QUESTPIE Autopilot company directory')
 		.argument('[name]', 'Company name', 'My Company')
-		.action(async (name: string) => {
-			const slug = name
-				.toLowerCase()
-				.replace(/[^a-z0-9]+/g, '-')
-				.replace(/^-|-$/g, '')
+		.option('-f, --force', 'Overwrite existing directory')
+		.action(async (name: string, opts: { force?: boolean }) => {
+			try {
+				const slug = name
+					.toLowerCase()
+					.replace(/[^a-z0-9]+/g, '-')
+					.replace(/^-|-$/g, '')
 
-			const targetDir = resolve(process.cwd(), slug)
+				const targetDir = resolve(process.cwd(), slug)
 
-			console.log(header('QUESTPIE Autopilot'))
-			console.log(dim(`Initializing company: ${name}\n`))
+				console.log(header('QUESTPIE Autopilot'))
+				console.log(dim(`Initializing company: ${name}\n`))
 
-			await cp(TEMPLATE_DIR, targetDir, { recursive: true })
+				// Check if directory already exists
+				try {
+					await access(targetDir)
+					if (!opts.force) {
+						console.log(warning(`Directory already exists: ${targetDir}`))
+						console.log(dim('Use --force to overwrite.'))
+						process.exit(1)
+					}
+					console.log(warning('Directory exists, overwriting...'))
+				} catch {
+					// Directory doesn't exist, good
+				}
 
-			const companyYamlPath = join(targetDir, 'company.yaml')
-			let content = await readFile(companyYamlPath, 'utf-8')
-			content = content.replace(/name:\s*"My Company"/, `name: "${name}"`)
-			content = content.replace(/slug:\s*"my-company"/, `slug: "${slug}"`)
-			await writeFile(companyYamlPath, content, 'utf-8')
+				// Check template exists
+				try {
+					await access(TEMPLATE_DIR)
+				} catch {
+					console.log(error('Template directory not found.'))
+					console.log(dim(`Expected at: ${TEMPLATE_DIR}`))
+					console.log(dim('Make sure @questpie/autopilot is properly installed.'))
+					process.exit(1)
+				}
 
-			console.log(success('Company initialized successfully!'))
-			console.log('')
-			console.log(`  ${dim('Directory:')}  ${targetDir}`)
-			console.log(`  ${dim('Company:')}    ${name}`)
-			console.log(`  ${dim('Slug:')}       ${slug}`)
-			console.log('')
-			console.log(dim('Next steps:'))
-			console.log(`  cd ${slug}`)
-			console.log('  autopilot status')
-			console.log('  autopilot ask "Build me a landing page"')
+				await cp(TEMPLATE_DIR, targetDir, { recursive: true })
+
+				const companyYamlPath = join(targetDir, 'company.yaml')
+				let content = await readFile(companyYamlPath, 'utf-8')
+				content = content.replace(/name:\s*"My Company"/, `name: "${name}"`)
+				content = content.replace(/slug:\s*"my-company"/, `slug: "${slug}"`)
+				await writeFile(companyYamlPath, content, 'utf-8')
+
+				console.log(success('Company initialized successfully!'))
+				console.log('')
+				console.log(`  ${dim('Directory:')}  ${targetDir}`)
+				console.log(`  ${dim('Company:')}    ${name}`)
+				console.log(`  ${dim('Slug:')}       ${slug}`)
+				console.log('')
+
+				console.log(dim('Company structure:'))
+				console.log(`${slug}/`)
+				await printTree(targetDir)
+				console.log('')
+
+				console.log(dim('Next steps:'))
+				console.log(`  ${dim('1.')} cd ${slug}`)
+				console.log(`  ${dim('2.')} autopilot status`)
+				console.log(`  ${dim('3.')} autopilot ask "Build me a landing page"`)
+				console.log(`  ${dim('4.')} autopilot start`)
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err)
+				console.log(error(`Failed to initialize company: ${message}`))
+				process.exit(1)
+			}
 		}),
 )

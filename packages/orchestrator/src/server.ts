@@ -9,6 +9,7 @@ import { WebhookServer } from './webhook'
 import { SessionStreamManager } from './session'
 import { Notifier } from './notifier'
 import type { Notification } from './notifier'
+import { spawnAgent, extractMemory } from './agent'
 
 export interface OrchestratorOptions {
 	companyRoot: string
@@ -23,6 +24,8 @@ export class Orchestrator {
 	private workflowLoader: WorkflowLoader
 	private notifier: Notifier
 	private running = false
+	private activeAgentCount = 0
+	private maxConcurrentAgents = 5
 
 	constructor(private options: OrchestratorOptions) {
 		this.streamManager = new SessionStreamManager()

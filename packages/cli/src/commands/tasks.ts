@@ -9,30 +9,44 @@ const tasksCmd = new Command('tasks')
 	.option('-s, --status <status>', 'Filter by status')
 	.option('-a, --agent <agent>', 'Filter by assigned agent')
 	.action(async (opts: { status?: string; agent?: string }) => {
-		const root = await findCompanyRoot()
-		const tasks = await listTasks(root, {
-			status: opts.status,
-			agent: opts.agent,
-		})
+		try {
+			const root = await findCompanyRoot()
+			const tasks = await listTasks(root, {
+				status: opts.status,
+				agent: opts.agent,
+			})
 
-		console.log(header('Tasks'))
-		if (tasks.length === 0) {
-			console.log(dim('  No tasks found'))
-			return
+			console.log(header('Tasks'))
+			if (tasks.length === 0) {
+				console.log(dim('  No tasks found'))
+				if (opts.status || opts.agent) {
+					console.log(dim(`  Filters: ${opts.status ? `status=${opts.status}` : ''} ${opts.agent ? `agent=${opts.agent}` : ''}`))
+				}
+				return
+			}
+
+			console.log(
+				table(
+					tasks.map((t) => [
+						dim(t.id),
+						badge(t.status, t.status === 'done' ? 'green' : t.status === 'blocked' ? 'red' : 'cyan'),
+						t.title,
+						t.assigned_to ? dim(`→ ${t.assigned_to}`) : '',
+					]),
+				),
+			)
+			console.log('')
+			console.log(dim(`${tasks.length} task(s)`))
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err)
+			if (message.includes('company.yaml')) {
+				console.log(error('No company directory found.'))
+				console.log(dim("Run 'autopilot init' to create one first."))
+			} else {
+				console.log(error(`Failed to list tasks: ${message}`))
+			}
+			process.exit(1)
 		}
-
-		console.log(
-			table(
-				tasks.map((t) => [
-					dim(t.id),
-					badge(t.status, t.status === 'done' ? 'green' : t.status === 'blocked' ? 'red' : 'cyan'),
-					t.title,
-					t.assigned_to ? dim(`→ ${t.assigned_to}`) : '',
-				]),
-			),
-		)
-		console.log('')
-		console.log(dim(`${tasks.length} task(s)`))
 	})
 
 tasksCmd.addCommand(
@@ -40,37 +54,49 @@ tasksCmd.addCommand(
 		.description('Show task details')
 		.argument('<id>', 'Task ID')
 		.action(async (id: string) => {
-			const root = await findCompanyRoot()
-			const task = await readTask(root, id)
+			try {
+				const root = await findCompanyRoot()
+				const task = await readTask(root, id)
 
-			if (!task) {
-				console.log(error(`Task not found: ${id}`))
-				process.exit(1)
-			}
-
-			console.log(header(task.title))
-			console.log('')
-			console.log(`  ${dim('ID:')}          ${task.id}`)
-			console.log(`  ${dim('Status:')}      ${badge(task.status)}`)
-			console.log(`  ${dim('Type:')}        ${task.type}`)
-			console.log(`  ${dim('Priority:')}    ${task.priority}`)
-			console.log(`  ${dim('Assigned:')}    ${task.assigned_to ?? 'unassigned'}`)
-			console.log(`  ${dim('Created by:')}  ${task.created_by}`)
-			console.log(`  ${dim('Created at:')}  ${task.created_at}`)
-			console.log(`  ${dim('Updated at:')}  ${task.updated_at}`)
-
-			if (task.description) {
-				console.log('')
-				console.log(dim('Description:'))
-				console.log(`  ${task.description}`)
-			}
-
-			if (task.history.length > 0) {
-				console.log('')
-				console.log(dim('History:'))
-				for (const entry of task.history) {
-					console.log(`  ${dim(entry.at)} ${entry.by} ${entry.action}${entry.note ? ` — ${entry.note}` : ''}`)
+				if (!task) {
+					console.log(error(`Task not found: ${id}`))
+					console.log(dim('Use `autopilot tasks` to list all tasks.'))
+					process.exit(1)
 				}
+
+				console.log(header(task.title))
+				console.log('')
+				console.log(`  ${dim('ID:')}          ${task.id}`)
+				console.log(`  ${dim('Status:')}      ${badge(task.status)}`)
+				console.log(`  ${dim('Type:')}        ${task.type}`)
+				console.log(`  ${dim('Priority:')}    ${task.priority}`)
+				console.log(`  ${dim('Assigned:')}    ${task.assigned_to ?? 'unassigned'}`)
+				console.log(`  ${dim('Created by:')}  ${task.created_by}`)
+				console.log(`  ${dim('Created at:')}  ${task.created_at}`)
+				console.log(`  ${dim('Updated at:')}  ${task.updated_at}`)
+
+				if (task.description) {
+					console.log('')
+					console.log(dim('Description:'))
+					console.log(`  ${task.description}`)
+				}
+
+				if (task.history.length > 0) {
+					console.log('')
+					console.log(dim('History:'))
+					for (const entry of task.history) {
+						console.log(`  ${dim(entry.at)} ${entry.by} ${entry.action}${entry.note ? ` — ${entry.note}` : ''}`)
+					}
+				}
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err)
+				if (message.includes('company.yaml')) {
+					console.log(error('No company directory found.'))
+					console.log(dim("Run 'autopilot init' to create one first."))
+				} else {
+					console.log(error(`Failed to read task: ${message}`))
+				}
+				process.exit(1)
 			}
 		}),
 )
@@ -80,37 +106,61 @@ tasksCmd.addCommand(
 		.description('Approve a task (move to done)')
 		.argument('<id>', 'Task ID')
 		.action(async (id: string) => {
-			const root = await findCompanyRoot()
-			const task = await readTask(root, id)
+			try {
+				const root = await findCompanyRoot()
+				const task = await readTask(root, id)
 
-			if (!task) {
-				console.log(error(`Task not found: ${id}`))
+				if (!task) {
+					console.log(error(`Task not found: ${id}`))
+					console.log(dim('Use `autopilot tasks` to list all tasks.'))
+					process.exit(1)
+				}
+
+				await moveTask(root, id, 'done', 'human:owner')
+				console.log(success(`Task ${id} approved and moved to done.`))
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err)
+				if (message.includes('company.yaml')) {
+					console.log(error('No company directory found.'))
+					console.log(dim("Run 'autopilot init' to create one first."))
+				} else {
+					console.log(error(`Failed to approve task: ${message}`))
+				}
 				process.exit(1)
 			}
-
-			await moveTask(root, id, 'done', 'human:owner')
-			console.log(success(`Task ${id} approved and moved to done.`))
 		}),
 )
 
 tasksCmd.addCommand(
 	new Command('reject')
-		.description('Reject a task (move back to backlog)')
+		.description('Reject a task (move to blocked)')
 		.argument('<id>', 'Task ID')
 		.argument('[reason]', 'Rejection reason')
 		.action(async (id: string, reason?: string) => {
-			const root = await findCompanyRoot()
-			const task = await readTask(root, id)
+			try {
+				const root = await findCompanyRoot()
+				const task = await readTask(root, id)
 
-			if (!task) {
-				console.log(error(`Task not found: ${id}`))
+				if (!task) {
+					console.log(error(`Task not found: ${id}`))
+					console.log(dim('Use `autopilot tasks` to list all tasks.'))
+					process.exit(1)
+				}
+
+				await moveTask(root, id, 'blocked', 'human:owner')
+				console.log(warning(`Task ${id} rejected and moved to blocked.`))
+				if (reason) {
+					console.log(dim(`  Reason: ${reason}`))
+				}
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err)
+				if (message.includes('company.yaml')) {
+					console.log(error('No company directory found.'))
+					console.log(dim("Run 'autopilot init' to create one first."))
+				} else {
+					console.log(error(`Failed to reject task: ${message}`))
+				}
 				process.exit(1)
-			}
-
-			await moveTask(root, id, 'backlog', 'human:owner')
-			console.log(warning(`Task ${id} rejected and moved to backlog.`))
-			if (reason) {
-				console.log(dim(`  Reason: ${reason}`))
 			}
 		}),
 )
