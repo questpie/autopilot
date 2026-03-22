@@ -38,7 +38,7 @@ function LandingPage() {
 					<p className="font-sans text-[22px] text-muted mt-4 font-light leading-relaxed">
 						AI-native company operating system.
 						<br />
-						Your company is a container. Your employees are agents.
+						Define agents. Assign roles. Give intent. They handle the rest.
 					</p>
 					<div className="w-[60px] h-[3px] bg-purple mt-8" />
 					<div className="mt-8 flex gap-2 flex-wrap">
@@ -54,7 +54,7 @@ function LandingPage() {
 
 				{/* WHAT IS THIS */}
 				<Section id="what">
-					<SectionHeader sub='You give a high-level intent. A team of AI agents decomposes it, plans it, implements it, reviews it, deploys it, and announces it. You approve at gates.'>
+					<SectionHeader sub='You give a high-level intent. Your AI team decomposes it, plans it, implements it, reviews it, deploys it, and announces it. You approve at gates.'>
 						What is Autopilot?
 					</SectionHeader>
 					<CodeBlock title="terminal — giving intent">
@@ -66,61 +66,67 @@ function LandingPage() {
 Created 4 tasks:
 
 \u{1F4CB} task-050: Scope pricing page requirements
-   \u2192 Assigned to: Ivan (strategist)
+   \u2192 Assigned to: sam (strategist)
    \u2192 Workflow: development/scope
 
 \u{1F4CB} task-051: Design pricing page UI
    \u2192 Waiting for: task-050
-   \u2192 Will assign to: Designer
+   \u2192 Will assign to: jordan (designer)
 
 \u{1F4CB} task-052: Implement pricing page with Stripe
    \u2192 Waiting for: task-050, task-051
-   \u2192 Will assign to: Peter (developer)
+   \u2192 Will assign to: max (developer)
 
 \u{1F4CB} task-053: Write pricing page copy and announce
    \u2192 Waiting for: task-050
    \u2192 Workflow: marketing
 
-Ivan is starting on task-050 now.
+Sam is starting on task-050 now.
 You'll be notified when approvals are needed.`}
 					</CodeBlock>
 					<p className="font-sans text-sm text-ghost mt-6 leading-relaxed">
-						This isn't a chatbot. It's a company. Ivan writes the spec. Adam plans
-						the implementation. Peter codes it. Marek reviews it. You merge. Ops
-						deploys. Marketer announces. Each agent has persistent memory, scoped
+						This isn't a chatbot. It's a company. Sam writes the spec. Alex plans
+						the implementation. Max codes it. Riley reviews it. You merge. Ops
+						deploys. Morgan announces. Each agent has persistent memory, scoped
 						filesystem access, and communicates through structured primitives.
 					</p>
 				</Section>
 
-				{/* YOUR AI TEAM */}
+				{/* DEFINE YOUR TEAM */}
 				<Section id="team">
-					<SectionHeader sub="8 agents with distinct roles, tools, and filesystem scope. Add more anytime.">
-						Your AI Team
+					<SectionHeader sub="Define agents in YAML. Give them names, roles, tools, and filesystem scope. Start from a template or build your own team.">
+						Define Your Team
 					</SectionHeader>
-					<div className="grid grid-cols-4 gap-2 max-md:grid-cols-2">
+					<p className="font-sans text-[13px] text-ghost mb-4 leading-relaxed">
+						Every agent is defined in{' '}
+						<code className="font-mono text-xs text-purple">agents.yaml</code>.
+						Pick from built-in role templates or create your own. Add or remove
+						agents anytime via CLI or the CEO agent.
+					</p>
+					<div className="grid grid-cols-4 gap-2 max-md:grid-cols-2 mb-4">
 						<AgentCard
-							name="Ivan"
+							name="Sam"
 							role="STRATEGIST"
 							desc="Scopes features, writes specs"
 							color="purple"
 							status="idle"
 						/>
 						<AgentCard
-							name="Adam"
+							name="Alex"
 							role="PLANNER"
 							desc="Implementation plans"
 							color="cyan"
 							status="idle"
 						/>
 						<AgentCard
-							name="Peter"
+							name="Max"
 							role="DEVELOPER"
 							desc="Writes code, creates PRs"
 							color="green"
 							status="run"
 						/>
 						<AgentCard
-							name="Marek"
+							name="Riley"
 							role="REVIEWER"
 							desc="Reviews code quality"
 							color="green"
@@ -134,14 +140,14 @@ You'll be notified when approvals are needed.`}
 							status="schd"
 						/>
 						<AgentCard
-							name="Designer"
+							name="Jordan"
 							role="DESIGN"
 							desc="UI/UX, design system"
 							color="purple-light"
 							status="idle"
 						/>
 						<AgentCard
-							name="Marketer"
+							name="Morgan"
 							role="MARKETING"
 							desc="Copy, social, campaigns"
 							color="red"
@@ -154,6 +160,14 @@ You'll be notified when approvals are needed.`}
 							color="white"
 							status="schd"
 						/>
+					</div>
+					<div className="bg-purple-faint border border-border border-l-[3px] border-l-purple p-3">
+						<div className="font-sans text-[12px] text-muted leading-relaxed">
+							<strong className="text-fg">Example above:</strong>{' '}
+							The <strong className="text-purple">Solo Dev Shop</strong> template.
+							You choose the names, the roles, and how many agents you need.
+							Multiple agents can share the same role.
+						</div>
 					</div>
 				</Section>
 
@@ -177,7 +191,7 @@ You'll be notified when approvals are needed.`}
 \u2502   \u2514\u2500\u2500 blocked/             # Needs human
 \u251C\u2500\u2500 comms/channels/          # Agent communication
 \u251C\u2500\u2500 knowledge/               # Company brain
-\u251C\u2500\u2500 context/memory/          # Agent memories
+\u251C\u2500\u2500 context/memory/          # Per-agent memories
 \u251C\u2500\u2500 projects/                # Code, docs, assets
 \u251C\u2500\u2500 secrets/                 # Encrypted API keys
 \u251C\u2500\u2500 dashboard/pins/          # Board items
@@ -188,8 +202,8 @@ You'll be notified when approvals are needed.`}
 title: "QUESTPIE Studio landing page"
 status: in_progress
 priority: high
-assigned_to: peter
-reviewers: [marek]
+assigned_to: max
+reviewers: [riley]
 workflow: development
 workflow_step: implement
 
@@ -205,13 +219,13 @@ history:
     note: "Decomposed from intent"
 
   - at: "2026-03-22T10:30:00Z"
-    by: ivan
+    by: sam
     action: completed_step
     step: scope
     note: "Spec written"
 
   - at: "2026-03-22T14:30:00Z"
-    by: peter
+    by: max
     action: status_change
     to: in_progress
     note: "Started implementation"`}
@@ -225,9 +239,9 @@ history:
 						Primitives, Not Chat
 					</SectionHeader>
 					<CodeBlock title="what agents actually do">
-						{`// Peter tells Marek PR is ready
+						{`// Max tells Riley PR is ready
 send_message({
-  to: "agent:marek",
+  to: "agent:riley",
   content: "PR #47 ready for review. Landing page implementation.",
   references: ["/projects/studio/docs/landing-spec.md", "task-040"]
 })
@@ -241,7 +255,7 @@ pin_to_board({
   metadata: { expires_at: "+6h" }
 })
 
-// Marek approves and surfaces to human for merge
+// Riley approves and surfaces to human for merge
 pin_to_board({
   group: "alerts",
   title: "PR #47 Approved \u2014 Needs Your Merge",
@@ -254,7 +268,7 @@ pin_to_board({
   }
 })
 
-// Peter can't create GitHub repo \u2014 blocks and pings human
+// Max can't create GitHub repo \u2014 blocks and pings human
 add_blocker({
   task_id: "task-042",
   reason: "Need admin access to create org repo",
@@ -266,24 +280,24 @@ add_blocker({
 
 				{/* SESSION ATTACH */}
 				<Section id="attach">
-					<SectionHeader sub="Like kubectl logs -f pod/peter. Connect to any running agent and watch them work in real-time. Ctrl+C to detach — agent keeps working.">
+					<SectionHeader sub="Like kubectl logs -f pod/max. Connect to any running agent and watch them work in real-time. Ctrl+C to detach — agent keeps working.">
 						Session Attach
 					</SectionHeader>
 					<LiveStream />
 					<div className="mt-4 grid grid-cols-2 gap-4 max-md:grid-cols-1">
 						<CodeBlock title="kubectl analogy">
 							{`kubectl get pods        \u2192  autopilot agents
-kubectl logs -f pod/web \u2192  autopilot attach peter
+kubectl logs -f pod/web \u2192  autopilot attach max
 kubectl logs pod/web    \u2192  autopilot replay <session>
-kubectl describe pod    \u2192  autopilot agent show peter
+kubectl describe pod    \u2192  autopilot agent show max
 kubectl top pods        \u2192  autopilot agents --stats`}
 						</CodeBlock>
 						<CodeBlock title="filter options">
 							{`# Only tool calls (skip thinking)
-$ autopilot attach peter --tools-only
+$ autopilot attach max --tools-only
 
 # Compact one-liner mode
-$ autopilot attach peter --compact
+$ autopilot attach max --compact
 
 # Replay a past session
 $ autopilot replay session-20260322-100000
@@ -297,10 +311,10 @@ $ autopilot sessions search "PricingTable"`}
 				{/* CONTEXT & MEMORY */}
 				<Section id="memory">
 					<SectionHeader sub="Each agent has persistent memory scoped to their role. Facts, decisions, mistakes, learnings. Extracted after every session. Private — no agent reads another's memory.">
-						Context & Memory
+						Per-Agent Memory
 					</SectionHeader>
 					<div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-						<CodeBlock title="context/memory/peter/memory.yaml">
+						<CodeBlock title="context/memory/max/memory.yaml">
 							{`facts:
   codebase:
     - "QUESTPIE v3 uses file-convention codegen"
@@ -325,7 +339,7 @@ mistakes:
     fix: "Always use Biome. Config at repo root"
 
 patterns:
-  - "Marek requests extracting shared logic
+  - "Riley requests extracting shared logic
      in first review round"
   - "Break PRs into <200 lines for faster
      reviews"`}
@@ -425,7 +439,7 @@ patterns:
     description: "Morning summary"
 
   - id: social-check
-    agent: marketer
+    agent: morgan
     cron: "0 9,13,17 * * 1-5"
     description: "Check engagement"`}
 						</CodeBlock>
@@ -444,7 +458,7 @@ patterns:
 
   - id: sentry-error
     path: "/sentry"
-    agent: peter
+    agent: max
     filter:
       payload:
         action: "created"
@@ -565,18 +579,18 @@ quiet_hours:
 						<CodeBlock title="WhatsApp \u2192 Agent">
 							{`# You text your Autopilot WhatsApp number:
 
-You: @peter how's the landing page going?
+You: @max how's the landing page going?
 
-Peter: FeatureGrid and Testimonials done.
+Max: FeatureGrid and Testimonials done.
   Working on footer CTA now. Estimate 2h
-  to PR-ready. Will ping Marek for review
+  to PR-ready. Will ping Riley for review
   when done.
 
 # Under the hood:
 # 1. Twilio receives message
-# 2. Orchestrator parses @peter mention
-# 3. Spawns peter with message context
-# 4. Peter reads his task state, responds
+# 2. Orchestrator parses @max mention
+# 3. Spawns max with message context
+# 4. Max reads his task state, responds
 # 5. Response sent back via WhatsApp`}
 						</CodeBlock>
 					</div>
@@ -603,7 +617,7 @@ Peter: FeatureGrid and Testimonials done.
 							},
 							{
 								label: 'AGENTS',
-								desc: 'Claude Agent SDK \u00B7 8 roles \u00B7 Tools \u00B7 MCPs \u00B7 Sandboxed FS \u00B7 Memory',
+								desc: 'Claude Agent SDK \u00B7 Role templates \u00B7 Tools \u00B7 MCPs \u00B7 Sandboxed FS \u00B7 Per-agent memory',
 								color: 'border-l-accent-cyan',
 								textColor: 'text-accent-cyan',
 							},
@@ -675,7 +689,7 @@ Peter: FeatureGrid and Testimonials done.
 							href="#waitlist"
 							className="font-mono text-xs text-purple border border-border px-6 py-2.5 no-underline hover:border-purple transition-colors"
 						>
-							questpie.com/autopilot
+							autopilot.questpie.com
 						</a>
 					</div>
 					<div className="font-mono text-[11px] text-dim mt-12">

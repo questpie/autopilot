@@ -44,12 +44,12 @@ function Architecture() {
 \u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510
 \u2502                   AGENT LAYER                      \u2502
 \u2502                                                     \u2502
-\u2502  8 roles: CEO, Ivan, Peter, Marek, Adam,            \u2502
-\u2502           Ops, Marketer, Designer                    \u2502
+\u2502  Defined in agents.yaml \u2014 any number of agents      \u2502
+\u2502  Each = AI session + role template + tools           \u2502
+\u2502  + FS scope + per-agent memory                      \u2502
 \u2502                                                     \u2502
-\u2502  Each = Claude session with:                        \u2502
-\u2502    system prompt + tools + FS scope +                \u2502
-\u2502    task context + memory                             \u2502
+\u2502  Role templates: strategist, developer, reviewer,   \u2502
+\u2502  planner, devops, marketing, design, meta           \u2502
 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518
                        \u2502
                        \u25BC

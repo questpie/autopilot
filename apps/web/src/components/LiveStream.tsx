@@ -6,49 +6,49 @@ const lines = [
 	{
 		t: '14:30:12',
 		icon: '\u{1F4AD}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: 'Reading spec to understand feature grid requirements...',
 	},
 	{
 		t: '14:30:15',
 		icon: '\u{1F4D6}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: 'read_file \u2192 landing-spec.md',
 	},
 	{
 		t: '14:30:22',
 		icon: '\u{1F4AD}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: 'Need 2x3 grid. Creating FeatureGrid component...',
 	},
 	{
 		t: '14:30:45',
 		icon: '\u{1F4DD}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: 'write_file \u2192 FeatureGrid.tsx (142 lines)',
 	},
 	{
 		t: '14:30:48',
 		icon: '\u{1F4DD}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: 'write_file \u2192 FeatureGrid.module.css (67 lines)',
 	},
 	{
 		t: '14:31:00',
 		icon: '\u{1F4AC}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: '\u2192 dev: "FeatureGrid done. Moving to testimonials."',
 	},
 	{
 		t: '14:31:02',
 		icon: '\u{1F4CC}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: 'pin_to_board \u2192 "Landing Page: 50%"',
 	},
@@ -62,28 +62,28 @@ const lines = [
 	{
 		t: '14:33:10',
 		icon: '\u{1F4AD}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: 'Checking if spec has testimonials section...',
 	},
 	{
 		t: '14:33:12',
 		icon: '\u{1F4D6}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: 'read_file \u2192 landing-spec.md (section: testimonials)',
 	},
 	{
 		t: '14:34:00',
 		icon: '\u{1F4DD}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: 'write_file \u2192 Testimonials.tsx (89 lines)',
 	},
 	{
 		t: '14:34:30',
 		icon: '\u{1F4E6}',
-		agent: 'peter',
+		agent: 'max',
 		color: 'text-accent-cyan',
 		msg: 'git_commit \u2192 "feat: add FeatureGrid and Testimonials"',
 	},
@@ -109,7 +109,7 @@ export function LiveStream() {
 				<div className="flex items-center gap-2">
 					<div className="w-2 h-2 bg-accent-green rounded-full" />
 					<span className="font-mono text-[11px] text-ghost">
-						autopilot attach peter --compact
+						autopilot attach max --compact
 					</span>
 				</div>
 				<span className="font-mono text-[10px] text-accent-green">● LIVE</span>

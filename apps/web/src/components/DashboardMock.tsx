@@ -4,31 +4,31 @@ const items = [
 	{
 		icon: '\u{1F534}',
 		title: 'Create GitHub repo',
-		from: 'peter',
+		from: 'max',
 		time: '2h ago',
 		actions: ['Resolve'],
 	},
 	{
 		icon: '\u{1F7E1}',
 		title: 'Merge landing page PR #47',
-		from: 'marek approved',
+		from: 'riley approved',
 		time: '45m',
 		actions: ['Merge', 'Reject'],
 	},
 	{
 		icon: '\u{1F7E2}',
 		title: 'Approve marketing copy',
-		from: 'marketer',
+		from: 'morgan',
 		time: '20m',
 		actions: ['Approve', 'Reject'],
 	},
 ]
 
 const agents = [
-	{ n: 'peter', s: '\u{1F7E2}', d: 'task-040 \u00B7 12m' },
+	{ n: 'max', s: '\u{1F7E2}', d: 'task-040 \u00B7 12m' },
 	{ n: 'ops', s: '\u{1F7E2}', d: 'health check' },
-	{ n: 'ivan', s: '\u26AA', d: 'idle 2h' },
-	{ n: 'marek', s: '\u26AA', d: 'idle' },
+	{ n: 'sam', s: '\u26AA', d: 'idle 2h' },
+	{ n: 'riley', s: '\u26AA', d: 'idle' },
 ]
 
 export function DashboardMock() {

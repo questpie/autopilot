@@ -38,7 +38,7 @@ function DocsOverview() {
 				<code className="font-mono text-xs text-purple">
 					"Build a pricing page with Stripe integration."
 				</code>{' '}
-				A team of 8 AI agents decomposes, plans, implements, reviews, deploys,
+				Your AI team decomposes, plans, implements, reviews, deploys,
 				and announces it. You approve at human gates.
 			</p>
 
@@ -70,12 +70,12 @@ function DocsOverview() {
 						Agents as Employees
 					</h3>
 					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						8 specialized AI agents, each with a role (strategist, developer,
-						reviewer, planner, devops, marketing, design, meta/CEO), scoped
-						filesystem access, persistent memory, and communication abilities.
-						Agents don't know they're AI. They see company structure, their
-						tasks, their colleagues. Each agent is a Claude session via the
-						Anthropic Agent SDK with a 4-layer context assembly.
+						Define your AI team in YAML. Each agent gets a name, a role template
+						(strategist, developer, reviewer, planner, devops, marketing, design,
+						meta/CEO), scoped filesystem access, persistent memory, and
+						communication abilities. Add or remove agents anytime. Multiple
+						agents can share the same role. Each agent is a Claude session via
+						the Anthropic Agent SDK with a 4-layer context assembly.
 					</p>
 				</div>
 
@@ -280,7 +280,7 @@ $ cd my-company
 $ export ANTHROPIC_API_KEY=sk-ant-xxx
 $ autopilot start
 $ autopilot ask "Build a landing page for our product"
-$ autopilot attach peter  # Watch Peter code in real-time`}
+$ autopilot attach max  # Watch an agent code in real-time`}
 			</CodeBlock>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
@@ -317,7 +317,7 @@ $ autopilot attach peter  # Watch Peter code in real-time`}
 						Agents
 					</div>
 					<div className="text-ghost text-xs">
-						8 agent roles, lifecycle, memory isolation, context assembly
+						Agent definitions, role templates, memory isolation, context assembly
 					</div>
 				</Link>
 				<Link
