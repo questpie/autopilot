@@ -1,12 +1,35 @@
-node_modules
-bun.lock
-*.tgz
+# Bun
+node_modules/
+*.pem
+*.log
+.DS_Store
 
-.claude/
-.autopilot-state.json
-LIVE_STATUS.md
-events.jsonl
-.autopilot-session.md
-.autopilot-project-changelog.md
-projects/*/.autopilot-session.md
-projects/*/.autopilot-project-changelog.md
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+.cache/
+tmp/
+
+local_specs/*
