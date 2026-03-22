@@ -8,8 +8,6 @@ import { Scheduler } from './scheduler'
 import { WebhookServer } from './webhook'
 import { SessionStreamManager } from './session'
 import { Notifier } from './notifier'
-import type { Notification } from './notifier'
-import { spawnAgent, extractMemory } from './agent'
 import { ApiServer } from './api'
 
 /** Configuration options for the {@link Orchestrator}. */

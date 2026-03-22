@@ -1,4 +1,3 @@
-import type { Agent, Task } from '@questpie/autopilot-spec'
 import type { ToolDefinition, ToolContext } from './tools'
 
 /**
@@ -36,15 +35,12 @@ export interface AgentSessionResult {
 
 /**
  * Provider interface for AI agent backends.
+ *
  * Implement this to add support for new LLM providers.
  *
- * Current implementations:
- * - AnthropicProvider (uses @anthropic-ai/sdk)
- *
- * Future:
- * - OpenAIProvider (uses openai SDK)
- * - GoogleProvider (uses @google/generative-ai)
- * - ClaudeAgentSDKProvider (uses @anthropic-ai/claude-agent-sdk)
+ * Built-in implementations:
+ * - {@link ClaudeAgentSDKProvider} (default, uses `@anthropic-ai/claude-agent-sdk`)
+ * - {@link AnthropicProvider} (uses `@anthropic-ai/sdk` API key flow)
  */
 export interface AgentProvider {
 	readonly name: string
