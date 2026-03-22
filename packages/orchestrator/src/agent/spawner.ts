@@ -5,7 +5,6 @@ import { appendActivity } from '../fs/activity'
 import { createAutopilotTools } from './tools'
 import type { ToolContext } from './tools'
 import type { AgentProvider, AgentEvent } from './provider'
-import { AnthropicProvider } from './providers/anthropic'
 import { ClaudeAgentSDKProvider } from './providers/claude-agent-sdk'
 
 /** Registry of available providers */
@@ -27,8 +26,8 @@ export function getProvider(name: string): AgentProvider {
 	return provider
 }
 
-// Register built-in providers
-registerProvider(new AnthropicProvider())
+// Register built-in provider
+// Claude Agent SDK works with both API key and Max subscription
 registerProvider(new ClaudeAgentSDKProvider())
 
 export interface SpawnOptions {
@@ -55,7 +54,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	// 1. Resolve provider (from agent definition or company default)
 	const agentProvider = (agent as Record<string, unknown>).provider as string | undefined
 	const companySettings = (company as Record<string, unknown>).settings as Record<string, unknown> | undefined
-	const providerName = agentProvider ?? companySettings?.agent_provider as string ?? 'anthropic'
+	const providerName = agentProvider ?? companySettings?.agent_provider as string ?? 'claude-agent-sdk'
 	const provider = getProvider(providerName)
 
 	// 2. Assemble context (4-layer system prompt)

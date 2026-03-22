@@ -14,8 +14,8 @@ settings:
   auto_assign: true
   require_approval: ["merge", "deploy", "spend", "publish"]
   max_concurrent_agents: 4
-  agent_provider: "anthropic"
-  agent_model: "claude-sonnet-4-20250514"
+  agent_provider: "claude-agent-sdk"
+  agent_model: "claude-sonnet-4-6"
   budget:
     daily_token_limit: 2000000
     alert_at: 80
