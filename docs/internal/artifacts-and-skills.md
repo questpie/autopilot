@@ -71,13 +71,74 @@ status: running                      # running | stopped | built
 url: "http://localhost:4100"
 ```
 
-### Port Management
+### Artifact Router (Lazy Serving with Cold Start)
 
-Orchestrator manages artifact ports:
-- Range: 4100-4199 (100 concurrent artifacts)
-- Registry: `/artifacts/.registry.yaml` tracks port assignments
-- Auto-cleanup: stop dev servers for artifacts older than 24h
-- On restart: re-serve persistent artifacts
+**Single router process — zero idle cost.** Like serverless but for artifacts.
+
+```
+Request → /artifacts/landing-v2/
+  │
+  ▼
+Router checks registry:
+  ├── Process running? → proxy to port → reset idle timer
+  └── Not running?     → cold start:
+                           1. Read .artifact.yaml
+                           2. Run build command (if needed)
+                           3. Assign port from pool (4100-4199)
+                           4. Run serve command
+                           5. Wait for health check
+                           6. Proxy request
+                           7. Start idle timer
+
+Idle timeout (default 5min):
+  → No requests for 5 min → kill process → free port
+  → Next request → cold start again (~2-3s for Vite)
+```
+
+**Artifact definition** (`.artifact.yaml`):
+```yaml
+name: landing-v2
+serve: "bun run dev --port {port}"    # {port} replaced by router
+build: "bun install"                   # Run once before first serve
+health: "/"                            # Health check path
+timeout: 5m                            # Idle timeout before shutdown
+```
+
+**Implementation** (`packages/orchestrator/src/artifact/router.ts`):
+```typescript
+class ArtifactRouter {
+  private processes: Map<string, { pid: number; port: number; timer: Timer }>
+  private portPool: Set<number>  // 4100-4199
+
+  async route(artifactId: string, request: Request): Promise<Response> {
+    let proc = this.processes.get(artifactId)
+    if (!proc) {
+      proc = await this.coldStart(artifactId)
+    }
+    this.resetIdleTimer(artifactId)
+    return fetch(`http://localhost:${proc.port}${new URL(request.url).pathname}`)
+  }
+
+  private async coldStart(artifactId: string): Promise<Process> {
+    const config = await readArtifactConfig(artifactId)
+    const port = this.allocatePort()
+    // Build if needed
+    if (config.build) await run(config.build, { cwd: artifactDir })
+    // Start serve
+    const proc = Bun.spawn(config.serve.replace('{port}', port), ...)
+    // Wait for health
+    await waitForHealth(`http://localhost:${port}${config.health}`)
+    return { pid: proc.pid, port, timer: ... }
+  }
+}
+```
+
+**Benefits:**
+- Zero idle resource usage (no permanently running dev servers)
+- Cold start ~2-3s (Vite/Bun is fast)
+- Port pool managed automatically
+- Graceful shutdown on `autopilot stop`
+- Simple for agent: just write files + `.artifact.yaml`, router handles the rest
 
 ### Dashboard Integration
 
