@@ -3,18 +3,27 @@ import type { Webhook } from '@questpie/autopilot-spec'
 import { WebhooksFileSchema } from '@questpie/autopilot-spec'
 import { readYaml } from '../fs/yaml'
 
+/** Configuration for the incoming-webhook HTTP server. */
 export interface WebhookServerOptions {
 	port: number
 	companyRoot: string
 	onWebhook: (webhook: Webhook, payload: unknown) => Promise<void>
 }
 
+/**
+ * HTTP server that receives external webhook payloads.
+ *
+ * Matches incoming requests to webhook definitions from `webhooks.yaml`,
+ * verifies authentication (none / bearer_token / hmac_sha256), and
+ * forwards the payload to the `onWebhook` callback.
+ */
 export class WebhookServer {
 	private server: ReturnType<typeof Bun.serve> | null = null
 	private webhooks: Webhook[] = []
 
 	constructor(private options: WebhookServerOptions) {}
 
+	/** Load webhooks from disk and start the Bun HTTP server. */
 	async start(): Promise<void> {
 		await this.loadWebhooks()
 
@@ -24,6 +33,7 @@ export class WebhookServer {
 		})
 	}
 
+	/** Stop the HTTP server. */
 	stop(): void {
 		if (this.server) {
 			this.server.stop()

@@ -7,6 +7,11 @@ function resolvePath(companyRoot: string, relativePath: string): string {
 	return join(companyRoot, relativePath.replace(/^\/company/, ''))
 }
 
+/**
+ * Load an agent's persistent memory from `memory.yaml`.
+ *
+ * Returns `null` if no memory file exists or if it fails validation.
+ */
 export async function loadAgentMemory(
 	companyRoot: string,
 	agentId: string,

@@ -7,7 +7,7 @@ import { findCompanyRoot } from '../utils/find-root'
 import { header, dim, table, success, error, badge } from '../utils/format'
 
 const boardCmd = new Command('board')
-	.description('Show dashboard pins')
+	.description('Show dashboard pins and alerts')
 	.action(async () => {
 		try {
 			const root = await findCompanyRoot()
@@ -33,20 +33,15 @@ const boardCmd = new Command('board')
 			console.log('')
 			console.log(dim(`${pins.length} pin(s)`))
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err)
-			if (message.includes('company.yaml')) {
-				console.log(error('No company directory found.'))
-				console.log(dim("Run 'autopilot init' to create one first."))
-			} else {
-				console.log(error(`Failed to load board: ${message}`))
-			}
+			console.error(error(err instanceof Error ? err.message : String(err)))
+			console.error(dim('Run "autopilot --help" for usage information.'))
 			process.exit(1)
 		}
 	})
 
 boardCmd.addCommand(
 	new Command('clear')
-		.description('Remove all pins')
+		.description('Remove all pins from the dashboard')
 		.action(async () => {
 			try {
 				const root = await findCompanyRoot()
@@ -72,13 +67,8 @@ boardCmd.addCommand(
 
 				console.log(success(`Cleared ${yamlFiles.length} pin(s).`))
 			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err)
-				if (message.includes('company.yaml')) {
-					console.log(error('No company directory found.'))
-					console.log(dim("Run 'autopilot init' to create one first."))
-				} else {
-					console.log(error(`Failed to clear board: ${message}`))
-				}
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),

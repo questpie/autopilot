@@ -1,18 +1,25 @@
 import { watch, type FSWatcher } from 'chokidar'
 import { join, relative, sep } from 'node:path'
 
+/** Discriminated union of filesystem events the watcher can emit. */
 export type WatchEvent =
 	| { type: 'task_changed'; taskId: string; path: string }
 	| { type: 'message_received'; channel: string; path: string }
 	| { type: 'pin_changed'; pinId: string; path: string }
 	| { type: 'config_changed'; file: string; path: string }
 
+/** Configuration for the filesystem {@link Watcher}. */
 export interface WatcherOptions {
 	companyRoot: string
 	onEvent: (event: WatchEvent) => Promise<void>
 	debounceMs?: number
 }
 
+/**
+ * Map a changed file path to a typed {@link WatchEvent}.
+ *
+ * Returns `null` when the path does not match any known pattern.
+ */
 export function parseWatchEvent(companyRoot: string, filePath: string): WatchEvent | null {
 	const rel = relative(companyRoot, filePath).split(sep).join('/')
 
@@ -43,12 +50,19 @@ export function parseWatchEvent(companyRoot: string, filePath: string): WatchEve
 	return null
 }
 
+/**
+ * Watches company directories for YAML file changes using chokidar.
+ *
+ * Debounces rapid writes (default 500ms) and emits typed events via
+ * the `onEvent` callback.
+ */
 export class Watcher {
 	private watcher: FSWatcher | null = null
 	private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
 
 	constructor(private options: WatcherOptions) {}
 
+	/** Start watching `tasks/`, `comms/`, `dashboard/pins/`, and `team/`. */
 	async start(): Promise<void> {
 		const root = this.options.companyRoot
 		const debounceMs = this.options.debounceMs ?? 500
@@ -91,6 +105,7 @@ export class Watcher {
 		this.watcher.on('change', handleFile)
 	}
 
+	/** Stop the watcher and clear any pending debounce timers. */
 	async stop(): Promise<void> {
 		for (const timer of this.debounceTimers.values()) {
 			clearTimeout(timer)

@@ -1,6 +1,7 @@
 import type { Agent } from '@questpie/autopilot-spec'
 import { listTasks, readChannelMessages, listPins, loadAgents } from '../fs'
 
+/** A point-in-time snapshot of company state scoped to a single agent. */
 export interface CompanySnapshot {
 	activeTasks: Array<{ id: string; title: string; status: string; assigned_to?: string }>
 	recentMessages: Array<{ from: string; content: string; at: string }>
@@ -8,6 +9,12 @@ export interface CompanySnapshot {
 	agentStatuses: Array<{ id: string; name: string; role: string; status: string }>
 }
 
+/**
+ * Build a role-scoped company snapshot for context assembly.
+ *
+ * Reads active tasks, recent channel messages (scoped by the agent's
+ * `fs_scope.read`), dashboard pins, and agent statuses.
+ */
 export async function buildCompanySnapshot(
 	companyRoot: string,
 	agent: Agent,

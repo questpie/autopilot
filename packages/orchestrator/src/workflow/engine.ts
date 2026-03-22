@@ -2,6 +2,7 @@ import type { Agent, Task, Workflow, WorkflowStep } from '@questpie/autopilot-sp
 
 // ─── Result types ───────────────────────────────────────────────────────────
 
+/** The kind of action the workflow engine recommends. */
 export type WorkflowAction =
 	| 'assign_agent'
 	| 'notify_human'
@@ -9,6 +10,7 @@ export type WorkflowAction =
 	| 'no_action'
 	| 'error'
 
+/** Result of evaluating a workflow transition. */
 export interface WorkflowTransitionResult {
 	action: WorkflowAction
 	nextStep?: string

@@ -4,6 +4,13 @@ import { join, dirname } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { readActivity } from '../fs/activity'
 
+/**
+ * Extract structured memory from a completed agent session.
+ *
+ * Uses Claude Haiku to distill the session's activity log into facts,
+ * decisions, mistakes, and patterns, then merges the result into the
+ * agent's persistent `memory.yaml`.
+ */
 export async function extractMemory(
 	companyRoot: string,
 	agentId: string,
@@ -83,6 +90,13 @@ Return ONLY valid YAML, no markdown fences.`,
 	}, { lineWidth: 120 }))
 }
 
+/**
+ * Merge extracted memory into existing memory (append-only).
+ *
+ * - `facts`: per-category arrays are union-deduplicated.
+ * - `decisions` / `mistakes`: appended.
+ * - `patterns`: appended and deduplicated.
+ */
 export function mergeMemory(
 	existing: Record<string, unknown>,
 	extracted: Record<string, unknown>,
