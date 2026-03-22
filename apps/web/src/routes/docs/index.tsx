@@ -15,31 +15,10 @@ function DocsOverview() {
 				QUESTPIE Autopilot
 			</h1>
 			<p className="text-muted text-lg mb-8">
-				AI-native company operating system. Your company is a container. Your
-				employees are agents. You give intent, they execute.
-			</p>
-
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				What is Autopilot?
-			</h2>
-			<p className="text-ghost leading-relaxed mb-4">
-				QUESTPIE Autopilot is an AI-native company operating system where every
-				company runs as an isolated Docker container with a filesystem-based
-				database. AI agents serve as employees — each with distinct roles, tools,
-				persistent memory, and scoped filesystem access.
-			</p>
-			<p className="text-ghost leading-relaxed mb-4">
-				A single founder should be able to operate like a 20-person company.
-				Instead of hiring, you define roles. Instead of managing, you give
-				intent. Instead of micromanaging, you approve at gates.
-			</p>
-			<p className="text-ghost leading-relaxed mb-4">
-				You give high-level intents like{' '}
-				<code className="font-mono text-xs text-purple">
-					"Build a pricing page with Stripe integration."
-				</code>{' '}
-				Your AI team decomposes, plans, implements, reviews, deploys,
-				and announces it. You approve at human gates.
+				QUESTPIE Autopilot is an AI-native company operating system. You define
+				a company as a filesystem, staff it with AI agents backed by Claude, and
+				give high-level intents. The agents decompose, plan, implement, review,
+				and deploy -- you approve at human gates.
 			</p>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
@@ -53,14 +32,13 @@ function DocsOverview() {
 						Filesystem as Database
 					</h3>
 					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						No database, no proprietary formats. YAML for structured data,
-						Markdown for documents, JSON for configs. Git for versioning. The
-						entire company can be{' '}
-						<code className="font-mono text-xs text-purple">ls</code>'d,{' '}
-						<code className="font-mono text-xs text-purple">cat</code>'d,{' '}
-						<code className="font-mono text-xs text-purple">grep</code>'d,
-						backed up, forked. Tasks move between folders by status. Agent
-						memory is YAML files. Communication lives in Markdown channels.
+						No database. YAML for structured data, Markdown for documents. The
+						entire company state lives in files you can{' '}
+						<code className="font-mono text-xs text-purple">ls</code>,{' '}
+						<code className="font-mono text-xs text-purple">cat</code>,{' '}
+						<code className="font-mono text-xs text-purple">grep</code>, back
+						up, and version with Git. Tasks move between folders by status.
+						Agent memory is YAML. Communication lives in Markdown channels.
 					</p>
 				</div>
 
@@ -70,12 +48,23 @@ function DocsOverview() {
 						Agents as Employees
 					</h3>
 					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						Define your AI team in YAML. Each agent gets a name, a role template
-						(strategist, developer, reviewer, planner, devops, marketing, design,
-						meta/CEO), scoped filesystem access, persistent memory, and
-						communication abilities. Add or remove agents anytime. Multiple
-						agents can share the same role. Each agent is a Claude session via
-						the Anthropic Agent SDK with a 4-layer context assembly.
+						Each agent is defined in YAML with an ID, role template, filesystem
+						scope, and tool set. The default template ships 8 agents:{' '}
+						<code className="font-mono text-xs text-purple">ceo</code> (meta),{' '}
+						<code className="font-mono text-xs text-purple">sam</code>{' '}
+						(strategist),{' '}
+						<code className="font-mono text-xs text-purple">alex</code>{' '}
+						(planner),{' '}
+						<code className="font-mono text-xs text-purple">max</code>{' '}
+						(developer),{' '}
+						<code className="font-mono text-xs text-purple">riley</code>{' '}
+						(reviewer),{' '}
+						<code className="font-mono text-xs text-purple">ops</code> (devops),{' '}
+						<code className="font-mono text-xs text-purple">morgan</code>{' '}
+						(marketing),{' '}
+						<code className="font-mono text-xs text-purple">jordan</code>{' '}
+						(design). Each agent runs as a Claude session via the Anthropic
+						Agent SDK with a 4-layer context assembly.
 					</p>
 				</div>
 
@@ -85,25 +74,23 @@ function DocsOverview() {
 						Primitives, Not Chat
 					</h3>
 					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						Agents don't generate text output. They call structured primitives
-						— tool calls with clear targets and effects.{' '}
-						<code className="font-mono text-xs text-purple">
-							send_message()
-						</code>
-						,{' '}
+						Agents don't produce text output. They call structured primitives
+						-- tool calls with clear targets and effects.{' '}
 						<code className="font-mono text-xs text-purple">
 							create_task()
 						</code>
 						,{' '}
 						<code className="font-mono text-xs text-purple">
-							git_commit()
+							send_message()
 						</code>
+						,{' '}
+						<code className="font-mono text-xs text-purple">git_commit()</code>
 						,{' '}
 						<code className="font-mono text-xs text-purple">
 							pin_to_board()
 						</code>
-						. Agent thinking is private and messy. Only primitive calls produce
-						visible effects.
+						. Agent thinking is internal. Only primitive calls produce visible
+						effects in the filesystem.
 					</p>
 				</div>
 
@@ -113,11 +100,15 @@ function DocsOverview() {
 						Workflows as Files
 					</h3>
 					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						Workflows define how work moves through the company — from intent
-						to deployed feature. They are YAML files owned by the CEO agent.
-						Standard workflows include Development (12 steps), Marketing (7
-						steps), and Incident response (9 steps). Any agent can propose
-						changes with evidence.
+						Workflows define how work moves through the company. They are YAML
+						files in{' '}
+						<code className="font-mono text-xs text-purple">
+							team/workflows/
+						</code>
+						. The template includes three: development (intent to deployed
+						feature), marketing (brief to published content), and incident
+						(triage to post-mortem). The CEO agent owns workflow definitions;
+						any agent can propose changes with evidence.
 					</p>
 				</div>
 
@@ -127,75 +118,17 @@ function DocsOverview() {
 						Orchestrator
 					</h3>
 					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						A single Bun process (~1500 LOC) that watches the filesystem for
-						changes, matches changes against workflow rules, spawns agent
-						sessions, routes tasks, runs cron schedules, handles webhooks,
-						dispatches notifications, and captures session streams for
-						observability.
+						A single Bun process that watches the filesystem for changes,
+						matches events against workflow rules, spawns agent sessions,
+						routes tasks, runs cron schedules, handles webhooks, and captures
+						session streams for observability. It is the only long-running
+						process -- agents are ephemeral.
 					</p>
 				</div>
 			</div>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Project Status
-			</h2>
-			<div className="bg-purple-faint border border-border border-l-[3px] border-l-purple p-4 mb-8">
-				<div className="font-sans text-sm text-fg">
-					<strong className="text-white">Early Development</strong> — QUESTPIE
-					Autopilot is currently in active development. The spec is complete,
-					the landing page is live, and core packages are being built.
-				</div>
-			</div>
-			<ul className="text-ghost leading-relaxed space-y-1 text-sm">
-				<li>
-					<span className="text-accent-green font-mono mr-1">[done]</span>{' '}
-					Complete product specification
-				</li>
-				<li>
-					<span className="text-accent-green font-mono mr-1">[done]</span>{' '}
-					Landing page and documentation
-				</li>
-				<li>
-					<span className="text-accent-green font-mono mr-1">[done]</span>{' '}
-					Package structure and schemas (
-					<code className="font-mono text-xs text-purple">@questpie/spec</code>
-					)
-				</li>
-				<li>
-					<span className="text-accent-yellow font-mono mr-1">[wip]</span>{' '}
-					Orchestrator core (
-					<code className="font-mono text-xs text-purple">
-						@questpie/orchestrator
-					</code>
-					)
-				</li>
-				<li>
-					<span className="text-accent-yellow font-mono mr-1">[wip]</span>{' '}
-					Agent system (
-					<code className="font-mono text-xs text-purple">
-						@questpie/agents
-					</code>
-					)
-				</li>
-				<li>
-					<span className="text-muted font-mono mr-1">[todo]</span> CLI (
-					<code className="font-mono text-xs text-purple">
-						@questpie/autopilot
-					</code>
-					)
-				</li>
-				<li>
-					<span className="text-muted font-mono mr-1">[todo]</span> Dashboard
-					web UI
-				</li>
-				<li>
-					<span className="text-muted font-mono mr-1">[todo]</span> Transport
-					integrations (WhatsApp, Slack, Email)
-				</li>
-			</ul>
-
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Package Structure
+				Packages
 			</h2>
 			<div className="overflow-x-auto mb-8">
 				<table className="w-full text-sm border-collapse">
@@ -231,8 +164,8 @@ function DocsOverview() {
 								@questpie/orchestrator
 							</td>
 							<td className="py-2 text-xs">
-								FS watcher, workflow engine, agent spawner, context assembler,
-								scheduler, webhook server
+								Filesystem watcher, workflow engine, agent spawner, scheduler,
+								webhook server
 							</td>
 						</tr>
 						<tr className="border-b border-border/50">
@@ -243,8 +176,8 @@ function DocsOverview() {
 								@questpie/agents
 							</td>
 							<td className="py-2 text-xs">
-								Agent definitions, system prompts, primitive implementations,
-								memory extraction
+								Agent runtime, system prompts, primitive implementations, memory
+								extraction
 							</td>
 						</tr>
 						<tr className="border-b border-border/50">
@@ -255,14 +188,14 @@ function DocsOverview() {
 								@questpie/autopilot
 							</td>
 							<td className="py-2 text-xs">
-								CLI interface — init, start, ask, attach, inbox, agents, status
+								CLI interface -- init, start, ask, attach, inbox, agents, status
 							</td>
 						</tr>
 						<tr className="border-b border-border/50">
 							<td className="py-2 pr-4 font-mono text-purple text-xs">
 								apps/web
 							</td>
-							<td className="py-2 pr-4 font-mono text-xs">—</td>
+							<td className="py-2 pr-4 font-mono text-xs">--</td>
 							<td className="py-2 text-xs">
 								TanStack Start landing page and documentation site
 							</td>
@@ -275,12 +208,13 @@ function DocsOverview() {
 				Quick Start
 			</h2>
 			<CodeBlock title="terminal">
-				{`$ bunx @questpie/autopilot init my-company
-$ cd my-company
-$ export ANTHROPIC_API_KEY=sk-ant-xxx
-$ autopilot start
-$ autopilot ask "Build a landing page for our product"
-$ autopilot attach max  # Watch an agent code in real-time`}
+				{`bunx @questpie/autopilot init my-company
+cd my-company
+export ANTHROPIC_API_KEY=sk-ant-xxx
+
+autopilot start
+autopilot ask "Build a landing page for our product"
+autopilot attach max`}
 			</CodeBlock>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
@@ -295,7 +229,7 @@ $ autopilot attach max  # Watch an agent code in real-time`}
 						Getting Started
 					</div>
 					<div className="text-ghost text-xs">
-						Prerequisites, installation, first commands, project structure
+						Prerequisites, installation, project structure, first commands
 					</div>
 				</Link>
 				<Link
@@ -317,7 +251,8 @@ $ autopilot attach max  # Watch an agent code in real-time`}
 						Agents
 					</div>
 					<div className="text-ghost text-xs">
-						Agent definitions, role templates, memory isolation, context assembly
+						Agent definitions, role templates, memory isolation, context
+						assembly
 					</div>
 				</Link>
 				<Link
@@ -339,7 +274,7 @@ $ autopilot attach max  # Watch an agent code in real-time`}
 						Workflows
 					</div>
 					<div className="text-ghost text-xs">
-						Development, marketing, incident workflows as YAML files
+						Development, marketing, and incident workflows as YAML files
 					</div>
 				</Link>
 				<Link
@@ -361,7 +296,7 @@ $ autopilot attach max  # Watch an agent code in real-time`}
 						CLI Reference
 					</div>
 					<div className="text-ghost text-xs">
-						All autopilot commands — init, ask, attach, inbox, agents, status
+						All Autopilot commands -- init, ask, attach, inbox, agents, status
 					</div>
 				</Link>
 				<Link

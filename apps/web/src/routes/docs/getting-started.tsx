@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { CodeBlock } from '@/components/CodeBlock'
 
 export const Route = createFileRoute('/docs/getting-started')({
@@ -15,24 +15,8 @@ function GettingStarted() {
 				Getting Started
 			</h1>
 			<p className="text-muted text-lg mb-8">
-				Set up your AI-powered company in under 5 minutes.
+				Install Autopilot, scaffold a company, and give your first intent.
 			</p>
-
-			<div className="bg-purple-faint border border-border border-l-[3px] border-l-purple p-4 mb-8">
-				<div className="font-sans text-sm text-fg">
-					<strong className="text-white">Coming Soon</strong> — QUESTPIE
-					Autopilot is currently in development. Star the{' '}
-					<a
-						href="https://github.com/questpie/autopilot"
-						className="text-purple"
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						GitHub repo
-					</a>{' '}
-					to follow progress.
-				</div>
-			</div>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
 				Prerequisites
@@ -50,13 +34,13 @@ function GettingStarted() {
 						</a>{' '}
 						v1.0+
 					</strong>{' '}
-					— runtime, package manager, and test runner. Install with{' '}
-					<code className="font-mono text-xs text-purple">
-						curl -fsSL https://bun.sh/install | bash
-					</code>
+					-- runtime, package manager, and test runner
+					<CodeBlock title="terminal">
+						{`curl -fsSL https://bun.sh/install | bash`}
+					</CodeBlock>
 				</li>
 				<li>
-					<strong className="text-fg">Anthropic API key</strong> — agents run
+					<strong className="text-fg">Anthropic API key</strong> -- agents run
 					on Claude via the Agent SDK. Get a key from{' '}
 					<a
 						href="https://console.anthropic.com"
@@ -68,12 +52,12 @@ function GettingStarted() {
 					</a>
 				</li>
 				<li>
-					<strong className="text-fg">Git</strong> — required for versioning
+					<strong className="text-fg">Git</strong> -- required for versioning
 					company state and code operations
 				</li>
 				<li>
-					<strong className="text-fg">Docker</strong> (optional) — for
-					containerized mode where each company runs in isolation
+					<strong className="text-fg">Docker</strong> (optional) -- for
+					containerized production mode
 				</li>
 			</ul>
 
@@ -81,7 +65,7 @@ function GettingStarted() {
 				Installation
 			</h2>
 			<CodeBlock title="terminal">
-				{`# Initialize a new company (creates directory + scaffolds filesystem)
+				{`# Scaffold a new company from the default template
 bunx @questpie/autopilot init my-company
 
 # Or install globally first
@@ -90,50 +74,118 @@ autopilot init my-company`}
 			</CodeBlock>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Project Structure After Init
+				Project Structure
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				After running{' '}
+				After{' '}
 				<code className="font-mono text-xs text-purple">autopilot init</code>,
-				you get a complete company filesystem:
+				you get a complete company filesystem based on the{' '}
+				<code className="font-mono text-xs text-purple">solo-dev-shop</code>{' '}
+				template:
 			</p>
 			<CodeBlock title="my-company/">
-				{`company.yaml                  # Company name, settings, budget limits
+				{`company.yaml                  # Company identity and global settings
 team/
-  agents.yaml                 # Agent definitions (name, role, tools, scope)
-  humans.yaml                 # Human team members + notification prefs
+  agents.yaml                 # 8 AI agents: ceo, sam, alex, max, riley, ops, morgan, jordan
+  humans.yaml                 # Human team members and notification preferences
   workflows/
-    development.yaml           # Intent -> Scope -> Plan -> Implement -> Review -> Deploy
-    marketing.yaml             # Brief -> Content -> Design -> Review -> Publish
-    incident.yaml              # Triage -> Fix -> Review -> Deploy -> Verify
-  schedules.yaml              # Cron jobs: daily standup, weekly metrics, etc.
-  webhooks.yaml               # GitHub push, Stripe events, etc.
-  transports.yaml             # Notification routing (email, WhatsApp, Slack)
+    development.yaml          # Intent -> Scope -> Plan -> Implement -> Review -> Deploy
+    marketing.yaml            # Brief -> Content -> Design -> Review -> Publish
+    incident.yaml             # Triage -> Fix -> Review -> Deploy -> Verify
+  schedules.yaml              # Cron jobs (daily standup, weekly metrics)
+  webhooks.yaml               # Inbound webhook definitions (GitHub, Stripe)
   policies/
-    approval-gates.yaml        # What requires human approval
-    information-sharing.yaml   # What agents can share with each other
+    approval-gates.yaml       # What requires human approval
 tasks/
   backlog/                    # Unassigned tasks
   active/                     # Tasks being worked on
-  review/                     # Awaiting review/approval
-  blocked/                    # Waiting on human or external
+  review/                     # Awaiting human review or approval
+  blocked/                    # Waiting on external dependency
   done/                       # Completed (auto-archived)
 comms/
-  channels/                   # dev, ops, marketing, general
+  channels/
+    general/                  # Company-wide channel
+    dev/                      # Development channel
   direct/                     # Agent-to-agent direct messages
 knowledge/
   brand/                      # Brand guidelines, tone of voice
   technical/                  # Stack conventions, architecture decisions
   business/                   # Strategy, pricing, market research
-  onboarding/                 # How to work in this company
+  onboarding/                 # How-we-work docs for agent context
+  skills/                     # Reusable skill docs (code review, deployment, etc.)
 projects/                     # Code repos, design assets, marketing materials
 context/
   memory/                     # Per-agent persistent memory (YAML)
-  indexes/                    # Embedding indexes for semantic search
-  snapshots/                  # Role-scoped company state snapshots
 secrets/                      # Encrypted API keys and credentials
-dashboard/                    # Board pins from agents
-logs/                         # Activity feed, session streams, error logs`}
+dashboard/
+  pins/                       # Board pins from agents
+logs/
+  activity/                   # Activity feed
+  sessions/                   # Agent session streams
+  errors/                     # Error logs
+infra/                        # Infrastructure configuration`}
+			</CodeBlock>
+
+			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
+				Configuration
+			</h2>
+			<p className="text-ghost leading-relaxed mb-4">
+				The root{' '}
+				<code className="font-mono text-xs text-purple">company.yaml</code>{' '}
+				controls company identity, agent runtime settings, and budget limits.
+				This is the default from the template:
+			</p>
+			<CodeBlock title="company.yaml">
+				{`name: "My Company"
+slug: "my-company"
+description: "A solo developer shop powered by QUESTPIE Autopilot"
+timezone: "UTC"
+language: "en"
+languages: ["en"]
+
+owner:
+  name: "Founder"
+  email: "founder@example.com"
+  notification_channels: []
+
+settings:
+  auto_assign: true
+  require_approval: ["merge", "deploy", "spend", "publish"]
+  max_concurrent_agents: 4
+  agent_provider: "claude-agent-sdk"
+  agent_model: "claude-sonnet-4-6"
+  budget:
+    daily_token_limit: 2000000
+    alert_at: 80
+
+integrations: {}`}
+			</CodeBlock>
+
+			<p className="text-ghost leading-relaxed mb-4 mt-4">
+				Agents are defined in{' '}
+				<code className="font-mono text-xs text-purple">team/agents.yaml</code>.
+				Each agent has an ID, role template, filesystem scope, and available
+				tools:
+			</p>
+			<CodeBlock title="team/agents.yaml (excerpt)">
+				{`agents:
+  - id: ceo
+    name: "CEO Agent"
+    role: meta
+    description: "Decomposes high-level intents into tasks, manages company structure"
+    fs_scope:
+      read: ["/**"]
+      write: ["/tasks/**", "/team/**", "/comms/**", "/dashboard/**"]
+    tools: ["fs", "terminal", "task", "message", "board"]
+
+  - id: max
+    name: "Max"
+    role: developer
+    description: "Implements features, writes code, creates branches and PRs"
+    fs_scope:
+      read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
+      write: ["/projects/*/code/**", "/tasks/**", "/comms/**"]
+    tools: ["fs", "terminal", "task", "message", "git"]`}
 			</CodeBlock>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
@@ -147,20 +199,21 @@ logs/                         # Activity feed, session streams, error logs`}
 				{`cd my-company
 export ANTHROPIC_API_KEY=sk-ant-xxx
 
-# Start the orchestrator (FS watcher + scheduler + webhook server)
 autopilot start`}
 			</CodeBlock>
+			<p className="text-ghost leading-relaxed mb-4 mt-2 text-sm">
+				This starts the filesystem watcher, scheduler, and webhook server. It
+				runs until you stop it.
+			</p>
 
 			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
-				Check status
+				Check company status
 			</h3>
 			<CodeBlock title="terminal">
-				{`# Company overview — agents, active tasks, recent activity
-autopilot status
+				{`autopilot status
 
-# Output:
 # QUESTPIE Autopilot — my-company
-# Agents: 8 defined (from template), 0 active
+# Agents: 8 defined, 0 active
 # Tasks:  0 backlog, 0 active, 0 review, 0 blocked
 # Uptime: 2m 14s`}
 			</CodeBlock>
@@ -169,16 +222,15 @@ autopilot status
 				Give your first intent
 			</h3>
 			<CodeBlock title="terminal">
-				{`# High-level intent — CEO agent decomposes into tasks
-autopilot ask "Set up a Next.js project with authentication"
+				{`autopilot ask "Set up a Next.js project with authentication"
 
-# The CEO agent will:
-# 1. Decompose into scoped tasks (setup, auth, testing, deployment)
-# 2. Route to strategist for scoping
-# 3. Then planner for implementation plan
-# 4. Then developer for code
-# 5. Then reviewer for code review
-# 6. You merge, devops deploys`}
+# The CEO agent decomposes this into scoped tasks:
+# 1. Sam (strategist) scopes the feature and writes a spec
+# 2. Alex (planner) creates a file-level implementation plan
+# 3. Max (developer) writes the code and opens a PR
+# 4. Riley (reviewer) reviews for quality and spec compliance
+# 5. You approve the merge (human gate)
+# 6. Ops (devops) deploys to staging, then production`}
 			</CodeBlock>
 
 			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
@@ -188,10 +240,10 @@ autopilot ask "Set up a Next.js project with authentication"
 				{`# List all agents and their current status
 autopilot agents
 
-# Live-stream an agent's session (like kubectl logs -f)
+# Live-stream an agent's session
 autopilot attach max
 
-# Compact mode — one line per tool call
+# Compact mode -- one line per tool call
 autopilot attach max --compact
 
 # Only show tool calls, skip thinking
@@ -205,52 +257,20 @@ autopilot attach max --tools-only`}
 				{`# Check your inbox for items needing attention
 autopilot inbox
 
-# Approve a task at a human gate (merge, deploy, publish)
+# Approve a task at a human gate
 autopilot approve TASK-001
 
-# Reject with feedback — agent will rework
+# Reject with feedback -- agent will rework
 autopilot reject TASK-001 --reason "Needs error handling for edge cases"`}
-			</CodeBlock>
-
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Configuration
-			</h2>
-			<p className="text-ghost leading-relaxed mb-4">
-				The root{' '}
-				<code className="font-mono text-xs text-purple">company.yaml</code> file
-				controls global settings:
-			</p>
-			<CodeBlock title="company.yaml">
-				{`name: my-company
-version: "1.0"
-description: "AI-powered SaaS startup"
-
-settings:
-  model: claude-sonnet-4-20250514      # Default model for agents
-  max_concurrent_agents: 3        # How many agents can run at once
-  session_timeout: 30m            # Max session duration
-  auto_archive_done: true         # Move done tasks to archive
-
-budget:
-  daily_limit_usd: 50             # Daily API spend limit
-  alert_threshold: 0.8            # Alert at 80% of limit
-
-git:
-  auto_commit: true               # Auto-commit filesystem changes
-  main_branch: main
-
-server:
-  webhook_port: 7777              # Webhook + dashboard port
-  ws_port: 7778                   # WebSocket for session streaming`}
 			</CodeBlock>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
 				Docker Mode
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				For production use, run each company in an isolated Docker container.
-				The container mounts the company filesystem and exposes webhook +
-				WebSocket ports:
+				For production, run the company in an isolated Docker container. The
+				container mounts the company filesystem and exposes webhook and WebSocket
+				ports:
 			</p>
 			<CodeBlock title="docker-compose.yaml">
 				{`services:
@@ -267,76 +287,39 @@ server:
 			</CodeBlock>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				What Happens Under the Hood
-			</h2>
-			<ol className="text-ghost leading-relaxed space-y-3">
-				<li>
-					<strong className="text-fg">CEO decomposes</strong> — breaks your
-					intent into scoped tasks with dependencies and assigns them to the
-					development workflow
-				</li>
-				<li>
-					<strong className="text-fg">Strategist scopes</strong> —
-					writes specs, defines business requirements, success criteria
-				</li>
-				<li>
-					<strong className="text-fg">Planner plans</strong> — creates
-					file-level implementation plans with estimated complexity
-				</li>
-				<li>
-					<strong className="text-fg">Developer implements</strong> —
-					writes code, creates branches and PRs, runs tests
-				</li>
-				<li>
-					<strong className="text-fg">Reviewer reviews</strong> —
-					reviews code quality, checks against spec, suggests improvements
-				</li>
-				<li>
-					<strong className="text-fg">You merge</strong> — human gate for code
-					deployment. You review the PR and merge to main
-				</li>
-				<li>
-					<strong className="text-fg">DevOps deploys</strong> — handles
-					infrastructure, deploys to staging, then production after your
-					approval
-				</li>
-				<li>
-					<strong className="text-fg">Marketer announces</strong> — writes
-					release notes, social posts, campaign copy
-				</li>
-			</ol>
-
-			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
 				Next Steps
 			</h2>
 			<ul className="text-ghost leading-relaxed space-y-1">
 				<li>
-					Read the{' '}
-					<a href="/docs/architecture" className="text-purple">
+					<Link to="/docs/architecture" className="text-purple">
 						Architecture
-					</a>{' '}
-					docs to understand the four-layer stack
+					</Link>{' '}
+					-- understand the four-layer stack and orchestrator internals
 				</li>
 				<li>
-					Learn about the{' '}
-					<a href="/docs/agents" className="text-purple">
-						Agent system
-					</a>{' '}
-					— defining agents, role templates, and filesystem scopes
+					<Link to="/docs/agents" className="text-purple">
+						Agents
+					</Link>{' '}
+					-- role templates, filesystem scopes, and context assembly
 				</li>
 				<li>
-					Explore{' '}
-					<a href="/docs/primitives" className="text-purple">
+					<Link to="/docs/primitives" className="text-purple">
 						Primitives
-					</a>{' '}
-					— the structured tool calls agents use
+					</Link>{' '}
+					-- the structured tool calls agents use
 				</li>
 				<li>
-					See the{' '}
-					<a href="/docs/cli" className="text-purple">
+					<Link to="/docs/workflows" className="text-purple">
+						Workflows
+					</Link>{' '}
+					-- how tasks flow through development, marketing, and incident
+					pipelines
+				</li>
+				<li>
+					<Link to="/docs/cli" className="text-purple">
 						CLI Reference
-					</a>{' '}
-					for all available commands
+					</Link>{' '}
+					-- all available commands and options
 				</li>
 			</ul>
 		</article>
