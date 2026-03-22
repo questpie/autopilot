@@ -287,18 +287,18 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 				const results: Array<{ path: string; snippet: string }> = []
 
 				async function searchRecursive(dir: string): Promise<void> {
-					let entries: string[]
+					let entries: import('node:fs').Dirent[]
 					try {
-						entries = await readdir(dir)
+						entries = await readdir(dir, { withFileTypes: true })
 					} catch {
 						return
 					}
 					for (const entry of entries) {
 						if (results.length >= maxResults) return
-						const fullPath = join(dir, entry)
-						const stat = await Bun.file(fullPath).exists()
-						if (!stat) continue
-						if (entry.endsWith('.md')) {
+						const fullPath = join(dir, entry.name)
+						if (entry.isDirectory()) {
+							await searchRecursive(fullPath)
+						} else if (entry.name.endsWith('.md')) {
 							try {
 								const content = await Bun.file(fullPath).text()
 								const queryLower = args.query.toLowerCase()
@@ -312,14 +312,6 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 								}
 							} catch {
 								// skip unreadable files
-							}
-						} else {
-							// might be a directory
-							try {
-								const subEntries = await readdir(fullPath)
-								if (subEntries) await searchRecursive(fullPath)
-							} catch {
-								// not a directory, skip
 							}
 						}
 					}
@@ -456,7 +448,7 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 					type: 'info',
 					created_by: ctx.agentId,
 					created_at: new Date().toISOString(),
-					metadata: { urgency: args.urgency ?? 'normal' },
+					metadata: {},
 				})
 
 				return {
