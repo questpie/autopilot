@@ -236,7 +236,83 @@ settings:
 
 ---
 
-## 4. Technology Stack (Definitive)
+## 4. Integration Architecture (Zero Custom Code)
+
+**Key insight: No integration is hard-coded.** All external service integrations
+follow the same 3-part pattern. There is NO "Linear sync module" or "GitHub
+integration module." It's just agents calling APIs.
+
+### The 3-Part Integration Pattern
+
+```
+Integration = Secret + Knowledge Doc + Primitive
+```
+
+1. **Secret** — `/company/secrets/{service}.yaml`
+   - API key or token
+   - `allowed_agents` list (which agents can use it)
+   - Usage instructions
+
+2. **Knowledge Doc** — `/company/knowledge/integrations/{service}.md`
+   - API documentation (endpoints, auth, conventions)
+   - Company-specific config (workspace ID, project mappings)
+   - Examples of common operations
+
+3. **Primitive** — Agent calls one of:
+   - `http_request({ url, method, body, secret_ref })` — orchestrator auto-injects API key
+   - MCP server tool (if MCP server exists for the service)
+
+### Example: Linear Integration
+
+```yaml
+# /secrets/linear.yaml
+service: linear
+type: api_token
+value: "lin_api_xxx"
+allowed_agents: [ceo, ivan, peter, marek]
+
+# /knowledge/integrations/linear.md contains:
+# - GraphQL endpoint, auth header format
+# - Workspace ID, team IDs, project mappings
+# - How to create/update issues, sync conventions
+```
+
+Agent (e.g., Peter) simply calls:
+```typescript
+http_request({
+  method: "POST",
+  url: "https://api.linear.app/graphql",
+  secret_ref: "linear",
+  body: { query: "mutation { issueCreate(...) { ... } }" }
+})
+```
+
+The orchestrator:
+1. Reads `/secrets/linear.yaml`
+2. Checks `allowed_agents` includes the requesting agent
+3. Injects the API key into the request headers
+4. Executes the HTTP request
+
+### Why This Is Powerful
+
+- **Infinitely extensible** — add any integration without code changes
+- **Agent-native** — agents learn from knowledge docs, not from hard-coded adapters
+- **Secure** — secrets are scoped per agent, never exposed directly
+- **Debuggable** — every API call is logged in the activity feed
+- **No vendor lock-in** — switch from Linear to Jira by changing the knowledge doc
+
+### Available Integration Methods
+
+| Method | When to Use | Example |
+|--------|------------|---------|
+| `http_request` + secret | Any REST/GraphQL API | Linear, Stripe, Slack webhooks |
+| MCP server | Rich tool interface exists | GitHub, Figma, Playwright |
+| `run_command` | CLI tool exists | kubectl, terraform, aws-cli |
+| Agent SDK built-in | Web browsing, search | WebSearch, WebFetch tools |
+
+---
+
+## 5. Technology Stack (Definitive)
 
 | Layer | Technology | Why |
 |-------|-----------|-----|

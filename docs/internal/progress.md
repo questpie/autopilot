@@ -168,9 +168,28 @@
 9. **Webhook HMAC verification** — security
 10. **Notifier email transport** — users need to receive notifications
 
-### P2 — Nice to Have
+### P2 — Polish & Extend
 11. Interactive CLI prompts (init wizard)
-12. Dashboard web UI
-13. Linear sync
-14. Embedding indexes
-15. WhatsApp/Telegram transport
+12. Dashboard web UI (thin React app over SDK)
+13. Embedding indexes (semantic search via text-embedding-3-small)
+14. Cost tracking and budget alerts
+
+### Note on Integrations
+
+**No integration is hard-coded.** All integrations (Linear, GitHub, Slack, Stripe,
+Figma, Twilio, etc.) follow the same 3-part pattern:
+
+```
+Integration = Secret + Knowledge Doc + Primitive (MCP or http_request)
+```
+
+1. **Secret** — `/secrets/{service}.yaml` (API key, allowed_agents)
+2. **Knowledge Doc** — `/knowledge/integrations/{service}.md` (API docs, conventions)
+3. **Primitive** — Agent calls `http_request` with `secret_ref` or uses MCP server
+
+Linear "sync" is NOT a special module. It's an agent calling Linear's GraphQL API
+via `http_request` primitive, guided by a knowledge doc. Same for GitHub, Slack,
+WhatsApp, or any future integration.
+
+This makes the system **infinitely extensible** without writing integration code.
+To add a new integration: `autopilot secrets add stripe` + add API docs to knowledge.
