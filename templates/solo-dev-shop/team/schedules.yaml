@@ -1,0 +1,21 @@
+schedules:
+  - id: health-check
+    agent: ops
+    cron: "*/5 * * * *"
+    description: "Check infrastructure health"
+    timeout: "2m"
+    on_failure: alert_human
+
+  - id: daily-standup
+    agent: ceo
+    cron: "0 9 * * 1-5"
+    description: "Generate morning summary of all agent activity"
+    timeout: "5m"
+    on_failure: alert_human
+
+  - id: weekly-review
+    agent: ceo
+    cron: "0 10 * * 1"
+    description: "Weekly company review — metrics, blockers, priorities"
+    timeout: "10m"
+    on_failure: alert_human

@@ -1,0 +1,72 @@
+agents:
+  - id: ceo
+    name: "CEO Agent"
+    role: meta
+    description: "Decomposes high-level intents into tasks, manages company structure, proposes workflow changes"
+    fs_scope:
+      read: ["/**"]
+      write: ["/tasks/**", "/team/**", "/comms/**", "/dashboard/**"]
+    tools: ["fs", "terminal", "task", "message", "board"]
+
+  - id: ivan
+    name: "Ivan"
+    role: strategist
+    description: "Scopes features, writes specs, defines business requirements"
+    fs_scope:
+      read: ["/knowledge/**", "/projects/*/docs/**", "/tasks/**"]
+      write: ["/projects/*/docs/**", "/tasks/**", "/comms/**"]
+    tools: ["fs", "terminal", "task", "message", "knowledge"]
+
+  - id: adam
+    name: "Adam"
+    role: planner
+    description: "Creates detailed implementation plans from specs"
+    fs_scope:
+      read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
+      write: ["/projects/*/docs/**", "/tasks/**", "/comms/**"]
+    tools: ["fs", "terminal", "task", "message"]
+
+  - id: peter
+    name: "Peter"
+    role: developer
+    description: "Implements features, writes code, creates branches and PRs"
+    fs_scope:
+      read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
+      write: ["/projects/*/code/**", "/tasks/**", "/comms/**"]
+    tools: ["fs", "terminal", "task", "message", "git"]
+
+  - id: marek
+    name: "Marek"
+    role: reviewer
+    description: "Reviews code quality, architecture decisions, suggests improvements"
+    fs_scope:
+      read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
+      write: ["/tasks/**", "/comms/**"]
+    tools: ["fs", "terminal", "task", "message", "git"]
+
+  - id: ops
+    name: "Ops"
+    role: devops
+    description: "Deploys applications, monitors infrastructure, handles incidents"
+    fs_scope:
+      read: ["/infra/**", "/projects/*/code/**", "/tasks/**", "/knowledge/technical/**"]
+      write: ["/infra/**", "/tasks/**", "/comms/**", "/logs/**"]
+    tools: ["fs", "terminal", "task", "message", "http"]
+
+  - id: marketer
+    name: "Marketer"
+    role: marketing
+    description: "Writes copy, manages social media, plans campaigns, announces features"
+    fs_scope:
+      read: ["/knowledge/brand/**", "/knowledge/business/**", "/projects/*/marketing/**", "/tasks/**"]
+      write: ["/projects/*/marketing/**", "/tasks/**", "/comms/**"]
+    tools: ["fs", "terminal", "task", "message", "http"]
+
+  - id: designer
+    name: "Designer"
+    role: design
+    description: "Creates UI/UX designs, maintains design system, produces mockups"
+    fs_scope:
+      read: ["/knowledge/brand/**", "/projects/*/design/**", "/tasks/**"]
+      write: ["/projects/*/design/**", "/tasks/**", "/comms/**"]
+    tools: ["fs", "terminal", "task", "message"]

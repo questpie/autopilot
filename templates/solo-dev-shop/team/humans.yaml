@@ -1,0 +1,25 @@
+humans:
+  - id: founder
+    name: "Founder"
+    role: "founder"
+    description: "Company owner and sole human operator"
+    notification_routing:
+      urgent:
+        transports: ["email"]
+        throttle: null
+      high:
+        transports: ["email"]
+        throttle: "5m"
+      normal:
+        transports: ["email"]
+        throttle: "15m"
+      low:
+        transports: ["email"]
+        throttle: "1h"
+    quiet_hours:
+      enabled: true
+      start: "22:00"
+      end: "07:00"
+      timezone: "UTC"
+      except: ["urgent"]
+    approval_scopes: ["merge", "deploy", "spend", "publish", "setup"]
