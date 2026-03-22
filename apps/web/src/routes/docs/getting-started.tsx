@@ -100,7 +100,7 @@ autopilot init my-company`}
 			<CodeBlock title="my-company/">
 				{`company.yaml                  # Company name, settings, budget limits
 team/
-  agents.yaml                 # 8 agent role definitions
+  agents.yaml                 # Agent definitions (name, role, tools, scope)
   humans.yaml                 # Human team members + notification prefs
   workflows/
     development.yaml           # Intent -> Scope -> Plan -> Implement -> Review -> Deploy
@@ -160,7 +160,7 @@ autopilot status
 
 # Output:
 # QUESTPIE Autopilot — my-company
-# Agents: 8 defined, 0 active
+# Agents: 8 defined (from template), 0 active
 # Tasks:  0 backlog, 0 active, 0 review, 0 blocked
 # Uptime: 2m 14s`}
 			</CodeBlock>
@@ -174,11 +174,11 @@ autopilot ask "Set up a Next.js project with authentication"
 
 # The CEO agent will:
 # 1. Decompose into scoped tasks (setup, auth, testing, deployment)
-# 2. Route to Ivan (strategist) for scoping
-# 3. Then Adam (planner) for implementation plan
-# 4. Then Peter (developer) for code
-# 5. Then Marek (reviewer) for code review
-# 6. You merge, Ops deploys`}
+# 2. Route to strategist for scoping
+# 3. Then planner for implementation plan
+# 4. Then developer for code
+# 5. Then reviewer for code review
+# 6. You merge, devops deploys`}
 			</CodeBlock>
 
 			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
@@ -189,13 +189,13 @@ autopilot ask "Set up a Next.js project with authentication"
 autopilot agents
 
 # Live-stream an agent's session (like kubectl logs -f)
-autopilot attach peter
+autopilot attach max
 
 # Compact mode — one line per tool call
-autopilot attach peter --compact
+autopilot attach max --compact
 
 # Only show tool calls, skip thinking
-autopilot attach peter --tools-only`}
+autopilot attach max --tools-only`}
 			</CodeBlock>
 
 			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
@@ -276,19 +276,19 @@ server:
 					development workflow
 				</li>
 				<li>
-					<strong className="text-fg">Ivan (Strategist) scopes</strong> —
+					<strong className="text-fg">Strategist scopes</strong> —
 					writes specs, defines business requirements, success criteria
 				</li>
 				<li>
-					<strong className="text-fg">Adam (Planner) plans</strong> — creates
+					<strong className="text-fg">Planner plans</strong> — creates
 					file-level implementation plans with estimated complexity
 				</li>
 				<li>
-					<strong className="text-fg">Peter (Developer) implements</strong> —
+					<strong className="text-fg">Developer implements</strong> —
 					writes code, creates branches and PRs, runs tests
 				</li>
 				<li>
-					<strong className="text-fg">Marek (Reviewer) reviews</strong> —
+					<strong className="text-fg">Reviewer reviews</strong> —
 					reviews code quality, checks against spec, suggests improvements
 				</li>
 				<li>
@@ -296,7 +296,7 @@ server:
 					deployment. You review the PR and merge to main
 				</li>
 				<li>
-					<strong className="text-fg">Ops deploys</strong> — handles
+					<strong className="text-fg">DevOps deploys</strong> — handles
 					infrastructure, deploys to staging, then production after your
 					approval
 				</li>
@@ -320,9 +320,9 @@ server:
 				<li>
 					Learn about the{' '}
 					<a href="/docs/agents" className="text-purple">
-						8 agent roles
+						Agent system
 					</a>{' '}
-					and their filesystem scopes
+					— defining agents, role templates, and filesystem scopes
 				</li>
 				<li>
 					Explore{' '}

@@ -55,8 +55,8 @@ function Workflows() {
 				</li>
 				<li>
 					<strong className="text-fg">Any agent can propose changes</strong>{' '}
-					— if Peter notices a bottleneck, he sends a proposal to the
-					CEO with evidence
+					— if a developer notices a bottleneck, they send a proposal to
+					the CEO with evidence
 				</li>
 				<li>
 					<strong className="text-fg">
@@ -165,7 +165,7 @@ steps:
   ▼
 ┌─────────┐     ┌──────────┐     ┌─────────────┐     ┌─────────────┐
 │  Scope  │────▶│   Plan   │────▶│  Implement  │────▶│ Code Review │
-│ (Ivan)  │     │  (Adam)  │     │  (Peter)    │     │  (Marek)    │
+│ (strat) │     │ (planner)│     │ (developer) │     │ (reviewer)  │
 └─────────┘     └────┬─────┘     └──────┬──────┘     └──────┬──────┘
                      │                  ▲                    │
                      ▼                  │                    │
@@ -829,7 +829,7 @@ transitions:
 				impact assessment.
 			</p>
 			<CodeBlock title="workflow-change-proposal.ts">
-				{`// Peter proposes reducing plan review approvals
+				{`// A developer proposes reducing plan review approvals
 send_message({
   to: "agent:ceo",
   content: \`WORKFLOW_CHANGE_PROPOSAL

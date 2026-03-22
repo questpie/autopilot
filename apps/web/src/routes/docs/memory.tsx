@@ -142,8 +142,8 @@ function Memory() {
 - feat/studio-landing: 3 commits, +247 -12 lines
 
 ### Team Context
-- Ivan completed landing page spec 4h ago
-- Marek is available for review when you're ready
+- Sam completed landing page spec 4h ago
+- Riley is available for review when you're ready
 - Ops reports all systems healthy`}
 			</CodeBlock>
 
@@ -230,7 +230,7 @@ function Memory() {
 			</p>
 			<CodeBlock title="memory-directory-structure">
 				{`/company/context/memory/
-├── peter/
+├── max/
 │   ├── memory.yaml              # Structured memories
 │   ├── learnings.md             # What I've learned
 │   ├── relationships.md         # Working notes about teammates
@@ -238,18 +238,18 @@ function Memory() {
 │       ├── 2026-03-22T10-00.md  # Session transcript summary
 │       ├── 2026-03-22T14-30.md
 │       └── ...
-├── ivan/
+├── sam/
 │   ├── memory.yaml
 │   ├── learnings.md
 │   └── ...
-├── marek/
+├── riley/
 │   └── ...`}
 			</CodeBlock>
 
 			<h3 className="font-sans text-lg font-bold text-white mt-8 mb-3">
 				memory.yaml Format
 			</h3>
-			<CodeBlock title="/company/context/memory/peter/memory.yaml">
+			<CodeBlock title="/company/context/memory/max/memory.yaml">
 				{`# Facts — things the agent knows about the company/codebase
 # Extracted from past sessions. Accumulate over time.
 facts:
@@ -281,7 +281,7 @@ facts:
 
   preferences:
     - "Dominik prefers small, focused PRs over large ones"
-    - "Marek is strict about type safety in reviews"
+    - "Riley is strict about type safety in reviews"
     - "Code comments only for non-obvious business logic"
 
 # Decisions — past decisions with context for why
@@ -299,7 +299,7 @@ decisions:
 # Patterns — recurring patterns the agent has noticed
 patterns:
   - "When implementing new pages, always check /knowledge/technical/stack.md first"
-  - "Marek usually requests extracting shared logic into utils in 1st review round"
+  - "Riley usually requests extracting shared logic into utils in 1st review round"
   - "Dominik merges PRs within 2 hours during business hours"
 
 # Mistakes — things that went wrong and how to avoid them
@@ -321,12 +321,12 @@ mistakes:
 				summaries are used to restore continuity when an agent picks up
 				the same task later.
 			</p>
-			<CodeBlock title="/company/context/memory/peter/sessions/2026-03-22T10-00.md">
+			<CodeBlock title="/company/context/memory/max/sessions/2026-03-22T10-00.md">
 				{`# Session: 2026-03-22T10:00 — task-040
 
 ## What I Did
-- Read Ivan's spec at /projects/questpie-studio/docs/landing-spec.md
-- Read Adam's implementation plan
+- Read Sam's spec at /projects/questpie-studio/docs/landing-spec.md
+- Read Alex's implementation plan
 - Scaffolded landing page layout (src/pages/landing.tsx)
 - Created PricingTable component with monthly/annual toggle
 - Created HeroSection component
@@ -347,9 +347,9 @@ mistakes:
 - Branch: feat/studio-landing, 3 commits
 
 ## Notes for Next Session
-- Check if Ivan added the feature list to the spec
-- Need design assets from Designer for hero illustration
-- Ask Marek to pre-review PricingTable component structure`}
+- Check if Sam added the feature list to the spec
+- Need design assets from Jordan for hero illustration
+- Ask Riley to pre-review PricingTable component structure`}
 			</CodeBlock>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
@@ -423,20 +423,20 @@ mistakes:
 			</p>
 
 			<CodeBlock title="context-isolation-matrix">
-				{`                     CEO  Ivan  Peter  Marek  Adam  Ops  Market  Design
+				{`Access by role:     meta  strat  dev  review  plan  devops  mktg  design
 ─────────────────────────────────────────────────────────────────────────
-Company overview      ✅    ✅    ⚡     ⚡    ⚡    ⚡    ⚡      ⚡
-All tasks             ✅    ✅    ⚡     ⚡    ⚡    ⚡    ⚡      ⚡
-My tasks only         -     -     ✅    ✅    ✅    ✅    ✅     ✅
-Business strategy     ✅    ✅    ❌    ❌    ❌    ❌    ⚡      ❌
-Code details          ⚡    ❌    ✅    ✅    ✅    ⚡    ❌      ⚡
-Infrastructure        ⚡    ❌    ❌    ❌    ❌    ✅    ❌      ❌
-Brand & marketing     ⚡    ⚡    ❌    ❌    ❌    ❌    ✅     ✅
-Design system         ⚡    ❌    ⚡    ❌    ❌    ❌    ⚡      ✅
-Other agents' memory  ❌    ❌    ❌    ❌    ❌    ❌    ❌      ❌
-My own memory         ✅    ✅    ✅    ✅    ✅    ✅    ✅     ✅
-Session transcripts   ❌    ❌    ❌    ❌    ❌    ❌    ❌      ❌
-Channel messages      ✅    ✅    ✅    ✅    ✅    ✅    ✅     ✅
+Company overview      ✅    ✅    ⚡     ⚡    ⚡    ⚡     ⚡      ⚡
+All tasks             ✅    ✅    ⚡     ⚡    ⚡    ⚡     ⚡      ⚡
+My tasks only         -     -     ✅    ✅    ✅    ✅     ✅     ✅
+Business strategy     ✅    ✅    ❌    ❌    ❌    ❌     ⚡      ❌
+Code details          ⚡    ❌    ✅    ✅    ✅    ⚡     ❌      ⚡
+Infrastructure        ⚡    ❌    ❌    ❌    ❌    ✅     ❌      ❌
+Brand & marketing     ⚡    ⚡    ❌    ❌    ❌    ❌     ✅     ✅
+Design system         ⚡    ❌    ⚡    ❌    ❌    ❌     ⚡      ✅
+Other agents' memory  ❌    ❌    ❌    ❌    ❌    ❌     ❌      ❌
+My own memory         ✅    ✅    ✅    ✅    ✅    ✅     ✅     ✅
+Session transcripts   ❌    ❌    ❌    ❌    ❌    ❌     ❌      ❌
+Channel messages      ✅    ✅    ✅    ✅    ✅    ✅     ✅     ✅
 
 ✅ = Full access     ⚡ = Summary/limited     ❌ = No access`}
 			</CodeBlock>
@@ -499,7 +499,7 @@ Rule:
   If a fact is about the company/product/tech     → shared knowledge
 
 Example:
-  Peter discovers that Drizzle migrations require a --strict flag.
+  Max discovers that Drizzle migrations require a --strict flag.
   1. Personal memory: "Always use --strict flag for migrations"
   2. Shared knowledge: edits /company/knowledge/technical/migrations.md`}
 			</CodeBlock>
@@ -508,13 +508,13 @@ Example:
 				Context Assembly Example
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				When Peter picks up task-040 (landing page implementation), the
+				When Max picks up task-040 (landing page implementation), the
 				Context Assembler builds the following context. Total budget:
 				100K tokens. Used: ~32K tokens.
 			</p>
 			<CodeBlock title="assembled-context-for-peter">
 				{`═══════════════════════════════════════════════════════
-ASSEMBLED CONTEXT FOR PETER — task-040
+ASSEMBLED CONTEXT FOR MAX — task-040
 Token budget: 100,000 | Used: ~32,000
 ═══════════════════════════════════════════════════════
 
@@ -530,7 +530,7 @@ Token budget: 100,000 | Used: ~32,000
 - task-042: GitHub repo (waiting on Dominik) — not blocking task-040
 
 ## Team
-- Ivan: idle | Marek: available for review | Ops: systems green
+- Sam: idle | Riley: available for review | Ops: systems green
 
 ───────────── MEMORIES (18,500 tokens) ─────────────
 ## Facts
@@ -551,7 +551,7 @@ Token budget: 100,000 | Used: ~32,000
 - Left off at: Hero and Pricing done, TODO features grid
 
 ## Patterns
-- Marek requests extracting shared logic in 1st review round
+- Reviewer requests extracting shared logic in 1st review round
 - Break PRs into <200 lines for faster reviews
 
 ───────────── TASK CONTEXT (8,200 tokens) ──────────
@@ -563,9 +563,9 @@ Plan: [full content of landing-plan.md]
 
 ## Task History
 - 10:00 CEO created from intent
-- 10:01 Assigned to Ivan for scoping
-- 10:30 Ivan completed spec
-- 14:30 Peter started implementation
+- 10:01 Assigned to Sam for scoping
+- 10:30 Sam completed spec
+- 14:30 Max started implementation
 
 ## Code Context
 Branch: feat/studio-landing (3 commits, +247 -12)
@@ -595,8 +595,8 @@ consolidation:
 			<p className="text-ghost leading-relaxed mb-4">
 				Storage costs are negligible. A fully populated agent memory is
 				~50-100 KB of YAML/Markdown. Session summaries are ~2-5 KB each.
-				For 50 sessions per agent across 8 agents: 400 files at ~5 KB =
-				~2 MB total.
+				For 50 sessions per agent across a typical team: a few hundred
+				files at ~5 KB each = a few MB total.
 			</p>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
@@ -608,14 +608,14 @@ consolidation:
 				read, edit, or delete any agent's memory directly.
 			</p>
 			<CodeBlock title="memory-operations.sh">
-				{`# Read Peter's memory
-$ cat /company/context/memory/peter/memory.yaml
+				{`# Read an agent's memory
+$ cat /company/context/memory/max/memory.yaml
 
 # Edit a wrong fact
-$ vim /company/context/memory/peter/memory.yaml
+$ vim /company/context/memory/max/memory.yaml
 
 # Delete a stale learning
-$ vim /company/context/memory/peter/learnings.md
+$ vim /company/context/memory/max/learnings.md
 
 # Bootstrap memory for a new company
 $ autopilot knowledge import ./docs/     # Import existing docs

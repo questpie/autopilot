@@ -8,8 +8,8 @@ agents:
       write: ["/tasks/**", "/team/**", "/comms/**", "/dashboard/**"]
     tools: ["fs", "terminal", "task", "message", "board"]
 
-  - id: ivan
-    name: "Ivan"
+  - id: sam
+    name: "Sam"
     role: strategist
     description: "Scopes features, writes specs, defines business requirements"
     fs_scope:
@@ -17,8 +17,8 @@ agents:
       write: ["/projects/*/docs/**", "/tasks/**", "/comms/**"]
     tools: ["fs", "terminal", "task", "message", "knowledge"]
 
-  - id: adam
-    name: "Adam"
+  - id: alex
+    name: "Alex"
     role: planner
     description: "Creates detailed implementation plans from specs"
     fs_scope:
@@ -26,8 +26,8 @@ agents:
       write: ["/projects/*/docs/**", "/tasks/**", "/comms/**"]
     tools: ["fs", "terminal", "task", "message"]
 
-  - id: peter
-    name: "Peter"
+  - id: max
+    name: "Max"
     role: developer
     description: "Implements features, writes code, creates branches and PRs"
     fs_scope:
@@ -35,8 +35,8 @@ agents:
       write: ["/projects/*/code/**", "/tasks/**", "/comms/**"]
     tools: ["fs", "terminal", "task", "message", "git"]
 
-  - id: marek
-    name: "Marek"
+  - id: riley
+    name: "Riley"
     role: reviewer
     description: "Reviews code quality, architecture decisions, suggests improvements"
     fs_scope:
@@ -53,8 +53,8 @@ agents:
       write: ["/infra/**", "/tasks/**", "/comms/**", "/logs/**"]
     tools: ["fs", "terminal", "task", "message", "http"]
 
-  - id: marketer
-    name: "Marketer"
+  - id: morgan
+    name: "Morgan"
     role: marketing
     description: "Writes copy, manages social media, plans campaigns, announces features"
     fs_scope:
@@ -62,8 +62,8 @@ agents:
       write: ["/projects/*/marketing/**", "/tasks/**", "/comms/**"]
     tools: ["fs", "terminal", "task", "message", "http"]
 
-  - id: designer
-    name: "Designer"
+  - id: jordan
+    name: "Jordan"
     role: design
     description: "Creates UI/UX designs, maintains design system, produces mockups"
     fs_scope:
