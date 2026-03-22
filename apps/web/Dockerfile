@@ -23,6 +23,7 @@ WORKDIR /app
 COPY --from=builder /app/apps/web/dist ./dist
 COPY --from=builder /app/apps/web/serve.ts ./serve.ts
 COPY --from=builder /app/apps/web/package.json ./package.json
+COPY --from=builder /app/node_modules ./node_modules
 ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000
