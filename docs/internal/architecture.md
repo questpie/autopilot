@@ -501,7 +501,106 @@ WS   /api/ws/sessions/:id   → session stream (attach)
 
 ---
 
-## 9. Implementation Status
+## 9. Agent SDK Integration (Key Architectural Decision)
+
+### Discovery: Claude Agent SDK Provides Built-in Infrastructure
+
+The `@anthropic-ai/claude-agent-sdk` provides many capabilities we originally planned
+to build from scratch. This dramatically simplifies the orchestrator.
+
+### What Agent SDK Handles (DON'T rebuild):
+
+| Capability | Agent SDK Feature | Our Original Plan |
+|-----------|------------------|-------------------|
+| File read/write/edit | Read, Write, Edit tools | Custom read_file/write_file primitives |
+| File search | Glob, Grep tools | Custom search_knowledge |
+| Shell execution | Bash tool | Custom run_command primitive |
+| FS sandboxing | Permission modes | Custom fs_scope enforcement |
+| Subagents | Agent tool + definitions | Custom agent spawner |
+| Sessions | Resume, list, fork | Custom session manager |
+| MCP integration | Built-in MCP support | N/A |
+| Hooks | Pre/PostToolUse, SessionEnd | Custom event system |
+| Web search | WebSearch, WebFetch tools | Custom http_request |
+
+### What WE Build (our value-add):
+
+1. **Workflow Engine** — routing between agents based on YAML workflows (SDK has no concept of workflows)
+2. **Context Assembly** — 4-layer system prompts via `systemPrompt` option
+3. **Memory Extraction** — post-session Haiku summarization via `SessionEnd` hook
+4. **Custom Primitives** — send_message, create_task, pin_to_board as MCP tools via `createSdkMcpServer`
+5. **Scheduler/Watcher/Webhooks** — trigger infrastructure (SDK doesn't watch FS or handle cron)
+6. **CLI** — user interface wrapping SDK's `query()` function
+7. **Orchestrator** — composition layer that wires everything together
+
+### Agent Spawning Pattern
+
+```typescript
+import { query, tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
+import { z } from 'zod'
+
+// Our custom primitives exposed as MCP tools
+const autopilotTools = createSdkMcpServer({
+  name: 'autopilot',
+  tools: [
+    tool('send_message', 'Send message to agent or channel', {
+      to: z.string(), content: z.string(), priority: z.string().optional()
+    }, async (args) => {
+      await sendChannelMessage(companyRoot, args.to, { ... })
+      return { content: [{ type: 'text', text: 'Message sent' }] }
+    }),
+    tool('create_task', 'Create a new task', {
+      title: z.string(), type: z.string(), assigned_to: z.string().optional()
+    }, async (args) => {
+      const task = await createTask(companyRoot, { ... })
+      return { content: [{ type: 'text', text: `Created ${task.id}` }] }
+    }),
+    tool('pin_to_board', 'Pin item to dashboard', {
+      group: z.string(), title: z.string(), type: z.string()
+    }, async (args) => {
+      await createPin(companyRoot, { ... })
+      return { content: [{ type: 'text', text: 'Pinned' }] }
+    }),
+  ]
+})
+
+// Spawn agent using SDK
+async function spawnAgent(agent: Agent, task: Task, context: AssembledContext) {
+  for await (const message of query({
+    prompt: `Work on task: ${task.title}\n\n${task.description}`,
+    options: {
+      systemPrompt: context.systemPrompt,
+      cwd: companyRoot,
+      allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
+      mcpServers: { autopilot: autopilotTools },
+      permissionMode: 'acceptEdits',
+      maxTurns: 50,
+      model: agent.model,
+      hooks: {
+        PostToolUse: [{ matcher: '.*', hooks: [logToActivityFeed] }],
+        SessionEnd: [{ matcher: '.*', hooks: [extractMemoryWithHaiku] }],
+      },
+    },
+  })) {
+    // Stream to JSONL log + WebSocket subscribers
+    if ('result' in message) {
+      streamManager.emit(sessionId, { type: 'text', content: message.result })
+    }
+  }
+}
+```
+
+### Implications
+
+- **No custom agent spawner needed** — SDK's `query()` handles the agentic loop
+- **No custom file tools needed** — SDK's built-in Read/Write/Edit/Glob/Grep
+- **No custom sandboxing** — SDK's `permissionMode` + `allowedTools`
+- **Hooks replace our event system** — PostToolUse for activity logging, SessionEnd for memory
+- **MCP for custom primitives** — `createSdkMcpServer` + `tool()` for our domain-specific tools
+- **Subagents for delegation** — CEO can spawn subagents via SDK's Agent tool
+
+---
+
+## 10. Implementation Status
 
 ### Done (Fáza 0-7)
 - [x] Monorepo setup (Bun + Turbo + Biome)
