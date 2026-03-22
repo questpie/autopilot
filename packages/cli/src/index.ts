@@ -1,2 +1,10 @@
-// @questpie/autopilot-cli — placeholder
-export {}
+export { program } from './program'
+
+import './commands/init'
+import './commands/status'
+import './commands/ask'
+import './commands/tasks'
+import './commands/agents'
+import './commands/inbox'
+import './commands/attach'
+import './commands/start'

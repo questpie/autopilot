@@ -5,8 +5,21 @@
 	"type": "module",
 	"description": "QUESTPIE Autopilot CLI",
 	"main": "src/index.ts",
+	"bin": {
+		"autopilot": "./bin/autopilot.ts"
+	},
 	"scripts": {
-		"build": "echo 'placeholder'",
-		"test": "echo 'placeholder'"
+		"build": "bun build src/index.ts --outdir dist --target bun",
+		"test": "bun test",
+		"typecheck": "bunx tsc --noEmit"
+	},
+	"dependencies": {
+		"@questpie/autopilot-spec": "workspace:*",
+		"@questpie/autopilot-orchestrator": "workspace:*",
+		"commander": "^13.0.0"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.11",
+		"typescript": "^5.9.3"
 	}
 }

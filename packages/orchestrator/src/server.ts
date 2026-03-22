@@ -1,0 +1,266 @@
+import type { Schedule, Webhook } from '@questpie/autopilot-spec'
+import { loadCompany, loadAgents, readTask } from './fs'
+import { evaluateTransition } from './workflow'
+import { WorkflowLoader } from './workflow'
+import { Watcher } from './watcher'
+import type { WatchEvent } from './watcher'
+import { Scheduler } from './scheduler'
+import { WebhookServer } from './webhook'
+import { SessionStreamManager } from './session'
+import { Notifier } from './notifier'
+import type { Notification } from './notifier'
+
+export interface OrchestratorOptions {
+	companyRoot: string
+	webhookPort?: number
+}
+
+export class Orchestrator {
+	private watcher: Watcher | null = null
+	private scheduler: Scheduler | null = null
+	private webhookServer: WebhookServer | null = null
+	private streamManager: SessionStreamManager
+	private workflowLoader: WorkflowLoader
+	private notifier: Notifier
+	private running = false
+
+	constructor(private options: OrchestratorOptions) {
+		this.streamManager = new SessionStreamManager()
+		this.workflowLoader = new WorkflowLoader(options.companyRoot)
+		this.notifier = new Notifier({ companyRoot: options.companyRoot })
+	}
+
+	async start(): Promise<void> {
+		if (this.running) {
+			console.log('[orchestrator] already running')
+			return
+		}
+
+		const root = this.options.companyRoot
+
+		// 1. Verify company directory
+		try {
+			const company = await loadCompany(root)
+			console.log(`[orchestrator] loaded company: ${company.name} (${company.slug})`)
+		} catch (err) {
+			console.error('[orchestrator] failed to load company.yaml — is this a valid company directory?')
+			throw err
+		}
+
+		// 2. Start watcher
+		this.watcher = new Watcher({
+			companyRoot: root,
+			onEvent: (event) => this.handleWatchEvent(event),
+		})
+		try {
+			await this.watcher.start()
+			console.log('[orchestrator] watcher started (watching tasks/, comms/, dashboard/, team/)')
+		} catch (err) {
+			console.error('[orchestrator] failed to start watcher:', err)
+		}
+
+		// 3. Start scheduler
+		this.scheduler = new Scheduler({
+			companyRoot: root,
+			onTrigger: (schedule) => this.handleScheduleTrigger(schedule),
+		})
+		try {
+			await this.scheduler.start()
+			const jobs = this.scheduler.getActiveJobs()
+			console.log(`[orchestrator] scheduler started (${jobs.length} active jobs)`)
+		} catch (err) {
+			console.error('[orchestrator] failed to start scheduler:', err)
+		}
+
+		// 4. Start webhook server
+		const port = this.options.webhookPort ?? 7777
+		this.webhookServer = new WebhookServer({
+			port,
+			companyRoot: root,
+			onWebhook: (webhook, payload) => this.handleWebhook(webhook, payload),
+		})
+		try {
+			await this.webhookServer.start()
+			console.log(`[orchestrator] webhook server started on port ${port}`)
+		} catch (err) {
+			console.error('[orchestrator] failed to start webhook server:', err)
+		}
+
+		this.running = true
+		console.log('[orchestrator] startup complete')
+	}
+
+	async stop(): Promise<void> {
+		if (!this.running) return
+
+		console.log('[orchestrator] shutting down...')
+
+		if (this.watcher) {
+			try {
+				await this.watcher.stop()
+			} catch (err) {
+				console.error('[orchestrator] error stopping watcher:', err)
+			}
+			this.watcher = null
+		}
+
+		if (this.scheduler) {
+			try {
+				this.scheduler.stop()
+			} catch (err) {
+				console.error('[orchestrator] error stopping scheduler:', err)
+			}
+			this.scheduler = null
+		}
+
+		if (this.webhookServer) {
+			try {
+				this.webhookServer.stop()
+			} catch (err) {
+				console.error('[orchestrator] error stopping webhook server:', err)
+			}
+			this.webhookServer = null
+		}
+
+		this.running = false
+		console.log('[orchestrator] shutdown complete')
+	}
+
+	getStreamManager(): SessionStreamManager {
+		return this.streamManager
+	}
+
+	getWorkflowLoader(): WorkflowLoader {
+		return this.workflowLoader
+	}
+
+	isRunning(): boolean {
+		return this.running
+	}
+
+	private async handleWatchEvent(event: WatchEvent): Promise<void> {
+		try {
+			switch (event.type) {
+				case 'task_changed':
+					console.log(`[orchestrator] task changed: ${event.taskId}`)
+					await this.handleTaskChange(event.taskId)
+					break
+				case 'message_received':
+					console.log(`[orchestrator] message received in channel: ${event.channel}`)
+					break
+				case 'pin_changed':
+					console.log(`[orchestrator] pin changed: ${event.pinId}`)
+					break
+				case 'config_changed':
+					console.log(`[orchestrator] config changed: ${event.file}`)
+					if (event.file === 'schedules.yaml' && this.scheduler) {
+						console.log('[orchestrator] reloading scheduler...')
+						await this.scheduler.reload()
+					}
+					break
+			}
+		} catch (err) {
+			console.error(`[orchestrator] error handling watch event (${event.type}):`, err)
+		}
+	}
+
+	private async handleScheduleTrigger(schedule: Schedule): Promise<void> {
+		try {
+			console.log(`[orchestrator] schedule triggered: ${schedule.id} (agent: ${schedule.agent})`)
+
+			await this.notifier.notify({
+				type: 'task_assigned',
+				title: `Schedule triggered: ${schedule.id}`,
+				message: `Scheduled task for agent ${schedule.agent}: ${schedule.description}`,
+				priority: 'normal',
+				agentId: schedule.agent,
+			})
+		} catch (err) {
+			console.error(`[orchestrator] error handling schedule trigger (${schedule.id}):`, err)
+		}
+	}
+
+	private async handleWebhook(webhook: Webhook, payload: unknown): Promise<void> {
+		try {
+			console.log(`[orchestrator] webhook received: ${webhook.id} (agent: ${webhook.agent})`)
+
+			await this.notifier.notify({
+				type: 'alert',
+				title: `Webhook received: ${webhook.id}`,
+				message: `Webhook ${webhook.id} triggered for agent ${webhook.agent}`,
+				priority: webhook.action.priority === 'urgent' ? 'urgent' : 'normal',
+				agentId: webhook.agent,
+			})
+		} catch (err) {
+			console.error(`[orchestrator] error handling webhook (${webhook.id}):`, err)
+		}
+	}
+
+	async handleTaskChange(taskId: string): Promise<void> {
+		const root = this.options.companyRoot
+
+		// 1. Read the task
+		const task = await readTask(root, taskId)
+		if (!task) {
+			console.log(`[orchestrator] task not found: ${taskId}`)
+			return
+		}
+
+		console.log(`[orchestrator] processing task: ${task.id} (status: ${task.status}, workflow_step: ${task.workflow_step ?? 'none'})`)
+
+		// 2. If task has a workflow, evaluate it
+		if (task.workflow && task.workflow_step) {
+			try {
+				const workflow = await this.workflowLoader.load(task.workflow)
+				const agents = await loadAgents(root)
+				const result = evaluateTransition(workflow, task, agents)
+
+				console.log(`[orchestrator] workflow evaluation for ${taskId}:`, {
+					action: result.action,
+					nextStep: result.nextStep,
+					assignTo: result.assignTo,
+					assignRole: result.assignRole,
+					gate: result.gate,
+					error: result.error,
+				})
+
+				// Log notifications based on result
+				switch (result.action) {
+					case 'assign_agent':
+						await this.notifier.notify({
+							type: 'task_assigned',
+							title: `Task assigned: ${task.title}`,
+							message: `Task ${taskId} assigned to ${result.assignTo ?? result.assignRole ?? 'unknown'}`,
+							priority: task.priority === 'critical' ? 'urgent' : 'normal',
+							taskId,
+							agentId: result.assignTo,
+						})
+						break
+					case 'notify_human':
+						await this.notifier.notify({
+							type: 'approval_needed',
+							title: `Human approval needed: ${task.title}`,
+							message: `Task ${taskId} requires human approval at gate: ${result.gate ?? 'unknown'}`,
+							priority: 'high',
+							taskId,
+						})
+						break
+					case 'complete':
+						await this.notifier.notify({
+							type: 'task_completed',
+							title: `Task completed: ${task.title}`,
+							message: `Task ${taskId} reached terminal step`,
+							priority: 'normal',
+							taskId,
+						})
+						break
+					case 'error':
+						console.error(`[orchestrator] workflow error for ${taskId}: ${result.error}`)
+						break
+				}
+			} catch (err) {
+				console.error(`[orchestrator] failed to evaluate workflow for task ${taskId}:`, err)
+			}
+		}
+	}
+}

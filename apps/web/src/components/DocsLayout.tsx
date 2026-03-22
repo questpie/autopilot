@@ -6,6 +6,7 @@ const navItems = [
 	{ to: '/docs/getting-started', label: 'Getting Started' },
 	{ to: '/docs/architecture', label: 'Architecture' },
 	{ to: '/docs/agents', label: 'Agents' },
+	{ to: '/docs/primitives', label: 'Primitives' },
 	{ to: '/docs/workflows', label: 'Workflows' },
 	{ to: '/docs/memory', label: 'Context & Memory' },
 	{ to: '/docs/cli', label: 'CLI Reference' },
