@@ -26,6 +26,14 @@ export function Header() {
 					>
 						GitHub
 					</a>
+					<a
+						href="https://questpie.com"
+						target="_blank"
+						rel="noopener noreferrer"
+						className="font-sans text-sm text-ghost hover:text-fg transition-colors no-underline"
+					>
+						QUESTPIE
+					</a>
 					<span className="font-mono text-[10px] text-purple border border-purple/30 px-2 py-0.5 tracking-wider">
 						COMING SOON
 					</span>

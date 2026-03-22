@@ -23,12 +23,6 @@ function LandingPage() {
 			<div className="max-w-[860px] mx-auto px-6">
 				{/* HERO */}
 				<section className="pt-20 pb-20 border-b border-border">
-					<div className="flex items-center gap-3 mb-12">
-						<QSymbol size={24} />
-						<span className="font-mono text-[11px] text-ghost tracking-[4px]">
-							QUESTPIE
-						</span>
-					</div>
 					<div className="font-mono text-xs text-purple tracking-[4px] mb-3">
 						INTRODUCING
 					</div>
@@ -671,7 +665,7 @@ Max: FeatureGrid and Testimonials done.
 						Your company, on autopilot.
 					</h2>
 					<p className="font-sans text-[15px] text-muted mt-2">
-						Open source. CLI-first. Ships in 8 weeks.
+						Open source. CLI-first. Coming soon.
 					</p>
 					<div className="mt-8 max-w-md mx-auto">
 						<WaitlistForm />
@@ -693,7 +687,15 @@ Max: FeatureGrid and Testimonials done.
 						</a>
 					</div>
 					<div className="font-mono text-[11px] text-dim mt-12">
-						QUESTPIE s.r.o. · Dominik Repkovsk\u00FD · 2026
+						Built by{' '}
+						<a
+							href="https://questpie.com"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="text-ghost hover:text-fg transition-colors"
+						>
+							QUESTPIE s.r.o.
+						</a>
 					</div>
 				</section>
 			</div>
