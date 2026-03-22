@@ -2,10 +2,10 @@
 
 # QUESTPIE Autopilot
 
-**AI-native company operating system**
+**AI-native company operating system.**
+**Your company is a container. Your employees are agents.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-B700FF?style=flat-square)](LICENSE)
-[![Tests: 504 passing](https://img.shields.io/badge/tests-504%20passing-B700FF?style=flat-square)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-B700FF?style=flat-square)]()
 [![Bun](https://img.shields.io/badge/runtime-Bun-B700FF?style=flat-square)](https://bun.sh)
 
@@ -17,18 +17,34 @@
 
 ## What is this?
 
-QUESTPIE Autopilot lets a single founder operate like a 20-person company. You define AI agents with names, roles, and tools. You give a high-level intent. They decompose it, plan it, implement it, review it, and ship it -- while you approve at gates.
+A single founder should be able to operate like a 20-person company. Instead of hiring, you define roles. Instead of managing, you give intent. Instead of micromanaging, you approve at gates.
+
+QUESTPIE Autopilot is a multi-agent AI system where your company is a filesystem, your employees are AI agents, and work flows through YAML-defined workflows — from intent to shipped feature.
 
 ```bash
 $ autopilot ask "Build a pricing page with Stripe integration"
 
 CEO Agent decomposing intent...
 
-  task-050: Scope requirements      -> ivan (strategist)
-  task-051: Design UI               -> designer
-  task-052: Implement with Stripe   -> peter (developer)
-  task-053: Write copy & announce   -> marketer
+  task-050: Scope requirements      → ivan (strategist)
+  task-051: Design UI               → designer
+  task-052: Implement with Stripe   → peter (developer)
+  task-053: Write copy & announce   → marketer
+
+Ivan is starting now. You'll be notified when approvals are needed.
 ```
+
+---
+
+## How it works
+
+**You give intent.** "Build a pricing page with Stripe integration."
+
+**Agents decompose and execute.** The CEO agent breaks it into scoped tasks. Ivan writes the spec. Adam creates the implementation plan. Peter codes it. Marek reviews it. Ops deploys it. Marketer announces it.
+
+**You approve at gates.** Merge code, deploy to production, publish content — these require your sign-off. Everything else runs autonomously.
+
+**Everything is files.** Tasks are YAML. Communication is Markdown. Knowledge is documents. The entire company state can be `ls`'d, `grep`'d, backed up, and forked. No database, no proprietary formats.
 
 ---
 
@@ -39,116 +55,112 @@ bunx @questpie/autopilot init my-company
 cd my-company
 export ANTHROPIC_API_KEY=sk-ant-xxx
 autopilot start
-autopilot ask "Build a landing page"
-autopilot attach peter
+autopilot ask "Build a landing page for our product"
+autopilot attach peter  # watch Peter code in real-time
 ```
 
 ---
 
 ## Features
 
-- **Filesystem as database** -- Tasks are YAML, communication is Markdown, knowledge is documents. Everything is plain text, diffable, and git-versioned.
-- **8 AI agent roles** -- CEO, strategist, planner, developer, reviewer, devops, marketing, design. Define your own or use built-in templates.
-- **Workflow engine** -- YAML-defined state machines that move work from intent to shipped feature with human approval gates.
-- **Persistent memory** -- Every agent accumulates facts, decisions, and learnings across sessions. Isolated per agent, extracted automatically.
-- **Session attach** -- `autopilot attach peter` streams an agent's work in real time. Like `kubectl logs -f` for your AI team.
-- **13 agent tools** -- send_message, create_task, update_task, add_blocker, resolve_blocker, pin_to_board, unpin_from_board, search_knowledge, update_knowledge, http_request, ask_agent, create_artifact, skill_request.
-- **10 built-in skills** -- Project scoping, code review, testing strategy, API design, deployment, security checklist, incident response, release notes, document creation, git workflow.
-- **CLI-first** -- 11 commands covering the full lifecycle: init, start, ask, status, tasks, agents, inbox, attach, board, knowledge, secrets.
-- **Provider abstraction** -- Claude Agent SDK with support for multiple model tiers (Sonnet for agents, Haiku for memory extraction).
-- **Artifact serving** -- Agents create artifacts (HTML pages, apps) that are served instantly via a lazy cold-start router.
+**Filesystem as database** — Tasks, communication, knowledge, agent memory — everything is plain text files. Git-versioned. Human-readable.
+
+**AI agents with roles** — 8 built-in role templates (strategist, planner, developer, reviewer, devops, design, marketing, CEO). Define your own agents with custom names, tools, and filesystem scope.
+
+**Workflow engine** — YAML-defined processes that move work from intent to deployment. Human gates for code merges, production deploys, and spending decisions.
+
+**Persistent memory** — Agents remember facts, decisions, and mistakes across sessions. Memory is private per agent, extracted automatically after every session.
+
+**Session attach** — `autopilot attach peter` streams an agent's work in real-time. Like `kubectl logs -f` for your AI team. Ctrl+C to detach — agent keeps working.
+
+**Skills as knowledge** — Agents learn from markdown knowledge docs. Built-in skills for code review, testing, API design, deployment, security, and more. Add your own.
+
+**CLI-first** — Full lifecycle from the terminal: init, start, ask, status, tasks, agents, inbox, attach, secrets, knowledge, board.
+
+**Integrations without code** — Any external service (GitHub, Linear, Slack, Stripe) follows the same pattern: add a secret, add a knowledge doc, agent calls the API. No integration modules.
+
+**Artifact serving** — Agents create previews (React apps, HTML pages) that are served via a lazy cold-start router. Get a live link to what your agent built.
+
+**Provider abstraction** — Works with Claude API key or Claude Max subscription via the Agent SDK.
 
 ---
 
 ## Architecture
 
 ```
-Human Layer    CLI · Dashboard · API
-     |
-Orchestrator   Watcher · Workflows · Spawner · Memory
-     |
-Agent Layer    Claude Agent SDK · 8 Roles · 13 Tools
-     |
-Container      Filesystem · YAML · Git · Secrets
+Human         CLI · Dashboard · WhatsApp · Slack · Email
+  ↓
+Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · Webhooks
+  ↓
+Agents        Claude Agent SDK · Role Templates · Tools · Sandboxed FS · Memory
+  ↓
+Container     Filesystem · YAML/Markdown/JSON · Git · Secrets
 ```
 
-Each company is an isolated folder. No database, no proprietary formats. The entire state can be `ls`'d, `cat`'d, `grep`'d, backed up, and forked.
+Each company is an isolated folder. One Bun process watches the filesystem, matches workflows, spawns agents, and routes notifications.
 
 ---
 
-## CLI Commands
+## CLI
 
-| Command | Description |
+| Command | What it does |
 |---------|-------------|
-| `init <name>` | Scaffold a new company from a template |
-| `start` | Start the orchestrator (watcher, workflows, scheduler) |
-| `ask <intent>` | Give a high-level intent to the CEO agent |
-| `status` | Show company overview with task counts |
-| `tasks [list\|show\|approve\|reject]` | Manage tasks |
-| `agents [list\|show]` | View agents and their roles |
-| `inbox` | Show items pending human approval |
-| `attach <agent>` | Stream an agent's session in real time |
-| `board` | Manage dashboard pins |
-| `knowledge` | Manage the company knowledge base |
-| `secrets` | Manage encrypted API keys and credentials |
+| `autopilot init <name>` | Create a new company from a template |
+| `autopilot start` | Start the orchestrator |
+| `autopilot ask "<intent>"` | Give a high-level intent to the CEO agent |
+| `autopilot status` | Company overview |
+| `autopilot tasks` | List, show, approve, or reject tasks |
+| `autopilot agents` | List agents and their roles |
+| `autopilot inbox` | Items waiting for your approval |
+| `autopilot attach <agent>` | Stream an agent's session live |
+| `autopilot secrets` | Manage API keys and credentials |
+| `autopilot knowledge` | Manage the company knowledge base |
+| `autopilot board` | View dashboard pins from agents |
 
 ---
 
-## Project Structure
+## Company structure after init
 
 ```
-questpie-autopilot/
-  apps/
-    web/                  Landing page (TanStack Start + Tailwind)
-  packages/
-    spec/                 Zod schemas, types, path conventions
-    orchestrator/         Core engine (watcher, workflows, spawner, memory)
-    agents/               Role templates, system prompts
-    cli/                  CLI commands (Commander.js)
-  templates/
-    solo-dev-shop/        Default company template (8 agents, 3 workflows)
-  turbo.json              Turborepo config
-  biome.json              Linter & formatter
+my-company/
+├── company.yaml              Settings, budget, owner
+├── team/
+│   ├── agents.yaml            Agent definitions (8 agents)
+│   ├── humans.yaml            Human team members
+│   ├── workflows/             development, marketing, incident
+│   ├── schedules.yaml         Cron jobs (health checks, standups)
+│   └── policies/              Approval gates
+├── tasks/                     backlog/ active/ review/ blocked/ done/
+├── comms/channels/            Agent communication
+├── knowledge/                 Brand, technical, business, skills
+├── projects/                  Code, docs, design, marketing
+├── context/memory/            Per-agent persistent memory
+├── secrets/                   Encrypted API keys
+├── dashboard/pins/            Agent status board
+└── logs/                      Activity feed, sessions
 ```
-
----
-
-## Roadmap
-
-- [x] Phase 0 -- Monorepo setup (Bun + Turbo + Biome)
-- [x] Phase 1 -- Landing page and documentation site
-- [x] Phase 2 -- README and branding
-- [x] Phase 3 -- Spec package (16 Zod schemas, 139 tests)
-- [x] Phase 4 -- Company template (8 agents, 3 workflows, 30 tests)
-- [x] Phase 5 -- Agent prompts (8 roles, 83 tests)
-- [x] Phase 6 -- Orchestrator (watcher, workflows, spawner, memory, tools, 252 tests)
-- [x] Phase 7 -- CLI (11 commands, 30 tests)
-- [ ] Phase 8 -- Dogfooding (run QUESTPIE internally)
-- [ ] Phase 9 -- Polish (email/WhatsApp transports, dashboard UI, cost tracking)
-- [ ] Phase 10 -- Public launch (npm publish, Product Hunt, Hacker News)
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, code conventions, and development workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and conventions.
 
 ```bash
 git clone https://github.com/questpie/autopilot.git
-cd autopilot
-bun install
-npx turbo test    # 504 tests
+cd autopilot && bun install
 npx turbo build
+npx turbo test
 ```
 
 ---
 
 ## License
 
-[MIT](LICENSE) -- Copyright (c) 2026 QUESTPIE s.r.o.
+[MIT](LICENSE) — QUESTPIE s.r.o. 2026
 
 <div align="center">
 
-Built by [QUESTPIE s.r.o.](https://questpie.com)
+Built by [QUESTPIE](https://questpie.com)
 
 </div>
