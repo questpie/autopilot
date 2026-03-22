@@ -5,7 +5,7 @@
 
 ---
 
-## Overall Status: 434+ tests | 9,200+ LOC | 4 packages
+## Overall Status: 497 tests | 12K+ LOC | 4 packages | READY FOR DOGFOODING
 
 ---
 
@@ -87,14 +87,18 @@
 - [x] server.ts — Orchestrator class
 - [x] notifier.ts — activity log + console
 
-### ❌ NOT YET IMPLEMENTED (Orchestrator)
-- [x] **Write Queue** — file-level locking for concurrent writes ✅
-- [x] **Agent Spawner (Agent SDK)** — Claude Agent SDK `query()` integration ✅ (being built)
-- [x] **Memory Extractor** — post-session Haiku summarization ✅ (being built)
-- [x] **Custom MCP Tools** — send_message, create_task, pin_to_board via createSdkMcpServer ✅ (being built)
+### ✅ COMPLETED (Orchestrator)
+- [x] **Write Queue** — file-level locking for concurrent writes
+- [x] **Agent Spawner** — ClaudeAgentSDKProvider (API key + Max sub)
+- [x] **Memory Extractor** — post-session Haiku summarization + merge
+- [x] **13 Agent Tools** — send_message, create_task, update_task, add_blocker, resolve_blocker, pin_to_board, unpin_from_board, search_knowledge, update_knowledge, http_request, ask_agent, create_artifact, skill_request
+- [x] **Skill System** — catalog loader, context assembly integration, role-based filtering
+- [x] **Artifact Router** — lazy cold-start serving, port management, create_artifact tool
+- [x] **API Server** — /api/* REST + /fs/* file serving, CORS
+
+### ⏳ REMAINING (Orchestrator)
 - [ ] **Notifier Transports** — email, WhatsApp, Slack (currently only console + activity log)
-- [ ] **Embedding Indexes** — semantic search (text-embedding-3-small)
-- [ ] **Linear Sync** — bidirectional task ↔ issue sync
+- [ ] **Embedding Indexes** — semantic search (text-embedding-3-small) — agents can use via skills
 
 ### ⚠️ NEEDS MORE TESTS (Business-Critical) — ✅ Hardened
 - [x] Workflow engine: rejection loops with max rounds ✅
@@ -119,12 +123,16 @@
 - [x] ANSI formatting helpers
 - [x] Template copy on init
 
-### ❌ NOT YET WIRED
-- [x] `start` → instantiate Orchestrator, run lifecycle ✅ (being built)
-- [x] `ask` → create task via SDK, spawn CEO ✅ (being built)
+### ✅ WIRED
+- [x] `start` → full Orchestrator lifecycle with SIGINT/SIGTERM
+- [x] `ask` → creates intent task assigned to CEO
+- [x] `status` → company overview with task counts
+- [x] `tasks` → list with filters, show, approve, reject
+- [x] `agents` → list with roles, show detail
+- [x] `inbox` → pending approval items
+
+### ⏳ REMAINING (CLI)
 - [ ] `attach` → WebSocket stream from SessionStreamManager
-- [ ] `tasks approve/reject` → update task + trigger workflow
-- [ ] Error handling and user-friendly messages
 - [ ] Interactive prompts for init (company name, email, etc.)
 
 ## Phase 8: Dogfooding ❌ NOT STARTED
