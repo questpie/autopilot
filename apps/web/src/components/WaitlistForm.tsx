@@ -25,7 +25,7 @@ export function WaitlistForm() {
 	}
 
 	return (
-		<form onSubmit={handleSubmit} className="flex gap-0" id="waitlist">
+		<form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-0" id="waitlist">
 			<input
 				type="email"
 				value={email}

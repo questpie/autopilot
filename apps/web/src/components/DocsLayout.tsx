@@ -17,12 +17,12 @@ export function DocsLayout() {
 	return (
 		<>
 			<Header />
-			<div className="max-w-[1000px] mx-auto px-6 flex gap-8 py-10 max-md:flex-col">
-				<nav className="w-48 shrink-0 max-md:w-full">
-					<div className="font-mono text-[10px] text-purple tracking-[2px] mb-4">
+			<div className="max-w-[1000px] mx-auto px-4 sm:px-6 flex flex-col sm:flex-row gap-6 sm:gap-8 py-6 sm:py-10">
+				<nav className="w-full sm:w-48 shrink-0">
+					<div className="font-mono text-[10px] text-purple tracking-[2px] mb-3 sm:mb-4">
 						DOCUMENTATION
 					</div>
-					<div className="flex flex-col gap-1 max-md:flex-row max-md:flex-wrap max-md:gap-2">
+					<div className="flex flex-row flex-wrap gap-2 sm:flex-col sm:gap-1">
 						{navItems.map((item) => (
 							<Link
 								key={item.to}

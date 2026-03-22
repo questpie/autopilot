@@ -23,7 +23,7 @@ function Agents() {
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
 				Example: Solo Dev Shop Template
 			</h2>
-			<div className="grid grid-cols-2 gap-2 mb-4 max-md:grid-cols-1">
+			<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
 				<AgentCard name="Sam" role="STRATEGIST" desc="Scopes features, writes specs, defines requirements" color="purple" status="idle" />
 				<AgentCard name="Alex" role="PLANNER" desc="Creates implementation plans with file-level detail" color="cyan" status="idle" />
 				<AgentCard name="Max" role="DEVELOPER" desc="Writes code, creates branches and PRs" color="green" status="run" />

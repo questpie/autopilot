@@ -286,7 +286,7 @@ $ autopilot attach max  # Watch an agent code in real-time`}
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
 				Documentation
 			</h2>
-			<div className="grid grid-cols-2 gap-2 max-md:grid-cols-1">
+			<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
 				<Link
 					to="/docs/getting-started"
 					className="border border-border p-4 hover:border-purple transition-colors no-underline group"

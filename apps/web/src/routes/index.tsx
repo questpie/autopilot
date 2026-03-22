@@ -20,16 +20,16 @@ function LandingPage() {
 	return (
 		<>
 			<Header />
-			<div className="max-w-[860px] mx-auto px-6">
+			<div className="max-w-[860px] mx-auto px-4 sm:px-6">
 				{/* HERO */}
-				<section className="pt-20 pb-20 border-b border-border">
+				<section className="pt-12 pb-12 sm:pt-20 sm:pb-20 border-b border-border">
 					<div className="font-mono text-xs text-purple tracking-[4px] mb-3">
 						INTRODUCING
 					</div>
-					<h1 className="font-sans text-[64px] font-black text-white m-0 leading-none tracking-tight">
+					<h1 className="font-sans text-[40px] sm:text-[64px] font-black text-white m-0 leading-none tracking-tight">
 						Autopilot
 					</h1>
-					<p className="font-sans text-[22px] text-muted mt-4 font-light leading-relaxed">
+					<p className="font-sans text-base sm:text-[22px] text-muted mt-4 font-light leading-relaxed">
 						AI-native company operating system.
 						<br />
 						Define agents. Assign roles. Give intent. They handle the rest.
@@ -97,7 +97,7 @@ You'll be notified when approvals are needed.`}
 						Pick from built-in role templates or create your own. Add or remove
 						agents anytime via CLI or the CEO agent.
 					</p>
-					<div className="grid grid-cols-4 gap-2 max-md:grid-cols-2 mb-4">
+					<div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
 						<AgentCard
 							name="Sam"
 							role="STRATEGIST"
@@ -170,7 +170,7 @@ You'll be notified when approvals are needed.`}
 					<SectionHeader sub="No SQL. No vector store. No proprietary format. YAML, Markdown, JSON. Git for versioning. Your company is a folder.">
 						Filesystem is the Database
 					</SectionHeader>
-					<div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 						<CodeBlock title="/company/">
 							{`\u251C\u2500\u2500 company.yaml             # Settings, budget
 \u251C\u2500\u2500 team/
@@ -278,7 +278,7 @@ add_blocker({
 						Session Attach
 					</SectionHeader>
 					<LiveStream />
-					<div className="mt-4 grid grid-cols-2 gap-4 max-md:grid-cols-1">
+					<div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
 						<CodeBlock title="kubectl analogy">
 							{`kubectl get pods        \u2192  autopilot agents
 kubectl logs -f pod/web \u2192  autopilot attach max
@@ -307,7 +307,7 @@ $ autopilot sessions search "PricingTable"`}
 					<SectionHeader sub="Each agent has persistent memory scoped to their role. Facts, decisions, mistakes, learnings. Extracted after every session. Private — no agent reads another's memory.">
 						Per-Agent Memory
 					</SectionHeader>
-					<div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 						<CodeBlock title="context/memory/max/memory.yaml">
 							{`facts:
   codebase:
@@ -417,7 +417,7 @@ patterns:
 					<SectionHeader sub="Agents don't just work on tasks. They react to cron schedules, webhooks, file changes, and metric thresholds.">
 						Triggers & Events
 					</SectionHeader>
-					<div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 						<CodeBlock title="team/schedules.yaml">
 							{`schedules:
   - id: health-check
@@ -544,7 +544,7 @@ changelog:
 					<SectionHeader sub="Email, WhatsApp, Slack, Telegram, push. Per-priority routing. Quiet hours. Or message agents directly from WhatsApp.">
 						Transports
 					</SectionHeader>
-					<div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 						<CodeBlock title="notification routing">
 							{`# /company/team/humans.yaml
 
@@ -624,14 +624,14 @@ Max: FeatureGrid and Testimonials done.
 						].map((l, i) => (
 							<div key={l.label}>
 								<div
-									className={`flex items-center gap-3 px-4 py-3.5 bg-card border border-border border-l-[3px] ${l.color}`}
+									className={`flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 bg-card border border-border border-l-[3px] ${l.color}`}
 								>
 									<span
-										className={`font-mono text-[11px] ${l.textColor} tracking-[3px] min-w-[120px]`}
+										className={`font-mono text-[11px] ${l.textColor} tracking-[3px] sm:min-w-[120px]`}
 									>
 										{l.label}
 									</span>
-									<span className="font-sans text-xs text-muted">{l.desc}</span>
+									<span className="font-sans text-[11px] sm:text-xs text-muted">{l.desc}</span>
 								</div>
 								{i < 3 && (
 									<div className="text-center font-mono text-xs text-dim py-0.5">
@@ -659,9 +659,9 @@ Max: FeatureGrid and Testimonials done.
 				</Section>
 
 				{/* FOOTER */}
-				<section className="py-20 pb-12 text-center">
+				<section className="py-12 sm:py-20 pb-12 text-center">
 					<QSymbol size={36} />
-					<h2 className="font-sans text-[32px] font-black text-white mt-6 tracking-tight">
+					<h2 className="font-sans text-2xl sm:text-[32px] font-black text-white mt-6 tracking-tight">
 						Your company, on autopilot.
 					</h2>
 					<p className="font-sans text-[15px] text-muted mt-2">
@@ -670,7 +670,7 @@ Max: FeatureGrid and Testimonials done.
 					<div className="mt-8 max-w-md mx-auto">
 						<WaitlistForm />
 					</div>
-					<div className="flex justify-center gap-3 mt-8">
+					<div className="flex flex-col sm:flex-row justify-center gap-3 mt-8">
 						<a
 							href="https://github.com/questpie/autopilot"
 							target="_blank"
