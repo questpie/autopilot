@@ -2,26 +2,21 @@
 
 <br />
 
-```txt
- ╔═══╗
- ║ Q ╠══╗
- ╚═══╝  ║  QUESTPIE Autopilot
-   ╔════╝  AI-Native Company OS
-   ╚═══╗
-       ║
-```
+<img src="https://img.shields.io/badge/QUESTPIE-Autopilot-B700FF?style=for-the-badge&labelColor=000" alt="QUESTPIE Autopilot" />
+
+**AI-Native Company OS**
 
 # QUESTPIE Autopilot
 
 **AI-native company operating system.**
-**Your company is a container. Your employees are agents. You give intent, they execute.**
+**Define agents. Assign roles. Give intent. They handle the rest.**
 
-[![Coming Soon](https://img.shields.io/badge/status-coming%20soon-B700FF?style=flat-square)](https://questpie.com/autopilot)
+[![Coming Soon](https://img.shields.io/badge/status-coming%20soon-B700FF?style=flat-square)](https://autopilot.questpie.com)
 [![License: MIT](https://img.shields.io/badge/license-MIT-B700FF?style=flat-square)](LICENSE)
-[![Discord](https://img.shields.io/badge/discord-join-B700FF?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/questpie)
+<!-- [![Discord](https://img.shields.io/badge/discord-join-B700FF?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/questpie) -->
 [![TypeScript](https://img.shields.io/badge/TypeScript-Bun-B700FF?style=flat-square)](https://bun.sh)
 
-[Website](https://questpie.com/autopilot) · [Docs](https://questpie.com/autopilot/docs) · [Discord](https://discord.gg/questpie) · [GitHub](https://github.com/questpie/autopilot)
+[Website](https://autopilot.questpie.com) · [Docs](https://autopilot.questpie.com/docs) · [Discord](https://discord.gg/questpie) · [GitHub](https://github.com/questpie/autopilot)
 
 </div>
 
@@ -38,23 +33,25 @@ $ autopilot ask "Build a pricing page with Stripe integration"
 
 CEO Agent decomposing intent...
 
-  task-050: Scope requirements      -> Ivan (strategist)
-  task-051: Design UI               -> Designer
-  task-052: Implement with Stripe   -> Peter (developer)
-  task-053: Write copy & announce   -> Marketer
+  task-050: Scope requirements      -> sam (strategist)
+  task-051: Design UI               -> jordan (designer)
+  task-052: Implement with Stripe   -> max (developer)
+  task-053: Write copy & announce   -> morgan (marketer)
 
-Ivan is starting now. You'll be notified when approvals are needed.
+Sam is starting now. You'll be notified when approvals are needed.
 
-$ autopilot attach peter
-[14:30:12] peter  Reading spec to understand pricing page requirements...
-[14:30:15] peter  read_file -> pricing-spec.md
-[14:30:22] peter  Need Stripe checkout. Creating PricingTable component...
-[14:30:45] peter  write_file -> PricingTable.tsx (142 lines)
-[14:31:00] peter  -> dev: "PricingTable done. Moving to checkout flow."
-[14:31:02] peter  pin_to_board -> "Pricing Page: 50%"
+$ autopilot attach max
+[14:30:12] max  Reading spec to understand pricing page requirements...
+[14:30:15] max  read_file -> pricing-spec.md
+[14:30:22] max  Need Stripe checkout. Creating PricingTable component...
+[14:30:45] max  write_file -> PricingTable.tsx (142 lines)
+[14:31:00] max  -> dev: "PricingTable done. Moving to checkout flow."
+[14:31:02] max  pin_to_board -> "Pricing Page: 50%"
 ```
 
-You give a high-level intent. A team of AI agents decomposes it, plans it, implements it, reviews it, deploys it, and announces it. You approve at gates.
+> Agent names above come from the **Solo Dev Shop** template — one of many starting points. You define your own team, names, roles, and tools in `agents.yaml`.
+
+You give a high-level intent. Your team of AI agents decomposes it, plans it, implements it, reviews it, deploys it, and announces it. You approve at gates.
 
 ---
 
@@ -79,16 +76,20 @@ autopilot start
 autopilot ask "Build a landing page for our product"
 
 # Watch an agent work in real-time
-autopilot attach peter
+autopilot attach max
 ```
 
 ---
 
 ## Features
 
-- **Company as Container** -- Your company is a folder. YAML, Markdown, Git. No database, no proprietary formats. The entire company can be `ls`'d, `cat`'d, `grep`'d, backed up, forked.
+- **Define Your Team** -- Create agents in YAML. Give them names, assign role templates, configure tools and filesystem scope. Start from a template or build from scratch. Add or remove agents anytime via CLI or the CEO agent.
 
-- **8 AI Agents** -- CEO (meta), Ivan (strategist), Marek (planner), Peter (developer), Adam (reviewer), Ops (devops), Marketer, Designer. Each with persistent identity, memory, and tools.
+- **Role Templates** -- Strategist, developer, reviewer, planner, devops, marketing, design -- pick from built-in templates or create your own. Each template defines default tools, FS scope, and a system prompt. Multiple agents can share the same role.
+
+- **Per-Agent Memory** -- Every agent has their own persistent memory: facts, decisions, mistakes, learnings. Extracted automatically after each session. Isolated -- no agent reads another's memory.
+
+- **Company as Container** -- Your company is a folder. YAML, Markdown, Git. No database, no proprietary formats. The entire company can be `ls`'d, `cat`'d, `grep`'d, backed up, forked.
 
 - **Filesystem = Database** -- Tasks are YAML files. Communication is Markdown. Knowledge is documents. Git is your version control. Everything is plain text, everything is diffable.
 
@@ -97,8 +98,6 @@ autopilot attach peter
 - **Workflow Engine** -- YAML-defined processes that move work from intent to deployed feature. Owned by the CEO agent. Evolve based on metrics and team feedback.
 
 - **Session Attach** -- `kubectl logs -f` for your AI team. Watch any agent work in real-time. See their thinking, file reads, file writes, tool calls, messages.
-
-- **Persistent Memory** -- Agents remember facts, decisions, mistakes, and learnings across sessions. Four layers: company, team, role, personal.
 
 - **Triggers & Events** -- Cron schedules and webhooks defined in YAML. Daily standups, weekly reviews, GitHub push handlers, Linear sync -- all declarative.
 
@@ -109,6 +108,51 @@ autopilot attach peter
 - **Integrations** -- GitHub (bidirectional sync), Linear (bidirectional sync), any API via MCP connections. Agents use tools, not wrappers.
 
 - **Dashboard** -- Pins, tasks, activity feed, intent input. A command center for your AI company.
+
+---
+
+## Define Your Team
+
+Agents are defined in a single YAML file. Each agent gets a name, a role template, tools, filesystem scope, and their own persistent memory.
+
+```yaml
+# /company/team/agents.yaml
+
+agents:
+  - id: sam
+    name: Sam
+    role: strategist            # Role template
+    description: "Scopes features, writes specs, analyzes requirements"
+    fs_scope:
+      read: ["/knowledge", "/projects", "/tasks"]
+      write: ["/tasks", "/comms", "/knowledge"]
+    tools: [read_file, write_file, send_message, create_task, search_knowledge]
+
+  - id: max
+    name: Max
+    role: developer
+    description: "Writes code, creates branches and PRs"
+    fs_scope:
+      read: ["/projects", "/tasks", "/knowledge/technical"]
+      write: ["/projects", "/tasks", "/comms"]
+    tools: [read_file, write_file, git_commit, git_create_pr, send_message]
+
+  # Add as many agents as you need...
+  - id: alice
+    name: Alice
+    role: developer             # Multiple agents can share a role
+    description: "Frontend specialist, React and CSS"
+    fs_scope:
+      read: ["/projects/frontend", "/tasks", "/knowledge/technical"]
+      write: ["/projects/frontend", "/tasks", "/comms"]
+    tools: [read_file, write_file, git_commit, git_create_pr, send_message]
+```
+
+```bash
+# Or use the CLI
+autopilot agent add --name "Alice" --role developer --desc "Frontend specialist"
+autopilot agent remove alice
+```
 
 ---
 
@@ -137,13 +181,12 @@ autopilot attach peter
 ┌─────────────────────────────────────────────────────────────┐
 │                     AGENT LAYER                             │
 │                                                             │
-│  CEO       Ivan        Marek       Peter                    │
-│  (meta)    (strategy)  (planning)  (developer)              │
+│  Defined in agents.yaml — any number of agents              │
+│  Each = AI session + role template + tools + FS scope       │
+│  Per-agent memory, isolated context, structured primitives  │
 │                                                             │
-│  Adam      Ops         Marketer    Designer                 │
-│  (review)  (devops)    (content)   (design)                 │
-│                                                             │
-│  Each = Claude session + tools + MCP + FS scope + memory    │
+│  Role templates: strategist, developer, reviewer, planner,  │
+│  devops, marketing, design, meta — or define your own       │
 └────────────────────────┬────────────────────────────────────┘
                          │ read / write / tool calls
                          v
@@ -193,7 +236,8 @@ questpie-autopilot/
 │   ├── spec/                Zod schemas, types, path conventions
 │   ├── orchestrator/        Core runtime engine
 │   ├── cli/                 CLI commands
-│   └── agents/              Agent system prompt templates
+│   └── agents/              Agent role templates & prompts
+├── templates/               Company templates (solo-dev-shop, etc.)
 ├── local_specs/             Design documents & specifications
 ├── turbo.json               Turborepo config
 ├── biome.json               Linter & formatter
@@ -209,13 +253,13 @@ questpie-autopilot/
 - [x] Landing page (TanStack Start + Tailwind)
 - [ ] `@questpie/autopilot-spec` -- Zod schemas & filesystem conventions
 - [ ] Orchestrator -- FS watcher, workflow engine, agent spawner
-- [ ] Agent system -- prompt templates, tool definitions, MCP integration
+- [ ] Agent system -- role templates, tool definitions, MCP integration
 - [ ] CLI -- `autopilot init`, `ask`, `attach`, `inbox`, `approve`
 - [ ] Dashboard -- web UI with board, tasks, activity feed
 - [ ] Transport system -- WhatsApp, Telegram, Slack, Email routing
 - [ ] Linear & GitHub bidirectional sync
 - [ ] Scheduled triggers & webhook handlers
-- [ ] Persistent memory system (4 layers)
+- [ ] Per-agent persistent memory system (4 layers)
 - [ ] Docker containerization & managed cloud
 - [ ] npm publish `@questpie/autopilot`
 - [ ] Public launch (Product Hunt, Hacker News)
@@ -271,7 +315,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Built by [QUESTPIE s.r.o.](https://questpie.com)
 
-**Your company is a container. Your employees are agents. You give intent, they execute.**
+**Define agents. Assign roles. Give intent. They handle the rest.**
 
 [![GitHub](https://img.shields.io/badge/GitHub-questpie%2Fautopilot-B700FF?style=flat-square&logo=github)](https://github.com/questpie/autopilot)
 
