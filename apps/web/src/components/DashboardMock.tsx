@@ -64,7 +64,7 @@ export function DashboardMock() {
 									key={a}
 									className={`font-mono text-[10px] px-2.5 py-0.5 cursor-pointer ${
 										j === 0
-											? 'text-bg bg-purple border-none'
+											? 'text-purple-fg bg-purple border-none'
 											: 'text-ghost bg-transparent border border-border'
 									}`}
 								>
