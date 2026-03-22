@@ -28,6 +28,13 @@ import {
   cmdWorkspaceShow,
   printWorkspaceHelp,
 } from "./commands/workspace.js";
+import {
+  cmdAutopilotStart,
+  cmdAutopilotStatus,
+  cmdAutopilotStop,
+  cmdAutopilotResume,
+  printAutopilotHelp,
+} from "./commands/autopilot.js";
 import type { PromptMode, TaskState } from "./core/types.js";
 import { checkForUpdate, getCurrentVersion } from "./update/checker.js";
 import { loadSettings } from "./update/settings.js";
@@ -139,6 +146,31 @@ async function main() {
         return cmdWorkspaceShow();
       default:
         printWorkspaceHelp();
+        return;
+    }
+  }
+
+  // Autopilot subcommands
+  if (command === "autopilot") {
+    const sub = args[1];
+    const subArgs = args.slice(2);
+
+    if (!sub || sub === "--help" || sub === "-h" || sub === "help") {
+      printAutopilotHelp();
+      return;
+    }
+
+    switch (sub) {
+      case "start":
+        return cmdAutopilotStart(subArgs);
+      case "status":
+        return cmdAutopilotStatus(subArgs);
+      case "stop":
+        return cmdAutopilotStop(subArgs);
+      case "resume":
+        return cmdAutopilotResume(subArgs);
+      default:
+        printAutopilotHelp();
         return;
     }
   }
@@ -303,6 +335,13 @@ ${B}Workspace:${R}
   qap workspace add <path>      Register a repo as a workspace
   qap workspace list            List all known workspaces
   qap workspace show            Show current workspace info
+
+${B}Autopilot (Unattended):${R}
+  qap autopilot start           Start bounded unattended autopilot
+  qap autopilot status          Show live autopilot status
+  qap autopilot stop            Stop running autopilot
+  qap autopilot resume          Resume from current state
+  qap autopilot --help          Full autopilot options
 
 ${B}Execution:${R}
   qap status                    Show project status

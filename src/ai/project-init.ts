@@ -572,11 +572,11 @@ export async function initProject(opts: InitOptions): Promise<{
     await ws.writeProjectFile(workspace.id, projectId, "handoff.md", handoff);
   }
 
-  // Initialize empty state
+  // Initialize runtime state
   await ws.writeProjectFile(
     workspace.id,
     projectId,
-    "state.json",
+    "run-state.json",
     JSON.stringify(
       {
         projectId,
@@ -755,11 +755,11 @@ export async function importProject(
     await ws.writeProjectFile(workspace.id, projectId, "handoff.md", handoff);
   }
 
-  // Initialize empty state
+  // Initialize runtime state
   await ws.writeProjectFile(
     workspace.id,
     projectId,
-    "state.json",
+    "run-state.json",
     JSON.stringify(
       {
         projectId,

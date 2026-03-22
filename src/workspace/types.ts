@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 // ── Workspace / Project / Session Types ─────────────────────
 
 export interface WorkspaceMeta {
@@ -42,8 +44,8 @@ export interface SessionMeta {
   eventLogPath?: string;
   changelogPath?: string;
   notes: string[];
-  /** What triggered this session: "run", "run-next", "run-task" */
-  triggerAction?: "run" | "run-next" | "run-task";
+  /** What triggered this session: "run", "run-next", "run-task", "autopilot" */
+  triggerAction?: "run" | "run-next" | "run-task" | "autopilot";
   /** Current execution phase (implement, validate-primary, etc.) */
   currentPhase?: string;
   /** Currently active tool name */
@@ -56,6 +58,10 @@ export interface SessionMeta {
   sdkSessionId?: string;
   /** Provider backend used: "cli" or "sdk" */
   backend?: string;
+  /** Autopilot master session ID (set on child sessions spawned by autopilot) */
+  autopilotSessionId?: string;
+  /** For autopilot master sessions: list of child session IDs */
+  childSessionIds?: string[];
 }
 
 // ── Constants ──
@@ -106,4 +112,54 @@ export function getSteeringPath(
   projectId: string
 ): string {
   return `${getProjectDir(workspaceId, projectId)}/steering.md`;
+}
+
+/**
+ * Resolve the qap project directory from a repo root path and project ID.
+ * Uses the same absolute-path normalization as WorkspaceManager.
+ */
+export function getProjectDirFromRepo(repoRoot: string, projectId: string): string {
+  return getProjectDir(workspaceIdFromPath(resolve(repoRoot)), projectId);
+}
+
+/**
+ * Path for the project-level runtime state file (replaces repo-root .autopilot-state.json).
+ */
+export function getProjectStatePath(repoRoot: string, projectId: string): string {
+  return `${getProjectDirFromRepo(repoRoot, projectId)}/run-state.json`;
+}
+
+/**
+ * Path for the project-level changelog (replaces repo-root .autopilot-changelog.md).
+ */
+export function getProjectChangelogPath(repoRoot: string, projectId: string): string {
+  return `${getProjectDirFromRepo(repoRoot, projectId)}/changelog.md`;
+}
+
+/**
+ * Path for the project-level structured event log.
+ */
+export function getProjectEventLogPath(repoRoot: string, projectId: string): string {
+  return `${getProjectDirFromRepo(repoRoot, projectId)}/events.jsonl`;
+}
+
+/**
+ * Path for the project-level live status file for interactive runs.
+ */
+export function getProjectLiveStatusPath(repoRoot: string, projectId: string): string {
+  return `${getProjectDirFromRepo(repoRoot, projectId)}/LIVE_STATUS.md`;
+}
+
+/**
+ * Path for the autopilot summary report.
+ */
+export function getProjectSummaryPath(repoRoot: string, projectId: string): string {
+  return `${getProjectDirFromRepo(repoRoot, projectId)}/summary.md`;
+}
+
+/**
+ * Path for the autopilot live status report.
+ */
+export function getProjectAutopilotStatusPath(repoRoot: string, projectId: string): string {
+  return `${getProjectDirFromRepo(repoRoot, projectId)}/AUTOPILOT_STATUS.md`;
 }

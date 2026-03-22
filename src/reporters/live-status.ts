@@ -2,20 +2,17 @@ import { writeFile } from "node:fs/promises";
 import type {
   ProjectConfig,
   TaskConfig,
-  TaskRunState,
   AgentProvider,
   PermissionProfile,
 } from "../core/types.js";
-import { findReadyTasks, deriveEpicState } from "../core/readiness.js";
+import { findReadyTasks } from "../core/readiness.js";
 import type { Store } from "../storage/store.js";
-
-const STATUS_FILE = "LIVE_STATUS.md";
 
 export class LiveStatusWriter {
   private filePath: string;
 
-  constructor(rootDir: string) {
-    this.filePath = `${rootDir}/${STATUS_FILE}`;
+  constructor(filePath: string) {
+    this.filePath = filePath;
   }
 
   async write(

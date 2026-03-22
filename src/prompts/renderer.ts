@@ -21,6 +21,12 @@ export interface RemediationContext {
   diffSummary?: string;
 }
 
+export interface CommitContext {
+  diffSummary: string;
+  commitMessageFormat?: string;
+  commitPolicy?: string;
+}
+
 /**
  * Render a complete prompt for an agent, combining all context sources.
  */
@@ -30,7 +36,8 @@ export async function renderPrompt(
   mode: PromptMode,
   states: Record<string, TaskRunState>,
   steering?: SteeringContext,
-  remediation?: RemediationContext
+  remediation?: RemediationContext,
+  commitCtx?: CommitContext
 ): Promise<string> {
   const parts: string[] = [];
 
@@ -88,6 +95,25 @@ export async function renderPrompt(
         `# Source Reference: ${ref}\n\n${content.slice(0, 5000)}${content.length > 5000 ? "\n\n[... truncated ...]" : ""}`
       );
     }
+  }
+
+  // 6a. Commit context (only for commit mode)
+  if (mode === "commit" && commitCtx) {
+    const commitParts: string[] = [
+      "# Commit Context",
+      "",
+      "**Current Diff:**",
+      "```",
+      commitCtx.diffSummary,
+      "```",
+    ];
+    if (commitCtx.commitPolicy) {
+      commitParts.push("", `**Commit Policy:** ${commitCtx.commitPolicy}`);
+    }
+    if (commitCtx.commitMessageFormat) {
+      commitParts.push("", `**Commit Message Format:** ${commitCtx.commitMessageFormat}`);
+    }
+    parts.push(commitParts.join("\n"));
   }
 
   // 6. Remediation context (only for remediate mode)
@@ -238,6 +264,22 @@ function renderModeInstructions(mode: PromptMode, task: TaskConfig): string {
         "- After fixing, verify the fix addresses each finding.",
         "- Keep changes minimal and targeted.",
       ].join("\n");
+
+    case "commit":
+      return [
+        "# Instructions: Commit",
+        "",
+        "Create a git commit for the changes made in this task.",
+        "- Review the diff above to understand what changed.",
+        "- Stage ONLY the files relevant to this task's scope.",
+        "- Do NOT stage unrelated files, build artifacts, or secrets (.env, credentials).",
+        "- Write a clear, concise commit message that describes what was done and why.",
+        "- Follow the commit message format if specified above.",
+        "- Do NOT push to any remote.",
+        "- Do NOT amend existing commits.",
+        "- Do NOT create additional branches.",
+        "- If the diff looks wrong or contains scope creep, output an error instead of committing.",
+      ].join("\n");
   }
 }
 
@@ -252,6 +294,21 @@ function renderOutputFormat(mode: PromptMode): string {
       "Tests: <test results or N/A>",
       "Risks: <any risks or concerns>",
       "Files changed: <list of key files>",
+      "```",
+    ].join("\n");
+  }
+
+  if (mode === "commit") {
+    return [
+      "# Required Output Format",
+      "",
+      "At the end, output exactly one of:",
+      "```",
+      "Committed: <commit-hash> <one-line commit message>",
+      "```",
+      "or if commit should not proceed:",
+      "```",
+      "Error: <reason why commit was skipped>",
       "```",
     ].join("\n");
   }

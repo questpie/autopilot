@@ -26,7 +26,12 @@ import { SessionEventLog, sessionEventLogPath } from "../events/session-log.js";
 import type { ProviderEventSink } from "../events/types.js";
 import { log } from "../utils/logger.js";
 import { WorkspaceManager } from "../workspace/manager.js";
-import type { SessionMeta } from "../workspace/types.js";
+import {
+  getProjectChangelogPath,
+  getProjectEventLogPath,
+  getProjectLiveStatusPath,
+  type SessionMeta,
+} from "../workspace/types.js";
 
 export interface RunnerOptions {
   dryRun?: boolean;
@@ -119,7 +124,7 @@ export class Runner {
 
     const logFile =
       config.reporting?.sessionLogFile ??
-      `${config.project.rootDir}/.autopilot-changelog.md`;
+      getProjectChangelogPath(config.project.rootDir, config.project.id);
     this.changelog = new ChangelogReporter(logFile);
 
     // Initialize provider runners (merge with defaults so binary is never undefined)
@@ -145,12 +150,12 @@ export class Runner {
       config.tracker?.provider === "linear";
 
     // Live status + structured event log
-    const protoDir = new URL("../../", import.meta.url).pathname.replace(
-      /\/$/,
-      ""
+    this.liveStatus = new LiveStatusWriter(
+      getProjectLiveStatusPath(config.project.rootDir, config.project.id)
     );
-    this.liveStatus = new LiveStatusWriter(protoDir);
-    this.events = new EventLog(`${protoDir}/events.jsonl`);
+    this.events = new EventLog(
+      getProjectEventLogPath(config.project.rootDir, config.project.id)
+    );
 
     // Linear reporter delegates to the default agent runner
     const defaultRunner =
@@ -170,7 +175,6 @@ export class Runner {
     const prjId = this.opts.projectId;
     if (!wsId || !prjId) return;
 
-    const protoDir = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
     const sessId = this.store.getSessionId();
 
     // Initialize per-session event log
@@ -189,9 +193,12 @@ export class Runner {
       tasksCompleted: 0,
       tasksFailed: 0,
       notes: [],
-      eventLogPath: `${protoDir}/events.jsonl`,
+      eventLogPath: getProjectEventLogPath(
+        this.config.project.rootDir,
+        this.config.project.id
+      ),
       changelogPath: this.config.reporting?.sessionLogFile ??
-        `${this.config.project.rootDir}/.autopilot-changelog.md`,
+        getProjectChangelogPath(this.config.project.rootDir, this.config.project.id),
       sessionEventsPath: eventsPath,
       backend: this.useClaudeSdk ? "sdk" : "cli",
     };

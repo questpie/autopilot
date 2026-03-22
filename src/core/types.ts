@@ -62,7 +62,8 @@ export type PromptMode =
   | "validate-secondary"
   | "validate-epic"
   | "validate-global"
-  | "remediate";
+  | "remediate"
+  | "commit";
 
 export type AgentProvider = "claude" | "codex";
 
@@ -251,4 +252,60 @@ export interface AgentResult {
   duration: number;
   error?: string;
   record: AgentRunRecord;
+}
+
+// ── Autopilot Config ────────────────────────────────────────
+
+export interface AutopilotBounds {
+  maxTasks?: number;
+  maxDurationMinutes?: number;
+  maxParallelTasks: number;
+}
+
+export interface AutopilotStopPolicy {
+  stopOnFailure: boolean;
+  stopOnValidationFail: boolean;
+  stopOnRemediationExhausted: boolean;
+  stopOnUnverifiedSync: boolean;
+  stopOnCommitFail: boolean;
+}
+
+export interface AutopilotConfig {
+  bounds: AutopilotBounds;
+  stopPolicy: AutopilotStopPolicy;
+  noSync: boolean;
+  detach: boolean;
+}
+
+export type AutopilotStopReason =
+  | "all-tasks-done"
+  | "max-tasks-reached"
+  | "max-duration-reached"
+  | "task-failed"
+  | "validation-failed"
+  | "remediation-exhausted"
+  | "commit-failed"
+  | "sync-failed"
+  | "sync-unverified"
+  | "stale-session-detected"
+  | "corrupt-state"
+  | "user-requested"
+  | "no-ready-tasks"
+  | "error";
+
+export interface AutopilotSummary {
+  stopReason: AutopilotStopReason;
+  totalSessionsSpawned: number;
+  tasksCompleted: number;
+  tasksFailed: number;
+  lastSuccessfulTasks: string[];
+  currentBlockers: string[];
+  nextReadyTasks: string[];
+  syncOutcomes: { taskId: string; outcome: TrackerSyncOutcome }[];
+  remediationSummary: { taskId: string; attempts: number; result: string }[];
+  commitSummary: { taskId: string; committed: boolean; reason?: string }[];
+  endedCleanly: boolean;
+  durationMs: number;
+  startedAt: string;
+  finishedAt: string;
 }
