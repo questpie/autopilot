@@ -1,8 +1,14 @@
+import { mkdir, readdir } from 'node:fs/promises'
+import { join } from 'path'
+import { stringify } from 'yaml'
 import { z } from 'zod'
-import { createTask, updateTask, moveTask } from '../fs/tasks'
+import { PATHS } from '@questpie/autopilot-spec'
+import { createTask, readTask, findTask, updateTask, moveTask } from '../fs/tasks'
 import { sendChannelMessage, sendDirectMessage } from '../fs/messages'
 import { createPin, removePin } from '../fs/pins'
 import { appendActivity } from '../fs/activity'
+import { readYamlUnsafe, writeYaml } from '../fs/yaml'
+import { loadSkillContent } from '../skills'
 
 // -- Tool definition types --
 
@@ -185,6 +191,344 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 			async (args) => {
 				await removePin(companyRoot, args.pin_id)
 				return { content: [{ type: 'text' as const, text: `Unpinned: ${args.pin_id}` }] }
+			},
+		),
+
+		// Artifacts
+		defineTool(
+			'create_artifact',
+			'Create a previewable artifact (React app, HTML page, or static files)',
+			z.object({
+				name: z.string().describe('Artifact name (used as directory name)'),
+				type: z.enum(['react', 'html', 'static']).describe('Artifact type'),
+				files: z.record(z.string()).describe('File paths (relative) mapped to their content'),
+			}),
+			async (args, ctx) => {
+				const artifactDir = join(companyRoot, 'artifacts', args.name)
+				await Bun.write(join(artifactDir, '.gitkeep'), '')
+
+				for (const [filePath, content] of Object.entries(args.files)) {
+					await Bun.write(join(artifactDir, filePath), content)
+				}
+
+				let artifactConfig: Record<string, string>
+				switch (args.type) {
+					case 'react':
+						artifactConfig = {
+							name: args.name,
+							serve: 'bunx vite --port {port}',
+							build: 'bun install',
+							health: '/',
+							timeout: '5m',
+						}
+						break
+					case 'html':
+						artifactConfig = {
+							name: args.name,
+							serve: 'bunx serve -p {port}',
+							health: '/',
+							timeout: '5m',
+						}
+						break
+					case 'static':
+						artifactConfig = {
+							name: args.name,
+						}
+						break
+				}
+
+				await Bun.write(
+					join(artifactDir, '.artifact.yaml'),
+					stringify(artifactConfig),
+				)
+
+				return {
+					content: [
+						{
+							type: 'text' as const,
+							text: `Created ${args.type} artifact "${args.name}" with ${Object.keys(args.files).length} files at /artifacts/${args.name}/`,
+						},
+					],
+				}
+			},
+		),
+
+		// Skills
+		defineTool(
+			'skill_request',
+			'Load the full content of a skill/knowledge document by its ID',
+			z.object({
+				skill_id: z.string().describe('The skill ID from the Available Skills list'),
+			}),
+			async (args) => {
+				try {
+					const content = await loadSkillContent(companyRoot, args.skill_id)
+					return { content: [{ type: 'text' as const, text: content }] }
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					return { content: [{ type: 'text' as const, text: msg }], isError: true }
+				}
+			},
+		),
+
+		// Knowledge
+		defineTool(
+			'search_knowledge',
+			'Search the company knowledge base',
+			z.object({
+				query: z.string().describe('Search query'),
+				scope: z.string().optional().describe('Limit to path like "technical" or "brand"'),
+				max_results: z.number().optional().describe('Max results, default 10'),
+			}),
+			async (args) => {
+				const knowledgeDir = join(companyRoot, PATHS.KNOWLEDGE_DIR.replace(/^\/company/, ''))
+				const searchDir = args.scope ? join(knowledgeDir, args.scope) : knowledgeDir
+				const maxResults = args.max_results ?? 10
+				const results: Array<{ path: string; snippet: string }> = []
+
+				async function searchRecursive(dir: string): Promise<void> {
+					let entries: string[]
+					try {
+						entries = await readdir(dir)
+					} catch {
+						return
+					}
+					for (const entry of entries) {
+						if (results.length >= maxResults) return
+						const fullPath = join(dir, entry)
+						const stat = await Bun.file(fullPath).exists()
+						if (!stat) continue
+						if (entry.endsWith('.md')) {
+							try {
+								const content = await Bun.file(fullPath).text()
+								const queryLower = args.query.toLowerCase()
+								const lines = content.split('\n')
+								for (const line of lines) {
+									if (line.toLowerCase().includes(queryLower)) {
+										const relPath = fullPath.slice(knowledgeDir.length + 1)
+										results.push({ path: relPath, snippet: line.trim() })
+										break
+									}
+								}
+							} catch {
+								// skip unreadable files
+							}
+						} else {
+							// might be a directory
+							try {
+								const subEntries = await readdir(fullPath)
+								if (subEntries) await searchRecursive(fullPath)
+							} catch {
+								// not a directory, skip
+							}
+						}
+					}
+				}
+
+				await searchRecursive(searchDir)
+
+				if (results.length === 0) {
+					return { content: [{ type: 'text' as const, text: 'No results found.' }] }
+				}
+
+				const text = results.map((r) => `- ${r.path}: ${r.snippet}`).join('\n')
+				return { content: [{ type: 'text' as const, text }] }
+			},
+		),
+
+		defineTool(
+			'update_knowledge',
+			'Create or update a knowledge document',
+			z.object({
+				path: z.string().describe('Path relative to /knowledge/, e.g. "technical/api-design.md"'),
+				content: z.string().describe('Markdown content'),
+				reason: z.string().optional().describe('Why this knowledge is being added/updated'),
+			}),
+			async (args, ctx) => {
+				const knowledgeDir = join(companyRoot, PATHS.KNOWLEDGE_DIR.replace(/^\/company/, ''))
+				const filePath = join(knowledgeDir, args.path)
+				const dirPath = join(filePath, '..')
+				await mkdir(dirPath, { recursive: true })
+				await Bun.write(filePath, args.content)
+
+				await appendActivity(companyRoot, {
+					agent: ctx.agentId,
+					type: 'knowledge_update',
+					summary: `Updated knowledge: ${args.path}`,
+					details: { path: args.path, reason: args.reason },
+				})
+
+				return { content: [{ type: 'text' as const, text: `Knowledge updated: ${args.path}` }] }
+			},
+		),
+
+		// HTTP
+		defineTool(
+			'http_request',
+			'Make an HTTP request to an external API',
+			z.object({
+				method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
+				url: z.string().describe('Full URL'),
+				headers: z.record(z.string()).optional(),
+				body: z.unknown().optional(),
+				secret_ref: z.string().optional().describe('Secret name from /secrets/ for auth injection'),
+			}),
+			async (args, ctx) => {
+				const headers: Record<string, string> = { ...args.headers }
+
+				if (args.secret_ref) {
+					const secretPath = join(
+						companyRoot,
+						PATHS.SECRETS_DIR.replace(/^\/company/, ''),
+						`${args.secret_ref}.yaml`,
+					)
+					try {
+						const secret = await readYamlUnsafe(secretPath) as {
+							allowed_agents?: string[]
+							api_key?: string
+						}
+						if (secret.allowed_agents && !secret.allowed_agents.includes(ctx.agentId)) {
+							return {
+								content: [{ type: 'text' as const, text: `Agent ${ctx.agentId} not allowed to use secret ${args.secret_ref}` }],
+								isError: true,
+							}
+						}
+						if (secret.api_key) {
+							headers['Authorization'] = `Bearer ${secret.api_key}`
+						}
+					} catch (err) {
+						const msg = err instanceof Error ? err.message : String(err)
+						return {
+							content: [{ type: 'text' as const, text: `Failed to load secret ${args.secret_ref}: ${msg}` }],
+							isError: true,
+						}
+					}
+				}
+
+				try {
+					const fetchOptions: RequestInit = {
+						method: args.method,
+						headers,
+					}
+					if (args.body !== undefined && args.method !== 'GET') {
+						fetchOptions.body = JSON.stringify(args.body)
+						headers['Content-Type'] = headers['Content-Type'] ?? 'application/json'
+					}
+					const response = await fetch(args.url, fetchOptions)
+					const responseText = await response.text()
+					return {
+						content: [{ type: 'text' as const, text: `HTTP ${response.status}\n${responseText}` }],
+					}
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					return {
+						content: [{ type: 'text' as const, text: `HTTP request failed: ${msg}` }],
+						isError: true,
+					}
+				}
+			},
+		),
+
+		// Agent communication
+		defineTool(
+			'ask_agent',
+			'Ask another agent a question (they decide whether to answer)',
+			z.object({
+				to: z.string().describe('Agent ID to ask'),
+				question: z.string(),
+				reason: z.string().describe('Why you need this information'),
+				urgency: z.enum(['low', 'normal', 'high']).optional(),
+			}),
+			async (args, ctx) => {
+				const msgId = `msg-${Date.now().toString(36)}`
+				const content = `**Question from ${ctx.agentId}:**\n${args.question}\n\n**Reason:** ${args.reason}`
+				await sendDirectMessage(companyRoot, ctx.agentId, args.to, {
+					id: msgId,
+					content,
+					references: [],
+				})
+
+				await createPin(companyRoot, {
+					id: `pin-${Date.now().toString(36)}`,
+					group: 'agents',
+					title: `Agent Request: ${ctx.agentId} → ${args.to}`,
+					content: args.question,
+					type: 'info',
+					created_by: ctx.agentId,
+					created_at: new Date().toISOString(),
+					metadata: { urgency: args.urgency ?? 'normal' },
+				})
+
+				return {
+					content: [{ type: 'text' as const, text: `Question sent to ${args.to}. They will respond when available.` }],
+				}
+			},
+		),
+
+		// Blocker resolution
+		defineTool(
+			'resolve_blocker',
+			'Mark a task blocker as resolved',
+			z.object({
+				task_id: z.string(),
+				note: z.string().describe('How the blocker was resolved'),
+			}),
+			async (args, ctx) => {
+				const task = await readTask(companyRoot, args.task_id)
+				if (!task) {
+					return {
+						content: [{ type: 'text' as const, text: `Task not found: ${args.task_id}` }],
+						isError: true,
+					}
+				}
+
+				const blockerIdx = task.blockers.findIndex((b) => !b.resolved)
+				if (blockerIdx === -1) {
+					return {
+						content: [{ type: 'text' as const, text: `No unresolved blockers on task ${args.task_id}` }],
+						isError: true,
+					}
+				}
+
+				const updatedBlockers = [...task.blockers]
+				updatedBlockers[blockerIdx] = {
+					...updatedBlockers[blockerIdx]!,
+					resolved: true,
+					resolved_at: new Date().toISOString(),
+					resolved_by: ctx.agentId,
+					resolved_note: args.note,
+				}
+
+				// Write blockers directly via yaml since updateTask doesn't support blockers field
+				const found = await findTask(companyRoot, args.task_id)
+				if (found) {
+					const timestamp = new Date().toISOString()
+					const patched = {
+						...task,
+						blockers: updatedBlockers,
+						updated_at: timestamp,
+						history: [
+							...task.history,
+							{
+								at: timestamp,
+								by: ctx.agentId,
+								action: 'blocker_resolved',
+								note: args.note,
+							},
+						],
+					}
+					await writeYaml(found.path, patched)
+				}
+
+				// If task was blocked and all blockers now resolved, move back to active
+				const allResolved = updatedBlockers.every((b) => b.resolved)
+				if (task.status === 'blocked' && allResolved) {
+					await moveTask(companyRoot, args.task_id, 'in_progress', ctx.agentId)
+				}
+
+				return {
+					content: [{ type: 'text' as const, text: `Blocker resolved on task ${args.task_id}: ${args.note}` }],
+				}
 			},
 		),
 	]

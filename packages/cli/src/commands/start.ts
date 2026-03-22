@@ -15,35 +15,33 @@ program.addCommand(
 				const agents = await loadAgents(root)
 				const port = Number.parseInt(opts.port, 10)
 
-				console.log('')
-				console.log(header('QUESTPIE Autopilot'))
-				console.log(dim(`Company: ${company.name} (${company.slug})`))
-				console.log(dim(`Agents:  ${agents.length}`))
-				console.log(dim(`Port:    ${port}`))
-				console.log('')
-
 				const orchestrator = new Orchestrator({
 					companyRoot: root,
 					webhookPort: port,
 				})
 
+				await orchestrator.start()
+
+				console.log('')
+				console.log(header('QUESTPIE Autopilot'))
+				console.log(dim(`Company: ${company.name}`))
+				console.log(dim(`Agents:  ${agents.length}`))
+				console.log(dim(`Port:    ${port}`))
+				console.log('')
+				console.log(success('Orchestrator is running.'))
+				console.log(dim('Press Ctrl+C to stop'))
+				console.log('')
+
 				const shutdown = async () => {
 					console.log('')
-					console.log(warning('Received shutdown signal...'))
+					console.log(warning('Shutting down...'))
 					await orchestrator.stop()
-					console.log(success('Orchestrator stopped gracefully.'))
+					console.log(success('Stopped.'))
 					process.exit(0)
 				}
 
 				process.on('SIGINT', shutdown)
 				process.on('SIGTERM', shutdown)
-
-				await orchestrator.start()
-
-				console.log('')
-				console.log(success('Orchestrator is running.'))
-				console.log(dim('Press Ctrl+C to stop.'))
-				console.log('')
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err)
 				if (message.includes('company.yaml')) {

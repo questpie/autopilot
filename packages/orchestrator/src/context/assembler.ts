@@ -3,6 +3,7 @@ import { buildSystemPrompt } from '@questpie/autopilot-agents'
 import type { AgentRole } from '@questpie/autopilot-agents'
 import { buildCompanySnapshot } from './snapshot'
 import { loadAgentMemory } from './memory-loader'
+import { getSkillsForRole } from '../skills'
 import { stringify as stringifyYaml } from 'yaml'
 
 export interface AssembledContext {
@@ -156,6 +157,18 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 		}
 
 		sections.push(truncateToTokens(taskLines.join('\n'), 15_000))
+	}
+
+	// Layer 5: Skills Discovery (~1K tokens) — available skills for the agent's role
+	const roleSkills = await getSkillsForRole(companyRoot, agent.role)
+	if (roleSkills.length > 0) {
+		const skillLines: string[] = ['## Available Skills']
+		skillLines.push('Use the `skill_request` tool with a skill_id to load full content.\n')
+		for (const skill of roleSkills) {
+			const desc = skill.description ? ` — ${skill.description}` : ''
+			skillLines.push(`- **${skill.name}** (\`${skill.id}\`)${desc}`)
+		}
+		sections.push(truncateToTokens(skillLines.join('\n'), 1_000))
 	}
 
 	const systemPrompt = sections.join('\n\n---\n\n')

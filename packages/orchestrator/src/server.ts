@@ -10,16 +10,19 @@ import { SessionStreamManager } from './session'
 import { Notifier } from './notifier'
 import type { Notification } from './notifier'
 import { spawnAgent, extractMemory } from './agent'
+import { ApiServer } from './api'
 
 export interface OrchestratorOptions {
 	companyRoot: string
 	webhookPort?: number
+	apiPort?: number
 }
 
 export class Orchestrator {
 	private watcher: Watcher | null = null
 	private scheduler: Scheduler | null = null
 	private webhookServer: WebhookServer | null = null
+	private apiServer: ApiServer | null = null
 	private streamManager: SessionStreamManager
 	private workflowLoader: WorkflowLoader
 	private notifier: Notifier
@@ -89,6 +92,19 @@ export class Orchestrator {
 			console.error('[orchestrator] failed to start webhook server:', err)
 		}
 
+		// 5. Start API server
+		const apiPort = this.options.apiPort ?? 7778
+		this.apiServer = new ApiServer({
+			companyRoot: root,
+			port: apiPort,
+		})
+		try {
+			await this.apiServer.start()
+			console.log(`[orchestrator] api server started on port ${apiPort}`)
+		} catch (err) {
+			console.error('[orchestrator] failed to start api server:', err)
+		}
+
 		this.running = true
 		console.log('[orchestrator] startup complete')
 	}
@@ -123,6 +139,15 @@ export class Orchestrator {
 				console.error('[orchestrator] error stopping webhook server:', err)
 			}
 			this.webhookServer = null
+		}
+
+		if (this.apiServer) {
+			try {
+				this.apiServer.stop()
+			} catch (err) {
+				console.error('[orchestrator] error stopping api server:', err)
+			}
+			this.apiServer = null
 		}
 
 		this.running = false
