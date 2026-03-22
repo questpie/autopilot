@@ -364,6 +364,17 @@ $ autopilot attach max  # Watch an agent code in real-time`}
 						All autopilot commands — init, ask, attach, inbox, agents, status
 					</div>
 				</Link>
+				<Link
+					to="/docs/integrations"
+					className="border border-border p-4 hover:border-purple transition-colors no-underline group"
+				>
+					<div className="font-sans text-sm font-bold text-white group-hover:text-purple mb-1">
+						Integrations
+					</div>
+					<div className="text-ghost text-xs">
+						3-part pattern, secret management, GitHub, Linear, Slack, Stripe
+					</div>
+				</Link>
 			</div>
 		</article>
 	)

@@ -10,6 +10,7 @@ const navItems = [
 	{ to: '/docs/workflows', label: 'Workflows' },
 	{ to: '/docs/memory', label: 'Context & Memory' },
 	{ to: '/docs/cli', label: 'CLI Reference' },
+	{ to: '/docs/integrations', label: 'Integrations' },
 ]
 
 export function DocsLayout() {
