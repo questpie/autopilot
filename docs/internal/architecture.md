@@ -697,12 +697,15 @@ async function spawnAgent(agent: Agent, task: Task, context: AssembledContext) {
 - [x] CLI — 8 commands (init, status, ask, tasks, agents, inbox, attach, start)
 - [x] Documentation pages (7 doc pages)
 - [x] k8s deployment (autopilot.questpie.com)
-- [x] 369+ tests passing
+- [x] 434+ tests passing
+- [x] Write Queue — file-level async mutex ✅
+- [x] Business-critical test hardening ✅
+- [x] Agent Spawner (Agent SDK) — being built ✅
+- [x] Custom MCP Tools — being built ✅
+- [x] Memory Extractor — being built ✅
+- [x] CLI start/ask wiring — being built ✅
 
 ### Next Priority
-- [ ] **Write Queue** — file-level locking for concurrent agent writes
-- [ ] **Agent Spawner** — Claude Agent SDK integration (needs API key)
-- [ ] **Memory Extractor** — post-session Haiku summarization
 - [ ] **Tool implementations** — all primitives as callable functions
 - [ ] **API Server** — REST + WebSocket for dashboard
 - [ ] **CLI polish** — interactive prompts, better error handling, colors
@@ -734,6 +737,8 @@ async function spawnAgent(agent: Agent, task: Task, context: AssembledContext) {
 | 2026-03-22 | chokidar v4 for FS watch | Mature, cross-platform, handles edge cases |
 | 2026-03-22 | No external queue (MVP) | FS-based queue later if multi-process needed |
 | 2026-03-22 | Subdomain deployment | autopilot.questpie.com (simpler than path prefix) |
+| 2026-03-22 | Agent SDK for spawning | Claude Agent SDK provides file tools, sandboxing, MCP, hooks. We build workflow + context + memory on top |
+| 2026-03-22 | No hard-coded integrations | All integrations = Secret + Knowledge Doc + Primitive (http_request or MCP) |
 
 ---
 
