@@ -4,7 +4,7 @@
 
 1. Open Telegram and search for `@BotFather`
 2. Send `/newbot` and follow the prompts
-3. Choose a name (e.g. "QuestPie Autopilot") and username (e.g. `questpie_autopilot_bot`)
+3. Choose a name (e.g. "QUESTPIE Autopilot") and username (e.g. `questpie_autopilot_bot`)
 4. BotFather will give you a bot token like `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`
 5. Store the token as a secret:
    ```bash

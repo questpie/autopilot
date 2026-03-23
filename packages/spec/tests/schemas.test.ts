@@ -61,7 +61,7 @@ describe('CompanySchema', () => {
 
 	test('rejects slug with uppercase', () => {
 		expect(() =>
-			CompanySchema.parse({ ...validCompany, slug: 'QuestPie' }),
+			CompanySchema.parse({ ...validCompany, slug: 'QUESTPIE' }),
 		).toThrow(ZodError)
 	})
 

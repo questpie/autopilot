@@ -1,7 +1,7 @@
 import type { Schedule, Webhook } from '@questpie/autopilot-spec'
 import { loadCompany, loadAgents, readTask, updateTask, moveTask } from './fs'
 import { spawnAgent } from './agent'
-import { evaluateTransition } from './workflow'
+import { evaluateTransition, advanceWorkflow } from './workflow'
 import { WorkflowLoader } from './workflow'
 import { Watcher } from './watcher'
 import type { WatchEvent } from './watcher'
@@ -368,12 +368,37 @@ export class Orchestrator {
 			}
 		}
 
-		// 3. If task has a workflow and step, evaluate transition
+		// 3. If task has a workflow and step, evaluate what to do
 		if (task.workflow && task.workflow_step) {
 			try {
 				const workflow = await this.workflowLoader.load(task.workflow)
 				const agents = await loadAgents(root)
-				const result = evaluateTransition(workflow, task, agents)
+
+				let result: import('./workflow').WorkflowTransitionResult
+
+				if (task.status === 'done') {
+					// Task finished current step → advance to next step
+					result = advanceWorkflow(workflow, task, 'done', agents)
+					if (result.nextStep && result.nextStep !== task.workflow_step) {
+						await updateTask(root, taskId, { workflow_step: result.nextStep, status: 'assigned' }, 'system')
+						await moveTask(root, taskId, 'assigned', 'system')
+						console.log(`[orchestrator] advanced ${taskId}: ${task.workflow_step} → ${result.nextStep}`)
+					} else if (result.action === 'complete') {
+						console.log(`[orchestrator] task ${taskId} workflow complete`)
+					} else {
+						// Can't advance — don't respawn
+						console.log(`[orchestrator] task ${taskId} done but can't advance: ${result.error ?? 'unknown'}`)
+						return
+					}
+				} else if (task.status === 'blocked') {
+					// Don't respawn blocked tasks
+					console.log(`[orchestrator] task ${taskId} is blocked — waiting for human`)
+					return
+				} else if (task.status === 'assigned' || task.status === 'in_progress') {
+					result = evaluateTransition(workflow, task, agents)
+				} else {
+					return
+				}
 
 				console.log(`[orchestrator] workflow evaluation for ${taskId}:`, {
 					action: result.action,

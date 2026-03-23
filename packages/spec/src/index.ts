@@ -2,7 +2,7 @@
  * @module @questpie/autopilot-spec
  *
  * Canonical Zod schemas, TypeScript types, filesystem path conventions,
- * and constants for the QuestPie Autopilot system.
+ * and constants for the QUESTPIE Autopilot system.
  */
 
 export * from './constants'
