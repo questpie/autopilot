@@ -104,7 +104,12 @@ export class Orchestrator {
 			await this.webhookServer.start()
 			console.log(`[orchestrator] webhook server started on port ${port}`)
 		} catch (err) {
-			console.error('[orchestrator] failed to start webhook server:', err)
+			const msg = err instanceof Error ? err.message : String(err)
+			if (msg.includes('EADDRINUSE') || msg.includes('in use')) {
+				console.warn(`[orchestrator] webhook port ${port} already in use — skipping (kill the other process or use --webhook-port)`)
+			} else {
+				console.error('[orchestrator] failed to start webhook server:', msg)
+			}
 		}
 
 		// 5. Start API server
@@ -117,7 +122,12 @@ export class Orchestrator {
 			await this.apiServer.start()
 			console.log(`[orchestrator] api server started on port ${apiPort}`)
 		} catch (err) {
-			console.error('[orchestrator] failed to start api server:', err)
+			const msg = err instanceof Error ? err.message : String(err)
+			if (msg.includes('EADDRINUSE') || msg.includes('in use')) {
+				console.warn(`[orchestrator] api port ${apiPort} already in use — skipping (kill the other process or use --api-port)`)
+			} else {
+				console.error('[orchestrator] failed to start api server:', msg)
+			}
 		}
 
 		this.running = true
