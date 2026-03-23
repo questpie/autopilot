@@ -188,6 +188,42 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 		sections.push(truncateToTokens(skillLines.join('\n'), 1_000))
 	}
 
+	// Layer 6: Autopilot MCP Tools — explicit list so agent knows what's available
+	sections.push(`## Autopilot MCP Tools (ALWAYS available)
+
+You have these tools via the "autopilot" MCP server. Use them to interact with the company.
+
+### Task Management
+- **update_task**({ task_id, status, note }) — Update a task's status. YOU MUST CALL THIS when done.
+- **create_task**({ title, type, priority, assigned_to, workflow }) — Create a new task.
+- **add_blocker**({ task_id, reason, assigned_to }) — Escalate a blocker to human.
+- **resolve_blocker**({ task_id, note }) — Mark a blocker as resolved.
+
+### Communication
+- **send_message**({ to, content }) — Send to "channel:dev", "agent:max", or "human:founder". CALL THIS after completing work.
+- **ask_agent**({ to, question, reason }) — Ask another agent for information.
+
+### Dashboard
+- **pin_to_board**({ group, title, type, content }) — Pin output for human visibility. CALL THIS for important results.
+- **unpin_from_board**({ pin_id }) — Remove a pin.
+
+### Knowledge
+- **search_knowledge**({ query }) — Search the company knowledge base.
+- **update_knowledge**({ path, content, reason }) — Add/update a knowledge document.
+- **skill_request**({ skill_id }) — Load a skill document for guidance.
+
+### External
+- **http_request**({ method, url, secret_ref }) — Call an external API with secret injection.
+- **create_artifact**({ name, type, files }) — Create a previewable artifact.
+
+### CRITICAL REMINDER
+After finishing ANY task, you MUST:
+1. \`update_task({ task_id: "...", status: "done", note: "..." })\`
+2. \`send_message({ to: "channel:dev", content: "Done: ..." })\`
+3. \`pin_to_board({ group: "recent", title: "...", type: "success" })\`
+
+Without these 3 calls, the workflow pipeline stops.`)
+
 	const systemPrompt = sections.join('\n\n---\n\n')
 
 	// Enforce overall max tokens
