@@ -44,8 +44,7 @@ describe('tasks edge cases', () => {
 					},
 				],
 				deadline: '2026-06-01T00:00:00Z',
-				_linear_id: 'LIN-123',
-				_github_pr: 'https://github.com/org/repo/pull/42',
+				metadata: { linear_id: 'LIN-123', github_pr: 'https://github.com/org/repo/pull/42' },
 			})
 
 			expect(task.id).toBe('task-001')
@@ -69,8 +68,64 @@ describe('tasks edge cases', () => {
 			expect(task.blockers).toHaveLength(1)
 			expect(task.blockers[0]?.reason).toBe('Need API key')
 			expect(task.deadline).toBe('2026-06-01T00:00:00Z')
-			expect(task._linear_id).toBe('LIN-123')
-			expect(task._github_pr).toBe('https://github.com/org/repo/pull/42')
+			expect(task.metadata).toEqual({ linear_id: 'LIN-123', github_pr: 'https://github.com/org/repo/pull/42' })
+		})
+	})
+
+	describe('metadata field — save and read JSON', () => {
+		it('persists arbitrary metadata through create and read', async () => {
+			const ctx = await createTestCompany()
+			root = ctx.root
+			cleanup = ctx.cleanup
+
+			const task = await createTask(root, {
+				id: 'task-meta',
+				title: 'Metadata test',
+				type: 'implementation',
+				status: 'backlog',
+				priority: 'medium',
+				created_by: 'peter',
+				metadata: {
+					linear_id: 'LIN-456',
+					github_pr: 'https://github.com/org/repo/pull/99',
+					custom_flag: true,
+					nested: { key: 'value' },
+				},
+			})
+
+			expect(task.metadata).toEqual({
+				linear_id: 'LIN-456',
+				github_pr: 'https://github.com/org/repo/pull/99',
+				custom_flag: true,
+				nested: { key: 'value' },
+			})
+
+			// Read back from disk
+			const read = await readTask(root, 'task-meta')
+			expect(read).not.toBeNull()
+			expect(read?.metadata).toEqual({
+				linear_id: 'LIN-456',
+				github_pr: 'https://github.com/org/repo/pull/99',
+				custom_flag: true,
+				nested: { key: 'value' },
+			})
+		})
+
+		it('defaults metadata to empty object when omitted', async () => {
+			const ctx = await createTestCompany()
+			root = ctx.root
+			cleanup = ctx.cleanup
+
+			const task = await createTask(root, {
+				id: 'task-no-meta',
+				title: 'No metadata',
+				type: 'implementation',
+				status: 'backlog',
+				priority: 'medium',
+				created_by: 'peter',
+			})
+
+			expect(task.metadata).toEqual({})
 		})
 	})
 

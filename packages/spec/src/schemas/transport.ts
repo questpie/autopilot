@@ -1,9 +1,8 @@
 import { z } from 'zod'
-import { TRANSPORT_TYPES } from '../constants'
 
 export const TransportConfigSchema = z.object({
 	id: z.string(),
-	type: z.enum(TRANSPORT_TYPES),
+	type: z.string(),
 	enabled: z.boolean().default(true),
 	config: z.record(z.string()).default({}),
 })

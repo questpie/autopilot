@@ -1,7 +1,9 @@
 import { drizzle } from 'drizzle-orm/bun-sqlite'
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
 import { Database } from 'bun:sqlite'
 import { join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
+import * as sqliteVec from 'sqlite-vec'
 import * as schema from './schema'
 
 export type AutopilotDb = ReturnType<typeof drizzle<typeof schema>>
@@ -11,6 +13,9 @@ export type AutopilotDb = ReturnType<typeof drizzle<typeof schema>>
  *
  * The DB file is stored at `<companyRoot>/.data/autopilot.db` with WAL mode
  * enabled for concurrent read performance.
+ *
+ * Loads sqlite-vec extension for vector search and runs Drizzle migrations
+ * (including custom SQL for FTS5 / vec0 virtual tables).
  */
 export async function createDb(companyRoot: string): Promise<AutopilotDb> {
 	const dataDir = join(companyRoot, '.data')
@@ -23,7 +28,75 @@ export async function createDb(companyRoot: string): Promise<AutopilotDb> {
 	sqlite.exec('PRAGMA foreign_keys = ON')
 	sqlite.exec('PRAGMA busy_timeout = 5000')
 
-	return drizzle(sqlite, { schema })
+	// Load sqlite-vec extension for vector similarity search (optional — may not be available)
+	try {
+		sqliteVec.load(sqlite)
+	} catch {
+		// Extension loading not supported in this SQLite build — vector search will be unavailable
+	}
+
+	const db = drizzle(sqlite, { schema })
+
+	// Run drizzle migrations (regular tables)
+	migrate(db, { migrationsFolder: join(__dirname, '..', '..', 'drizzle') })
+
+	// Create FTS5 virtual table + triggers for unified search index
+	// (must be raw SQL — drizzle migrator cannot handle trigger semicolons)
+	initSearchFts(sqlite)
+
+	// Create vec0 virtual table (requires sqlite-vec extension)
+	try {
+		sqlite.exec(`
+			CREATE VIRTUAL TABLE IF NOT EXISTS search_vec USING vec0(
+				search_id INTEGER PRIMARY KEY,
+				embedding float[768]
+			)
+		`)
+	} catch {
+		// sqlite-vec not available — vector search will be unavailable
+	}
+
+	return db
+}
+
+/**
+ * Initialize FTS5 virtual table and triggers for the unified search_index table.
+ * Uses raw SQL because Drizzle ORM does not support virtual tables or triggers.
+ */
+function initSearchFts(sqlite: Database): void {
+	try {
+		sqlite.exec(`
+			CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
+				title, content,
+				content=search_index,
+				content_rowid=id,
+				tokenize='porter unicode61'
+			)
+		`)
+	} catch {
+		// Already exists
+	}
+
+	try {
+		sqlite.exec(`
+			CREATE TRIGGER IF NOT EXISTS search_fts_ai AFTER INSERT ON search_index BEGIN
+				INSERT INTO search_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
+			END
+		`)
+		sqlite.exec(`
+			CREATE TRIGGER IF NOT EXISTS search_fts_ad AFTER DELETE ON search_index BEGIN
+				INSERT INTO search_fts(search_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
+			END
+		`)
+		sqlite.exec(`
+			CREATE TRIGGER IF NOT EXISTS search_fts_au AFTER UPDATE ON search_index BEGIN
+				INSERT INTO search_fts(search_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
+				INSERT INTO search_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
+			END
+		`)
+	} catch {
+		// Triggers already exist
+	}
 }
 
 /**

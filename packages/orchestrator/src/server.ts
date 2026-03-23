@@ -3,16 +3,16 @@ import { join } from 'node:path'
 import type { Schedule, Webhook } from '@questpie/autopilot-spec'
 import { loadCompany, loadAgents, readTask, updateTask, moveTask, createStorage } from './fs'
 import type { StorageBackend, StorageMode } from './fs'
-import { createDb, initFts } from './db'
-import { reindexKnowledge, initKnowledgeFts } from './db/knowledge-index'
+import { createDb } from './db'
+import { Indexer } from './db/indexer'
 import { spawnAgent } from './agent'
 import { evaluateTransition, advanceWorkflow } from './workflow'
 import { WorkflowLoader } from './workflow'
 import { Watcher } from './watcher'
 import type { WatchEvent } from './watcher'
 import { Scheduler } from './scheduler'
-import { WebhookServer } from './webhook'
-import { handleTelegramWebhook } from './webhook'
+import { WebhookServer, webhookHandlerRegistry } from './webhook'
+import { telegramWebhookHandler } from './webhook'
 import { SessionStreamManager } from './session'
 import { Notifier } from './notifier'
 import { ApiServer } from './api'
@@ -90,9 +90,10 @@ export class Orchestrator {
 
 			if (storageMode === 'sqlite') {
 				const db = await createDb(root)
-				initKnowledgeFts(db)
-				const indexedCount = await reindexKnowledge(db, root)
-				console.log(`[orchestrator] knowledge index: ${indexedCount} documents indexed`)
+				const indexer = new Indexer(db, root)
+				const counts = await indexer.reindexAll()
+				const total = counts.tasks + counts.messages + counts.knowledge + counts.pins
+				console.log(`[orchestrator] search index: ${total} entities indexed (tasks=${counts.tasks}, messages=${counts.messages}, knowledge=${counts.knowledge}, pins=${counts.pins})`)
 			}
 		} catch (err) {
 			console.error('[orchestrator] failed to initialize storage:', err)
@@ -123,7 +124,10 @@ export class Orchestrator {
 			console.error('[orchestrator] failed to start scheduler:', err)
 		}
 
-		// 4. Start webhook server
+		// 4. Register webhook handlers
+		webhookHandlerRegistry.register(telegramWebhookHandler)
+
+		// 5. Start webhook server
 		const port = this.options.webhookPort ?? 7777
 		this.webhookServer = new WebhookServer({
 			port,
@@ -142,7 +146,7 @@ export class Orchestrator {
 			}
 		}
 
-		// 5. Start API server
+		// 6. Start API server
 		const apiPort = this.options.apiPort ?? 7778
 		this.apiServer = new ApiServer({
 			companyRoot: root,
@@ -160,7 +164,7 @@ export class Orchestrator {
 			}
 		}
 
-		// 6. Initialize GitManager
+		// 7. Initialize GitManager
 		try {
 			const companyConfig = await loadCompany(root)
 			const gitConfig = (companyConfig as Record<string, unknown>).settings as Record<string, unknown> | undefined
@@ -414,17 +418,17 @@ export class Orchestrator {
 		try {
 			console.log(`[orchestrator] webhook received: ${webhook.id} (agent: ${webhook.agent})`)
 
-			// Telegram webhook gets special handling
-			if (webhook.id === 'telegram') {
-				const result = await handleTelegramWebhook(payload, {
+			// Dispatch to registered webhook handlers
+			if (webhookHandlerRegistry.has(webhook.id)) {
+				const result = await webhookHandlerRegistry.dispatch(webhook.id, payload, {
 					companyRoot: this.options.companyRoot,
 					streamManager: this.streamManager,
 				})
 				if (result.handled) {
 					await this.notifier.notify({
 						type: 'alert',
-						title: `Telegram message handled`,
-						message: `Telegram message routed to agent ${result.agentId ?? 'unknown'}`,
+						title: `Webhook handled: ${webhook.id}`,
+						message: `Webhook ${webhook.id} routed to agent ${result.agentId ?? 'unknown'}`,
 						priority: 'normal',
 						agentId: result.agentId,
 					})

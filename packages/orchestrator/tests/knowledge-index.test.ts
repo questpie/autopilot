@@ -3,7 +3,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createDb } from '../src/db'
 import type { AutopilotDb } from '../src/db'
-import { initKnowledgeFts, reindexKnowledge, reindexFile, searchKnowledge } from '../src/db/knowledge-index'
+import { reindexKnowledge, reindexFile, searchKnowledge } from '../src/db/knowledge-index'
 import { createTestCompany } from './helpers'
 
 describe('knowledge-index', () => {
@@ -42,10 +42,12 @@ describe('knowledge-index', () => {
 		db = await createDb(root)
 	}
 
-	it('should initialize FTS table', async () => {
+	it('should initialize FTS table via createDb migrations', async () => {
 		await setup()
-		initKnowledgeFts(db)
-		// Should not throw
+		// FTS5 is now initialized automatically by createDb via migrations + initSearchFts
+		// Verify by doing a search (should not throw)
+		const results = searchKnowledge(db, 'test')
+		expect(results).toEqual([])
 	})
 
 	it('should reindex all knowledge files', async () => {

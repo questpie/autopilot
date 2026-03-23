@@ -1,0 +1,13 @@
+{
+	"version": "6",
+	"dialect": "sqlite",
+	"id": "0002_search_vec",
+	"prevId": "0001_search_index",
+	"tables": {},
+	"enums": {},
+	"_meta": {
+		"schemas": {},
+		"tables": {},
+		"columns": {}
+	}
+}

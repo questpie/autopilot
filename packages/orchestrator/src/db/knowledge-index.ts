@@ -1,47 +1,16 @@
-import { Database } from 'bun:sqlite'
 import { readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { PATHS } from '@questpie/autopilot-spec'
 import type { AutopilotDb } from './index'
-
-/**
- * Initialize the FTS5 knowledge index virtual table.
- * Uses raw SQL because Drizzle ORM does not support virtual tables.
- */
-export function initKnowledgeFts(db: AutopilotDb): void {
-	const raw = getRawDb(db)
-
-	try {
-		raw.exec(`
-			CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
-				path,
-				title,
-				content,
-				tokenize='porter unicode61'
-			)
-		`)
-	} catch {
-		// Already exists
-	}
-}
+import { indexEntity, removeEntity, searchFts, type SearchResult } from './search-index'
 
 /**
  * Full reindex of all knowledge .md files at startup.
- * Clears the existing index and re-scans the knowledge directory.
+ * Writes into the unified search_index table via indexEntity().
  */
 export async function reindexKnowledge(db: AutopilotDb, companyRoot: string): Promise<number> {
-	const raw = getRawDb(db)
-	initKnowledgeFts(db)
-
-	// Clear existing index
-	raw.exec("DELETE FROM knowledge_fts")
-
 	const knowledgeDir = join(companyRoot, PATHS.KNOWLEDGE_DIR.replace(/^\/company/, ''))
 	let count = 0
-
-	const insertStmt = raw.prepare(
-		'INSERT INTO knowledge_fts(path, title, content) VALUES (?, ?, ?)',
-	)
 
 	async function indexDir(dir: string): Promise<void> {
 		let entries: import('node:fs').Dirent[]
@@ -60,7 +29,7 @@ export async function reindexKnowledge(db: AutopilotDb, companyRoot: string): Pr
 					const content = await Bun.file(fullPath).text()
 					const relPath = relative(knowledgeDir, fullPath)
 					const title = extractTitle(content, entry.name)
-					insertStmt.run(relPath, title, content)
+					await indexEntity(db, 'knowledge', relPath, title, content)
 					count++
 				} catch {
 					// Skip unreadable files
@@ -82,32 +51,26 @@ export async function reindexFile(
 	companyRoot: string,
 	filePath: string,
 ): Promise<void> {
-	const raw = getRawDb(db)
-	initKnowledgeFts(db)
-
 	const knowledgeDir = join(companyRoot, PATHS.KNOWLEDGE_DIR.replace(/^\/company/, ''))
 	const relPath = relative(knowledgeDir, filePath)
 
-	// Remove old entry
-	raw.prepare("DELETE FROM knowledge_fts WHERE path = ?").run(relPath)
-
-	// Re-add if file still exists
 	try {
 		const file = Bun.file(filePath)
 		if (await file.exists()) {
 			const content = await file.text()
 			const title = extractTitle(content, relPath.split('/').pop() ?? relPath)
-			raw.prepare(
-				'INSERT INTO knowledge_fts(path, title, content) VALUES (?, ?, ?)',
-			).run(relPath, title, content)
+			await indexEntity(db, 'knowledge', relPath, title, content)
+		} else {
+			await removeEntity(db, 'knowledge', relPath)
 		}
 	} catch {
-		// File was deleted or unreadable — removal is enough
+		// File was deleted or unreadable — remove from index
+		await removeEntity(db, 'knowledge', relPath)
 	}
 }
 
 /**
- * Search the knowledge index using FTS5 queries.
+ * Search the knowledge index using the unified FTS5 search.
  * Returns matching documents with snippet previews and rank scores.
  */
 export function searchKnowledge(
@@ -115,37 +78,66 @@ export function searchKnowledge(
 	query: string,
 	maxResults = 10,
 ): Array<{ path: string; title: string; snippet: string; rank: number }> {
-	const raw = getRawDb(db)
+	try {
+		const results = searchFtsSync(db, query, maxResults)
+		return results.map((r) => ({
+			path: r.entityId,
+			title: r.title ?? '',
+			snippet: r.snippet,
+			rank: r.score,
+		}))
+	} catch {
+		return []
+	}
+}
+
+/**
+ * Synchronous wrapper for searchFts — knowledge search is called synchronously
+ * in existing code paths.
+ */
+function searchFtsSync(
+	db: AutopilotDb,
+	query: string,
+	limit: number,
+): SearchResult[] {
+	const { Database } = require('bun:sqlite') as typeof import('bun:sqlite')
+	const raw = (db as unknown as { $client: InstanceType<typeof Database> }).$client
 
 	try {
 		const rows = raw.prepare(`
 			SELECT
-				path,
-				title,
-				snippet(knowledge_fts, 2, '<b>', '</b>', '...', 40) as snippet,
-				rank
-			FROM knowledge_fts
-			WHERE knowledge_fts MATCH ?
-			ORDER BY rank
+				si.entity_type,
+				si.entity_id,
+				si.title,
+				snippet(search_fts, 1, '<b>', '</b>', '...', 40) as snippet,
+				search_fts.rank as score
+			FROM search_fts
+			JOIN search_index si ON si.id = search_fts.rowid
+			WHERE search_fts MATCH ?
+			AND si.entity_type = 'knowledge'
+			ORDER BY search_fts.rank
 			LIMIT ?
-		`).all(query, maxResults) as Array<{
-			path: string
-			title: string
+		`).all(query, limit) as Array<{
+			entity_type: string
+			entity_id: string
+			title: string | null
 			snippet: string
-			rank: number
+			score: number
 		}>
 
-		return rows
+		return rows.map((r) => ({
+			entityType: r.entity_type as 'knowledge',
+			entityId: r.entity_id,
+			title: r.title,
+			snippet: r.snippet,
+			score: r.score,
+		}))
 	} catch {
 		return []
 	}
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
-
-function getRawDb(db: AutopilotDb): Database {
-	return (db as unknown as { $client: Database }).$client
-}
 
 function extractTitle(content: string, fallback: string): string {
 	// Extract first heading from markdown

@@ -76,8 +76,7 @@ export class SqliteBackend implements StorageBackend {
 				completed_at TEXT,
 				deadline TEXT,
 				history TEXT DEFAULT '[]',
-				_linear_id TEXT,
-				_github_pr TEXT
+				metadata TEXT DEFAULT '{}'
 			)
 		`)
 		raw.exec('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)')
@@ -187,8 +186,7 @@ export class SqliteBackend implements StorageBackend {
 			completed_at: task.completed_at ?? null,
 			deadline: task.deadline ?? null,
 			history: JSON.stringify(task.history),
-			_linear_id: task._linear_id ?? null,
-			_github_pr: task._github_pr ?? null,
+			metadata: JSON.stringify(task.metadata ?? {}),
 		})
 
 		return task
@@ -251,8 +249,7 @@ export class SqliteBackend implements StorageBackend {
 			completed_at: validated.completed_at ?? null,
 			deadline: validated.deadline ?? null,
 			history: JSON.stringify(validated.history),
-			_linear_id: validated._linear_id ?? null,
-			_github_pr: validated._github_pr ?? null,
+			metadata: JSON.stringify(validated.metadata ?? {}),
 		}).where(eq(schema.tasks.id, id))
 
 		return validated
@@ -453,6 +450,7 @@ export class SqliteBackend implements StorageBackend {
 			context: typeof row.context === 'string' ? JSON.parse(row.context) : row.context,
 			blockers: typeof row.blockers === 'string' ? JSON.parse(row.blockers) : row.blockers,
 			history: typeof row.history === 'string' ? JSON.parse(row.history) : row.history,
+			metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {}),
 		})
 	}
 

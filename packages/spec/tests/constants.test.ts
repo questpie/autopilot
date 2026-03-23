@@ -6,7 +6,6 @@ import {
 	PRIORITIES,
 	WORKFLOW_STEP_TYPES,
 	TRIGGER_TYPES,
-	TRANSPORT_TYPES,
 	PIN_TYPES,
 	SESSION_STATUSES,
 	GATE_TYPES,
@@ -135,27 +134,6 @@ describe('TRIGGER_TYPES', () => {
 
 	test('has exactly 10 trigger types', () => {
 		expect(TRIGGER_TYPES).toHaveLength(10)
-	})
-})
-
-describe('TRANSPORT_TYPES', () => {
-	test('is a non-empty readonly array', () => {
-		expect(TRANSPORT_TYPES.length).toBeGreaterThan(0)
-		expect(Array.isArray(TRANSPORT_TYPES)).toBe(true)
-	})
-
-	test('contains expected transport types', () => {
-		expect(TRANSPORT_TYPES).toContain('email')
-		expect(TRANSPORT_TYPES).toContain('whatsapp')
-		expect(TRANSPORT_TYPES).toContain('slack')
-		expect(TRANSPORT_TYPES).toContain('telegram')
-		expect(TRANSPORT_TYPES).toContain('discord')
-		expect(TRANSPORT_TYPES).toContain('web_push')
-		expect(TRANSPORT_TYPES).toContain('cli')
-	})
-
-	test('has exactly 7 transport types', () => {
-		expect(TRANSPORT_TYPES).toHaveLength(7)
 	})
 })
 

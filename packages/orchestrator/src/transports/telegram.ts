@@ -1,4 +1,6 @@
 /**
+ * @deprecated Use `transports/adapters/telegram.ts` and `createTelegramAdapter` instead.
+ *
  * Telegram Bot API transport.
  *
  * Provides helpers to send messages via the Telegram Bot API and

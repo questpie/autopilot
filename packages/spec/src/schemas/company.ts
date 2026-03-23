@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const NotificationChannelSchema = z.object({
-	type: z.enum(['email', 'whatsapp', 'slack', 'telegram', 'discord', 'push']),
+	type: z.string(),
 	address: z.string().optional(),
 	number: z.string().optional(),
 	webhook: z.string().url().optional(),
@@ -29,26 +29,7 @@ export const CompanySettingsSchema = z.object({
 		.default({}),
 })
 
-export const IntegrationConfigSchema = z.object({
-	github: z
-		.object({
-			org: z.string(),
-			default_branch: z.string().default('main'),
-		})
-		.optional(),
-	linear: z
-		.object({
-			workspace: z.string(),
-			sync: z.enum(['none', 'one_way', 'bidirectional']).default('bidirectional'),
-		})
-		.optional(),
-	slack: z
-		.object({
-			workspace: z.string(),
-			bot_channel: z.string().optional(),
-		})
-		.optional(),
-})
+export const IntegrationConfigSchema = z.record(z.string(), z.record(z.string(), z.unknown()))
 
 export const CompanySchema = z.object({
 	name: z.string(),
@@ -59,5 +40,5 @@ export const CompanySchema = z.object({
 	languages: z.array(z.string()).default(['en']),
 	owner: CompanyOwnerSchema,
 	settings: CompanySettingsSchema.default({}),
-	integrations: IntegrationConfigSchema.default({}),
+	integrations: IntegrationConfigSchema.optional().default({}),
 })

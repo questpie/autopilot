@@ -78,17 +78,6 @@ export const TRIGGER_TYPES = [
 	'agent_request',
 ] as const
 
-/** Supported message transport channels. */
-export const TRANSPORT_TYPES = [
-	'email',
-	'whatsapp',
-	'slack',
-	'telegram',
-	'discord',
-	'web_push',
-	'cli',
-] as const
-
 /** Visual indicator types for dashboard pins. */
 export const PIN_TYPES = ['info', 'warning', 'success', 'error', 'progress'] as const
 

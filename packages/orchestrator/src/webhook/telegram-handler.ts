@@ -1,4 +1,6 @@
 /**
+ * @deprecated Use `webhook/handlers/telegram.ts` and `webhookHandlerRegistry` instead.
+ *
  * Telegram-specific webhook handler.
  *
  * When a POST arrives at `/hooks/telegram`, this module:

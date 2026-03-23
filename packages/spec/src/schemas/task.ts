@@ -58,6 +58,5 @@ export const TaskSchema = z.object({
 
 	history: z.array(TaskHistoryEntrySchema).default([]),
 
-	_linear_id: z.string().optional(),
-	_github_pr: z.string().optional(),
+	metadata: z.record(z.string(), z.unknown()).optional().default({}),
 })

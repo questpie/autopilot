@@ -73,8 +73,7 @@ export async function createTask(
 		created_at?: string
 		updated_at?: string
 		history?: z.input<typeof TaskSchema>['history']
-		_linear_id?: string
-		_github_pr?: string
+		metadata?: Record<string, unknown>
 	},
 ): Promise<TaskOutput> {
 	const id = taskData.id ?? generateTaskId()

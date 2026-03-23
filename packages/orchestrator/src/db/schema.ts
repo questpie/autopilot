@@ -39,8 +39,7 @@ export const tasks = sqliteTable('tasks', {
 
 	history: text('history').default('[]'),
 
-	_linear_id: text('_linear_id'),
-	_github_pr: text('_github_pr'),
+	metadata: text('metadata').default('{}'),
 }, (table) => [
 	index('idx_tasks_status').on(table.status),
 	index('idx_tasks_assigned').on(table.assigned_to),
@@ -109,4 +108,19 @@ export const sessions = sqliteTable('sessions', {
 	index('idx_sessions_task').on(table.task_id),
 	index('idx_sessions_status').on(table.status),
 	index('idx_sessions_started').on(table.started_at),
+])
+
+// ─── Search Index ────────────────────────────────────────────────────────
+
+export const searchIndex = sqliteTable('search_index', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	entityType: text('entity_type').notNull(),
+	entityId: text('entity_id').notNull(),
+	title: text('title'),
+	content: text('content').notNull(),
+	contentHash: text('content_hash').notNull(),
+	indexedAt: text('indexed_at').notNull(),
+}, (table) => [
+	index('idx_search_entity_type').on(table.entityType),
+	index('idx_search_entity_id').on(table.entityId),
 ])
