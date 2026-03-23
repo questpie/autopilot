@@ -112,10 +112,13 @@ knowledge/
   technical/                  # Stack conventions, architecture decisions
   business/                   # Strategy, pricing, market research
   onboarding/                 # How-we-work docs for agent context
-  skills/                     # Reusable skill docs (code review, deployment, etc.)
 projects/                     # Code repos, design assets, marketing materials
 context/
   memory/                     # Per-agent persistent memory (YAML)
+skills/                       # Agent Skills (agentskills.io standard)
+  code-review/SKILL.md        # Each skill = directory + SKILL.md
+  deployment/SKILL.md
+  ...
 secrets/                      # Encrypted API keys and credentials
 dashboard/
   pins/                       # Board pins from agents

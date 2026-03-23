@@ -1,8 +1,21 @@
 import { Command } from 'commander'
-import { loadCompany, loadAgents, listTasks } from '@questpie/autopilot-orchestrator'
+import { loadCompany, loadAgents, listTasks, readActivity } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { header, badge, dim, table, error } from '../utils/format'
+
+const API_BASE = 'http://localhost:7778'
+
+async function fetchSessions(): Promise<Array<{ sessionId: string; agentId: string }>> {
+	try {
+		const res = await fetch(`${API_BASE}/api/status`)
+		if (!res.ok) return []
+		const data = (await res.json()) as { sessions?: Array<{ sessionId: string; agentId: string }> }
+		return data.sessions ?? []
+	} catch {
+		return []
+	}
+}
 
 program.addCommand(
 	new Command('status')
@@ -19,9 +32,38 @@ program.addCommand(
 					statusCounts[task.status] = (statusCounts[task.status] ?? 0) + 1
 				}
 
-				console.log(header(`QUESTPIE Autopilot — ${company.name}`))
+				console.log(header(`QUESTPIE Autopilot \u2014 ${company.name}`))
 				console.log(dim(`slug: ${company.slug} | timezone: ${company.timezone}`))
 				console.log('')
+
+				// Running sessions
+				const sessions = await fetchSessions()
+				if (sessions.length > 0) {
+					console.log(header('Running Sessions'))
+					console.log(
+						table(
+							sessions.map((s) => [
+								badge(s.agentId, 'green'),
+								dim(s.sessionId),
+							]),
+						),
+					)
+					console.log('')
+				}
+
+				// Last activity
+				const activity = await readActivity(root, { limit: 3 })
+				if (activity.length > 0) {
+					console.log(header('Recent Activity'))
+					for (const entry of activity) {
+						const time = new Date(entry.at).toLocaleTimeString('en-GB', {
+							hour: '2-digit',
+							minute: '2-digit',
+						})
+						console.log(`  ${dim(time)} ${badge(entry.agent, 'cyan')} ${entry.summary}`)
+					}
+					console.log('')
+				}
 
 				console.log(header('Agents'))
 				console.log(

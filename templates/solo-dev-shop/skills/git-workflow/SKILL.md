@@ -1,7 +1,13 @@
 ---
-name: Git Workflow
-description: Git branching strategy and PR conventions
-roles: [developer, reviewer, devops]
+name: git-workflow
+description: |
+  Git branching strategy and PR conventions
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [git, workflow]
+  roles: [developer, reviewer, devops]
 ---
 
 # Git Workflow

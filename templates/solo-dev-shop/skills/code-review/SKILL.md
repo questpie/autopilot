@@ -1,7 +1,13 @@
 ---
-name: Code Review Checklist
-description: Systematic code review process and quality standards
-roles: [reviewer, developer]
+name: code-review
+description: |
+  Systematic code review process and quality standards
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [review, quality]
+  roles: [reviewer, developer]
 ---
 
 # Code Review

@@ -5,6 +5,7 @@ import {
 	loadAgents,
 	spawnAgent,
 	SessionStreamManager,
+	readChannelMessages,
 } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
@@ -35,7 +36,8 @@ program.addCommand(
 		.description('Send a message to an agent and get a response')
 		.argument('<agent>', 'Agent ID (with or without @ prefix)')
 		.argument('<message>', 'Message to send to the agent')
-		.action(async (rawAgent: string, message: string) => {
+		.option('-c, --channel <channel>', 'Channel to load history from before chatting', 'general')
+		.action(async (rawAgent: string, message: string, opts: { channel: string }) => {
 			try {
 				const agentId = rawAgent.replace(/^@/, '')
 				const root = await findCompanyRoot()
@@ -54,6 +56,18 @@ program.addCommand(
 				console.log(header('QUESTPIE Autopilot'))
 				console.log(dim(`Chatting with ${badge(agent.id, 'cyan')} (${agent.name})`))
 				console.log('')
+
+				// Show recent channel history for context
+				const channelMessages = await readChannelMessages(root, opts.channel, 10)
+				if (channelMessages.length > 0) {
+					console.log(dim(`--- recent #${opts.channel} ---`))
+					for (const msg of channelMessages) {
+						const time = new Date(msg.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+						console.log(dim(`  ${time} ${msg.from}: ${msg.content}`))
+					}
+					console.log(dim('---'))
+					console.log('')
+				}
 
 				// Stream manager that prints output for any session the spawner creates
 				const streamManager = new ChatStreamManager((chunk) => {

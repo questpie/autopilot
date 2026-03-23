@@ -1,7 +1,13 @@
 ---
-name: Security Checklist
-description: Security review checklist for code and infrastructure
-roles: [reviewer, devops, developer]
+name: security-checklist
+description: |
+  Security review checklist for code and infrastructure
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [security, review]
+  roles: [reviewer, devops, developer]
 ---
 
 # Security Checklist

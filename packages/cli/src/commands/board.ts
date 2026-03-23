@@ -8,10 +8,11 @@ import { header, dim, table, success, error, badge } from '../utils/format'
 
 const boardCmd = new Command('board')
 	.description('Show dashboard pins and alerts')
-	.action(async () => {
+	.option('-g, --group <group>', 'Filter by group')
+	.action(async (opts: { group?: string }) => {
 		try {
 			const root = await findCompanyRoot()
-			const pins = await listPins(root)
+			const pins = await listPins(root, opts.group)
 
 			console.log(header('Dashboard Board'))
 			if (pins.length === 0) {
@@ -19,19 +20,44 @@ const boardCmd = new Command('board')
 				return
 			}
 
-			console.log(
-				table(
-					pins.map((p) => [
-						dim(p.id),
-						badge(p.type, p.type === 'alert' ? 'red' : p.type === 'status' ? 'green' : 'cyan'),
-						badge(p.group, 'magenta'),
-						p.title,
-						p.content ? dim(p.content.slice(0, 60) + (p.content.length > 60 ? '...' : '')) : '',
-					]),
-				),
-			)
+			// Group pins by group field
+			const groups = new Map<string, typeof pins>()
+			for (const pin of pins) {
+				const group = pin.group ?? 'ungrouped'
+				if (!groups.has(group)) groups.set(group, [])
+				groups.get(group)!.push(pin)
+			}
+
+			for (const [group, groupPins] of groups) {
+				console.log('')
+				console.log(header(`  ${group.toUpperCase()}`))
+				console.log(
+					table(
+						groupPins.map((p) => {
+							const row = [
+								dim(p.id),
+								badge(p.type, p.type === 'error' ? 'red' : p.type === 'warning' ? 'yellow' : p.type === 'success' ? 'green' : 'cyan'),
+								p.title,
+								p.content ? dim(p.content.slice(0, 50) + (p.content.length > 50 ? '...' : '')) : '',
+							]
+							return row
+						}),
+					),
+				)
+
+				// Show actions for pins that have them
+				for (const p of groupPins) {
+					const meta = p.metadata as Record<string, unknown> | undefined
+					const actions = meta?.actions as Array<{ label: string; action: string }> | undefined
+					if (actions && actions.length > 0) {
+						const actionStr = actions.map((a) => badge(a.label, 'magenta')).join(' ')
+						console.log(`    ${dim(p.id)} ${actionStr}`)
+					}
+				}
+			}
+
 			console.log('')
-			console.log(dim(`${pins.length} pin(s)`))
+			console.log(dim(`${pins.length} pin(s) in ${groups.size} group(s)`))
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))
 			console.error(dim('Run "autopilot --help" for usage information.'))

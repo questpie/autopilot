@@ -35,7 +35,7 @@ export function Header() {
 						QUESTPIE
 					</a>
 					<span className="font-mono text-[10px] text-purple border border-purple/30 px-2 py-0.5 tracking-wider hidden sm:inline">
-						COMING SOON
+						v1.0 BETA
 					</span>
 				</nav>
 			</div>

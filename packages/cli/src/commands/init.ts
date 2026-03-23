@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { cp, readFile, writeFile, access, readdir } from 'node:fs/promises'
+import { cp, readFile, writeFile, access, readdir, symlink, mkdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { program } from '../program'
 import { header, success, dim, error, warning } from '../utils/format'
@@ -90,7 +90,16 @@ program.addCommand(
 				content = content.replace(/slug:\s*"my-company"/, `slug: "${slug}"`)
 				await writeFile(companyYamlPath, content, 'utf-8')
 
-				console.log(success('Company initialized successfully!'))
+				// Create .claude/skills symlink → ../skills (Agent Skills standard)
+			const claudeDir = join(targetDir, '.claude')
+			await mkdir(claudeDir, { recursive: true })
+			try {
+				await symlink('../skills', join(claudeDir, 'skills'))
+			} catch {
+				// Symlink may already exist from template copy
+			}
+
+			console.log(success('Company initialized successfully!'))
 				console.log('')
 				console.log(`  ${dim('Directory:')}  ${targetDir}`)
 				console.log(`  ${dim('Company:')}    ${name}`)

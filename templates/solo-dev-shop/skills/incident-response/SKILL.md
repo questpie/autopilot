@@ -1,7 +1,13 @@
 ---
-name: Incident Response
-description: How to handle production incidents
-roles: [devops, developer]
+name: incident-response
+description: |
+  How to handle production incidents
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [incident, operations]
+  roles: [devops, developer]
 ---
 
 # Incident Response

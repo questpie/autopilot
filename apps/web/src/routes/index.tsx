@@ -7,7 +7,6 @@ import { LiveStream } from '@/components/LiveStream'
 import { QSymbol } from '@/components/QSymbol'
 import { Section, SectionHeader } from '@/components/Section'
 import { Tag } from '@/components/Tag'
-import { WaitlistForm } from '@/components/WaitlistForm'
 
 export const Route = createFileRoute('/')({
 	head: () => ({
@@ -23,16 +22,13 @@ function LandingPage() {
 			<div className="max-w-[860px] mx-auto px-4 sm:px-6">
 				{/* HERO */}
 				<section className="pt-12 pb-12 sm:pt-20 sm:pb-20 border-b border-border">
-					<div className="font-mono text-xs text-purple tracking-[4px] mb-3">
-						INTRODUCING
-					</div>
 					<h1 className="font-sans text-[40px] sm:text-[64px] font-black text-white m-0 leading-none tracking-tight">
 						Autopilot
 					</h1>
 					<p className="font-sans text-base sm:text-[22px] text-muted mt-4 font-light leading-relaxed">
 						AI-native company operating system.
 						<br />
-						Define agents. Assign roles. Give intent. They handle the rest.
+						Define agents. Give intent. They handle the rest.
 					</p>
 					<div className="w-[60px] h-[3px] bg-purple mt-8" />
 					<div className="mt-8 flex gap-2 flex-wrap">
@@ -41,10 +37,38 @@ function LandingPage() {
 						<Tag color="green">FS-NATIVE</Tag>
 						<Tag color="orange">CLI-FIRST</Tag>
 					</div>
-					<div className="mt-10">
-						<WaitlistForm />
+					<div className="mt-10 flex gap-3 flex-wrap">
+						<a
+							href="/docs/getting-started"
+							className="font-mono text-xs text-white bg-purple px-6 py-2.5 no-underline hover:bg-purple-light transition-colors"
+						>
+							Install
+						</a>
+						<a
+							href="https://github.com/questpie/autopilot"
+							target="_blank"
+							rel="noopener noreferrer"
+							className="font-mono text-xs text-purple border border-border px-6 py-2.5 no-underline hover:border-purple transition-colors"
+						>
+							GitHub
+						</a>
 					</div>
 				</section>
+
+				{/* QUICK START */}
+				<Section id="quickstart">
+					<SectionHeader sub="Install globally, scaffold a company, and start giving intents in under a minute.">
+						Get Started in 60 Seconds
+					</SectionHeader>
+					<CodeBlock title="terminal">
+						{`$ bun add -g @questpie/autopilot
+$ autopilot init my-company
+$ cd my-company
+$ autopilot start
+$ autopilot ask "Build a pricing page with Stripe"
+$ autopilot attach sam`}
+					</CodeBlock>
+				</Section>
 
 				{/* WHAT IS THIS */}
 				<Section id="what">
@@ -665,11 +689,8 @@ Max: FeatureGrid and Testimonials done.
 						Your company, on autopilot.
 					</h2>
 					<p className="font-sans text-[15px] text-muted mt-2">
-						Open source. CLI-first. Coming soon.
+						Open Source. CLI-first. MIT License.
 					</p>
-					<div className="mt-8 max-w-md mx-auto">
-						<WaitlistForm />
-					</div>
 					<div className="flex flex-col sm:flex-row justify-center gap-3 mt-8">
 						<a
 							href="https://github.com/questpie/autopilot"
@@ -680,10 +701,10 @@ Max: FeatureGrid and Testimonials done.
 							github.com/questpie/autopilot
 						</a>
 						<a
-							href="#waitlist"
+							href="/docs"
 							className="font-mono text-xs text-purple border border-border px-6 py-2.5 no-underline hover:border-purple transition-colors"
 						>
-							autopilot.questpie.com
+							Documentation
 						</a>
 					</div>
 					<div className="font-mono text-[11px] text-dim mt-12">

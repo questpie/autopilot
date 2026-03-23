@@ -1,7 +1,13 @@
 ---
-name: Document Creation
-description: How to write specs, ADRs, plans, and structured documents
-roles: [strategist, planner, all]
+name: document-creation
+description: |
+  How to write specs, ADRs, plans, and structured documents
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [documentation, planning]
+  roles: [strategist, planner, all]
 ---
 
 # Document Creation

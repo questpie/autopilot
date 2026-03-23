@@ -150,7 +150,7 @@ function DocsOverview() {
 							<td className="py-2 pr-4 font-mono text-purple text-xs">
 								packages/spec
 							</td>
-							<td className="py-2 pr-4 font-mono text-xs">@questpie/spec</td>
+							<td className="py-2 pr-4 font-mono text-xs">@questpie/autopilot-spec</td>
 							<td className="py-2 text-xs">
 								Zod schemas, constants, path helpers, validators for all
 								filesystem formats
@@ -161,7 +161,7 @@ function DocsOverview() {
 								packages/orchestrator
 							</td>
 							<td className="py-2 pr-4 font-mono text-xs">
-								@questpie/orchestrator
+								@questpie/autopilot-orchestrator
 							</td>
 							<td className="py-2 text-xs">
 								Filesystem watcher, workflow engine, agent spawner, scheduler,
@@ -173,7 +173,7 @@ function DocsOverview() {
 								packages/agents
 							</td>
 							<td className="py-2 pr-4 font-mono text-xs">
-								@questpie/agents
+								@questpie/autopilot-agents
 							</td>
 							<td className="py-2 text-xs">
 								Agent runtime, system prompts, primitive implementations, memory
@@ -208,7 +208,8 @@ function DocsOverview() {
 				Quick Start
 			</h2>
 			<CodeBlock title="terminal">
-				{`bunx @questpie/autopilot init my-company
+				{`bun add -g @questpie/autopilot
+autopilot init my-company
 cd my-company
 export ANTHROPIC_API_KEY=sk-ant-xxx
 

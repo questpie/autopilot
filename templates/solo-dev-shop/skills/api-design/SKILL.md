@@ -1,7 +1,13 @@
 ---
-name: API Design
-description: REST API design patterns and conventions
-roles: [developer, planner]
+name: api-design
+description: |
+  REST API design patterns and conventions
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [api, design]
+  roles: [developer, planner]
 ---
 
 # API Design

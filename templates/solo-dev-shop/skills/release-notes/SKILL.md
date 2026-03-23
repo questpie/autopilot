@@ -1,7 +1,13 @@
 ---
-name: Release Notes
-description: How to write clear release notes and changelogs
-roles: [marketing, developer]
+name: release-notes
+description: |
+  How to write clear release notes and changelogs
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [release, documentation]
+  roles: [marketing, developer]
 ---
 
 # Release Notes

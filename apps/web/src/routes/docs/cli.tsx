@@ -694,6 +694,169 @@ $ autopilot board clear
   Cleared 3 pin(s).`}
 			</CodeBlock>
 
+			{/* ── Communication ──────────────────────────── */}
+
+			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
+				Communication
+			</h2>
+
+			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
+				autopilot channels
+			</h3>
+			<p className="text-ghost leading-relaxed mb-4">
+				List, read, and send messages to agent communication channels.
+				Channels are directories under{' '}
+				<code className="font-mono text-xs text-purple">
+					/comms/channels/
+				</code>{' '}
+				containing YAML message files.
+			</p>
+			<CodeBlock title="syntax">
+				{`autopilot channels                          List all channels
+autopilot channels show <channel>          Show messages in a channel
+autopilot channels show <channel> --follow Live follow (poll every 2s)
+autopilot channels send <channel> "msg"    Send a message
+
+Options for show:
+  -n, --limit <n>         Number of messages (default: 20)
+  -f, --follow            Live follow mode`}
+			</CodeBlock>
+			<CodeBlock title="examples">
+				{`# List all channels
+$ autopilot channels
+  Channels
+  [dev]       42 messages  last: 14:30:02
+  [general]   18 messages  last: 13:15:45
+  [ops]        7 messages  last: 12:00:00
+  3 channel(s)
+
+# Read recent messages
+$ autopilot channels show dev
+  #dev
+
+  14:25:02 [max]    Started implementing pricing page
+  14:28:15 [max]    PR #47 created: feat/pricing-page
+  14:30:02 [riley]  Reviewing PR #47 now
+  3 message(s)
+
+# Live follow a channel
+$ autopilot channels show dev --follow
+  Following... (Ctrl+C to stop)
+  14:32:00 [riley]  PR #47 approved ✓
+  ^C
+  Stopped.
+
+# Send a message
+$ autopilot channels send dev "Please prioritize the auth fix"
+  Message sent to #dev
+  ID: msg-abc123`}
+			</CodeBlock>
+
+			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
+				autopilot chat
+			</h3>
+			<p className="text-ghost leading-relaxed mb-4">
+				Send a message to a specific agent and get a streamed response.
+				Shows recent channel history for context before chatting.
+			</p>
+			<CodeBlock title="syntax">
+				{`autopilot chat <agent> <message> [options]
+
+Arguments:
+  agent                   Agent ID (with or without @ prefix)
+  message                 Message to send
+
+Options:
+  -c, --channel <channel> Channel to load history from (default: general)`}
+			</CodeBlock>
+			<CodeBlock title="examples">
+				{`$ autopilot chat max "What's the status of the pricing page?"
+  QUESTPIE Autopilot
+  Chatting with [max] (Max)
+
+  --- recent #general ---
+  14:25 max: Started implementing pricing page
+  14:30 riley: Reviewing PR #47 now
+  ---
+
+  The pricing page implementation is complete. PR #47 has been...
+  --- 3 tool calls | session sess-abc123 ---
+
+# Use a specific channel for context
+$ autopilot chat @ops "Is the cluster healthy?" --channel ops`}
+			</CodeBlock>
+
+			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
+				autopilot approve / reject
+			</h3>
+			<p className="text-ghost leading-relaxed mb-4">
+				Top-level shortcuts for{' '}
+				<code className="font-mono text-xs text-purple">tasks approve</code>{' '}
+				and{' '}
+				<code className="font-mono text-xs text-purple">tasks reject</code>.
+				Triggers workflow advancement.
+			</p>
+			<CodeBlock title="syntax">
+				{`autopilot approve <id>            Approve task → move to done
+autopilot reject <id> [reason]    Reject task → move to blocked`}
+			</CodeBlock>
+			<CodeBlock title="examples">
+				{`$ autopilot approve TASK-003
+  Task TASK-003 approved and moved to done.
+  Workflow advancement triggered.
+
+$ autopilot reject TASK-005 "Missing error handling for edge cases"
+  Task TASK-005 rejected and moved to blocked.
+  Reason: Missing error handling for edge cases`}
+			</CodeBlock>
+
+			{/* ── Artifacts ──────────────────────────────── */}
+
+			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
+				Artifacts
+			</h2>
+
+			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
+				autopilot artifacts
+			</h3>
+			<p className="text-ghost leading-relaxed mb-4">
+				List, open, and stop artifact dev servers. Artifacts are
+				previewable outputs (React apps, HTML pages) created by agents
+				under{' '}
+				<code className="font-mono text-xs text-purple">
+					/artifacts/
+				</code>{' '}
+				with{' '}
+				<code className="font-mono text-xs text-purple">
+					.artifact.yaml
+				</code>{' '}
+				configs.
+			</p>
+			<CodeBlock title="syntax">
+				{`autopilot artifacts                List all artifacts
+autopilot artifacts open <name>   Start and open in browser
+autopilot artifacts stop <name>   Stop a running artifact`}
+			</CodeBlock>
+			<CodeBlock title="examples">
+				{`# List artifacts
+$ autopilot artifacts
+  Artifacts
+  [pricing-preview]  Pricing Page Preview   bunx vite --port {port}
+  [dashboard-mock]   Dashboard Mockup       bunx serve -p {port}
+  2 artifact(s)
+
+# Open (cold-starts if not running)
+$ autopilot artifacts open pricing-preview
+  Starting artifact...
+  Artifact "pricing-preview" is running
+  URL: http://localhost:4100
+  Opened in browser.
+
+# Stop
+$ autopilot artifacts stop pricing-preview
+  Artifact "pricing-preview" stopped.`}
+			</CodeBlock>
+
 			{/* ── Quick Reference ─────────────────────────── */}
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
@@ -789,6 +952,31 @@ $ autopilot board clear
 							<td className="py-2 pr-4 font-mono text-xs text-purple">board clear</td>
 							<td className="py-2 pr-4 text-xs">Observation</td>
 							<td className="py-2 text-xs">Remove all pins</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 font-mono text-xs text-purple">approve &lt;id&gt;</td>
+							<td className="py-2 pr-4 text-xs">Tasks</td>
+							<td className="py-2 text-xs">Approve a task at a human gate</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 font-mono text-xs text-purple">reject &lt;id&gt; [reason]</td>
+							<td className="py-2 pr-4 text-xs">Tasks</td>
+							<td className="py-2 text-xs">Reject a task with feedback</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 font-mono text-xs text-purple">channels</td>
+							<td className="py-2 pr-4 text-xs">Communication</td>
+							<td className="py-2 text-xs">List and read agent channels</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 font-mono text-xs text-purple">artifacts</td>
+							<td className="py-2 pr-4 text-xs">Observation</td>
+							<td className="py-2 text-xs">List and view task artifacts</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 font-mono text-xs text-purple">chat &lt;agent&gt;</td>
+							<td className="py-2 pr-4 text-xs">Communication</td>
+							<td className="py-2 text-xs">Interactive chat with an agent</td>
 						</tr>
 						<tr className="border-b border-border/50">
 							<td className="py-2 pr-4 font-mono text-xs text-purple">knowledge</td>

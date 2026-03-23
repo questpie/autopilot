@@ -1,7 +1,13 @@
 ---
-name: Project Scoping
-description: How to scope features and estimate work
-roles: [strategist, planner]
+name: project-scoping
+description: |
+  How to scope features and estimate work
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [planning, estimation]
+  roles: [strategist, planner]
 ---
 
 # Project Scoping

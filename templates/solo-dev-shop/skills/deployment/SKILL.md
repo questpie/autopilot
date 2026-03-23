@@ -1,7 +1,13 @@
 ---
-name: Deployment Guide
-description: How to deploy applications safely
-roles: [devops, developer]
+name: deployment
+description: |
+  How to deploy applications safely
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [deployment, operations]
+  roles: [devops, developer]
 ---
 
 # Deployment

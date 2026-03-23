@@ -1,7 +1,13 @@
 ---
-name: Testing Strategy
-description: How to write and organize tests effectively
-roles: [developer, reviewer]
+name: testing-strategy
+description: |
+  How to write and organize tests effectively
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [testing, quality]
+  roles: [developer, reviewer]
 ---
 
 # Testing Strategy

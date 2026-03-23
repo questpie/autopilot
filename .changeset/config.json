@@ -1,0 +1,18 @@
+{
+	"$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
+	"changelog": ["@changesets/changelog-github", { "repo": "questpie/autopilot" }],
+	"commit": false,
+	"fixed": [],
+	"linked": [
+		[
+			"@questpie/autopilot",
+			"@questpie/autopilot-spec",
+			"@questpie/autopilot-agents",
+			"@questpie/autopilot-orchestrator"
+		]
+	],
+	"access": "public",
+	"baseBranch": "main",
+	"updateInternalDependencies": "patch",
+	"ignore": ["@questpie/autopilot-web", "@questpie/autopilot-dashboard"]
+}

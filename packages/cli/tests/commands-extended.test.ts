@@ -16,8 +16,24 @@ describe('extended command registration', () => {
 		expect(commandNames).toContain('board')
 	})
 
-	it('has exactly 13 commands', () => {
-		expect(program.commands.length).toBe(13)
+	it('registers the channels command', () => {
+		expect(commandNames).toContain('channels')
+	})
+
+	it('registers the artifacts command', () => {
+		expect(commandNames).toContain('artifacts')
+	})
+
+	it('registers the approve command', () => {
+		expect(commandNames).toContain('approve')
+	})
+
+	it('registers the reject command', () => {
+		expect(commandNames).toContain('reject')
+	})
+
+	it('has exactly 17 commands', () => {
+		expect(program.commands.length).toBe(17)
 	})
 
 	it('has secrets subcommands', () => {
@@ -44,5 +60,21 @@ describe('extended command registration', () => {
 		expect(boardCmd).toBeDefined()
 		const subNames = boardCmd!.commands.map((c) => c.name())
 		expect(subNames).toContain('clear')
+	})
+
+	it('has channels subcommands', () => {
+		const channelsCmd = program.commands.find((c) => c.name() === 'channels')
+		expect(channelsCmd).toBeDefined()
+		const subNames = channelsCmd!.commands.map((c) => c.name())
+		expect(subNames).toContain('show')
+		expect(subNames).toContain('send')
+	})
+
+	it('has artifacts subcommands', () => {
+		const artifactsCmd = program.commands.find((c) => c.name() === 'artifacts')
+		expect(artifactsCmd).toBeDefined()
+		const subNames = artifactsCmd!.commands.map((c) => c.name())
+		expect(subNames).toContain('open')
+		expect(subNames).toContain('stop')
 	})
 })

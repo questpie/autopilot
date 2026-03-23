@@ -23,6 +23,27 @@ const EVENT_ICONS: Record<string, string> = {
 	status: '\u{2705}',
 }
 
+const TOOL_COLORS: Record<string, string> = {
+	read_file: 'dim',
+	list_directory: 'dim',
+	search_knowledge: 'dim',
+	write_file: 'green',
+	append_file: 'green',
+	update_knowledge: 'green',
+	run_command: 'yellow',
+	install_tool: 'yellow',
+	git_commit: 'yellow',
+	git_create_branch: 'yellow',
+	git_create_pr: 'yellow',
+	git_status: 'yellow',
+}
+
+function getToolColor(tool: string): string {
+	if (tool in TOOL_COLORS) return TOOL_COLORS[tool]!
+	if (tool.startsWith('mcp__autopilot')) return 'magenta'
+	return 'cyan'
+}
+
 function formatTime(iso: string): string {
 	const d = new Date(iso)
 	return d.toLocaleTimeString('en-GB', {
@@ -46,7 +67,8 @@ function formatEntry(entry: ActivityEntry, compact: boolean): string {
 		case 'tool_call': {
 			const tool = entry.details?.tool as string | undefined
 			const target = entry.details?.target as string | undefined
-			const toolText = tool ? badge(tool, 'cyan') : ''
+			const color = tool ? getToolColor(tool) : 'cyan'
+			const toolText = tool ? badge(tool, color) : ''
 			const targetText = target ? ` \u2192 ${target}` : ''
 			return `[${time}] ${icon} ${entry.agent}  ${toolText}${targetText} ${entry.summary}`
 		}
