@@ -52,7 +52,8 @@ export class ClaudeAgentSDKProvider implements AgentProvider {
 					cwd: toolContext.companyRoot,
 					allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
 					mcpServers: { autopilot: autopilotMcp },
-					permissionMode: 'acceptEdits',
+					permissionMode: 'bypassPermissions',
+					allowDangerouslySkipPermissions: true,
 					maxTurns,
 					model,
 					hooks: {
