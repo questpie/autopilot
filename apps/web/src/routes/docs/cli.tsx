@@ -1,10 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { CodeBlock } from '@/components/CodeBlock'
+import { seoHead } from '@/lib/seo'
 
 export const Route = createFileRoute('/docs/cli')({
-	head: () => ({
-		meta: [{ title: 'CLI Reference — QUESTPIE Autopilot' }],
-	}),
+	head: () => ({ ...seoHead({ title: 'CLI Reference', description: 'Complete CLI reference for QUESTPIE Autopilot — init, start, ask, attach, inbox, agents, status, secrets, and more.', path: '/docs/cli', ogImage: 'https://autopilot.questpie.com/og-cli.png' }) }),
 	component: CLIReference,
 })
 

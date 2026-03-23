@@ -1,11 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AgentCard } from '@/components/AgentCard'
 import { CodeBlock } from '@/components/CodeBlock'
+import { seoHead } from '@/lib/seo'
 
 export const Route = createFileRoute('/docs/agents')({
-	head: () => ({
-		meta: [{ title: 'Agents — QUESTPIE Autopilot' }],
-	}),
+	head: () => ({ ...seoHead({ title: 'Agents', description: 'AI agents with persistent identity — role templates, filesystem scope, memory isolation, 4-layer context assembly, and the default 8-agent team.', path: '/docs/agents', ogImage: 'https://autopilot.questpie.com/og-agents.png' }) }),
 	component: Agents,
 })
 

@@ -1,10 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { CodeBlock } from '@/components/CodeBlock'
+import { seoHead } from '@/lib/seo'
 
 export const Route = createFileRoute('/docs/integrations')({
-	head: () => ({
-		meta: [{ title: 'Integrations — QUESTPIE Autopilot' }],
-	}),
+	head: () => ({ ...seoHead({ title: 'Integrations', description: 'The 3-part integration pattern — Secret + Knowledge Doc + Primitive. GitHub, Linear, Slack, Stripe examples.', path: '/docs/integrations', ogImage: 'https://autopilot.questpie.com/og-integrations.png' }) }),
 	component: Integrations,
 })
 

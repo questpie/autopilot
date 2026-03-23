@@ -7,10 +7,16 @@ import { LiveStream } from '@/components/LiveStream'
 import { QSymbol } from '@/components/QSymbol'
 import { Section, SectionHeader } from '@/components/Section'
 import { Tag } from '@/components/Tag'
+import { seoHead } from '@/lib/seo'
 
 export const Route = createFileRoute('/')({
 	head: () => ({
-		meta: [{ title: 'QUESTPIE Autopilot — AI-Native Company Operating System' }],
+		...seoHead({
+			title: 'QUESTPIE Autopilot',
+			description:
+				'AI-native company operating system. Define your company as a filesystem, staff it with AI agents backed by Claude, and give high-level intents. Open source, CLI-first.',
+			path: '/',
+		}),
 	}),
 	component: LandingPage,
 })

@@ -1,10 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { CodeBlock } from '@/components/CodeBlock'
+import { seoHead } from '@/lib/seo'
 
 export const Route = createFileRoute('/docs/workflows')({
-	head: () => ({
-		meta: [{ title: 'Workflows — QUESTPIE Autopilot' }],
-	}),
+	head: () => ({ ...seoHead({ title: 'Workflows', description: 'YAML workflow definitions for development, marketing, and incident response. How work flows through the company.', path: '/docs/workflows' }) }),
 	component: Workflows,
 })
 

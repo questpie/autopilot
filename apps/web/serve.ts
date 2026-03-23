@@ -3,6 +3,10 @@ import server from './dist/server/server.js'
 
 const port = Number(process.env.PORT) || 3000
 const clientDir = join(import.meta.dir, 'dist', 'client')
+const publicDir = join(import.meta.dir, 'public')
+
+const STATIC_CACHE = 'public, max-age=31536000, immutable'
+const SHORT_CACHE = 'public, max-age=3600'
 
 Bun.serve({
 	port,
@@ -15,11 +19,17 @@ Bun.serve({
 			const file = Bun.file(filePath)
 			if (await file.exists()) {
 				return new Response(file, {
-					headers: {
-						'cache-control': 'public, max-age=31536000, immutable',
-					},
+					headers: { 'cache-control': STATIC_CACHE },
 				})
 			}
+		}
+
+		// Serve public files (robots.txt, sitemap.xml, favicons, etc.)
+		const publicFile = Bun.file(join(publicDir, url.pathname))
+		if (await publicFile.exists()) {
+			return new Response(publicFile, {
+				headers: { 'cache-control': SHORT_CACHE },
+			})
 		}
 
 		// SSR for everything else

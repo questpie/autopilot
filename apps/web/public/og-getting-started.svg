@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&amp;display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#0A0A0A"/>
+
+  <!-- Subtle grid -->
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1a1a" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.5"/>
+
+  <!-- Purple accent line top -->
+  <rect x="0" y="0" width="1200" height="4" fill="#B700FF"/>
+
+  <!-- Symbol -->
+  
+  <g transform="translate(506, 160) scale(4)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="square">
+    <path d="M10 2H2v20h8" />
+    <path d="M14 2h8v8" />
+    <rect x="13" y="13" width="10" height="10" fill="#B700FF" stroke="none" />
+  </g>
+
+
+  <!-- Title -->
+  <text x="600" y="400" text-anchor="middle" fill="#ffffff" font-family="Inter, sans-serif" font-size="42" font-weight="900" letter-spacing="-0.02em">Getting Started</text>
+
+  <text x="600" y="450" text-anchor="middle" fill="#999999" font-family="Inter, sans-serif" font-size="28" font-weight="400">QUESTPIE Autopilot</text>
+
+  <!-- Bottom bar -->
+  <rect x="0" y="570" width="1200" height="60" fill="#111111"/>
+  
+  <g transform="translate(40, 582) scale(1.5)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="square">
+    <path d="M10 2H2v20h8" />
+    <path d="M14 2h8v8" />
+    <rect x="13" y="13" width="10" height="10" fill="#B700FF" stroke="none" />
+  </g>
+
+  <text x="90" y="606" fill="#999999" font-family="JetBrains Mono, monospace" font-size="16" font-weight="700">QUESTPIE</text>
+  <text x="1160" y="606" text-anchor="end" fill="#666666" font-family="JetBrains Mono, monospace" font-size="14">autopilot.questpie.com</text>
+</svg>

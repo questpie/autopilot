@@ -1,10 +1,9 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { CodeBlock } from '@/components/CodeBlock'
+import { seoHead } from '@/lib/seo'
 
 export const Route = createFileRoute('/docs/')({
-	head: () => ({
-		meta: [{ title: 'Documentation — QUESTPIE Autopilot' }],
-	}),
+	head: () => ({ ...seoHead({ title: 'Documentation', description: 'Complete documentation for QUESTPIE Autopilot — architecture, agents, primitives, workflows, skills, and CLI reference.', path: '/docs', ogImage: 'https://autopilot.questpie.com/og-docs.png' }) }),
 	component: DocsOverview,
 })
 
@@ -290,14 +289,36 @@ autopilot attach max`}
 					</div>
 				</Link>
 				<Link
-					to="/docs/cli"
+					to="/docs/skills"
 					className="border border-border p-4 hover:border-purple transition-colors no-underline group"
 				>
 					<div className="font-sans text-sm font-bold text-white group-hover:text-purple mb-1">
-						CLI Reference
+						Skills
 					</div>
 					<div className="text-ghost text-xs">
-						All Autopilot commands -- init, ask, attach, inbox, agents, status
+						Markdown knowledge packages, agentskills.io format, built-in skills
+					</div>
+				</Link>
+				<Link
+					to="/docs/artifacts"
+					className="border border-border p-4 hover:border-purple transition-colors no-underline group"
+				>
+					<div className="font-sans text-sm font-bold text-white group-hover:text-purple mb-1">
+						Artifacts
+					</div>
+					<div className="text-ghost text-xs">
+						Agent-created previews, artifact router, cold-start, port pool
+					</div>
+				</Link>
+				<Link
+					to="/docs/living-dashboard"
+					className="border border-border p-4 hover:border-purple transition-colors no-underline group"
+				>
+					<div className="font-sans text-sm font-bold text-white group-hover:text-purple mb-1">
+						Living Dashboard
+					</div>
+					<div className="text-ghost text-xs">
+						Widgets, theme overrides, layout config, custom pages, dev/prod mode
 					</div>
 				</Link>
 				<Link
@@ -309,6 +330,39 @@ autopilot attach max`}
 					</div>
 					<div className="text-ghost text-xs">
 						3-part pattern, secret management, GitHub, Linear, Slack, Stripe
+					</div>
+				</Link>
+				<Link
+					to="/docs/integrations-setup"
+					className="border border-border p-4 hover:border-purple transition-colors no-underline group"
+				>
+					<div className="font-sans text-sm font-bold text-white group-hover:text-purple mb-1">
+						Integration Setup
+					</div>
+					<div className="text-ghost text-xs">
+						Agent workflow, secrets, knowledge docs, webhooks, OAuth
+					</div>
+				</Link>
+				<Link
+					to="/docs/use-cases"
+					className="border border-border p-4 hover:border-purple transition-colors no-underline group"
+				>
+					<div className="font-sans text-sm font-bold text-white group-hover:text-purple mb-1">
+						Use Cases
+					</div>
+					<div className="text-ghost text-xs">
+						Dev shop, marketing, e-commerce, consulting, solo SaaS
+					</div>
+				</Link>
+				<Link
+					to="/docs/cli"
+					className="border border-border p-4 hover:border-purple transition-colors no-underline group"
+				>
+					<div className="font-sans text-sm font-bold text-white group-hover:text-purple mb-1">
+						CLI Reference
+					</div>
+					<div className="text-ghost text-xs">
+						All Autopilot commands -- init, ask, attach, inbox, agents, status
 					</div>
 				</Link>
 			</div>

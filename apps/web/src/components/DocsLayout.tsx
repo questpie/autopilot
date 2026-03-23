@@ -9,8 +9,13 @@ const navItems = [
 	{ to: '/docs/primitives', label: 'Primitives' },
 	{ to: '/docs/workflows', label: 'Workflows' },
 	{ to: '/docs/memory', label: 'Context & Memory' },
-	{ to: '/docs/cli', label: 'CLI Reference' },
+	{ to: '/docs/skills', label: 'Skills' },
+	{ to: '/docs/artifacts', label: 'Artifacts' },
+	{ to: '/docs/living-dashboard', label: 'Living Dashboard' },
 	{ to: '/docs/integrations', label: 'Integrations' },
+	{ to: '/docs/integrations-setup', label: 'Integration Setup' },
+	{ to: '/docs/use-cases', label: 'Use Cases' },
+	{ to: '/docs/cli', label: 'CLI Reference' },
 ]
 
 export function DocsLayout() {

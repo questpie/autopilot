@@ -1,10 +1,9 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { CodeBlock } from '@/components/CodeBlock'
+import { seoHead } from '@/lib/seo'
 
 export const Route = createFileRoute('/docs/getting-started')({
-	head: () => ({
-		meta: [{ title: 'Getting Started — QUESTPIE Autopilot' }],
-	}),
+	head: () => ({ ...seoHead({ title: 'Getting Started', description: 'Install QUESTPIE Autopilot, create your first company, and run AI agents in minutes. Prerequisites, project structure, and first commands.', path: '/docs/getting-started', ogImage: 'https://autopilot.questpie.com/og-getting-started.png' }) }),
 	component: GettingStarted,
 })
 

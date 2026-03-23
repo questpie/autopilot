@@ -1,10 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { CodeBlock } from '@/components/CodeBlock'
+import { seoHead } from '@/lib/seo'
 
 export const Route = createFileRoute('/docs/primitives')({
-	head: () => ({
-		meta: [{ title: 'Primitives — QUESTPIE Autopilot' }],
-	}),
+	head: () => ({ ...seoHead({ title: 'Primitives', description: 'Structured tool calls agents use to interact with the system — tasks, messages, files, git, dashboard pins, and approval gates.', path: '/docs/primitives' }) }),
 	component: Primitives,
 })
 

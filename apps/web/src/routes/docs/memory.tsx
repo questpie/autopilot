@@ -1,10 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { CodeBlock } from '@/components/CodeBlock'
+import { seoHead } from '@/lib/seo'
 
 export const Route = createFileRoute('/docs/memory')({
-	head: () => ({
-		meta: [{ title: 'Context & Memory — QUESTPIE Autopilot' }],
-	}),
+	head: () => ({ ...seoHead({ title: 'Context & Memory', description: '4-layer context assembly, persistent agent memory, memory extraction after sessions, and cross-session knowledge retention.', path: '/docs/memory' }) }),
 	component: Memory,
 })
 
