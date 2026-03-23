@@ -13,7 +13,7 @@ function generatePinId(): string {
 }
 
 function resolvePath(companyRoot: string, relativePath: string): string {
-	return join(companyRoot, relativePath.replace(/^\/company/, ''))
+	return join(companyRoot, relativePath)
 }
 
 function now(): string {

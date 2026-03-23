@@ -5,7 +5,22 @@ import { program } from '../program'
 import { header, success, dim, error, warning } from '../utils/format'
 
 const CLI_ROOT = resolve(import.meta.dir, '..', '..')
-const TEMPLATE_DIR = resolve(CLI_ROOT, '..', '..', 'templates', 'solo-dev-shop')
+
+/**
+ * Resolve the template directory.
+ * When installed from npm, templates are copied into the package at packages/cli/templates/.
+ * In local dev (monorepo), they live at the repo root: ../../templates/.
+ */
+async function resolveTemplateDir(): Promise<string> {
+	const npmPath = resolve(CLI_ROOT, 'templates', 'solo-dev-shop')
+	try {
+		await access(npmPath)
+		return npmPath
+	} catch {}
+	// Fallback: monorepo layout
+	return resolve(CLI_ROOT, '..', '..', 'templates', 'solo-dev-shop')
+}
+
 
 async function printTree(dir: string, prefix: string = '', isLast: boolean = true): Promise<void> {
 	const entries = await readdir(dir, { withFileTypes: true })
@@ -55,17 +70,19 @@ program.addCommand(
 					// Directory doesn't exist, good
 				}
 
+				const templateDir = await resolveTemplateDir()
+
 				// Check template exists
 				try {
-					await access(TEMPLATE_DIR)
+					await access(templateDir)
 				} catch {
 					console.error(error('Template directory not found.'))
-					console.error(dim(`Expected at: ${TEMPLATE_DIR}`))
+					console.error(dim(`Expected at: ${templateDir}`))
 					console.error(dim('Make sure @questpie/autopilot is properly installed.'))
 					process.exit(1)
 				}
 
-				await cp(TEMPLATE_DIR, targetDir, { recursive: true })
+				await cp(templateDir, targetDir, { recursive: true })
 
 				const companyYamlPath = join(targetDir, 'company.yaml')
 				let content = await readFile(companyYamlPath, 'utf-8')

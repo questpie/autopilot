@@ -1,10 +1,13 @@
 {
 	"name": "@questpie/autopilot-orchestrator",
-	"version": "0.1.0",
-	"private": true,
+	"version": "1.0.0-beta.1",
+	"private": false,
 	"type": "module",
 	"description": "QUESTPIE Autopilot orchestrator runtime",
 	"main": "src/index.ts",
+	"files": [
+		"src/"
+	],
 	"scripts": {
 		"build": "bun build src/index.ts --outdir dist --target bun",
 		"test": "bun test",
@@ -13,8 +16,8 @@
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "^0.2.81",
 		"@anthropic-ai/sdk": "^0.80.0",
-		"@questpie/autopilot-agents": "workspace:*",
-		"@questpie/autopilot-spec": "workspace:*",
+		"@questpie/autopilot-agents": "1.0.0-beta.1",
+		"@questpie/autopilot-spec": "1.0.0-beta.1",
 		"chokidar": "^4.0.0",
 		"node-cron": "^3.0.0",
 		"simple-git": "^3.27.0",

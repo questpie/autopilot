@@ -1,14 +1,22 @@
 {
-	"name": "@questpie/autopilot-cli",
-	"version": "0.1.0",
-	"private": true,
+	"name": "@questpie/autopilot",
+	"version": "1.0.0-beta.1",
+	"private": false,
 	"type": "module",
-	"description": "QUESTPIE Autopilot CLI — AI-native company operating system",
-	"main": "src/index.ts",
+	"description": "AI-native company operating system. Your company is a container. Your employees are agents.",
 	"bin": {
 		"autopilot": "./bin/autopilot.ts"
 	},
-	"keywords": ["questpie", "autopilot", "cli", "ai", "agents"],
+	"main": "src/index.ts",
+	"files": [
+		"bin/",
+		"src/",
+		"templates/"
+	],
+	"keywords": [
+		"ai", "agents", "multi-agent", "orchestration", "typescript", "bun",
+		"claude", "anthropic", "company-os", "cli", "autopilot", "questpie"
+	],
 	"homepage": "https://autopilot.questpie.com",
 	"repository": {
 		"type": "git",
@@ -18,13 +26,14 @@
 	"license": "MIT",
 	"author": "QUESTPIE s.r.o.",
 	"scripts": {
-		"build": "bun build src/index.ts --outdir dist --target bun",
+		"build": "echo 'no build needed — runs as TypeScript via Bun'",
 		"test": "bun test",
-		"typecheck": "bunx tsc --noEmit"
+		"typecheck": "bunx tsc --noEmit",
+		"prepublishOnly": "rm -rf ./templates && cp -r ../../templates ./templates"
 	},
 	"dependencies": {
-		"@questpie/autopilot-spec": "workspace:*",
-		"@questpie/autopilot-orchestrator": "workspace:*",
+		"@questpie/autopilot-orchestrator": "1.0.0-beta.1",
+		"@questpie/autopilot-spec": "1.0.0-beta.1",
 		"commander": "^13.0.0"
 	},
 	"devDependencies": {
