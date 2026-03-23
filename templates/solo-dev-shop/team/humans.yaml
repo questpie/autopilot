@@ -1,7 +1,7 @@
 humans:
-  - id: founder
-    name: "Founder"
-    role: "founder"
+  - id: owner
+    name: "Owner"
+    role: "owner"
     description: "Company owner and sole human operator"
     notification_routing:
       urgent:

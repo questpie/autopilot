@@ -49,8 +49,8 @@ describe('solo-dev-shop template', () => {
 	test('team/humans.yaml validates against HumansFileSchema', async () => {
 		const result = await loadAndValidate(join(TEMPLATE_DIR, 'team/humans.yaml'), HumansFileSchema)
 		expect(result.humans).toHaveLength(1)
-		expect(result.humans[0].id).toBe('founder')
-		expect(result.humans[0].role).toBe('founder')
+		expect(result.humans[0].id).toBe('owner')
+		expect(result.humans[0].role).toBe('owner')
 		expect(result.humans[0].quiet_hours.enabled).toBe(true)
 		expect(result.humans[0].approval_scopes).toContain('merge')
 		expect(result.humans[0].approval_scopes).toContain('deploy')

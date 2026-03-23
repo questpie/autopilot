@@ -694,14 +694,14 @@ describe('HumanSchema', () => {
 	const validHuman = {
 		id: 'dominik',
 		name: 'Dominik',
-		role: 'founder',
+		role: 'owner',
 	}
 
 	test('parses valid data successfully', () => {
 		const result = HumanSchema.parse(validHuman)
 		expect(result.id).toBe('dominik')
 		expect(result.name).toBe('Dominik')
-		expect(result.role).toBe('founder')
+		expect(result.role).toBe('owner')
 	})
 
 	test('applies default values', () => {

@@ -103,4 +103,4 @@ steps:
     terminal: true
     actions:
       - move_task_to: done
-      - notify: ["founder"]
+      - notify: ["owner"]

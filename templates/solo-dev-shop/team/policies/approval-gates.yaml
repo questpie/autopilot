@@ -1,36 +1,36 @@
 gates:
   - gate: merge
     description: "Approve merging code into the main branch"
-    required_roles: ["founder"]
+    required_roles: ["owner"]
     human_required: true
 
   - gate: deploy
     description: "Approve deployment to production environment"
-    required_roles: ["founder"]
+    required_roles: ["owner"]
     human_required: true
 
   - gate: publish
     description: "Approve publishing content to external channels"
-    required_roles: ["founder"]
+    required_roles: ["owner"]
     human_required: true
 
   - gate: spend
     description: "Approve spending or resource allocation"
-    required_roles: ["founder"]
+    required_roles: ["owner"]
     human_required: true
 
   - gate: setup
     description: "Approve infrastructure or configuration changes"
-    required_roles: ["founder"]
+    required_roles: ["owner"]
     human_required: true
 
   - gate: incident
     description: "Approve incident response actions"
-    required_roles: ["founder"]
+    required_roles: ["owner"]
     human_required: false
     auto_approve_after: "15m"
 
   - gate: review
     description: "Approve review completion"
-    required_roles: ["founder"]
+    required_roles: ["owner"]
     human_required: false
