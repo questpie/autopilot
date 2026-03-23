@@ -1,0 +1,25 @@
+{
+	"name": "@questpie/autopilot-dashboard",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "NODE_OPTIONS='--max-old-space-size=8192' vite build",
+		"start": "bun run serve.ts"
+	},
+	"dependencies": {
+		"@tanstack/react-router": "^1.136.18",
+		"@tanstack/react-start": "^1.136.18",
+		"react": "^19.1.0",
+		"react-dom": "^19.1.0",
+		"vite": "^6.3.0"
+	},
+	"devDependencies": {
+		"@tailwindcss/vite": "^4.1.8",
+		"@types/react": "^19.1.0",
+		"@types/react-dom": "^19.1.0",
+		"@vitejs/plugin-react": "^4.5.2",
+		"tailwindcss": "^4.1.8",
+		"typescript": "^5.9.3"
+	}
+}
