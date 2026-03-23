@@ -1,70 +1,134 @@
-# How We Work
+# How We Work — MANDATORY Rules
 
-> This document explains how QUESTPIE Autopilot operates. All agents should read this.
+> CRITICAL: Every agent MUST follow these rules. Non-compliance breaks the workflow.
 
-## The Basics
+## Your Available Tools
 
-You are an AI agent in a company powered by QUESTPIE Autopilot. The company filesystem IS the database — everything is YAML, Markdown, and JSON files.
+You have access to these tools via the `autopilot` MCP server. Use them — they are the ONLY way to produce visible effects.
 
-## Communication
+### Communication
+- `send_message({ to, content })` — Send to `channel:dev`, `channel:general`, `agent:{id}`, or `human:{id}`
+- `ask_agent({ to, question, reason })` — Ask another agent for info they have
 
-- **Don't "chat."** Call structured primitives: `send_message`, `create_task`, `pin_to_board`.
-- **Thinking is private.** Only tool calls produce visible effects.
-- **Use channels** for team communication: `send_message({ to: "channel:dev", content: "..." })`.
-- **Use direct messages** for 1:1: `send_message({ to: "agent:riley", content: "..." })`.
-- **Reference files** when discussing work: include paths in `references` field.
+### Tasks
+- `create_task({ title, type, assigned_to, workflow })` — Create a new task
+- `update_task({ task_id, status, note })` — Update task status (MUST do when done)
+- `add_blocker({ task_id, reason, assigned_to })` — Escalate to human when stuck
+- `resolve_blocker({ task_id, note })` — Mark a blocker as resolved
 
-## Tasks
+### Dashboard
+- `pin_to_board({ group, title, type, content })` — Pin for human visibility (MUST do for important outputs)
+- `unpin_from_board({ pin_id })` — Remove a pin
 
-- Tasks live in `/tasks/` organized by status: `backlog/`, `active/`, `review/`, `blocked/`, `done/`.
-- Every task has a YAML file with `id`, `title`, `status`, `assigned_to`, `workflow`, `history`.
-- **History is append-only** — never delete history entries.
-- When you finish work, update the task status: `update_task({ task_id: "...", status: "done" })`.
-- If you're blocked, escalate: `add_blocker({ task_id: "...", reason: "...", assigned_to: "human" })`.
+### Knowledge
+- `search_knowledge({ query })` — Search company knowledge base
+- `update_knowledge({ path, content, reason })` — Add/update knowledge docs
+- `skill_request({ skill_id })` — Load a skill for guidance
 
-## Workflows
+### External
+- `http_request({ method, url, secret_ref })` — Call external APIs
+- `create_artifact({ name, type, files })` — Create a previewable artifact
 
-- Work follows workflows defined in `/team/workflows/`.
-- The **development workflow** goes: scope → plan → implement → review → merge → deploy.
-- At **human gates** (merge, deploy, publish), work pauses for human approval.
-- You'll be assigned tasks automatically based on your role and the workflow step.
+### Files (built-in)
+- `Read`, `Write`, `Edit`, `Glob`, `Grep` — File operations on the company filesystem
+- `Bash` — Run shell commands
 
-## Filesystem Scope
+## MANDATORY: What You MUST Do After Every Task
 
-- You can only read/write within your defined `fs_scope`.
-- If you need info outside your scope, use `send_message` to ask the owning agent.
-- **Never** try to read another agent's memory.
+When you finish working on a task, you MUST do ALL of these in order:
 
-## Memory
+### Step 1: Update the task status
+```
+update_task({ task_id: "task-xxx", status: "done", note: "Brief summary of what was done" })
+```
 
-- Your memory persists across sessions in `/context/memory/{your-id}/memory.yaml`.
-- After each session, key facts, decisions, and learnings are extracted and saved.
-- Use memory to avoid repeating mistakes and build on past work.
+### Step 2: Notify the team
+```
+send_message({
+  to: "channel:dev",
+  content: "Completed [task title]. Output: [path to file]. Ready for next step.",
+  references: ["task-xxx", "/path/to/output"]
+})
+```
 
-## Approval Gates
+### Step 3: Pin for human visibility (if the output is important)
+```
+pin_to_board({
+  group: "recent",
+  title: "[Task title] — Done",
+  content: "Output at /path/to/file",
+  type: "success"
+})
+```
 
-These **always** require human approval:
-- Merging code to main branch
-- Deploying to production
-- Publishing external content
-- Spending money (> $10)
-- Creating/deleting infrastructure
-- Modifying team or policies
+**If you skip these steps, the workflow engine cannot route work to the next agent.**
 
-These you can approve between agents:
-- Code review, plan review, spec review
-- Deploy to staging
-- Knowledge base updates
+## Workflow Steps — What Each Role Does
 
-## Dashboard
+### Scope (strategist)
+1. Read the task description and any references
+2. Search knowledge base for relevant context: `search_knowledge({ query: "..." })`
+3. Write a spec document to `/projects/{project}/specs/{name}.md`
+4. **Update task**: `update_task({ task_id, status: "done", note: "Spec written at /projects/..." })`
+5. **Notify**: `send_message({ to: "channel:dev", content: "Spec ready: /projects/..." })`
+6. **Pin**: `pin_to_board({ group: "recent", title: "Spec: [title]", type: "success" })`
 
-- Pin important items for the human: `pin_to_board({ group: "alerts", title: "...", type: "warning" })`.
-- Use `progress` type for ongoing work with percentage.
-- Use `actions` in metadata to give the human clickable buttons.
+### Plan (planner)
+1. Read the spec document referenced in the task
+2. Create an implementation plan at `/projects/{project}/plans/{name}.md`
+3. Include: file changes needed, dependencies, test strategy, estimated complexity
+4. **Update task + notify + pin** (same 3-step pattern)
 
-## Conventions
+### Implement (developer)
+1. Read the spec and plan
+2. Write code, create files, run tests
+3. Create a git branch if working in a code repo
+4. **Update task + notify + pin**
 
-- Write QUESTPIE always in ALL CAPS.
-- Use conventional commits: `feat:`, `fix:`, `docs:`, `chore:`.
-- Keep PRs under 200 lines when possible.
-- Always reference the task ID in commit messages and PR descriptions.
+### Review (reviewer)
+1. Read the code changes and the spec
+2. Check: correctness, security, performance, readability, tests
+3. If approved: `update_task({ task_id, status: "done", note: "Approved" })`
+4. If rejected: `update_task({ task_id, status: "blocked", note: "Changes needed: ..." })`
+5. **Notify + pin**
+
+### Deploy (devops)
+1. Read deployment configs
+2. Deploy to staging first
+3. Verify health checks
+4. **Update task + notify + pin**
+
+## When You're Stuck
+
+If you cannot complete your work:
+```
+add_blocker({
+  task_id: "task-xxx",
+  reason: "Cannot access GitHub repo — need admin credentials",
+  assigned_to: "human"
+})
+```
+This pins a blocker for the human and pauses the workflow.
+
+## Filesystem Structure
+
+```
+/tasks/          — Your assigned tasks (YAML files)
+/comms/          — Team communication channels
+/knowledge/      — Company knowledge base (searchable)
+/projects/       — Project specs, plans, code, design, marketing
+/context/memory/ — Your private persistent memory (auto-managed)
+/secrets/        — API keys (managed by human)
+/dashboard/pins/ — Board items visible to human
+/logs/           — Activity feed
+```
+
+## Rules
+
+1. **Always update task status when done.** The workflow engine depends on this.
+2. **Always notify via channel.** Other agents and the human need to know.
+3. **Always pin important outputs.** The human checks the board.
+4. **Never read another agent's memory.** Use `ask_agent` if you need their info.
+5. **Reference files and task IDs** in all messages.
+6. **Use conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`.
+7. **Write QUESTPIE in ALL CAPS.**
