@@ -1,5 +1,6 @@
 import type { Schedule, Webhook } from '@questpie/autopilot-spec'
-import { loadCompany, loadAgents, readTask } from './fs'
+import { loadCompany, loadAgents, readTask, updateTask, moveTask } from './fs'
+import { spawnAgent } from './agent'
 import { evaluateTransition } from './workflow'
 import { WorkflowLoader } from './workflow'
 import { Watcher } from './watcher'
@@ -271,7 +272,29 @@ export class Orchestrator {
 
 		console.log(`[orchestrator] processing task: ${task.id} (status: ${task.status}, workflow_step: ${task.workflow_step ?? 'none'})`)
 
-		// 2. If task has a workflow, evaluate it
+		// 2. If task has a workflow but no step, initialize to first step
+		if (task.workflow && !task.workflow_step) {
+			try {
+				const workflow = await this.workflowLoader.load(task.workflow)
+				const firstStep = workflow.steps[0]
+				if (firstStep) {
+					await updateTask(root, taskId, {
+						workflow_step: firstStep.id,
+						status: 'assigned',
+					}, 'system')
+					await moveTask(root, taskId, 'assigned', 'system')
+					console.log(`[orchestrator] initialized ${taskId} to workflow step: ${firstStep.id}`)
+					// Re-process with the updated task
+					await this.handleTaskChange(taskId)
+					return
+				}
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err)
+				console.error(`[orchestrator] failed to initialize workflow for ${taskId}: ${msg}`)
+			}
+		}
+
+		// 3. If task has a workflow and step, evaluate transition
 		if (task.workflow && task.workflow_step) {
 			try {
 				const workflow = await this.workflowLoader.load(task.workflow)
@@ -289,16 +312,40 @@ export class Orchestrator {
 
 				// Log notifications based on result
 				switch (result.action) {
-					case 'assign_agent':
+					case 'assign_agent': {
+						const assignedAgentId = result.assignTo ?? agents.find(a => a.role === result.assignRole)?.id
 						await this.notifier.notify({
 							type: 'task_assigned',
 							title: `Task assigned: ${task.title}`,
-							message: `Task ${taskId} assigned to ${result.assignTo ?? result.assignRole ?? 'unknown'}`,
+							message: `Task ${taskId} assigned to ${assignedAgentId ?? result.assignRole ?? 'unknown'}`,
 							priority: task.priority === 'critical' ? 'urgent' : 'normal',
 							taskId,
-							agentId: result.assignTo,
+							agentId: assignedAgentId,
 						})
+
+						// Actually spawn the agent
+						if (assignedAgentId) {
+							const agent = agents.find(a => a.id === assignedAgentId)
+							if (agent) {
+								const company = await loadCompany(root)
+								console.log(`[orchestrator] spawning agent: ${agent.id} (${agent.role}) for task ${taskId}`)
+								spawnAgent({
+									companyRoot: root,
+									agent,
+									company,
+									allAgents: agents,
+									task,
+									streamManager: this.streamManager,
+									trigger: { type: 'task_assigned', task_id: taskId },
+								}).then(result => {
+									console.log(`[orchestrator] agent ${agent.id} finished: ${result.toolCalls} tool calls${result.error ? `, error: ${result.error}` : ''}`)
+								}).catch(err => {
+									console.error(`[orchestrator] agent ${agent.id} failed:`, err instanceof Error ? err.message : err)
+								})
+							}
+						}
 						break
+					}
 					case 'notify_human':
 						await this.notifier.notify({
 							type: 'approval_needed',
