@@ -206,6 +206,7 @@ export class Orchestrator {
 					break
 				case 'message_received':
 					console.log(`[orchestrator] message received in channel: ${event.channel}`)
+					await this.handleMessage(event.channel, event.path)
 					break
 				case 'pin_changed':
 					console.log(`[orchestrator] pin changed: ${event.pinId}`)
@@ -220,6 +221,52 @@ export class Orchestrator {
 			}
 		} catch (err) {
 			console.error(`[orchestrator] error handling watch event (${event.type}):`, err)
+		}
+	}
+
+	private async handleMessage(channel: string, filePath: string): Promise<void> {
+		const root = this.options.companyRoot
+		try {
+			const { readYamlUnsafe } = await import('./fs/yaml')
+			const msg = await readYamlUnsafe(filePath) as Record<string, unknown>
+			const content = (msg?.content as string) ?? ''
+			const from = (msg?.from as string) ?? 'unknown'
+
+			// Check for @mentions — spawn mentioned agent with message context
+			const mentionPattern = /@([a-z0-9-]+)/g
+			const mentions: string[] = []
+			let match: RegExpExecArray | null = mentionPattern.exec(content)
+			while (match) {
+				mentions.push(match[1]!)
+				match = mentionPattern.exec(content)
+			}
+
+			if (mentions.length === 0) return
+
+			const agents = await loadAgents(root)
+			const company = await loadCompany(root)
+
+			for (const mentionedId of mentions) {
+				const agent = agents.find(a => a.id === mentionedId)
+				if (!agent) continue
+				if (agent.id === from) continue // don't spawn agent that sent the message
+
+				console.log(`[orchestrator] @${mentionedId} mentioned in #${channel} by ${from} — spawning`)
+				spawnAgent({
+					companyRoot: root,
+					agent,
+					company,
+					allAgents: agents,
+					streamManager: this.streamManager,
+					trigger: { type: 'mention' },
+				}).then(result => {
+					console.log(`[orchestrator] agent ${agent.id} finished mention response: ${result.toolCalls} tool calls`)
+				}).catch(err => {
+					console.error(`[orchestrator] agent ${agent.id} failed:`, err instanceof Error ? err.message : err)
+				})
+			}
+		} catch (err) {
+			// Ignore parse errors — might be a partial write
 		}
 	}
 
