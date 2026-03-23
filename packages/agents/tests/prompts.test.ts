@@ -103,6 +103,20 @@ describe('Agent prompt templates', () => {
 				const prompt = ROLE_PROMPT_MAP[role](TEST_CONTEXT)
 				expect(prompt).toContain('## Rules')
 			})
+
+			it('includes mandatory workflow section with update_task, send_message, pin_to_board', () => {
+				const prompt = ROLE_PROMPT_MAP[role](TEST_CONTEXT)
+				expect(prompt).toContain('## MANDATORY: After Completing Your Work')
+				expect(prompt).toContain('update_task')
+				expect(prompt).toContain('send_message')
+				expect(prompt).toContain('pin_to_board')
+				expect(prompt).toContain('the next agent in the workflow will never be triggered')
+			})
+
+			it('includes role-specific tools section', () => {
+				const prompt = ROLE_PROMPT_MAP[role](TEST_CONTEXT)
+				expect(prompt).toContain('## Role-Specific Tools')
+			})
 		})
 	}
 })
