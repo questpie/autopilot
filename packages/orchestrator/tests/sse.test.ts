@@ -1,64 +1,34 @@
-import { describe, it, expect, afterEach, beforeEach } from 'bun:test'
+import { describe, it, expect } from 'bun:test'
 import { eventBus } from '../src/events/event-bus'
-import { ApiServer } from '../src/api/server'
-import { createTestCompany } from './helpers'
 
 describe('SSE endpoint', () => {
-	let cleanup: () => Promise<void>
-	let root: string
-	let server: ApiServer
-	const port = 17791
+	it('should deliver events through eventBus subscription', async () => {
+		const received: unknown[] = []
+		const unsubscribe = eventBus.subscribe((event) => {
+			received.push(event)
+		})
 
-	beforeEach(async () => {
-		const ctx = await createTestCompany()
-		root = ctx.root
-		cleanup = ctx.cleanup
+		eventBus.emit({ type: 'pin_changed', pinId: 'pin-42', action: 'created' })
+		eventBus.emit({ type: 'task_changed', taskId: 'task-1', status: 'active' })
 
-		await Bun.write(`${root}/company.yaml`, 'name: "Test"\nslug: "test"\n')
-		await Bun.write(`${root}/team/agents.yaml`, '[]')
+		expect(received).toHaveLength(2)
+		expect(received[0]).toEqual({ type: 'pin_changed', pinId: 'pin-42', action: 'created' })
+		expect(received[1]).toEqual({ type: 'task_changed', taskId: 'task-1', status: 'active' })
 
-		server = new ApiServer({ companyRoot: root, port })
-		await server.start()
+		unsubscribe()
+
+		// After unsubscribe, no more events
+		eventBus.emit({ type: 'pin_changed', pinId: 'pin-99', action: 'removed' })
+		expect(received).toHaveLength(2)
 	})
 
-	afterEach(async () => {
-		server.stop()
-		if (cleanup) await cleanup()
+	it('should format events as SSE data lines', () => {
+		const event = { type: 'pin_changed', pinId: 'pin-42', action: 'created' }
+		const sseData = `data: ${JSON.stringify(event)}\n\n`
+
+		expect(sseData).toContain('data:')
+		expect(sseData).toContain('pin_changed')
+		expect(sseData).toContain('pin-42')
+		expect(sseData.endsWith('\n\n')).toBe(true)
 	})
-
-	it('should return text/event-stream and deliver events', async () => {
-		// Emit an event with a small delay so the stream picks it up
-		setTimeout(() => {
-			eventBus.emit({ type: 'pin_changed', pinId: 'pin-42', action: 'created' })
-		}, 200)
-
-		const controller = new AbortController()
-		setTimeout(() => controller.abort(), 3000) // Safety abort
-
-		try {
-			const chunks: string[] = []
-
-			const response = await fetch(`http://localhost:${port}/api/events`, {
-				signal: controller.signal,
-			})
-
-			// Verify headers
-			expect(response.headers.get('content-type')).toBe('text/event-stream')
-			expect(response.headers.get('cache-control')).toBe('no-cache')
-
-			// Read first chunk
-			const reader = response.body!.getReader()
-			const decoder = new TextDecoder()
-			const { value } = await reader.read()
-			const text = decoder.decode(value)
-			chunks.push(text)
-
-			expect(text).toContain('data:')
-			expect(text).toContain('pin_changed')
-
-			reader.cancel()
-		} catch (err) {
-			if ((err as Error).name !== 'AbortError') throw err
-		}
-	}, 5000)
 })

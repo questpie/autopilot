@@ -282,10 +282,42 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 			},
 		),
 
+		// Universal search across all entity types
+		defineTool(
+			'search',
+			'Search across all entities (tasks, messages, knowledge, pins). Returns ranked results.',
+			z.object({
+				query: z.string().describe('Search query'),
+				type: z.string().optional().describe('Filter: task, message, knowledge, pin'),
+				limit: z.number().optional().describe('Max results, default 10'),
+			}),
+			async (args) => {
+				const maxResults = args.limit ?? 10
+				try {
+					const { createDb } = await import('../db')
+					const { searchFts: fts } = await import('../db/search-index')
+					const db = await createDb(companyRoot)
+					const typeFilter = args.type as import('../db/search-index').EntityType | undefined
+					const results = await fts(db, args.query, { type: typeFilter, limit: maxResults })
+
+					if (results.length === 0) {
+						return { content: [{ type: 'text' as const, text: 'No results found.' }] }
+					}
+
+					const text = results
+						.map((r) => `- [${r.entityType}] **${r.entityId}** ${r.title ? `(${r.title})` : ''}: ${r.snippet}`)
+						.join('\n')
+					return { content: [{ type: 'text' as const, text }] }
+				} catch {
+					return { content: [{ type: 'text' as const, text: 'Search index not available.' }] }
+				}
+			},
+		),
+
 		// Knowledge — uses FTS5 index when available, falls back to FS scan
 		defineTool(
 			'search_knowledge',
-			'Search the company knowledge base using full-text search (FTS5)',
+			'Search the company knowledge base. Wrapper around unified search with type=knowledge filter, with FS fallback.',
 			z.object({
 				query: z.string().describe('Search query — supports FTS5 syntax (AND, OR, NOT, phrases)'),
 				scope: z.string().optional().describe('Limit to path like "technical" or "brand"'),
@@ -294,7 +326,30 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 			async (args) => {
 				const maxResults = args.max_results ?? 10
 
-				// Try FTS5 search first
+				// Try unified search index first (type=knowledge)
+				try {
+					const { createDb } = await import('../db')
+					const { searchFts: unifiedFts } = await import('../db/search-index')
+					const db = await createDb(companyRoot)
+					const unifiedResults = await unifiedFts(db, args.query, { type: 'knowledge', limit: maxResults })
+
+					if (unifiedResults.length > 0) {
+						let filtered = unifiedResults
+						if (args.scope) {
+							filtered = filtered.filter((r) => r.entityId.startsWith(args.scope!))
+						}
+						if (filtered.length > 0) {
+							const text = filtered
+								.map((r) => `- **${r.entityId}** ${r.title ? `(${r.title})` : ''}: ${r.snippet}`)
+								.join('\n')
+							return { content: [{ type: 'text' as const, text }] }
+						}
+					}
+				} catch {
+					// Unified index not available — try legacy knowledge index
+				}
+
+				// Try legacy FTS5 knowledge index
 				try {
 					const { createDb } = await import('../db')
 					const { searchKnowledge } = await import('../db/knowledge-index')

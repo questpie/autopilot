@@ -16,6 +16,10 @@ import { loadSkillCatalog } from '../skills'
 import { routeMessage } from '../router'
 import { ArtifactRouter } from '../artifact'
 import type { ListTasksOptions } from '../fs'
+import { searchFts, searchHybrid } from '../db/search-index'
+import type { EntityType, SearchResult } from '../db/search-index'
+import { createDb } from '../db'
+import type { AutopilotDb } from '../db'
 import { resolveActor, getRequiredPermission } from '../auth/middleware'
 import { checkPermission } from '../auth/roles'
 import { logAudit } from '../auth/audit'
@@ -99,8 +103,16 @@ function errorResponse(error: string, status: number): Response {
  */
 export class ApiServer {
 	private server: ReturnType<typeof Bun.serve> | null = null
+	private db: AutopilotDb | null = null
 
 	constructor(private options: ApiServerOptions) {}
+
+	private async getDb(): Promise<AutopilotDb> {
+		if (!this.db) {
+			this.db = await createDb(this.options.companyRoot)
+		}
+		return this.db
+	}
 
 	/** Start the Bun HTTP server. */
 	async start(): Promise<void> {
@@ -277,6 +289,8 @@ export class ApiServer {
 					return await this.handleSkills()
 				case '/api/groups':
 					return await this.handleGroups()
+				case '/api/search':
+					return await this.handleSearch(url.searchParams)
 				case '/api/dashboard/layout':
 					return await this.handleDashboardLayout()
 				case '/api/dashboard/widgets':
@@ -495,6 +509,59 @@ export class ApiServer {
 			return jsonResponse(data)
 		} catch {
 			return jsonResponse({ groups: [] })
+		}
+	}
+
+	private async handleSearch(params: URLSearchParams): Promise<Response> {
+		const q = params.get('q')
+		if (!q) return errorResponse('q parameter is required', 400)
+
+		const typeParam = params.get('type')
+		const mode = params.get('mode') ?? 'hybrid'
+		const limitStr = params.get('limit')
+		const limit = limitStr ? parseInt(limitStr, 10) : 20
+
+		const types = typeParam
+			? typeParam.split(',').map((t) => t.trim()) as EntityType[]
+			: undefined
+
+		try {
+			const db = await this.getDb()
+			let results: SearchResult[] = []
+
+			if (mode === 'fts') {
+				if (types && types.length === 1) {
+					results = await searchFts(db, q, { type: types[0], limit })
+				} else {
+					results = await searchFts(db, q, { limit })
+				}
+			} else {
+				// hybrid or semantic — use searchHybrid with null embedding (FTS fallback)
+				if (types && types.length === 1) {
+					results = await searchHybrid(db, q, null, { type: types[0], limit })
+				} else {
+					results = await searchHybrid(db, q, null, { limit })
+				}
+			}
+
+			// Filter by multiple types if provided
+			if (types && types.length > 1) {
+				results = results.filter((r) => types.includes(r.entityType))
+			}
+
+			return jsonResponse({
+				results,
+				query: q,
+				mode,
+				total: results.length,
+			})
+		} catch {
+			return jsonResponse({
+				results: [],
+				query: q,
+				mode,
+				total: 0,
+			})
 		}
 	}
 

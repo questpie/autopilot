@@ -1,3 +1,9 @@
+# Provider defaults to claude-agent-sdk (Claude models).
+# To use OpenAI GPT models instead, set on any agent:
+#   provider: codex-sdk
+#   model: gpt-4o
+# Supported codex-sdk models: gpt-4o, gpt-4.1, o3, o4-mini
+
 agents:
   - id: ceo
     name: "CEO Agent"

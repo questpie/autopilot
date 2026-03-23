@@ -12,11 +12,15 @@ export const AgentTriggerSchema = z.object({
 	cron: z.string().optional(),
 })
 
+/** Supported agent provider backends. */
+export const AGENT_PROVIDERS = ['claude-agent-sdk', 'codex-sdk'] as const
+
 export const AgentSchema = z.object({
 	id: z.string().regex(/^[a-z0-9-]+$/),
 	name: z.string(),
 	role: z.enum(AGENT_ROLES),
 	description: z.string(),
+	provider: z.enum(AGENT_PROVIDERS).default('claude-agent-sdk'),
 	model: z.string().default('claude-sonnet-4-20250514'),
 	fs_scope: FsScopeSchema,
 	tools: z.array(z.string()).default(['fs', 'terminal']),

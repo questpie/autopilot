@@ -84,6 +84,46 @@ describe('agent tools', () => {
 		})
 	})
 
+	describe('search', () => {
+		it('returns results from the unified search index', async () => {
+			const tools = await setup()
+
+			// Index test data
+			const { createDb } = await import('../src/db')
+			const { indexEntity } = await import('../src/db/search-index')
+			const db = await createDb(root)
+			await indexEntity(db, 'task', 'task-001', 'Fix login', 'The login page crashes on empty form')
+			await indexEntity(db, 'knowledge', 'api.md', 'API Guide', 'REST API design patterns')
+
+			const result = await executeTool(tools, 'search', { query: 'login' }, ctx)
+			expect(result.isError).toBeUndefined()
+			expect(result.content[0]!.text).toContain('task-001')
+			expect(result.content[0]!.text).toContain('login')
+		})
+
+		it('filters by entity type', async () => {
+			const tools = await setup()
+
+			const { createDb } = await import('../src/db')
+			const { indexEntity } = await import('../src/db/search-index')
+			const db = await createDb(root)
+			await indexEntity(db, 'task', 'task-001', 'API task', 'Build REST API')
+			await indexEntity(db, 'knowledge', 'api.md', 'API Guide', 'REST API docs')
+
+			const result = await executeTool(tools, 'search', { query: 'API', type: 'knowledge' }, ctx)
+			expect(result.isError).toBeUndefined()
+			expect(result.content[0]!.text).toContain('knowledge')
+			expect(result.content[0]!.text).toContain('api.md')
+		})
+
+		it('returns no results message when nothing matches', async () => {
+			const tools = await setup()
+
+			const result = await executeTool(tools, 'search', { query: 'xyznonexistent' }, ctx)
+			expect(result.content[0]!.text).toContain('No results found')
+		})
+	})
+
 	describe('update_knowledge', () => {
 		it('creates a new knowledge file', async () => {
 			const tools = await setup()

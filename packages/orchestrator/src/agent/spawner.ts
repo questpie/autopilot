@@ -7,6 +7,7 @@ import { createAutopilotTools } from './tools'
 import type { ToolContext } from './tools'
 import type { AgentProvider, AgentEvent } from './provider'
 import { ClaudeAgentSDKProvider } from './providers/claude-agent-sdk'
+import { CodexSDKProvider } from './providers/codex-sdk'
 import { eventBus } from '../events'
 
 /** Registry of available agent providers, keyed by name. */
@@ -21,24 +22,32 @@ export function registerProvider(provider: AgentProvider): void {
 	providers.set(provider.name, provider)
 }
 
+const DEFAULT_PROVIDER = 'claude-agent-sdk'
+
 /**
  * Look up a registered provider by name.
  *
- * @throws When no provider with the given name has been registered.
+ * Falls back to the default provider (`claude-agent-sdk`) with a warning
+ * when the requested provider is not registered.
  */
 export function getProvider(name: string): AgentProvider {
 	const provider = providers.get(name)
 	if (!provider) {
-		throw new Error(
-			`Unknown agent provider: "${name}". Available: ${[...providers.keys()].join(', ')}`,
+		console.warn(
+			`[autopilot] Unknown agent provider: "${name}". ` +
+			`Available: ${[...providers.keys()].join(', ')}. ` +
+			`Falling back to "${DEFAULT_PROVIDER}".`,
 		)
+		return providers.get(DEFAULT_PROVIDER)!
 	}
 	return provider
 }
 
-// Register built-in provider
-// Claude Agent SDK works with both API key and Max subscription
+// Register built-in providers
+// Claude Agent SDK works with both API key and Max subscription (default)
 registerProvider(new ClaudeAgentSDKProvider())
+// OpenAI Codex SDK for GPT models (gpt-4o, gpt-4.1, o3, o4-mini, etc.)
+registerProvider(new CodexSDKProvider())
 
 /** Options required to spawn an agent session. */
 export interface SpawnOptions {
@@ -79,7 +88,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	// 1. Resolve provider (from agent definition or company default)
 	const agentProvider = (agent as Record<string, unknown>).provider as string | undefined
 	const companySettings = (company as Record<string, unknown>).settings as Record<string, unknown> | undefined
-	const providerName = agentProvider ?? companySettings?.agent_provider as string ?? 'claude-agent-sdk'
+	const providerName = agentProvider ?? (companySettings?.agent_provider as string | undefined) ?? DEFAULT_PROVIDER
 	const provider = getProvider(providerName)
 
 	// 2. Assemble context (4-layer system prompt)

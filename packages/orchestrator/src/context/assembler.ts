@@ -95,6 +95,9 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 		companyName: company.name,
 		teamRoster,
 		currentTasksSummary: '',
+		language: company.language,
+		languages: company.languages,
+		timezone: company.timezone,
 	})
 	sections.push(identityPrompt)
 

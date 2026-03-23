@@ -18,6 +18,7 @@ import { Notifier } from './notifier'
 import { ApiServer } from './api'
 import { eventBus } from './events'
 import { GitManager } from './git/git-manager'
+import { createEmbeddingService, type EmbeddingService } from './embeddings'
 
 /** Configuration options for the {@link Orchestrator}. */
 export interface OrchestratorOptions {
@@ -47,6 +48,7 @@ export class Orchestrator {
 	private workflowLoader: WorkflowLoader
 	private notifier: Notifier
 	private gitManager: GitManager | null = null
+	private embeddingService: EmbeddingService | null = null
 	private storage: StorageBackend | null = null
 	private running = false
 	private activeAgentCount = 0
@@ -82,7 +84,17 @@ export class Orchestrator {
 			throw err
 		}
 
-		// 1b. Initialize storage backend + knowledge index
+		// 1b. Initialize embedding service
+		try {
+			const companyConfig = await loadCompany(root)
+			const settings = companyConfig.settings as Record<string, unknown>
+			const embeddingsConfig = settings?.embeddings as { provider?: string; fallback?: string; dimensions?: number } | undefined
+			this.embeddingService = await createEmbeddingService(embeddingsConfig as any)
+		} catch (err) {
+			console.error('[orchestrator] failed to initialize embedding service:', err instanceof Error ? err.message : err)
+		}
+
+		// 1c. Initialize storage backend + knowledge index
 		try {
 			const storageMode = this.options.storageMode ?? 'sqlite'
 			this.storage = await createStorage(root, storageMode)
@@ -90,7 +102,7 @@ export class Orchestrator {
 
 			if (storageMode === 'sqlite') {
 				const db = await createDb(root)
-				const indexer = new Indexer(db, root)
+				const indexer = new Indexer(db, root, this.embeddingService)
 				const counts = await indexer.reindexAll()
 				const total = counts.tasks + counts.messages + counts.knowledge + counts.pins
 				console.log(`[orchestrator] search index: ${total} entities indexed (tasks=${counts.tasks}, messages=${counts.messages}, knowledge=${counts.knowledge}, pins=${counts.pins})`)
@@ -286,6 +298,11 @@ export class Orchestrator {
 	/** Return the storage backend (used by tools and API). */
 	getStorage(): StorageBackend | null {
 		return this.storage
+	}
+
+	/** Return the embedding service (used by tools and search). */
+	getEmbeddingService(): EmbeddingService | null {
+		return this.embeddingService
 	}
 
 	/** Whether the orchestrator is currently running. */

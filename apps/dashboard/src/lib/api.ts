@@ -86,6 +86,8 @@ export const queryKeys = {
 	dashboardLayout: ['dashboard-layout'] as const,
 	dashboardWidgets: ['dashboard-widgets'] as const,
 	dashboardPages: ['dashboard-pages'] as const,
+	search: (query: string, type?: string, mode?: string) =>
+		['search', query, type, mode] as const,
 }
 
 // Auto-refresh intervals

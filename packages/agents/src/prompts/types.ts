@@ -11,6 +11,12 @@ export interface PromptContext {
 	currentTasksSummary: string
 	/** Additional context injected by the orchestrator */
 	additionalContext?: string
+	/** Primary communication language (ISO 639-1 code), e.g. "en", "sk" */
+	language?: string
+	/** All languages the company operates in */
+	languages?: string[]
+	/** Company timezone, e.g. "Europe/Bratislava" */
+	timezone?: string
 }
 
 export type PromptTemplate = (context: PromptContext) => string

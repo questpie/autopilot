@@ -36,5 +36,27 @@ export function buildSystemPrompt(role: AgentRole, context: PromptContext): stri
 	}
 
 	const template = PROMPT_MAP[role]
-	return template(context)
+	const sections: string[] = [template(context)]
+
+	// Language instructions (additive — only for non-English)
+	if (context.language && context.language !== 'en') {
+		const langLines: string[] = [
+			`LANGUAGE: The primary communication language for this company is ${context.language}. Respond in ${context.language} when communicating with humans. Use English for code, technical terms, and tool outputs.`,
+		]
+
+		if (context.languages && context.languages.length > 1) {
+			langLines.push(
+				`The company operates in multiple languages: ${context.languages.join(', ')}. Default to ${context.language} for human communication.`,
+			)
+		}
+
+		sections.push(langLines.join('\n'))
+	}
+
+	// Timezone instruction
+	if (context.timezone) {
+		sections.push(`TIMEZONE: The company operates in the ${context.timezone} timezone.`)
+	}
+
+	return sections.join('\n\n')
 }

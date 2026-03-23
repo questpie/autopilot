@@ -2,18 +2,30 @@ import { readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { PATHS } from '@questpie/autopilot-spec'
 import type { AutopilotDb } from './index'
+import { eq, and } from 'drizzle-orm'
+import { Database } from 'bun:sqlite'
 import { indexEntity, removeEntity, type EntityType } from './search-index'
 import { schema } from './index'
+import type { EmbeddingService } from '../embeddings'
 
 /**
  * Unified indexer that populates the search_index table from all entity sources.
  * Uses content hashing for incremental reindexing — only changed entities are updated.
+ *
+ * When an {@link EmbeddingService} is provided, embeddings are generated for
+ * each indexed entity and stored in the `search_vec` virtual table. If
+ * embedding generation fails the entity is still indexed for FTS-only search.
  */
 export class Indexer {
+	private embeddingService: EmbeddingService | null
+
 	constructor(
 		private db: AutopilotDb,
 		private companyRoot: string,
-	) {}
+		embeddingService?: EmbeddingService | null,
+	) {
+		this.embeddingService = embeddingService ?? null
+	}
 
 	/**
 	 * Reindex all entity types. Returns counts per type.
@@ -133,6 +145,7 @@ export class Indexer {
 
 	/**
 	 * Index a single entity, comparing content hash. Returns true if content changed.
+	 * When an embedding service is available, also generates and stores a vector embedding.
 	 */
 	private async indexEntitySafe(
 		type: EntityType,
@@ -141,9 +154,56 @@ export class Indexer {
 		content: string,
 	): Promise<boolean> {
 		try {
-			return await indexEntity(this.db, type, id, title, content)
+			const changed = await indexEntity(this.db, type, id, title, content)
+			if (changed && this.embeddingService) {
+				await this.storeEmbedding(type, id, title, content)
+			}
+			return changed
 		} catch {
 			return false
+		}
+	}
+
+	/**
+	 * Generate an embedding for the entity content and store it in search_vec.
+	 * Failures are silently ignored — the entity remains searchable via FTS.
+	 */
+	private async storeEmbedding(
+		type: EntityType,
+		id: string,
+		title: string | null,
+		content: string,
+	): Promise<void> {
+		try {
+			const text = [title, content].filter(Boolean).join('\n')
+			const embedding = await this.embeddingService!.embedText(text)
+			if (!embedding) return
+
+			// Get the search_index row id for this entity
+			const row = this.db
+				.select({ id: schema.searchIndex.id })
+				.from(schema.searchIndex)
+				.where(and(eq(schema.searchIndex.entityType, type), eq(schema.searchIndex.entityId, id)))
+				.get()
+
+			if (!row) return
+
+			const raw = (this.db as unknown as { $client: Database }).$client
+			const embeddingBuffer = Buffer.from(embedding.buffer)
+
+			// Delete existing vector for this search_id, then insert
+			try {
+				raw.prepare('DELETE FROM search_vec WHERE search_id = ?').run(row.id)
+			} catch {
+				// search_vec might not exist
+			}
+			try {
+				raw.prepare('INSERT INTO search_vec (search_id, embedding) VALUES (?, ?)').run(row.id, embeddingBuffer)
+			} catch {
+				// search_vec not available — skip silently
+			}
+		} catch {
+			// Embedding storage failed — entity is still indexed for FTS
 		}
 	}
 

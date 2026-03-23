@@ -1,4 +1,6 @@
 import { useAgents } from '@/hooks/use-agents'
+import { useSearch } from '@/hooks/use-search'
+import type { SearchResultItem } from '@/hooks/use-search'
 import { useApproveTask, useTasks } from '@/hooks/use-tasks'
 import { cn } from '@/lib/utils'
 import { MagnifyingGlass } from '@phosphor-icons/react'
@@ -10,7 +12,46 @@ interface CommandItem {
 	label: string
 	section: string
 	hint?: string
+	snippetHtml?: string
 	action: () => void
+}
+
+const ENTITY_TYPE_LABELS: Record<string, string> = {
+	task: 'Tasks',
+	knowledge: 'Knowledge',
+	message: 'Messages',
+	pin: 'Pins',
+	file: 'Files',
+}
+
+function useDebounce<T>(value: T, delay: number): T {
+	const [debounced, setDebounced] = useState(value)
+	useEffect(() => {
+		const timer = setTimeout(() => setDebounced(value), delay)
+		return () => clearTimeout(timer)
+	}, [value, delay])
+	return debounced
+}
+
+function getSearchResultRoute(result: SearchResultItem): {
+	to: string
+	params?: Record<string, string>
+	search?: Record<string, string>
+} {
+	switch (result.entityType) {
+		case 'task':
+			return { to: '/tasks/$taskId', params: { taskId: result.entityId } }
+		case 'knowledge':
+			return { to: '/files', search: { file: result.entityId } }
+		case 'message':
+			return { to: '/chat', search: { channel: result.entityId } }
+		case 'pin':
+			return { to: '/inbox' }
+		case 'file':
+			return { to: '/files', search: { file: result.entityId } }
+		default:
+			return { to: '/' }
+	}
 }
 
 export function CommandBar() {
@@ -22,6 +63,9 @@ export function CommandBar() {
 	const { data: tasks } = useTasks()
 	const { data: agents } = useAgents()
 	const approveTask = useApproveTask()
+
+	const debouncedQuery = useDebounce(query, 300)
+	const { data: searchData } = useSearch(debouncedQuery)
 
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
@@ -42,6 +86,42 @@ export function CommandBar() {
 	useEffect(() => {
 		if (open) inputRef.current?.focus()
 	}, [open])
+
+	// Build search result items grouped by entityType
+	const searchItems = useMemo(() => {
+		if (!searchData?.results || searchData.results.length === 0) return []
+		const list: CommandItem[] = []
+
+		// Group results by entityType
+		const grouped: Record<string, SearchResultItem[]> = {}
+		for (const r of searchData.results) {
+			const key = r.entityType
+			if (!grouped[key]) grouped[key] = []
+			grouped[key].push(r)
+		}
+
+		for (const [type, results] of Object.entries(grouped)) {
+			for (const r of results) {
+				const route = getSearchResultRoute(r)
+				list.push({
+					id: `search-${r.entityType}-${r.entityId}`,
+					label: r.title ?? r.entityId,
+					section: `Search: ${ENTITY_TYPE_LABELS[type] ?? type}`,
+					hint: r.entityType,
+					snippetHtml: r.snippet,
+					action: () => {
+						navigate({
+							to: route.to,
+							params: route.params,
+							search: route.search,
+						} as Parameters<typeof navigate>[0])
+					},
+				})
+			}
+		}
+
+		return list
+	}, [searchData, navigate])
 
 	const items = useMemo(() => {
 		const list: CommandItem[] = []
@@ -157,14 +237,23 @@ export function CommandBar() {
 		return list
 	}, [tasks, agents, navigate, approveTask])
 
+	// Combine: search results first, then filtered command items
 	const filtered = useMemo(() => {
-		if (!query) return items
-		const q = query.toLowerCase()
-		return items.filter(
-			(item) =>
-				item.label.toLowerCase().includes(q) || (item.hint?.toLowerCase().includes(q) ?? false),
-		)
-	}, [items, query])
+		const commandItems = !query
+			? items
+			: items.filter(
+					(item) =>
+						item.label.toLowerCase().includes(query.toLowerCase()) ||
+						(item.hint?.toLowerCase().includes(query.toLowerCase()) ?? false),
+				)
+
+		// If we have search results, prepend them
+		if (searchItems.length > 0) {
+			return [...searchItems, ...commandItems]
+		}
+
+		return commandItems
+	}, [items, searchItems, query])
 
 	const execute = useCallback((item: CommandItem) => {
 		item.action()
@@ -234,17 +323,25 @@ export function CommandBar() {
 											key={item.id}
 											onClick={() => execute(item)}
 											className={cn(
-												'w-full text-left px-4 py-2 text-sm transition-colors cursor-pointer flex items-center justify-between',
+												'w-full text-left px-4 py-2 text-sm transition-colors cursor-pointer flex flex-col gap-0.5',
 												idx === selectedIndex
 													? 'bg-accent text-foreground'
 													: 'text-muted-foreground hover:bg-accent/50',
 											)}
 										>
-											<span>{item.label}</span>
-											{item.hint && (
-												<span className="font-mono text-[10px] text-muted-foreground/60 ml-2 shrink-0">
-													{item.hint}
-												</span>
+											<div className="flex items-center justify-between w-full">
+												<span>{item.label}</span>
+												{item.hint && (
+													<span className="font-mono text-[10px] text-muted-foreground/60 ml-2 shrink-0">
+														{item.hint}
+													</span>
+												)}
+											</div>
+											{item.snippetHtml && (
+												<span
+													className="text-xs text-muted-foreground/80 truncate max-w-full [&_b]:text-foreground [&_b]:font-semibold [&_mark]:bg-yellow-500/30 [&_mark]:text-foreground"
+													dangerouslySetInnerHTML={{ __html: item.snippetHtml }}
+												/>
 											)}
 										</button>
 									)

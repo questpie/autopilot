@@ -27,6 +27,13 @@ export const CompanySettingsSchema = z.object({
 			alert_at: z.number().int().min(0).max(100).default(80),
 		})
 		.default({}),
+	embeddings: z
+		.object({
+			provider: z.enum(['gemini', 'multilingual-e5', 'nomic', 'none']).default('none'),
+			fallback: z.enum(['gemini', 'multilingual-e5', 'nomic', 'none']).optional(),
+			dimensions: z.number().int().min(1).default(768),
+		})
+		.optional(),
 })
 
 export const IntegrationConfigSchema = z.record(z.string(), z.record(z.string(), z.unknown()))

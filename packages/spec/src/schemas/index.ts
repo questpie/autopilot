@@ -1,5 +1,5 @@
 export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema, IntegrationConfigSchema, NotificationChannelSchema } from './company'
-export { AgentSchema, AgentsFileSchema, FsScopeSchema, AgentTriggerSchema } from './agent'
+export { AgentSchema, AgentsFileSchema, FsScopeSchema, AgentTriggerSchema, AGENT_PROVIDERS } from './agent'
 export { TaskSchema, TaskHistoryEntrySchema, BlockerSchema, TaskContextSchema } from './task'
 export { MessageSchema } from './message'
 export { WorkflowSchema, WorkflowStepSchema, WorkflowOutputSchema, WorkflowReviewSchema, WorkflowTransitionsSchema, WorkflowChangelogEntrySchema, WorkflowChangePolicySchema } from './workflow'
