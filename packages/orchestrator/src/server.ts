@@ -39,6 +39,7 @@ export class Orchestrator {
 	private running = false
 	private activeAgentCount = 0
 	private maxConcurrentAgents = 5
+	private processingTasks = new Set<string>()
 
 	constructor(private options: OrchestratorOptions) {
 		this.streamManager = new SessionStreamManager()
@@ -261,6 +262,12 @@ export class Orchestrator {
 	 * appropriate notification (assign, approve, complete, or error).
 	 */
 	async handleTaskChange(taskId: string): Promise<void> {
+		// Debounce: skip if already processing this task
+		if (this.processingTasks.has(taskId)) return
+		this.processingTasks.add(taskId)
+		// Release lock after a short delay to absorb rapid file changes
+		setTimeout(() => this.processingTasks.delete(taskId), 2000)
+
 		const root = this.options.companyRoot
 
 		// 1. Read the task
