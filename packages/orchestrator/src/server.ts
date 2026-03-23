@@ -279,7 +279,7 @@ export class Orchestrator {
 
 		console.log(`[orchestrator] processing task: ${task.id} (status: ${task.status}, workflow_step: ${task.workflow_step ?? 'none'})`)
 
-		// 2. If task has a workflow but no step, initialize to first step
+		// 2. If task has a workflow but no step, initialize to first step and continue
 		if (task.workflow && !task.workflow_step) {
 			try {
 				const workflow = await this.workflowLoader.load(task.workflow)
@@ -291,13 +291,14 @@ export class Orchestrator {
 					}, 'system')
 					await moveTask(root, taskId, 'assigned', 'system')
 					console.log(`[orchestrator] initialized ${taskId} to workflow step: ${firstStep.id}`)
-					// Re-process with the updated task
-					await this.handleTaskChange(taskId)
-					return
+					// Update local task reference and fall through to evaluation
+					task.workflow_step = firstStep.id
+					task.status = 'assigned'
 				}
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err)
 				console.error(`[orchestrator] failed to initialize workflow for ${taskId}: ${msg}`)
+				return
 			}
 		}
 
