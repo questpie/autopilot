@@ -34,8 +34,8 @@ describe('extended command registration', () => {
 		expect(commandNames).toContain('reject')
 	})
 
-	it('has exactly 17 commands', () => {
-		expect(program.commands.length).toBe(18)
+	it('has exactly 20 commands', () => {
+		expect(program.commands.length).toBe(20)
 	})
 
 	it('has secrets subcommands', () => {
