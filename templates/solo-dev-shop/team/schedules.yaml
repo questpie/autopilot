@@ -13,6 +13,14 @@ schedules:
     timeout: "5m"
     on_failure: alert_human
 
+  - id: ceo-watchdog
+    agent: ceo
+    cron: "*/10 * * * *"
+    description: "Monitor company health — check stuck tasks, idle agents, stale work"
+    timeout: "5m"
+    on_failure: alert_human
+    enabled: true
+
   - id: weekly-review
     agent: ceo
     cron: "0 10 * * 1"

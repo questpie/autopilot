@@ -1,3 +1,5 @@
+import { readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { Schedule, Webhook } from '@questpie/autopilot-spec'
 import { loadCompany, loadAgents, readTask, updateTask, moveTask } from './fs'
 import { spawnAgent } from './agent'
@@ -131,6 +133,28 @@ export class Orchestrator {
 			} else {
 				console.error('[orchestrator] failed to start api server:', msg)
 			}
+		}
+
+		// Startup scan: process existing tasks that may have been added while offline
+		const startupDirs = ['active', 'backlog']
+		let scannedCount = 0
+		for (const dir of startupDirs) {
+			const dirPath = join(root, 'tasks', dir)
+			try {
+				const files = await readdir(dirPath)
+				for (const file of files) {
+					if (file.endsWith('.yaml') && !file.startsWith('.')) {
+						const taskId = file.replace('.yaml', '')
+						await this.handleTaskChange(taskId)
+						scannedCount++
+					}
+				}
+			} catch {
+				// dir might not exist
+			}
+		}
+		if (scannedCount > 0) {
+			console.log(`[orchestrator] startup scan: processed ${scannedCount} existing tasks`)
 		}
 
 		this.running = true
