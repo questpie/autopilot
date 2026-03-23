@@ -1,5 +1,6 @@
 import type { Agent, Task } from '@questpie/autopilot-spec'
 import { assembleContext } from '../context/assembler'
+import { extractMemory } from './memory-extractor'
 import type { SessionStreamManager } from '../session/stream'
 import { appendActivity } from '../fs/activity'
 import { createAutopilotTools } from './tools'
@@ -47,6 +48,8 @@ export interface SpawnOptions {
 	task?: Task
 	streamManager: SessionStreamManager
 	trigger: { type: string; task_id?: string; schedule_id?: string }
+	/** Optional human message to use as the prompt (e.g. from `autopilot chat`). */
+	message?: string
 }
 
 /** Outcome of a completed agent session. */
@@ -69,7 +72,7 @@ export interface SpawnResult {
  * 6. Delegate to the provider's `spawn()` for the actual LLM loop.
  */
 export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
-	const { companyRoot, agent, company, allAgents, task, streamManager, trigger } = options
+	const { companyRoot, agent, company, allAgents, task, streamManager, trigger, message } = options
 	const sessionId = `session-${Date.now().toString(36)}-${agent.id}`
 
 	// 1. Resolve provider (from agent definition or company default)
@@ -92,9 +95,11 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	const toolContext: ToolContext = { companyRoot, agentId: agent.id }
 
 	// 4. Build prompt
-	const prompt = task
-		? `Work on task: ${task.title}\n\nDescription: ${task.description || 'No description'}\nPriority: ${task.priority}\nStatus: ${task.status}\n\nDo your work using the available tools. When done, update the task status.`
-		: `You have been triggered by: ${trigger.type}. Check your current tasks and act accordingly.`
+	const prompt = message
+		? message
+		: task
+			? `Work on task: ${task.title}\n\nDescription: ${task.description || 'No description'}\nPriority: ${task.priority}\nStatus: ${task.status}\n\nDo your work using the available tools. When done, update the task status.`
+			: `You have been triggered by: ${trigger.type}. Check your current tasks and act accordingly.`
 
 	// 5. Create session stream for attach
 	streamManager.createStream(sessionId, agent.id)
@@ -155,6 +160,13 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 				: `Session completed (${sessionResult!.toolCalls} tool calls)`,
 			details: { sessionId, ...sessionResult! },
 		})
+
+		// Extract and persist memory from this session (best-effort)
+		try {
+			await extractMemory(companyRoot, agent.id, sessionId)
+		} catch {
+			// Memory extraction failure must not crash the session
+		}
 	}
 
 	return { sessionId, ...sessionResult! }

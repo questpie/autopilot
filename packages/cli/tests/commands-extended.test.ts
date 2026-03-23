@@ -16,8 +16,8 @@ describe('extended command registration', () => {
 		expect(commandNames).toContain('board')
 	})
 
-	it('has exactly 12 commands', () => {
-		expect(program.commands.length).toBe(12)
+	it('has exactly 13 commands', () => {
+		expect(program.commands.length).toBe(13)
 	})
 
 	it('has secrets subcommands', () => {

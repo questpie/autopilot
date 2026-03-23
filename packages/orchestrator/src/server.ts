@@ -7,6 +7,7 @@ import { Watcher } from './watcher'
 import type { WatchEvent } from './watcher'
 import { Scheduler } from './scheduler'
 import { WebhookServer } from './webhook'
+import { handleTelegramWebhook } from './webhook'
 import { SessionStreamManager } from './session'
 import { Notifier } from './notifier'
 import { ApiServer } from './api'
@@ -289,6 +290,24 @@ export class Orchestrator {
 	private async handleWebhook(webhook: Webhook, payload: unknown): Promise<void> {
 		try {
 			console.log(`[orchestrator] webhook received: ${webhook.id} (agent: ${webhook.agent})`)
+
+			// Telegram webhook gets special handling
+			if (webhook.id === 'telegram') {
+				const result = await handleTelegramWebhook(payload, {
+					companyRoot: this.options.companyRoot,
+					streamManager: this.streamManager,
+				})
+				if (result.handled) {
+					await this.notifier.notify({
+						type: 'alert',
+						title: `Telegram message handled`,
+						message: `Telegram message routed to agent ${result.agentId ?? 'unknown'}`,
+						priority: 'normal',
+						agentId: result.agentId,
+					})
+				}
+				return
+			}
 
 			await this.notifier.notify({
 				type: 'alert',
