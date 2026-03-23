@@ -1,30 +1,30 @@
-import { createFileRoute, useSearch, useNavigate } from '@tanstack/react-router'
-import { useRef, useMemo, useState } from 'react'
-import { TopBar } from '@/components/layout/top-bar'
-import { KanbanBoard } from '@/components/data/kanban-board'
-import { TaskCard } from '@/components/data/task-card'
 import { ActivityItem } from '@/components/data/activity-item'
+import { CreateTaskDialog } from '@/components/data/create-task-dialog'
+import { KanbanBoard } from '@/components/data/kanban-board'
 import { PinCard } from '@/components/data/pin-card'
 import { PinDetailPanel } from '@/components/data/pin-detail-panel'
-import { CreateTaskDialog } from '@/components/data/create-task-dialog'
 import { RejectDialog } from '@/components/data/reject-dialog'
+import { TaskCard } from '@/components/data/task-card'
 import { EmptyState } from '@/components/feedback/empty-state'
 import { ErrorBoundary } from '@/components/feedback/error-boundary'
-import { Skeleton } from '@/components/ui/skeleton'
+import { TopBar } from '@/components/layout/top-bar'
 import { Button } from '@/components/ui/button'
-import { useTasks, useApproveTask, useRejectTask } from '@/hooks/use-tasks'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useActivity } from '@/hooks/use-activity'
-import { usePins } from '@/hooks/use-pins'
 import { useAgents } from '@/hooks/use-agents'
 import { useGroups } from '@/hooks/use-groups'
-import { useLayout, LayoutRenderer } from '@/lib/layout-engine'
+import { usePins } from '@/hooks/use-pins'
+import { useApproveTask, useRejectTask, useTasks } from '@/hooks/use-tasks'
+import { LayoutRenderer, useLayout } from '@/lib/layout-engine'
+import type { DashboardGroup, Pin, Task, TaskStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import type { Task, TaskStatus, Pin, DashboardGroup } from '@/lib/types'
+import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
+import { useMemo, useRef, useState } from 'react'
 
 export const Route = createFileRoute('/')({
 	component: DashboardPage,
 	validateSearch: (search: Record<string, unknown>) => ({
-		pin: (search.pin as string) ?? undefined,
+		pin: (search.pin as string) ?? '',
 		view: (search.view as string) ?? 'kanban',
 	}),
 })
@@ -64,10 +64,10 @@ function DashboardPage() {
 	}, [agents])
 
 	const selectedPin = pinId ? pins?.find((p) => p.id === pinId) : undefined
-	const closePanel = () => navigate({ to: '/', search: { view: viewMode }, replace: true })
+	const closePanel = () => navigate({ to: '/', search: { pin: '', view: viewMode }, replace: true })
 
 	const setView = (v: ViewMode) => {
-		navigate({ to: '/', search: { view: v }, replace: true })
+		navigate({ to: '/', search: { pin: '', view: v }, replace: true })
 	}
 
 	return (
@@ -79,7 +79,9 @@ function DashboardPage() {
 						onClick={() => setView('kanban')}
 						className={cn(
 							'font-mono text-[10px] px-2 py-1 transition-colors',
-							viewMode === 'kanban' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground',
+							viewMode === 'kanban'
+								? 'bg-primary/10 text-primary'
+								: 'text-muted-foreground hover:text-foreground',
 						)}
 					>
 						Board
@@ -88,13 +90,17 @@ function DashboardPage() {
 						onClick={() => setView('list')}
 						className={cn(
 							'font-mono text-[10px] px-2 py-1 transition-colors',
-							viewMode === 'list' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground',
+							viewMode === 'list'
+								? 'bg-primary/10 text-primary'
+								: 'text-muted-foreground hover:text-foreground',
 						)}
 					>
 						List
 					</button>
 				</div>
-				<Button size="sm" onClick={() => setShowCreateTask(true)}>New Task</Button>
+				<Button size="sm" onClick={() => setShowCreateTask(true)}>
+					New Task
+				</Button>
 			</TopBar>
 
 			<div className="flex flex-1 overflow-hidden">
@@ -109,7 +115,13 @@ function DashboardPage() {
 							/>
 							<GroupedPinsSection
 								agentRoleMap={agentRoleMap}
-								onSelectPin={(id) => navigate({ to: '/', search: { pin: id, view: viewMode }, replace: true })}
+								onSelectPin={(id) =>
+									navigate({
+										to: '/',
+										search: { pin: id, view: viewMode as string },
+										replace: true,
+									})
+								}
 							/>
 						</div>
 					)}
@@ -129,9 +141,7 @@ function DashboardPage() {
 				/>
 			)}
 
-			{showCreateTask && (
-				<CreateTaskDialog onClose={() => setShowCreateTask(false)} />
-			)}
+			{showCreateTask && <CreateTaskDialog onClose={() => setShowCreateTask(false)} />}
 
 			{rejectingTaskId && (
 				<RejectDialog
@@ -165,17 +175,15 @@ function TaskCountSummary() {
 			if (t.status === 'done') continue
 			map[t.status] = (map[t.status] ?? 0) + 1
 		}
-		return STATUS_ORDER
-			.filter((s) => (map[s] ?? 0) > 0)
-			.map((s) => `${map[s]} ${COUNT_LABELS[s] ?? s}`)
+		return STATUS_ORDER.filter((s) => (map[s] ?? 0) > 0).map(
+			(s) => `${map[s]} ${COUNT_LABELS[s] ?? s}`,
+		)
 	}, [tasks])
 
 	if (counts.length === 0) return null
 
 	return (
-		<span className="font-mono text-[10px] text-muted-foreground">
-			{counts.join(' \u00b7 ')}
-		</span>
+		<span className="font-mono text-[10px] text-muted-foreground">{counts.join(' \u00b7 ')}</span>
 	)
 }
 
@@ -348,7 +356,10 @@ function PinLayout({
 	if (layout === 'grid') {
 		const cols = columns ?? 2
 		return (
-			<div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+			<div
+				className="grid gap-2"
+				style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+			>
 				{children}
 			</div>
 		)
@@ -382,7 +393,9 @@ function ActivitySection({ agentRoleMap }: { agentRoleMap: Record<string, string
 				>
 					<option value="">All agents</option>
 					{agents?.map((a) => (
-						<option key={a.id} value={a.name}>{a.name}</option>
+						<option key={a.id} value={a.name}>
+							{a.name}
+						</option>
 					))}
 				</select>
 			</div>
@@ -394,10 +407,7 @@ function ActivitySection({ agentRoleMap }: { agentRoleMap: Record<string, string
 						))}
 					</div>
 				) : filtered.length === 0 ? (
-					<EmptyState
-						title="No activity yet"
-						description="Agents will appear here when working."
-					/>
+					<EmptyState title="No activity yet" description="Agents will appear here when working." />
 				) : (
 					<div className="divide-y divide-border">
 						{filtered.map((entry, i) => (

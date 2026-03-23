@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { PinSchema, PATHS, pinPath, PIN_TYPES } from '@questpie/autopilot-spec'
 import { readYaml, writeYaml, fileExists } from './yaml'
 import { writeQueue } from './write-queue'
+import { eventBus } from '../events'
 
 /** Resolved (validated) dashboard pin object. */
 export type PinOutput = z.output<typeof PinSchema>
@@ -46,6 +47,7 @@ export async function createPin(
 
 	const filePath = resolvePath(companyRoot, pinPath(pin.id))
 	await writeYaml(filePath, pin)
+	eventBus.emit({ type: 'pin_changed', pinId: pin.id, action: 'created' })
 	return pin
 }
 
@@ -57,6 +59,7 @@ export async function removePin(companyRoot: string, pinId: string): Promise<voi
 			await rm(filePath)
 		}
 	})
+	eventBus.emit({ type: 'pin_changed', pinId, action: 'removed' })
 }
 
 /** List all pins, optionally filtered by group. */

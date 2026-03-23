@@ -16,3 +16,10 @@ export {
 	loadSchedules,
 	loadWebhooks,
 } from './company'
+
+// Storage backend abstraction
+export { createStorage } from './storage-factory'
+export type { StorageMode } from './storage-factory'
+export type { StorageBackend, Task, Message, TaskFilter, MessageFilter, ActivityFilter } from './storage'
+export { SqliteBackend } from './sqlite-backend'
+export { YamlFsBackend } from './yaml-backend'

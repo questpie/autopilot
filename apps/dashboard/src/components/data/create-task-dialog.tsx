@@ -1,11 +1,19 @@
-import { useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { useCreateTask } from '@/hooks/use-tasks'
 import { useAgents } from '@/hooks/use-agents'
+import { useCreateTask } from '@/hooks/use-tasks'
+import { useState } from 'react'
 
-const TASK_TYPES = ['intent', 'planning', 'implementation', 'review', 'deployment', 'marketing'] as const
+const TASK_TYPES = [
+	'intent',
+	'planning',
+	'implementation',
+	'review',
+	'deployment',
+	'marketing',
+] as const
 const PRIORITIES = ['critical', 'high', 'medium', 'low'] as const
 const WORKFLOWS = ['development', 'marketing', 'incident', 'none'] as const
 
@@ -20,8 +28,23 @@ export function CreateTaskDialog({ onClose }: CreateTaskDialogProps) {
 	const [priority, setPriority] = useState<string>('medium')
 	const [assignedTo, setAssignedTo] = useState<string>('')
 	const [workflow, setWorkflow] = useState<string>('none')
+	const [project, setProject] = useState('')
+	const [labels, setLabels] = useState<string[]>([])
+	const [labelInput, setLabelInput] = useState('')
 	const createTask = useCreateTask()
 	const { data: agents } = useAgents()
+
+	const addLabel = () => {
+		const label = labelInput.trim().toLowerCase()
+		if (label && !labels.includes(label)) {
+			setLabels([...labels, label])
+		}
+		setLabelInput('')
+	}
+
+	const removeLabel = (label: string) => {
+		setLabels(labels.filter((l) => l !== label))
+	}
 
 	const handleSubmit = () => {
 		if (!title.trim()) return
@@ -33,6 +56,8 @@ export function CreateTaskDialog({ onClose }: CreateTaskDialogProps) {
 				priority,
 				assigned_to: assignedTo || undefined,
 				workflow: workflow === 'none' ? undefined : workflow,
+				labels: labels.length > 0 ? labels : undefined,
+				project: project.trim() || undefined,
 			},
 			{ onSuccess: () => onClose() },
 		)
@@ -41,10 +66,8 @@ export function CreateTaskDialog({ onClose }: CreateTaskDialogProps) {
 	return (
 		<>
 			<div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
-			<div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-background border border-border p-6">
-				<h2 className="font-mono text-[13px] font-bold tracking-[-0.03em] mb-4">
-					New Task
-				</h2>
+			<div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-background border border-border p-6 max-h-[90vh] overflow-y-auto">
+				<h2 className="font-mono text-[13px] font-bold tracking-[-0.03em] mb-4">New Task</h2>
 				<div className="space-y-4">
 					<Field label="Title">
 						<Input
@@ -95,14 +118,55 @@ export function CreateTaskDialog({ onClose }: CreateTaskDialogProps) {
 						</Field>
 					</div>
 
+					<Field label="Project">
+						<Input
+							value={project}
+							onChange={(e) => setProject(e.target.value)}
+							placeholder="e.g. pricing-page"
+						/>
+					</Field>
+
+					<Field label="Labels">
+						<div className="space-y-2">
+							{labels.length > 0 && (
+								<div className="flex gap-1 flex-wrap">
+									{labels.map((label) => (
+										<Badge
+											key={label}
+											variant="outline"
+											className="font-mono text-[9px] cursor-pointer hover:bg-destructive/10"
+											onClick={() => removeLabel(label)}
+										>
+											{label} x
+										</Badge>
+									))}
+								</div>
+							)}
+							<div className="flex gap-2">
+								<Input
+									value={labelInput}
+									onChange={(e) => setLabelInput(e.target.value)}
+									onKeyDown={(e) => {
+										if (e.key === 'Enter') {
+											e.preventDefault()
+											addLabel()
+										}
+									}}
+									placeholder="Add label..."
+									className="flex-1 h-8 text-[11px]"
+								/>
+								<Button size="sm" variant="outline" onClick={addLabel} type="button">
+									Add
+								</Button>
+							</div>
+						</div>
+					</Field>
+
 					<div className="flex justify-end gap-2 pt-2">
 						<Button variant="outline" onClick={onClose}>
 							Cancel
 						</Button>
-						<Button
-							onClick={handleSubmit}
-							disabled={!title.trim() || createTask.isPending}
-						>
+						<Button onClick={handleSubmit} disabled={!title.trim() || createTask.isPending}>
 							{createTask.isPending ? 'Creating...' : 'Create Task'}
 						</Button>
 					</div>

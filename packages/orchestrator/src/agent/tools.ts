@@ -282,19 +282,43 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 			},
 		),
 
-		// Knowledge
+		// Knowledge — uses FTS5 index when available, falls back to FS scan
 		defineTool(
 			'search_knowledge',
-			'Search the company knowledge base',
+			'Search the company knowledge base using full-text search (FTS5)',
 			z.object({
-				query: z.string().describe('Search query'),
+				query: z.string().describe('Search query — supports FTS5 syntax (AND, OR, NOT, phrases)'),
 				scope: z.string().optional().describe('Limit to path like "technical" or "brand"'),
 				max_results: z.number().optional().describe('Max results, default 10'),
 			}),
 			async (args) => {
+				const maxResults = args.max_results ?? 10
+
+				// Try FTS5 search first
+				try {
+					const { createDb } = await import('../db')
+					const { searchKnowledge } = await import('../db/knowledge-index')
+					const db = await createDb(companyRoot)
+					let ftsResults = searchKnowledge(db, args.query, maxResults)
+
+					// Filter by scope if provided
+					if (args.scope && ftsResults.length > 0) {
+						ftsResults = ftsResults.filter((r) => r.path.startsWith(args.scope!))
+					}
+
+					if (ftsResults.length > 0) {
+						const text = ftsResults
+							.map((r) => `- **${r.path}** (${r.title}): ${r.snippet}`)
+							.join('\n')
+						return { content: [{ type: 'text' as const, text }] }
+					}
+				} catch {
+					// FTS not available — fall through to FS scan
+				}
+
+				// Fallback: filesystem scan
 				const knowledgeDir = join(companyRoot, PATHS.KNOWLEDGE_DIR.replace(/^\/company/, ''))
 				const searchDir = args.scope ? join(knowledgeDir, args.scope) : knowledgeDir
-				const maxResults = args.max_results ?? 10
 				const results: Array<{ path: string; snippet: string }> = []
 
 				async function searchRecursive(dir: string): Promise<void> {

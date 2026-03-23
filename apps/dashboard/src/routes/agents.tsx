@@ -11,7 +11,7 @@ import { useActivity } from '@/hooks/use-activity'
 export const Route = createFileRoute('/agents')({
 	component: AgentsPage,
 	validateSearch: (search: Record<string, unknown>) => ({
-		agent: (search.agent as string) ?? undefined,
+		agent: (search.agent as string) ?? '',
 	}),
 })
 
@@ -63,7 +63,7 @@ function AgentsPage() {
 			{selectedAgent && (
 				<AgentDetailPanel
 					agent={selectedAgent}
-					onClose={() => navigate({ to: '/agents', search: {}, replace: true })}
+					onClose={() => navigate({ to: '/agents', search: { agent: '' }, replace: true })}
 				/>
 			)}
 		</ErrorBoundary>

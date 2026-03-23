@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { HUMAN_ROLES } from '../constants'
 
 export const NotificationRoutingSchema = z.object({
 	transports: z.array(z.string()),
@@ -17,7 +18,8 @@ export const QuietHoursSchema = z.object({
 export const HumanSchema = z.object({
 	id: z.string(),
 	name: z.string(),
-	role: z.string(),
+	role: z.enum(HUMAN_ROLES),
+	email: z.string().email().optional(),
 	description: z.string().default(''),
 	notification_routing: z.record(z.string(), NotificationRoutingSchema).default({}),
 	quiet_hours: QuietHoursSchema.default({}),

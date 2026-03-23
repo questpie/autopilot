@@ -1,22 +1,24 @@
 import { cn } from '@/lib/utils'
 
-const CHANNELS = ['general', 'dev', 'ops'] as const
-export type Channel = (typeof CHANNELS)[number]
+export type Channel = string
 
 interface ChannelSelectorProps {
 	active: Channel
 	onChange: (channel: Channel) => void
+	channels?: string[]
 }
 
-export function ChannelSelector({ active, onChange }: ChannelSelectorProps) {
+export function ChannelSelector({ active, onChange, channels }: ChannelSelectorProps) {
+	const list = channels ?? ['general', 'dev', 'ops']
+
 	return (
-		<div className="flex border-b border-border">
-			{CHANNELS.map((ch) => (
+		<div className="flex border-b border-border overflow-x-auto">
+			{list.map((ch) => (
 				<button
 					key={ch}
 					onClick={() => onChange(ch)}
 					className={cn(
-						'font-mono text-[11px] font-semibold uppercase tracking-[0.08em] px-5 py-3 cursor-pointer border-b-2 -mb-px transition-colors',
+						'font-mono text-[11px] font-semibold uppercase tracking-[0.08em] px-5 py-3 cursor-pointer border-b-2 -mb-px transition-colors whitespace-nowrap',
 						active === ch
 							? 'text-primary border-primary'
 							: 'text-muted-foreground border-transparent hover:text-foreground',

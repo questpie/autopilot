@@ -7,6 +7,7 @@ import { createAutopilotTools } from './tools'
 import type { ToolContext } from './tools'
 import type { AgentProvider, AgentEvent } from './provider'
 import { ClaudeAgentSDKProvider } from './providers/claude-agent-sdk'
+import { eventBus } from '../events'
 
 /** Registry of available agent providers, keyed by name. */
 const providers: Map<string, AgentProvider> = new Map()
@@ -111,6 +112,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		summary: `Session started: ${task?.title ?? trigger.type} [${provider.name}/${agent.model}]`,
 		details: { sessionId, trigger, taskId: task?.id, provider: provider.name, model: agent.model },
 	})
+	eventBus.emit({ type: 'agent_session', agentId: agent.id, status: 'started', sessionId })
 
 	// 7. Spawn via provider
 	const onEvent = (event: AgentEvent) => {
@@ -128,6 +130,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 				summary: event.tool ?? 'unknown',
 				details: { sessionId, tool: event.tool },
 			}).catch(() => {}) // Fire-and-forget activity logging
+			eventBus.emit({ type: 'activity', agent: agent.id, toolName: event.tool ?? 'unknown', summary: event.tool ?? 'unknown' })
 		}
 	}
 
@@ -160,6 +163,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 				: `Session completed (${sessionResult!.toolCalls} tool calls)`,
 			details: { sessionId, ...sessionResult! },
 		})
+		eventBus.emit({ type: 'agent_session', agentId: agent.id, status: 'ended', sessionId })
 
 		// Extract and persist memory from this session (best-effort)
 		try {

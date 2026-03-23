@@ -1,8 +1,8 @@
-import { cn } from '@/lib/utils'
-import type { Task } from '@/lib/types'
-import { StatusBadge } from './status-badge'
-import { AgentAvatar } from './agent-avatar'
 import { Badge } from '@/components/ui/badge'
+import type { Task } from '@/lib/types'
+import { cn } from '@/lib/utils'
+import { AgentAvatar } from './agent-avatar'
+import { StatusBadge } from './status-badge'
 
 interface KanbanCardProps {
 	task: Task
@@ -38,9 +38,7 @@ export function KanbanCard({ task, onClick, onDragStart }: KanbanCardProps) {
 			)}
 		>
 			<div className="flex items-center justify-between gap-1 mb-1.5">
-				<span className="font-mono text-[10px] text-muted-foreground truncate">
-					{task.id}
-				</span>
+				<span className="font-mono text-[10px] text-muted-foreground truncate">{task.id}</span>
 				{task.priority && (
 					<Badge className={cn('font-mono text-[8px] px-1 py-0', PRIORITY_COLORS[task.priority])}>
 						{task.priority.toUpperCase()}
@@ -48,9 +46,7 @@ export function KanbanCard({ task, onClick, onDragStart }: KanbanCardProps) {
 				)}
 			</div>
 
-			<div className="text-[13px] font-medium leading-snug mb-2 line-clamp-2">
-				{task.title}
-			</div>
+			<div className="text-[13px] font-medium leading-snug mb-2 line-clamp-2">{task.title}</div>
 
 			<div className="flex items-center gap-2 flex-wrap">
 				{task.assigned_to && (

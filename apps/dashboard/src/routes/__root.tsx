@@ -74,9 +74,9 @@ function useAuthGuard() {
 
 	useEffect(() => {
 		if (status?.authRequired && !location.pathname.startsWith('/auth')) {
-			navigate({ to: '/auth/login' })
+			window.location.href = '/auth/login'
 		}
-	}, [status, location.pathname, navigate])
+	}, [status, location.pathname])
 
 	return status
 }

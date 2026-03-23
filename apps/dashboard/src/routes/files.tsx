@@ -1,19 +1,19 @@
-import { createFileRoute, useSearch, useNavigate } from '@tanstack/react-router'
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { TopBar } from '@/components/layout/top-bar'
+import { ErrorBoundary } from '@/components/feedback/error-boundary'
 import { FileTree } from '@/components/knowledge/file-tree'
 import { FileViewer } from '@/components/knowledge/file-viewer'
 import { SearchBar } from '@/components/knowledge/search-bar'
-import { ErrorBoundary } from '@/components/feedback/error-boundary'
+import { TopBar } from '@/components/layout/top-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useCreateFile, useUploadFile } from '@/hooks/use-files'
+import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export const Route = createFileRoute('/files')({
 	component: FilesPage,
 	validateSearch: (search: Record<string, unknown>) => ({
-		file: (search.file as string) ?? undefined,
+		file: (search.file as string) ?? '',
 	}),
 })
 
@@ -24,6 +24,7 @@ function FilesPage() {
 	const [search, setSearch] = useState('')
 	const [showNewDoc, setShowNewDoc] = useState(false)
 	const [showUpload, setShowUpload] = useState(false)
+	const [editing, setEditing] = useState(false)
 
 	useEffect(() => {
 		if (fileFromSearch && fileFromSearch !== selectedPath) {
@@ -33,12 +34,11 @@ function FilesPage() {
 
 	const handleSelect = (path: string) => {
 		setSelectedPath(path)
+		setEditing(false)
 		navigate({ to: '/files', search: { file: path }, replace: true })
 	}
 
-	const breadcrumb = selectedPath
-		? selectedPath.split('/').filter(Boolean).join(' / ')
-		: undefined
+	const breadcrumb = selectedPath ? selectedPath.split('/').filter(Boolean).join(' / ') : undefined
 
 	return (
 		<ErrorBoundary>
@@ -58,14 +58,10 @@ function FilesPage() {
 				</div>
 			</TopBar>
 			<div className="flex flex-1 overflow-hidden">
-				{/* File Tree */}
+				{/* File Tree — root of company */}
 				<div className="w-[280px] border-r border-border overflow-y-auto shrink-0">
 					<SearchBar value={search} onChange={setSearch} />
-					<FileTree
-						basePath=""
-						selectedPath={selectedPath}
-						onSelect={handleSelect}
-					/>
+					<FileTree basePath="" selectedPath={selectedPath} onSelect={handleSelect} />
 				</div>
 
 				{/* Content Viewer */}
@@ -76,14 +72,18 @@ function FilesPage() {
 
 			{showNewDoc && (
 				<NewDocumentDialog
-					currentDir={selectedPath?.includes('/') ? selectedPath.split('/').slice(0, -1).join('/') : ''}
+					currentDir={
+						selectedPath?.includes('/') ? selectedPath.split('/').slice(0, -1).join('/') : ''
+					}
 					onClose={() => setShowNewDoc(false)}
 				/>
 			)}
 
 			{showUpload && (
 				<UploadDialog
-					currentDir={selectedPath?.includes('/') ? selectedPath.split('/').slice(0, -1).join('/') : ''}
+					currentDir={
+						selectedPath?.includes('/') ? selectedPath.split('/').slice(0, -1).join('/') : ''
+					}
 					onClose={() => setShowUpload(false)}
 				/>
 			)}
@@ -98,10 +98,7 @@ function NewDocumentDialog({ currentDir, onClose }: { currentDir: string; onClos
 
 	const handleSubmit = () => {
 		if (!path.trim()) return
-		createFile.mutate(
-			{ path: path.trim(), content },
-			{ onSuccess: () => onClose() },
-		)
+		createFile.mutate({ path: path.trim(), content }, { onSuccess: () => onClose() })
 	}
 
 	return (
@@ -132,7 +129,9 @@ function NewDocumentDialog({ currentDir, onClose }: { currentDir: string; onClos
 						/>
 					</div>
 					<div className="flex justify-end gap-2">
-						<Button variant="outline" onClick={onClose}>Cancel</Button>
+						<Button variant="outline" onClick={onClose}>
+							Cancel
+						</Button>
 						<Button onClick={handleSubmit} disabled={!path.trim() || createFile.isPending}>
 							{createFile.isPending ? 'Creating...' : 'Create'}
 						</Button>
@@ -151,10 +150,7 @@ function UploadDialog({ currentDir, onClose }: { currentDir: string; onClose: ()
 
 	const handleUpload = useCallback(
 		(file: File) => {
-			uploadFile.mutate(
-				{ file, targetDir },
-				{ onSuccess: () => onClose() },
-			)
+			uploadFile.mutate({ file, targetDir }, { onSuccess: () => onClose() })
 		},
 		[targetDir, uploadFile, onClose],
 	)
@@ -186,17 +182,20 @@ function UploadDialog({ currentDir, onClose }: { currentDir: string; onClose: ()
 						/>
 					</div>
 					<div
-						onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+						onDragOver={(e) => {
+							e.preventDefault()
+							setIsDragging(true)
+						}}
 						onDragLeave={() => setIsDragging(false)}
 						onDrop={handleDrop}
 						onClick={() => fileInputRef.current?.click()}
 						className={`border-2 border-dashed p-8 text-center cursor-pointer transition-colors ${
-							isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground'
+							isDragging
+								? 'border-primary bg-primary/5'
+								: 'border-border hover:border-muted-foreground'
 						}`}
 					>
-						<div className="text-sm text-muted-foreground">
-							Drop files here or click to browse
-						</div>
+						<div className="text-sm text-muted-foreground">Drop files here or click to browse</div>
 						<input
 							ref={fileInputRef}
 							type="file"
@@ -211,7 +210,9 @@ function UploadDialog({ currentDir, onClose }: { currentDir: string; onClose: ()
 						<div className="font-mono text-[11px] text-info">Uploading...</div>
 					)}
 					<div className="flex justify-end">
-						<Button variant="outline" onClick={onClose}>Cancel</Button>
+						<Button variant="outline" onClick={onClose}>
+							Cancel
+						</Button>
 					</div>
 				</div>
 			</div>

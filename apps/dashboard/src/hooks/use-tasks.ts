@@ -1,7 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiFetch, apiPost, apiPut, queryKeys, REFETCH } from '@/lib/api'
 import { toast } from '@/hooks/use-toast'
+import { REFETCH, apiFetch, apiPost, apiPut, queryKeys } from '@/lib/api'
 import type { Task } from '@/lib/types'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 export function useTasks() {
 	return useQuery({
@@ -131,7 +131,10 @@ export function useAddTaskResource() {
 	const queryClient = useQueryClient()
 
 	return useMutation({
-		mutationFn: ({ taskId, resource }: { taskId: string; resource: { type: string; path: string; label?: string } }) =>
+		mutationFn: ({
+			taskId,
+			resource,
+		}: { taskId: string; resource: { type: string; path: string; label?: string } }) =>
 			apiPost(`/api/tasks/${taskId}/link`, resource),
 		onSuccess: () => {
 			toast('Resource added', 'success')

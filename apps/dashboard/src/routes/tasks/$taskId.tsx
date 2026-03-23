@@ -1,24 +1,24 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useState, useMemo } from 'react'
-import { TopBar } from '@/components/layout/top-bar'
-import { StatusBadge } from '@/components/data/status-badge'
-import { AgentAvatar } from '@/components/data/agent-avatar'
-import { RejectDialog } from '@/components/data/reject-dialog'
-import { AddResourceDialog } from '@/components/data/add-resource-dialog'
-import { EmptyState } from '@/components/feedback/empty-state'
-import { ErrorBoundary } from '@/components/feedback/error-boundary'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Linkify } from '@/lib/linkify'
-import { renderMarkdown, PROSE_CLASSES } from '@/lib/markdown'
-import { useTask, useApproveTask, useRejectTask, useAddTaskLabel } from '@/hooks/use-tasks'
-import { useAgents } from '@/hooks/use-agents'
-import { useChat, useSendMessage } from '@/hooks/use-chat'
 import { ChatBubble } from '@/components/chat/chat-bubble'
 import { ChatInput } from '@/components/chat/chat-input'
-import { cn } from '@/lib/utils'
+import { AddResourceDialog } from '@/components/data/add-resource-dialog'
+import { AgentAvatar } from '@/components/data/agent-avatar'
+import { RejectDialog } from '@/components/data/reject-dialog'
+import { StatusBadge } from '@/components/data/status-badge'
+import { EmptyState } from '@/components/feedback/empty-state'
+import { ErrorBoundary } from '@/components/feedback/error-boundary'
+import { TopBar } from '@/components/layout/top-bar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useAgents } from '@/hooks/use-agents'
+import { useChat, useSendMessage } from '@/hooks/use-chat'
+import { useAddTaskLabel, useApproveTask, useRejectTask, useTask } from '@/hooks/use-tasks'
+import { Linkify } from '@/lib/linkify'
+import { PROSE_CLASSES, renderMarkdown } from '@/lib/markdown'
+import { cn } from '@/lib/utils'
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useMemo, useState } from 'react'
 
 export const Route = createFileRoute('/tasks/$taskId')({
 	component: TaskDetailPage,
@@ -69,14 +69,18 @@ function TaskDetailPage() {
 		return (
 			<ErrorBoundary>
 				<TopBar title="Task" />
-				<EmptyState icon={'\u26A0'} title="Task not found" description={`Could not find ${taskId}`} />
+				<EmptyState
+					icon={'\u26A0'}
+					title="Task not found"
+					description={`Could not find ${taskId}`}
+				/>
 			</ErrorBoundary>
 		)
 	}
 
 	const handleApprove = () => {
 		approveTask.mutate(task.id)
-		navigate({ to: '/' })
+		navigate({ to: '/', search: { pin: '', view: 'kanban' } })
 	}
 
 	const handleReject = (reason: string) => {
@@ -103,7 +107,9 @@ function TaskDetailPage() {
 		<ErrorBoundary>
 			<TopBar title="Task">
 				<nav className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
-					<Link to="/" className="hover:text-foreground">Dashboard</Link>
+					<Link to="/" search={{ pin: '', view: 'kanban' }} className="hover:text-foreground">
+						Dashboard
+					</Link>
 					<span>/</span>
 					<span>Tasks</span>
 					<span>/</span>
@@ -131,7 +137,11 @@ function TaskDetailPage() {
 						<h1 className="text-lg font-semibold tracking-[-0.02em]">{task.title}</h1>
 						{task.assigned_to && (
 							<div className="flex items-center gap-2">
-								<AgentAvatar name={task.assigned_to} role={agentRoleMap[task.assigned_to]} size="md" />
+								<AgentAvatar
+									name={task.assigned_to}
+									role={agentRoleMap[task.assigned_to]}
+									size="md"
+								/>
 								<span className="font-mono text-[11px]">{task.assigned_to}</span>
 								{agentRoleMap[task.assigned_to] && (
 									<Badge variant="outline" className="text-[8px]">
@@ -179,8 +189,12 @@ function TaskDetailPage() {
 									className="h-8 w-32 text-[11px]"
 									autoFocus
 								/>
-								<Button size="sm" onClick={handleAddLabel}>Add</Button>
-								<Button size="sm" variant="outline" onClick={() => setShowLabelInput(false)}>X</Button>
+								<Button size="sm" onClick={handleAddLabel}>
+									Add
+								</Button>
+								<Button size="sm" variant="outline" onClick={() => setShowLabelInput(false)}>
+									X
+								</Button>
 							</div>
 						) : (
 							<Button variant="outline" size="sm" onClick={() => setShowLabelInput(true)}>
@@ -214,7 +228,9 @@ function TaskDetailPage() {
 					<div className="min-h-[200px]">
 						{activeTab === 'Description' && <DescriptionTab task={task} />}
 						{activeTab === 'Resources' && <ResourcesTab task={task} />}
-						{activeTab === 'Discussion' && <DiscussionTab taskId={task.id} agentRoleMap={agentRoleMap} />}
+						{activeTab === 'Discussion' && (
+							<DiscussionTab taskId={task.id} agentRoleMap={agentRoleMap} />
+						)}
 						{activeTab === 'History' && <HistoryTab task={task} agentRoleMap={agentRoleMap} />}
 						{activeTab === 'Dependencies' && <DependenciesTab task={task} />}
 					</div>
@@ -247,10 +263,7 @@ function TaskDetailPage() {
 				/>
 			)}
 			{showResource && (
-				<AddResourceDialog
-					taskId={task.id}
-					onClose={() => setShowResource(false)}
-				/>
+				<AddResourceDialog taskId={task.id} onClose={() => setShowResource(false)} />
 			)}
 		</ErrorBoundary>
 	)
@@ -274,7 +287,9 @@ function DescriptionTab({ task }: { task: import('@/lib/types').Task }) {
 							<span className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.1em] w-20 shrink-0 pt-0.5">
 								{key}
 							</span>
-							<span className="text-sm"><Linkify>{value}</Linkify></span>
+							<span className="text-sm">
+								<Linkify>{value}</Linkify>
+							</span>
 						</div>
 					))}
 				</div>
@@ -283,7 +298,10 @@ function DescriptionTab({ task }: { task: import('@/lib/types').Task }) {
 				<div className="mt-4">
 					<SectionTitle>Blockers</SectionTitle>
 					{task.blockers.map((b, i) => (
-						<div key={i} className="border-l-2 border-destructive pl-3 py-2 text-sm text-destructive mb-2">
+						<div
+							key={i}
+							className="border-l-2 border-destructive pl-3 py-2 text-sm text-destructive mb-2"
+						>
 							{b.reason}
 							{b.assigned_to && (
 								<div className="font-mono text-[10px] text-muted-foreground mt-1">
@@ -301,7 +319,9 @@ function DescriptionTab({ task }: { task: import('@/lib/types').Task }) {
 function ResourcesTab({ task }: { task: import('@/lib/types').Task }) {
 	const resources = task.resources ?? []
 	if (resources.length === 0) {
-		return <EmptyState title="No resources" description="Link files, URLs, pins, or related tasks." />
+		return (
+			<EmptyState title="No resources" description="Link files, URLs, pins, or related tasks." />
+		)
 	}
 
 	const typeIcons: Record<string, string> = {
@@ -318,9 +338,7 @@ function ResourcesTab({ task }: { task: import('@/lib/types').Task }) {
 				<div key={i} className="flex items-center gap-3 border border-border bg-card p-3">
 					<span className="text-lg">{typeIcons[r.type] ?? '\uD83D\uDCC4'}</span>
 					<div className="flex-1 min-w-0">
-						{r.label && (
-							<div className="text-sm font-medium">{r.label}</div>
-						)}
+						{r.label && <div className="text-sm font-medium">{r.label}</div>}
 						<div className="font-mono text-[11px] text-muted-foreground truncate">
 							<Linkify>{r.path}</Linkify>
 						</div>
@@ -334,7 +352,10 @@ function ResourcesTab({ task }: { task: import('@/lib/types').Task }) {
 	)
 }
 
-function DiscussionTab({ taskId, agentRoleMap }: { taskId: string; agentRoleMap: Record<string, string> }) {
+function DiscussionTab({
+	taskId,
+	agentRoleMap,
+}: { taskId: string; agentRoleMap: Record<string, string> }) {
 	const channel = taskId
 	const { data: messages, isLoading } = useChat(channel)
 	const sendMessage = useSendMessage()
@@ -355,30 +376,25 @@ function DiscussionTab({ taskId, agentRoleMap }: { taskId: string; agentRoleMap:
 
 	return (
 		<div className="space-y-4">
-			{(!messages || messages.length === 0) ? (
+			{!messages || messages.length === 0 ? (
 				<EmptyState
 					title="No discussion yet"
 					description={`Messages in #${channel} will appear here.`}
 				/>
 			) : (
 				messages.map((msg) => (
-					<ChatBubble
-						key={msg.id}
-						message={msg}
-						agentRole={agentRoleMap[msg.sender]}
-					/>
+					<ChatBubble key={msg.id} message={msg} agentRole={agentRoleMap[msg.sender]} />
 				))
 			)}
-			<ChatInput
-				channel={channel}
-				onSend={handleSend}
-				isLoading={sendMessage.isPending}
-			/>
+			<ChatInput channel={channel} onSend={handleSend} isLoading={sendMessage.isPending} />
 		</div>
 	)
 }
 
-function HistoryTab({ task, agentRoleMap }: { task: import('@/lib/types').Task; agentRoleMap: Record<string, string> }) {
+function HistoryTab({
+	task,
+	agentRoleMap,
+}: { task: import('@/lib/types').Task; agentRoleMap: Record<string, string> }) {
 	if (!task.history || task.history.length === 0) {
 		return <EmptyState title="No history" description="Task events will appear here." />
 	}
@@ -394,9 +410,7 @@ function HistoryTab({ task, agentRoleMap }: { task: import('@/lib/types').Task; 
 								i === 0 ? 'bg-primary' : 'bg-muted-foreground',
 							)}
 						/>
-						{i < (task.history?.length ?? 0) - 1 && (
-							<div className="w-px flex-1 bg-border mt-1" />
-						)}
+						{i < (task.history?.length ?? 0) - 1 && <div className="w-px flex-1 bg-border mt-1" />}
 					</div>
 					<div className="pb-4">
 						<div className="flex items-center gap-2">
@@ -473,7 +487,10 @@ function DepLink({ id, type }: { id: string; type: 'depends' | 'blocks' | 'relat
 		<Link
 			to="/tasks/$taskId"
 			params={{ taskId: id }}
-			className={cn('flex items-center gap-2 border border-border bg-card p-2 border-l-2 hover:bg-accent transition-colors', colors[type])}
+			className={cn(
+				'flex items-center gap-2 border border-border bg-card p-2 border-l-2 hover:bg-accent transition-colors',
+				colors[type],
+			)}
 		>
 			<span className="font-mono text-[11px] text-primary">{id}</span>
 		</Link>

@@ -2,6 +2,7 @@ humans:
   - id: owner
     name: "Owner"
     role: "owner"
+    email: ""
     description: "Company owner and sole human operator"
     notification_routing:
       urgent:

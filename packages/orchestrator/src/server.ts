@@ -1,7 +1,10 @@
-import { readdir } from 'node:fs/promises'
+import { readdir, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Schedule, Webhook } from '@questpie/autopilot-spec'
-import { loadCompany, loadAgents, readTask, updateTask, moveTask } from './fs'
+import { loadCompany, loadAgents, readTask, updateTask, moveTask, createStorage } from './fs'
+import type { StorageBackend, StorageMode } from './fs'
+import { createDb, initFts } from './db'
+import { reindexKnowledge, initKnowledgeFts } from './db/knowledge-index'
 import { spawnAgent } from './agent'
 import { evaluateTransition, advanceWorkflow } from './workflow'
 import { WorkflowLoader } from './workflow'
@@ -13,6 +16,8 @@ import { handleTelegramWebhook } from './webhook'
 import { SessionStreamManager } from './session'
 import { Notifier } from './notifier'
 import { ApiServer } from './api'
+import { eventBus } from './events'
+import { GitManager } from './git/git-manager'
 
 /** Configuration options for the {@link Orchestrator}. */
 export interface OrchestratorOptions {
@@ -22,6 +27,8 @@ export interface OrchestratorOptions {
 	webhookPort?: number
 	/** Port for the read-only REST API server (default `7778`). */
 	apiPort?: number
+	/** Storage backend mode: "sqlite" (default) or "yaml" (legacy). */
+	storageMode?: StorageMode
 }
 
 /**
@@ -39,6 +46,8 @@ export class Orchestrator {
 	private streamManager: SessionStreamManager
 	private workflowLoader: WorkflowLoader
 	private notifier: Notifier
+	private gitManager: GitManager | null = null
+	private storage: StorageBackend | null = null
 	private running = false
 	private activeAgentCount = 0
 	private maxConcurrentAgents = 5
@@ -71,6 +80,22 @@ export class Orchestrator {
 		} catch (err) {
 			console.error('[orchestrator] failed to load company.yaml — is this a valid company directory?')
 			throw err
+		}
+
+		// 1b. Initialize storage backend + knowledge index
+		try {
+			const storageMode = this.options.storageMode ?? 'sqlite'
+			this.storage = await createStorage(root, storageMode)
+			console.log(`[orchestrator] storage backend initialized (mode: ${storageMode})`)
+
+			if (storageMode === 'sqlite') {
+				const db = await createDb(root)
+				initKnowledgeFts(db)
+				const indexedCount = await reindexKnowledge(db, root)
+				console.log(`[orchestrator] knowledge index: ${indexedCount} documents indexed`)
+			}
+		} catch (err) {
+			console.error('[orchestrator] failed to initialize storage:', err)
 		}
 
 		// 2. Start watcher
@@ -135,6 +160,25 @@ export class Orchestrator {
 			}
 		}
 
+		// 6. Initialize GitManager
+		try {
+			const companyConfig = await loadCompany(root)
+			const gitConfig = (companyConfig as Record<string, unknown>).settings as Record<string, unknown> | undefined
+			const gitSettings = (gitConfig?.git ?? {}) as Record<string, unknown>
+
+			this.gitManager = new GitManager({
+				companyRoot: root,
+				enabled: gitSettings.auto_commit !== false,
+				batchIntervalMs: (gitSettings.commit_batch_interval as number) ?? 5000,
+				autoPush: (gitSettings.auto_push as boolean) ?? false,
+				remote: (gitSettings.remote as string) ?? '',
+				branch: (gitSettings.branch as string) ?? 'main',
+			})
+			await this.gitManager.initialize()
+		} catch (err) {
+			console.error('[orchestrator] failed to initialize git manager:', err instanceof Error ? err.message : err)
+		}
+
 		// Startup scan: process existing tasks that may have been added while offline
 		const startupDirs = ['active', 'backlog']
 		let scannedCount = 0
@@ -166,6 +210,15 @@ export class Orchestrator {
 		if (!this.running) return
 
 		console.log('[orchestrator] shutting down...')
+
+		if (this.gitManager) {
+			try {
+				await this.gitManager.stop()
+			} catch (err) {
+				console.error('[orchestrator] error stopping git manager:', err)
+			}
+			this.gitManager = null
+		}
 
 		if (this.watcher) {
 			try {
@@ -203,6 +256,15 @@ export class Orchestrator {
 			this.apiServer = null
 		}
 
+		if (this.storage) {
+			try {
+				await this.storage.close()
+			} catch (err) {
+				console.error('[orchestrator] error closing storage:', err)
+			}
+			this.storage = null
+		}
+
 		this.running = false
 		console.log('[orchestrator] shutdown complete')
 	}
@@ -215,6 +277,11 @@ export class Orchestrator {
 	/** Return the workflow loader (used by the API layer). */
 	getWorkflowLoader(): WorkflowLoader {
 		return this.workflowLoader
+	}
+
+	/** Return the storage backend (used by tools and API). */
+	getStorage(): StorageBackend | null {
+		return this.storage
 	}
 
 	/** Whether the orchestrator is currently running. */
@@ -438,6 +505,7 @@ export class Orchestrator {
 					if (result.nextStep && result.nextStep !== task.workflow_step) {
 						await updateTask(root, taskId, { workflow_step: result.nextStep, status: 'assigned' }, 'system')
 						await moveTask(root, taskId, 'assigned', 'system')
+						eventBus.emit({ type: 'workflow_advanced', taskId, from: task.workflow_step!, to: result.nextStep })
 						console.log(`[orchestrator] advanced ${taskId}: ${task.workflow_step} → ${result.nextStep}`)
 					} else if (result.action === 'complete') {
 						console.log(`[orchestrator] task ${taskId} workflow complete`)

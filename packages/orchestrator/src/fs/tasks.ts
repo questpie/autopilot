@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { TaskSchema, taskPath, PATHS, TASK_STATUSES } from '@questpie/autopilot-spec'
 import { readYaml, writeYaml, fileExists } from './yaml'
 import { writeQueue } from './write-queue'
+import { eventBus } from '../events'
 
 /** Resolved (validated) task object. */
 export type TaskOutput = z.output<typeof TaskSchema>
@@ -95,6 +96,7 @@ export async function createTask(
 	const folder = STATUS_FOLDER_MAP[task.status] ?? 'backlog'
 	const filePath = resolvePath(companyRoot, taskPath(folder, task.id))
 	await writeYaml(filePath, task)
+	eventBus.emit({ type: 'task_changed', taskId: task.id, status: task.status, assignedTo: task.assigned_to })
 	return task
 }
 
@@ -180,6 +182,7 @@ export async function updateTask(
 		})
 
 		await writeYaml(found.path, updated)
+		eventBus.emit({ type: 'task_changed', taskId: updated.id, status: updated.status, assignedTo: updated.assigned_to })
 		return updated
 	})
 }
@@ -233,6 +236,7 @@ export async function moveTask(
 			await writeYaml(found.path, updated)
 		}
 
+		eventBus.emit({ type: 'task_changed', taskId: updated.id, status: updated.status, assignedTo: updated.assigned_to })
 		return updated
 	})
 }

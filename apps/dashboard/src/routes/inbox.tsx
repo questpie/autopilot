@@ -1,16 +1,17 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { TopBar } from '@/components/layout/top-bar'
-import { TaskCard } from '@/components/data/task-card'
 import { PinCard } from '@/components/data/pin-card'
+import { RejectDialog } from '@/components/data/reject-dialog'
+import { TaskCard } from '@/components/data/task-card'
 import { EmptyState } from '@/components/feedback/empty-state'
 import { ErrorBoundary } from '@/components/feedback/error-boundary'
+import { TopBar } from '@/components/layout/top-bar'
+import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { RejectDialog } from '@/components/data/reject-dialog'
+import { useAgents } from '@/hooks/use-agents'
 import { useInbox } from '@/hooks/use-inbox'
 import { useApproveTask, useRejectTask } from '@/hooks/use-tasks'
-import { useAgents } from '@/hooks/use-agents'
-import { useMemo, useState } from 'react'
+import { createFileRoute } from '@tanstack/react-router'
 import { useNavigate } from '@tanstack/react-router'
+import { useMemo, useState } from 'react'
 
 export const Route = createFileRoute('/inbox')({
 	component: InboxPage,
@@ -42,9 +43,17 @@ function InboxPage() {
 		}
 	}
 
+	const totalCount = (inbox?.tasks?.length ?? 0) + (inbox?.pins?.length ?? 0)
+
 	return (
 		<ErrorBoundary>
-			<TopBar title="Inbox" />
+			<TopBar title="Inbox">
+				{totalCount > 0 && (
+					<Badge variant="default" className="font-mono text-[9px]">
+						{totalCount} pending
+					</Badge>
+				)}
+			</TopBar>
 			<div className="flex-1 overflow-y-auto p-6 max-w-[900px]">
 				{isLoading ? (
 					<div className="space-y-3">
@@ -58,7 +67,7 @@ function InboxPage() {
 						title="Cannot connect to orchestrator"
 						description="Make sure it's running on :7778"
 					/>
-				) : (!inbox?.tasks?.length && !inbox?.pins?.length) ? (
+				) : !inbox?.tasks?.length && !inbox?.pins?.length ? (
 					<EmptyState
 						icon={'\u2713'}
 						title="All clear"
@@ -77,7 +86,9 @@ function InboxPage() {
 										<TaskCard
 											key={task.id}
 											task={task}
-											onClick={() => navigate({ to: '/tasks/$taskId', params: { taskId: task.id } })}
+											onClick={() =>
+												navigate({ to: '/tasks/$taskId', params: { taskId: task.id } })
+											}
 											onApprove={() => approveTask.mutate(task.id)}
 											onReject={() => setRejectingTaskId(task.id)}
 										/>

@@ -16,6 +16,13 @@ import { loadSkillCatalog } from '../skills'
 import { routeMessage } from '../router'
 import { ArtifactRouter } from '../artifact'
 import type { ListTasksOptions } from '../fs'
+import { resolveActor, getRequiredPermission } from '../auth/middleware'
+import { checkPermission } from '../auth/roles'
+import { logAudit } from '../auth/audit'
+import type { Auth } from '../auth'
+import type { Actor } from '../auth/types'
+import { eventBus } from '../events'
+import type { AutopilotEvent } from '../events'
 
 /** Configuration for the read-only REST API server. */
 export interface ApiServerOptions {
@@ -23,6 +30,10 @@ export interface ApiServerOptions {
 	companyRoot: string
 	/** TCP port to listen on. */
 	port: number
+	/** Better Auth instance (optional — if not provided, auth is disabled). */
+	auth?: Auth
+	/** Whether auth is enabled (from company.yaml settings.auth.enabled). */
+	authEnabled?: boolean
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -117,6 +128,75 @@ export class ApiServer {
 		const method = request.method
 
 		try {
+			// Better Auth passthrough
+			if (path.startsWith('/api/auth')) {
+				if (this.options.auth) {
+					return this.options.auth.handler(request)
+				}
+				return errorResponse('auth not configured', 404)
+			}
+
+			// Webhook endpoints exempt from bearer/API key
+			if (path.startsWith('/hooks/')) {
+				return await this.routeToHandler(request, url)
+			}
+
+			// Resolve actor
+			const actor = await resolveActor(request, {
+				authEnabled: this.options.authEnabled ?? false,
+				companyRoot: this.options.companyRoot,
+				auth: this.options.auth!,
+			})
+
+			// /api/status is a public health check
+			if (!actor && path === '/api/status') {
+				return await this.handleStatus()
+			}
+
+			if (!actor) return errorResponse('Unauthorized', 401)
+
+			// Permission check
+			const required = getRequiredPermission(path, method)
+			if (required && !checkPermission(actor, required.resource, required.action)) {
+				await logAudit(this.options.companyRoot, {
+					ts: new Date().toISOString(),
+					actor: actor.id,
+					actor_type: actor.type,
+					action: `${required.resource}.${required.action}`,
+					target: path,
+					source: actor.source,
+					ip: actor.ip,
+					result: 'denied',
+				})
+				return errorResponse('Forbidden', 403)
+			}
+
+			// Route + audit
+			const response = await this.routeToHandler(request, url)
+			if (required) {
+				await logAudit(this.options.companyRoot, {
+					ts: new Date().toISOString(),
+					actor: actor.id,
+					actor_type: actor.type,
+					action: `${required.resource}.${required.action}`,
+					target: path,
+					source: actor.source,
+					ip: actor.ip,
+					result: 'success',
+				})
+			}
+			return response
+		} catch (err) {
+			console.error('[api] error handling request:', err)
+			return errorResponse('internal error', 500)
+		}
+	}
+
+	private async routeToHandler(request: Request, url: URL): Promise<Response> {
+		const path = url.pathname
+		const method = request.method
+
+		try {
 			// Filesystem browser
 			if (path.startsWith('/fs/') || path === '/fs') {
 				return await this.handleFs(path)
@@ -167,6 +247,11 @@ export class ApiServer {
 			const widgetDetailMatch = path.match(/^\/api\/dashboard\/widgets\/([^/]+)$/)
 			if (widgetDetailMatch?.[1] && method === 'GET') {
 				return await this.handleDashboardWidgetDetail(widgetDetailMatch[1])
+			}
+
+			// SSE events endpoint
+			if (path === '/api/events' && method === 'GET') {
+				return this.handleSSE(request, url.searchParams)
 			}
 
 			switch (path) {
@@ -560,5 +645,55 @@ export class ApiServer {
 			}
 			throw err
 		}
+	}
+
+	private handleSSE(request: Request, params: URLSearchParams): Response {
+		const encoder = new TextEncoder()
+
+		const stream = new ReadableStream({
+			start(controller) {
+				const send = (data: string) => {
+					try {
+						controller.enqueue(encoder.encode(`data: ${data}\n\n`))
+					} catch {
+						// Stream closed
+					}
+				}
+
+				// Subscribe to event bus
+				const unsubscribe = eventBus.subscribe((event: AutopilotEvent) => {
+					send(JSON.stringify(event))
+				})
+
+				// Heartbeat every 30s to keep connection alive
+				const heartbeat = setInterval(() => {
+					try {
+						controller.enqueue(encoder.encode(': heartbeat\n\n'))
+					} catch {
+						clearInterval(heartbeat)
+					}
+				}, 30_000)
+
+				// Cleanup on client disconnect
+				request.signal.addEventListener('abort', () => {
+					unsubscribe()
+					clearInterval(heartbeat)
+					try {
+						controller.close()
+					} catch {
+						// Already closed
+					}
+				})
+			},
+		})
+
+		return new Response(stream, {
+			headers: {
+				'Content-Type': 'text/event-stream',
+				'Cache-Control': 'no-cache',
+				'Connection': 'keep-alive',
+				...CORS_HEADERS,
+			},
+		})
 	}
 }

@@ -1,6 +1,7 @@
 import { Command } from 'commander'
 import { cp, readFile, writeFile, access, readdir, symlink, mkdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import simpleGit from 'simple-git'
 import { program } from '../program'
 import { header, success, dim, error, warning } from '../utils/format'
 
@@ -97,6 +98,44 @@ program.addCommand(
 				await symlink('../skills', join(claudeDir, 'skills'))
 			} catch {
 				// Symlink may already exist from template copy
+			}
+
+			// Initialize git repository
+			const gitignoreContent = [
+				'# Auth & sessions (ephemeral, not versioned)',
+				'.auth/',
+				'',
+				'# SQLite operational databases',
+				'.data/',
+				'',
+				'# Secrets (encryption key MUST NOT be in git)',
+				'secrets/.master-key',
+				'',
+				'# Dependencies',
+				'node_modules/',
+				'',
+				'# Build artifacts',
+				'.turbo/',
+				'dashboard/dist/',
+				'',
+				'# Session streams (too large, append-only)',
+				'logs/sessions/*.jsonl',
+				'',
+				'# OS files',
+				'.DS_Store',
+				'Thumbs.db',
+			].join('\n')
+			await writeFile(join(targetDir, '.gitignore'), gitignoreContent, 'utf-8')
+
+			try {
+				const git = simpleGit(targetDir)
+				await git.init()
+				await git.add('-A')
+				await git.commit('chore: initial company setup via autopilot init')
+				console.log(success('Git repository initialized'))
+				console.log(dim('All changes will be auto-committed by the orchestrator'))
+			} catch (err) {
+				console.log(warning('Git init skipped — git may not be installed'))
 			}
 
 			console.log(success('Company initialized successfully!'))

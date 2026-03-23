@@ -1,0 +1,112 @@
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
+
+// ─── Tasks ──────────────────────────────────────────────────────────────────
+
+export const tasks = sqliteTable('tasks', {
+	id: text('id').primaryKey(),
+	title: text('title').notNull(),
+	description: text('description').default(''),
+	type: text('type').notNull(),
+	status: text('status').notNull(),
+	priority: text('priority').default('medium'),
+
+	created_by: text('created_by').notNull(),
+	assigned_to: text('assigned_to'),
+	reviewers: text('reviewers').default('[]'),
+	approver: text('approver'),
+
+	project: text('project'),
+	parent: text('parent'),
+	depends_on: text('depends_on').default('[]'),
+	blocks: text('blocks').default('[]'),
+	related: text('related').default('[]'),
+
+	workflow: text('workflow'),
+	workflow_step: text('workflow_step'),
+
+	context: text('context').default('{}'),
+	blockers: text('blockers').default('[]'),
+
+	resources: text('resources').default('[]'),
+	labels: text('labels').default('[]'),
+	milestone: text('milestone'),
+
+	created_at: text('created_at').notNull(),
+	updated_at: text('updated_at').notNull(),
+	started_at: text('started_at'),
+	completed_at: text('completed_at'),
+	deadline: text('deadline'),
+
+	history: text('history').default('[]'),
+
+	_linear_id: text('_linear_id'),
+	_github_pr: text('_github_pr'),
+}, (table) => [
+	index('idx_tasks_status').on(table.status),
+	index('idx_tasks_assigned').on(table.assigned_to),
+	index('idx_tasks_workflow').on(table.workflow, table.workflow_step),
+	index('idx_tasks_project').on(table.project),
+	index('idx_tasks_parent').on(table.parent),
+	index('idx_tasks_created').on(table.created_at),
+	index('idx_tasks_priority').on(table.priority, table.status),
+	index('idx_tasks_milestone').on(table.milestone),
+])
+
+// ─── Messages ───────────────────────────────────────────────────────────────
+
+export const messages = sqliteTable('messages', {
+	id: text('id').primaryKey(),
+	channel: text('channel'),
+	from_id: text('from_id').notNull(),
+	to_id: text('to_id'),
+	content: text('content').notNull(),
+	created_at: text('created_at').notNull(),
+	mentions: text('mentions').default('[]'),
+	references_ids: text('references_ids').default('[]'),
+	reactions: text('reactions').default('[]'),
+	thread: text('thread'),
+	transport: text('transport'),
+	external: integer('external', { mode: 'boolean' }).default(false),
+}, (table) => [
+	index('idx_messages_channel').on(table.channel),
+	index('idx_messages_from').on(table.from_id),
+	index('idx_messages_to').on(table.to_id),
+	index('idx_messages_thread').on(table.thread),
+	index('idx_messages_created').on(table.created_at),
+])
+
+// ─── Activity ───────────────────────────────────────────────────────────────
+
+export const activity = sqliteTable('activity', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	agent: text('agent').notNull(),
+	type: text('type').notNull(),
+	summary: text('summary').notNull(),
+	details: text('details'),
+	created_at: text('created_at').notNull(),
+}, (table) => [
+	index('idx_activity_agent_time').on(table.agent, table.created_at),
+	index('idx_activity_type').on(table.type),
+	index('idx_activity_time').on(table.created_at),
+])
+
+// ─── Sessions ───────────────────────────────────────────────────────────────
+
+export const sessions = sqliteTable('sessions', {
+	id: text('id').primaryKey(),
+	agent_id: text('agent_id').notNull(),
+	task_id: text('task_id'),
+	trigger_type: text('trigger_type').notNull(),
+	status: text('status').notNull().default('running'),
+	started_at: text('started_at').notNull(),
+	ended_at: text('ended_at'),
+	tool_calls: integer('tool_calls').default(0),
+	tokens_used: integer('tokens_used').default(0),
+	error: text('error'),
+	log_path: text('log_path'),
+}, (table) => [
+	index('idx_sessions_agent').on(table.agent_id),
+	index('idx_sessions_task').on(table.task_id),
+	index('idx_sessions_status').on(table.status),
+	index('idx_sessions_started').on(table.started_at),
+])

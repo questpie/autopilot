@@ -38,7 +38,7 @@ function LoginPage() {
 				localStorage.setItem('autopilot-token', data.token)
 			}
 
-			navigate({ to: '/' })
+			navigate({ to: '/', search: { pin: '', view: 'kanban' } })
 		} catch {
 			setError('Could not connect to orchestrator')
 		} finally {

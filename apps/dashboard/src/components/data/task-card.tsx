@@ -1,9 +1,9 @@
-import { cn } from '@/lib/utils'
-import type { Task } from '@/lib/types'
-import { StatusBadge } from './status-badge'
-import { AgentAvatar } from './agent-avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import type { Task } from '@/lib/types'
+import { cn } from '@/lib/utils'
+import { AgentAvatar } from './agent-avatar'
+import { StatusBadge } from './status-badge'
 
 interface TaskCardProps {
 	task: Task
@@ -80,22 +80,26 @@ export function TaskCard({ task, onClick, onApprove, onReject }: TaskCardProps) 
 				)}
 			</div>
 			{task.status === 'blocked' && task.blockers?.[0] && (
-				<div className="mt-2 text-[11px] text-destructive font-mono">
-					{task.blockers[0].reason}
-				</div>
+				<div className="mt-2 text-[11px] text-destructive font-mono">{task.blockers[0].reason}</div>
 			)}
 			{task.status === 'review' && (
 				<div className="flex gap-2 mt-3 pt-3 border-t border-border">
 					<Button
 						size="sm"
-						onClick={(e) => { e.stopPropagation(); onApprove?.() }}
+						onClick={(e) => {
+							e.stopPropagation()
+							onApprove?.()
+						}}
 					>
 						Approve
 					</Button>
 					<Button
 						size="sm"
 						variant="destructive"
-						onClick={(e) => { e.stopPropagation(); onReject?.() }}
+						onClick={(e) => {
+							e.stopPropagation()
+							onReject?.()
+						}}
 					>
 						Reject
 					</Button>

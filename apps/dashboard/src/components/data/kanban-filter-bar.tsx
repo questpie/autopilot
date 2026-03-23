@@ -1,4 +1,4 @@
-import type { KanbanFilters, GroupBy } from '@/hooks/use-kanban'
+import type { GroupBy, KanbanFilters } from '@/hooks/use-kanban'
 
 interface KanbanFilterBarProps {
 	filters: KanbanFilters
@@ -15,7 +15,8 @@ interface KanbanFilterBarProps {
 	onGroupByChange: (g: GroupBy) => void
 }
 
-const selectClass = 'font-mono text-[10px] bg-transparent border border-border px-2 py-1 text-foreground outline-none min-w-[90px]'
+const selectClass =
+	'font-mono text-[10px] bg-transparent border border-border px-2 py-1 text-foreground outline-none min-w-[90px]'
 
 export function KanbanFilterBar({
 	filters,
@@ -101,14 +102,12 @@ function FilterSelect({
 	if (options.length === 0) return null
 
 	return (
-		<select
-			value={value}
-			onChange={(e) => onChange(e.target.value)}
-			className={selectClass}
-		>
+		<select value={value} onChange={(e) => onChange(e.target.value)} className={selectClass}>
 			<option value="">{label}</option>
 			{options.map((opt) => (
-				<option key={opt} value={opt}>{opt}</option>
+				<option key={opt} value={opt}>
+					{opt}
+				</option>
 			))}
 		</select>
 	)

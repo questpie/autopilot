@@ -1,7 +1,7 @@
-import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAddTaskResource } from '@/hooks/use-tasks'
+import { useState } from 'react'
 
 const RESOURCE_TYPES = ['file', 'url', 'pin', 'task'] as const
 
@@ -28,9 +28,7 @@ export function AddResourceDialog({ taskId, onClose }: AddResourceDialogProps) {
 		<>
 			<div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
 			<div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-background border border-border p-6">
-				<h2 className="font-mono text-[13px] font-bold tracking-[-0.03em] mb-4">
-					Add Resource
-				</h2>
+				<h2 className="font-mono text-[13px] font-bold tracking-[-0.03em] mb-4">Add Resource</h2>
 				<div className="space-y-4">
 					<div>
 						<label className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.1em] mb-1 block">
@@ -42,7 +40,9 @@ export function AddResourceDialog({ taskId, onClose }: AddResourceDialogProps) {
 							className="h-8 w-full border border-input bg-transparent px-2.5 text-sm"
 						>
 							{RESOURCE_TYPES.map((t) => (
-								<option key={t} value={t}>{t}</option>
+								<option key={t} value={t}>
+									{t}
+								</option>
 							))}
 						</select>
 					</div>
@@ -68,11 +68,10 @@ export function AddResourceDialog({ taskId, onClose }: AddResourceDialogProps) {
 						/>
 					</div>
 					<div className="flex justify-end gap-2">
-						<Button variant="outline" onClick={onClose}>Cancel</Button>
-						<Button
-							onClick={handleSubmit}
-							disabled={!path.trim() || addResource.isPending}
-						>
+						<Button variant="outline" onClick={onClose}>
+							Cancel
+						</Button>
+						<Button onClick={handleSubmit} disabled={!path.trim() || addResource.isPending}>
 							{addResource.isPending ? 'Adding...' : 'Add Resource'}
 						</Button>
 					</div>

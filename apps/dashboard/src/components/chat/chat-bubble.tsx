@@ -1,7 +1,7 @@
-import type { ChatMessage } from '@/lib/types'
 import { AgentAvatar } from '@/components/data/agent-avatar'
 import { Badge } from '@/components/ui/badge'
-import { renderMarkdown, PROSE_CLASSES } from '@/lib/markdown'
+import { PROSE_CLASSES, renderMarkdown } from '@/lib/markdown'
+import type { ChatMessage } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface ChatBubbleProps {
@@ -13,9 +13,7 @@ export function ChatBubble({ message, agentRole }: ChatBubbleProps) {
 	if (message.type === 'system') {
 		return (
 			<div className="text-center py-2">
-				<span className="font-mono text-[11px] text-muted-foreground">
-					{message.content}
-				</span>
+				<span className="font-mono text-[11px] text-muted-foreground">{message.content}</span>
 			</div>
 		)
 	}
@@ -32,9 +30,7 @@ export function ChatBubble({ message, agentRole }: ChatBubbleProps) {
 
 	return (
 		<div className={cn('flex gap-3', isHuman ? 'justify-end' : 'justify-start')}>
-			{!isHuman && (
-				<AgentAvatar name={message.sender} role={agentRole} size="md" />
-			)}
+			{!isHuman && <AgentAvatar name={message.sender} role={agentRole} size="md" />}
 			<div className={cn('max-w-[70%]')}>
 				{!isHuman && (
 					<div className="flex items-center gap-2 mb-1">

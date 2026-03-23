@@ -1,14 +1,15 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { useNavigate } from '@tanstack/react-router'
-import { MagnifyingGlass } from '@phosphor-icons/react'
-import { useTasks } from '@/hooks/use-tasks'
 import { useAgents } from '@/hooks/use-agents'
+import { useApproveTask, useTasks } from '@/hooks/use-tasks'
 import { cn } from '@/lib/utils'
+import { MagnifyingGlass } from '@phosphor-icons/react'
+import { useNavigate } from '@tanstack/react-router'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 interface CommandItem {
 	id: string
 	label: string
 	section: string
+	hint?: string
 	action: () => void
 }
 
@@ -20,6 +21,7 @@ export function CommandBar() {
 	const navigate = useNavigate()
 	const { data: tasks } = useTasks()
 	const { data: agents } = useAgents()
+	const approveTask = useApproveTask()
 
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
@@ -46,24 +48,96 @@ export function CommandBar() {
 
 		// Navigation
 		list.push(
-			{ id: 'nav-dashboard', label: 'Go to Dashboard', section: 'Navigation', action: () => navigate({ to: '/' }) },
-			{ id: 'nav-inbox', label: 'Go to Inbox', section: 'Navigation', action: () => navigate({ to: '/inbox' }) },
-			{ id: 'nav-agents', label: 'Go to Agents', section: 'Navigation', action: () => navigate({ to: '/agents' }) },
-			{ id: 'nav-chat', label: 'Go to Chat', section: 'Navigation', action: () => navigate({ to: '/chat' }) },
-			{ id: 'nav-files', label: 'Go to Files', section: 'Navigation', action: () => navigate({ to: '/files' }) },
-			{ id: 'nav-artifacts', label: 'Go to Artifacts', section: 'Navigation', action: () => navigate({ to: '/artifacts' }) },
-			{ id: 'nav-settings', label: 'Go to Settings', section: 'Navigation', action: () => navigate({ to: '/settings' }) },
+			{
+				id: 'nav-dashboard',
+				label: 'Go to Dashboard',
+				section: 'Navigation',
+				hint: 'Board view',
+				action: () => navigate({ to: '/', search: { pin: '', view: 'kanban' } }),
+			},
+			{
+				id: 'nav-inbox',
+				label: 'Go to Inbox',
+				section: 'Navigation',
+				hint: 'Pending approvals',
+				action: () => navigate({ to: '/inbox' }),
+			},
+			{
+				id: 'nav-agents',
+				label: 'Go to Agents',
+				section: 'Navigation',
+				action: () => navigate({ to: '/agents', search: { agent: '' } }),
+			},
+			{
+				id: 'nav-chat',
+				label: 'Go to Chat',
+				section: 'Navigation',
+				action: () => navigate({ to: '/chat', search: { channel: 'general' } }),
+			},
+			{
+				id: 'nav-files',
+				label: 'Go to Files',
+				section: 'Navigation',
+				action: () => navigate({ to: '/files', search: { file: '' } }),
+			},
+			{
+				id: 'nav-artifacts',
+				label: 'Go to Artifacts',
+				section: 'Navigation',
+				action: () => navigate({ to: '/artifacts' }),
+			},
+			{
+				id: 'nav-settings',
+				label: 'Go to Settings',
+				section: 'Navigation',
+				action: () => navigate({ to: '/settings' }),
+			},
+		)
+
+		// Actions
+		list.push(
+			{
+				id: 'action-new-task',
+				label: 'New Task',
+				section: 'Actions',
+				hint: 'Create a new task',
+				action: () => {
+					setOpen(false)
+				},
+			},
+			{
+				id: 'action-chat-general',
+				label: 'Chat in #general',
+				section: 'Actions',
+				action: () => navigate({ to: '/chat', search: { channel: 'general' as string } }),
+			},
 		)
 
 		// Tasks
 		if (tasks) {
-			for (const t of tasks.slice(0, 10)) {
-				list.push({
+			for (const t of tasks.slice(0, 15)) {
+				const item: CommandItem = {
 					id: `task-${t.id}`,
 					label: `${t.id}: ${t.title}`,
 					section: 'Tasks',
+					hint: t.status,
 					action: () => navigate({ to: '/tasks/$taskId', params: { taskId: t.id } }),
-				})
+				}
+				list.push(item)
+
+				// Add approve shortcut for review tasks
+				if (t.status === 'review') {
+					list.push({
+						id: `approve-${t.id}`,
+						label: `Approve ${t.id}`,
+						section: 'Actions',
+						hint: t.title,
+						action: () => {
+							approveTask.mutate(t.id)
+							setOpen(false)
+						},
+					})
+				}
 			}
 		}
 
@@ -74,27 +148,28 @@ export function CommandBar() {
 					id: `agent-${a.id}`,
 					label: `${a.name} (${a.role})`,
 					section: 'Agents',
-					action: () => navigate({ to: '/agents', search: { agent: a.id } }),
+					hint: a.status,
+					action: () => navigate({ to: '/agents', search: { agent: a.id as string } }),
 				})
 			}
 		}
 
 		return list
-	}, [tasks, agents, navigate])
+	}, [tasks, agents, navigate, approveTask])
 
 	const filtered = useMemo(() => {
 		if (!query) return items
 		const q = query.toLowerCase()
-		return items.filter((item) => item.label.toLowerCase().includes(q))
+		return items.filter(
+			(item) =>
+				item.label.toLowerCase().includes(q) || (item.hint?.toLowerCase().includes(q) ?? false),
+		)
 	}, [items, query])
 
-	const execute = useCallback(
-		(item: CommandItem) => {
-			item.action()
-			setOpen(false)
-		},
-		[],
-	)
+	const execute = useCallback((item: CommandItem) => {
+		item.action()
+		setOpen(false)
+	}, [])
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === 'ArrowDown') {
@@ -119,7 +194,7 @@ export function CommandBar() {
 	const sections: Record<string, CommandItem[]> = {}
 	for (const item of filtered) {
 		if (!sections[item.section]) sections[item.section] = []
-		sections[item.section]!.push(item)
+		sections[item.section]?.push(item)
 	}
 
 	let flatIndex = -1
@@ -144,9 +219,7 @@ export function CommandBar() {
 				</div>
 				<div className="max-h-[400px] overflow-y-auto">
 					{filtered.length === 0 ? (
-						<div className="p-4 text-center text-sm text-muted-foreground">
-							No results found
-						</div>
+						<div className="p-4 text-center text-sm text-muted-foreground">No results found</div>
 					) : (
 						Object.entries(sections).map(([section, sectionItems]) => (
 							<div key={section}>
@@ -161,13 +234,18 @@ export function CommandBar() {
 											key={item.id}
 											onClick={() => execute(item)}
 											className={cn(
-												'w-full text-left px-4 py-2 text-sm transition-colors cursor-pointer',
+												'w-full text-left px-4 py-2 text-sm transition-colors cursor-pointer flex items-center justify-between',
 												idx === selectedIndex
 													? 'bg-accent text-foreground'
 													: 'text-muted-foreground hover:bg-accent/50',
 											)}
 										>
-											{item.label}
+											<span>{item.label}</span>
+											{item.hint && (
+												<span className="font-mono text-[10px] text-muted-foreground/60 ml-2 shrink-0">
+													{item.hint}
+												</span>
+											)}
 										</button>
 									)
 								})}

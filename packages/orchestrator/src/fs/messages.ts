@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { MessageSchema, PATHS } from '@questpie/autopilot-spec'
 import { readYaml, writeYaml } from './yaml'
+import { eventBus } from '../events'
 
 /** Resolved (validated) message object. */
 export type MessageOutput = z.output<typeof MessageSchema>
@@ -58,6 +59,7 @@ export async function sendChannelMessage(
 	const dirPath = resolvePath(companyRoot, `${PATHS.CHANNELS_DIR}/${channel}`)
 	const filePath = join(dirPath, `${msg.id}.yaml`)
 	await writeYaml(filePath, msg)
+	eventBus.emit({ type: 'message', channel, from: msg.from, content: msg.content })
 	return msg
 }
 
@@ -98,6 +100,7 @@ export async function sendDirectMessage(
 	const dirPath = resolvePath(companyRoot, `${PATHS.DIRECT_DIR}/${dirName}`)
 	const filePath = join(dirPath, `${msg.id}.yaml`)
 	await writeYaml(filePath, msg)
+	eventBus.emit({ type: 'message', channel: `dm:${dirName}`, from: msg.from, content: msg.content })
 	return msg
 }
 

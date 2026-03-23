@@ -1,7 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiFetch, apiPost, queryKeys, REFETCH } from '@/lib/api'
 import { toast } from '@/hooks/use-toast'
+import { REFETCH, apiFetch, apiPost, queryKeys } from '@/lib/api'
 import type { ChannelInfo } from '@/lib/types'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 interface FsEntry {
 	name: string
@@ -16,7 +16,7 @@ async function fetchChannels(): Promise<ChannelInfo[]> {
 			.map((d) => ({
 				id: d.name,
 				name: d.name,
-				type: d.name.includes('--') ? 'direct' as const : 'channel' as const,
+				type: d.name.includes('--') ? ('direct' as const) : ('channel' as const),
 				unread: 0,
 			}))
 	} catch {
@@ -40,8 +40,7 @@ export function useCreateChannel() {
 	const queryClient = useQueryClient()
 
 	return useMutation({
-		mutationFn: (name: string) =>
-			apiPost<{ ok: boolean }>('/api/channels', { name }),
+		mutationFn: (name: string) => apiPost<{ ok: boolean }>('/api/channels', { name }),
 		onSuccess: () => {
 			toast('Channel created', 'success')
 		},

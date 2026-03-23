@@ -1,5 +1,6 @@
-import { cn } from '@/lib/utils'
+import { Linkify } from '@/lib/linkify'
 import type { ActivityEntry } from '@/lib/types'
+import { cn } from '@/lib/utils'
 import { AgentAvatar } from './agent-avatar'
 
 const TYPE_COLORS: Record<string, string> = {
@@ -37,13 +38,11 @@ export function ActivityItem({ entry, agentRole }: { entry: ActivityEntry; agent
 					<span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">
 						{entry.agent}
 					</span>
-					{toolName && (
-						<span className={cn('font-mono text-[10px]', colorClass)}>
-							{toolName}
-						</span>
-					)}
+					{toolName && <span className={cn('font-mono text-[10px]', colorClass)}>{toolName}</span>}
 				</div>
-				<div className="text-muted-foreground text-[11px] truncate">{entry.summary}</div>
+				<div className="text-muted-foreground text-[11px] truncate">
+					<Linkify>{entry.summary}</Linkify>
+				</div>
 			</div>
 		</div>
 	)

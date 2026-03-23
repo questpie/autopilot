@@ -1,12 +1,12 @@
-import { useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { EmptyState } from '@/components/feedback/empty-state'
+import { Skeleton } from '@/components/ui/skeleton'
+import { COLUMN_LABELS, type GroupBy, useKanban } from '@/hooks/use-kanban'
 import { useTasks, useUpdateTaskStatus } from '@/hooks/use-tasks'
-import { useKanban, COLUMN_LABELS, type GroupBy } from '@/hooks/use-kanban'
+import type { Task } from '@/lib/types'
+import { useNavigate } from '@tanstack/react-router'
+import { useState } from 'react'
 import { KanbanCard } from './kanban-card'
 import { KanbanFilterBar } from './kanban-filter-bar'
-import { Skeleton } from '@/components/ui/skeleton'
-import { EmptyState } from '@/components/feedback/empty-state'
-import type { Task } from '@/lib/types'
 
 export function KanbanBoard() {
 	const { data: tasks, isLoading, isError } = useTasks()
@@ -115,9 +115,7 @@ function KanbanColumn({
 				<span className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.12em] font-semibold">
 					{label}
 				</span>
-				<span className="font-mono text-[9px] text-muted-foreground/60">
-					{tasks.length}
-				</span>
+				<span className="font-mono text-[9px] text-muted-foreground/60">{tasks.length}</span>
 			</div>
 			<div className="flex-1 space-y-2 overflow-y-auto min-h-[100px]">
 				{tasks.map((task) => (
