@@ -34,7 +34,8 @@
 	"dependencies": {
 		"@questpie/autopilot-orchestrator": "1.0.0-beta.1",
 		"@questpie/autopilot-spec": "1.0.0-beta.1",
-		"commander": "^13.0.0"
+		"commander": "^13.0.0",
+		"yaml": "^2.7.0"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3.11",

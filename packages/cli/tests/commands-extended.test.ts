@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'bun:test'
+import { access } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { program } from '../src/index'
 
 describe('extended command registration', () => {
@@ -33,7 +35,7 @@ describe('extended command registration', () => {
 	})
 
 	it('has exactly 17 commands', () => {
-		expect(program.commands.length).toBe(17)
+		expect(program.commands.length).toBe(18)
 	})
 
 	it('has secrets subcommands', () => {
@@ -70,11 +72,43 @@ describe('extended command registration', () => {
 		expect(subNames).toContain('send')
 	})
 
+	it('registers the dashboard command', () => {
+		expect(commandNames).toContain('dashboard')
+	})
+
+	it('has dashboard subcommands', () => {
+		const dashboardCmd = program.commands.find((c) => c.name() === 'dashboard')
+		expect(dashboardCmd).toBeDefined()
+		const subNames = dashboardCmd!.commands.map((c) => c.name())
+		expect(subNames).toContain('dev')
+		expect(subNames).toContain('build')
+		expect(subNames).toContain('reset')
+		expect(subNames).toContain('widgets')
+		expect(subNames).toContain('pages')
+	})
+
 	it('has artifacts subcommands', () => {
 		const artifactsCmd = program.commands.find((c) => c.name() === 'artifacts')
 		expect(artifactsCmd).toBeDefined()
 		const subNames = artifactsCmd!.commands.map((c) => c.name())
 		expect(subNames).toContain('open')
 		expect(subNames).toContain('stop')
+	})
+})
+
+describe('dashboard-customization skill', () => {
+	it('skill file exists', async () => {
+		const skillPath = resolve(
+			import.meta.dir,
+			'..',
+			'..',
+			'..',
+			'templates',
+			'solo-dev-shop',
+			'skills',
+			'dashboard-customization',
+			'SKILL.md',
+		)
+		await expect(access(skillPath).then(() => true)).resolves.toBe(true)
 	})
 })

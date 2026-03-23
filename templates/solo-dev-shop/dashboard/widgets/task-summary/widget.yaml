@@ -1,0 +1,7 @@
+name: task-summary
+title: 'Task Summary'
+description: 'Shows task counts per status with progress bar'
+size: medium
+refresh: 10000
+position: overview
+created_by: system

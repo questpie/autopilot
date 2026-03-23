@@ -163,6 +163,12 @@ export class ApiServer {
 				return await this.handleArtifactStop(artifactStopMatch[1])
 			}
 
+			// Dashboard widget detail
+			const widgetDetailMatch = path.match(/^\/api\/dashboard\/widgets\/([^/]+)$/)
+			if (widgetDetailMatch?.[1] && method === 'GET') {
+				return await this.handleDashboardWidgetDetail(widgetDetailMatch[1])
+			}
+
 			switch (path) {
 				case '/api/status':
 					return await this.handleStatus()
@@ -186,6 +192,12 @@ export class ApiServer {
 					return await this.handleSkills()
 				case '/api/groups':
 					return await this.handleGroups()
+				case '/api/dashboard/layout':
+					return await this.handleDashboardLayout()
+				case '/api/dashboard/widgets':
+					return await this.handleDashboardWidgets()
+				case '/api/dashboard/pages':
+					return await this.handleDashboardPages()
 				default:
 					return errorResponse('not found', 404)
 			}
@@ -448,6 +460,61 @@ export class ApiServer {
 			return jsonResponse({ ok: true, path: join(targetDir, file.name) })
 		} catch (err) {
 			return errorResponse(err instanceof Error ? err.message : 'upload failed', 500)
+		}
+	}
+
+	private async handleDashboardLayout(): Promise<Response> {
+		const root = this.options.companyRoot
+		const layoutPath = join(root, 'dashboard', 'overrides', 'layout.yaml')
+		try {
+			const data = await readYamlUnsafe(layoutPath)
+			return jsonResponse(data)
+		} catch {
+			return errorResponse('not found', 404)
+		}
+	}
+
+	private async handleDashboardWidgets(): Promise<Response> {
+		const root = this.options.companyRoot
+		const widgetsDir = join(root, 'dashboard', 'widgets')
+		try {
+			const entries = await readdir(widgetsDir, { withFileTypes: true })
+			const folders = entries.filter((d) => d.isDirectory()).map((d) => d.name)
+			const widgets = []
+			for (const name of folders) {
+				try {
+					const metaPath = join(widgetsDir, name, 'widget.yaml')
+					const meta = await readYamlUnsafe(metaPath)
+					widgets.push(meta)
+				} catch {
+					// skip widgets without valid yaml
+				}
+			}
+			return jsonResponse(widgets)
+		} catch {
+			return jsonResponse([])
+		}
+	}
+
+	private async handleDashboardWidgetDetail(name: string): Promise<Response> {
+		const root = this.options.companyRoot
+		const metaPath = join(root, 'dashboard', 'widgets', name, 'widget.yaml')
+		try {
+			const meta = await readYamlUnsafe(metaPath)
+			return jsonResponse(meta)
+		} catch {
+			return errorResponse('widget not found', 404)
+		}
+	}
+
+	private async handleDashboardPages(): Promise<Response> {
+		const root = this.options.companyRoot
+		const registryPath = join(root, 'dashboard', 'pages', 'registry.yaml')
+		try {
+			const data = await readYamlUnsafe(registryPath)
+			return jsonResponse(data)
+		} catch {
+			return jsonResponse({ pages: [] })
 		}
 	}
 

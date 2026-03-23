@@ -7,6 +7,7 @@ export type WatchEvent =
 	| { type: 'message_received'; channel: string; path: string }
 	| { type: 'pin_changed'; pinId: string; path: string }
 	| { type: 'config_changed'; file: string; path: string }
+	| { type: 'dashboard_changed'; file: string; path: string }
 
 /** Configuration for the filesystem {@link Watcher}. */
 export interface WatcherOptions {
@@ -41,6 +42,16 @@ export function parseWatchEvent(companyRoot: string, filePath: string): WatchEve
 		return { type: 'pin_changed', pinId: pinMatch[1], path: filePath }
 	}
 
+	// dashboard/ changes (excluding pins/ and groups.yaml)
+	const dashboardMatch = rel.match(/^dashboard\/(.+)$/)
+	if (dashboardMatch?.[1]) {
+		const dashFile = dashboardMatch[1]
+		// Skip pins/ and groups.yaml — those are data, not dashboard customization
+		if (!dashFile.startsWith('pins/') && dashFile !== 'groups.yaml') {
+			return { type: 'dashboard_changed', file: dashFile, path: filePath }
+		}
+	}
+
 	// team/*.yaml
 	const teamMatch = rel.match(/^team\/(.+\.yaml)$/)
 	if (teamMatch?.[1]) {
@@ -70,7 +81,7 @@ export class Watcher {
 		const watchPaths = [
 			join(root, 'tasks'),
 			join(root, 'comms'),
-			join(root, 'dashboard', 'pins'),
+			join(root, 'dashboard'),
 			join(root, 'team'),
 		]
 
@@ -80,7 +91,9 @@ export class Watcher {
 		})
 
 		const handleFile = (filePath: string) => {
-			if (!filePath.endsWith('.yaml')) return
+			const rel = relative(root, filePath).split(sep).join('/')
+			const isDashboardFile = rel.startsWith('dashboard/') && !rel.startsWith('dashboard/pins/') && rel !== 'dashboard/groups.yaml'
+			if (!filePath.endsWith('.yaml') && !isDashboardFile) return
 
 			const existing = this.debounceTimers.get(filePath)
 			if (existing) clearTimeout(existing)

@@ -236,6 +236,10 @@ export class Orchestrator {
 				case 'pin_changed':
 					console.log(`[orchestrator] pin changed: ${event.pinId}`)
 					break
+				case 'dashboard_changed':
+					console.log(`[orchestrator] dashboard files changed: ${event.file}`)
+					await this.handleDashboardChange()
+					break
 				case 'config_changed':
 					console.log(`[orchestrator] config changed: ${event.file}`)
 					if (event.file === 'schedules.yaml' && this.scheduler) {
@@ -247,6 +251,34 @@ export class Orchestrator {
 		} catch (err) {
 			console.error(`[orchestrator] error handling watch event (${event.type}):`, err)
 		}
+	}
+
+	private dashboardBuildTimer: ReturnType<typeof setTimeout> | null = null
+
+	private async handleDashboardChange(): Promise<void> {
+		// Debounce: wait 1s after last change before triggering rebuild
+		if (this.dashboardBuildTimer) clearTimeout(this.dashboardBuildTimer)
+		this.dashboardBuildTimer = setTimeout(async () => {
+			this.dashboardBuildTimer = null
+			const root = this.options.companyRoot
+			const dashboardDir = join(root, 'dashboard')
+			console.log('[orchestrator] auto-rebuilding dashboard (prod mode)...')
+			try {
+				const proc = Bun.spawn(['bunx', 'vite', 'build'], {
+					cwd: dashboardDir,
+					stdout: 'ignore',
+					stderr: 'ignore',
+				})
+				const exitCode = await proc.exited
+				if (exitCode === 0) {
+					console.log('[orchestrator] dashboard rebuild complete')
+				} else {
+					console.error(`[orchestrator] dashboard rebuild failed (exit ${exitCode})`)
+				}
+			} catch (err) {
+				console.error('[orchestrator] dashboard rebuild error:', err instanceof Error ? err.message : err)
+			}
+		}, 1000)
 	}
 
 	private async handleMessage(channel: string, filePath: string): Promise<void> {

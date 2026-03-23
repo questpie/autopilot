@@ -1,0 +1,3 @@
+name: dashboard
+serve: 'bunx vite --port {port}'
+build: 'bun install && bunx vite build'

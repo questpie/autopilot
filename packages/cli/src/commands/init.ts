@@ -100,6 +100,7 @@ program.addCommand(
 			}
 
 			console.log(success('Company initialized successfully!'))
+				console.log(dim('Dashboard template installed'))
 				console.log('')
 				console.log(`  ${dim('Directory:')}  ${targetDir}`)
 				console.log(`  ${dim('Company:')}    ${name}`)

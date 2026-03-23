@@ -37,7 +37,7 @@ describe('command registration', () => {
 	})
 
 	it('has exactly 17 commands', () => {
-		expect(program.commands.length).toBe(17)
+		expect(program.commands.length).toBe(18)
 	})
 
 	it('has tasks subcommands', () => {
