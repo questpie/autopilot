@@ -22,11 +22,21 @@ program.addCommand(
 
 				await orchestrator.start()
 
+				const apiPort = port + 1
+
 				console.log('')
 				console.log(header('QUESTPIE Autopilot'))
-				console.log(dim(`Company: ${company.name}`))
-				console.log(dim(`Agents:  ${agents.length}`))
-				console.log(dim(`Port:    ${port}`))
+				console.log(dim(`Company:  ${company.name}`))
+				console.log(dim(`Agents:   ${agents.length}`))
+				console.log(dim(`Root:     ${root}`))
+				console.log('')
+				console.log(dim('Endpoints:'))
+				console.log(dim(`  Webhooks   http://localhost:${port}`))
+				console.log(dim(`  API        http://localhost:${apiPort}/api/status`))
+				console.log(dim(`  Files      http://localhost:${apiPort}/fs/`))
+				console.log(dim(`  Tasks      http://localhost:${apiPort}/api/tasks`))
+				console.log(dim(`  Agents     http://localhost:${apiPort}/api/agents`))
+				console.log(dim(`  Activity   http://localhost:${apiPort}/api/activity`))
 				console.log('')
 				console.log(success('Orchestrator is running.'))
 				console.log(dim('Press Ctrl+C to stop'))
