@@ -109,7 +109,8 @@ export class ApiServer {
 
 	private async getDb(): Promise<AutopilotDb> {
 		if (!this.db) {
-			this.db = await createDb(this.options.companyRoot)
+			const { db } = await createDb(this.options.companyRoot)
+			this.db = db
 		}
 		return this.db
 	}

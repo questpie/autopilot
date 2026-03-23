@@ -30,7 +30,8 @@ export class SqliteBackend implements StorageBackend {
 	constructor(private companyRoot: string) {}
 
 	async initialize(): Promise<void> {
-		this.db = await createDb(this.companyRoot)
+		const { db } = await createDb(this.companyRoot)
+		this.db = db
 
 		// Push schema — create tables if they do not exist
 		// Using raw SQL for table creation since we need IF NOT EXISTS
@@ -125,7 +126,7 @@ export class SqliteBackend implements StorageBackend {
 		raw.exec('CREATE INDEX IF NOT EXISTS idx_activity_time ON activity(created_at)')
 
 		raw.exec(`
-			CREATE TABLE IF NOT EXISTS sessions (
+			CREATE TABLE IF NOT EXISTS agent_sessions (
 				id TEXT PRIMARY KEY,
 				agent_id TEXT NOT NULL,
 				task_id TEXT,
@@ -139,10 +140,10 @@ export class SqliteBackend implements StorageBackend {
 				log_path TEXT
 			)
 		`)
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_sessions_task ON sessions(task_id)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at)')
+		raw.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent ON agent_sessions(agent_id)')
+		raw.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_task ON agent_sessions(task_id)')
+		raw.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_status ON agent_sessions(status)')
+		raw.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_started ON agent_sessions(started_at)')
 	}
 
 	async close(): Promise<void> {

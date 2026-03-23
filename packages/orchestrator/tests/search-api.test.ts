@@ -30,7 +30,7 @@ describe('Search API', () => {
 		})
 
 		// Index some test data
-		const db = await createDb(companyRoot)
+		const { db } = await createDb(companyRoot)
 		await indexEntity(db, 'task', 'task-001', 'Implement pricing page', 'Build the pricing page with Stripe integration')
 		await indexEntity(db, 'task', 'task-002', 'Fix login bug', 'The login form crashes when submitting empty credentials')
 		await indexEntity(db, 'knowledge', 'api-design.md', 'API Design Guide', 'REST API design guidelines and best practices')

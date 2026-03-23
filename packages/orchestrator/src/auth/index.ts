@@ -1,28 +1,21 @@
 /**
  * Better Auth instance for QUESTPIE Autopilot.
  *
- * Uses bun:sqlite as the database adapter. Roles are loaded from
- * team/roles.yaml (YAML-driven, not hardcoded).
+ * Uses a shared bun:sqlite Database instance (the same autopilot.db used by
+ * Drizzle ORM) so that all data lives in a single SQLite file.
  */
 import { betterAuth } from 'better-auth'
 import { bearer, admin } from 'better-auth/plugins'
 import { apiKey } from '@better-auth/api-key'
-import { Database } from 'bun:sqlite'
-import { join } from 'node:path'
-import { mkdir } from 'node:fs/promises'
+import type { Database } from 'bun:sqlite'
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export async function createAuth(companyRoot: string): Promise<{
+export async function createAuth(rawDb: Database): Promise<{
 	handler: (request: Request) => Promise<Response> | Response
 	api: Record<string, unknown>
 }> {
-	const authDir = join(companyRoot, '.auth')
-	await mkdir(authDir, { recursive: true })
-	const dbPath = join(authDir, 'auth.db')
-	const db = new Database(dbPath)
-
 	return betterAuth({
-		database: db,
+		database: rawDb,
 		basePath: '/api/auth',
 
 		emailAndPassword: { enabled: true },

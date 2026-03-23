@@ -91,7 +91,7 @@ describe('agent tools', () => {
 			// Index test data
 			const { createDb } = await import('../src/db')
 			const { indexEntity } = await import('../src/db/search-index')
-			const db = await createDb(root)
+			const { db } = await createDb(root)
 			await indexEntity(db, 'task', 'task-001', 'Fix login', 'The login page crashes on empty form')
 			await indexEntity(db, 'knowledge', 'api.md', 'API Guide', 'REST API design patterns')
 
@@ -106,7 +106,7 @@ describe('agent tools', () => {
 
 			const { createDb } = await import('../src/db')
 			const { indexEntity } = await import('../src/db/search-index')
-			const db = await createDb(root)
+			const { db } = await createDb(root)
 			await indexEntity(db, 'task', 'task-001', 'API task', 'Build REST API')
 			await indexEntity(db, 'knowledge', 'api.md', 'API Guide', 'REST API docs')
 

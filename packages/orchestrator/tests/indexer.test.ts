@@ -43,7 +43,8 @@ describe('Indexer', () => {
 			'title: Important Pin\ncontent: This is an important pinned item\n',
 		)
 
-		db = await createDb(root)
+		const result = await createDb(root)
+		db = result.db
 	}
 
 	it('should reindex all entity types', async () => {

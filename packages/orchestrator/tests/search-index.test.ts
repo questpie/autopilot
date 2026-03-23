@@ -17,7 +17,8 @@ describe('search-index', () => {
 		const ctx = await createTestCompany()
 		root = ctx.root
 		cleanup = ctx.cleanup
-		db = await createDb(root)
+		const result = await createDb(root)
+		db = result.db
 	}
 
 	it('should index an entity and find it via FTS', async () => {

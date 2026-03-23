@@ -17,7 +17,8 @@ describe('migration', () => {
 		const ctx = await createTestCompany()
 		root = ctx.root
 		cleanup = ctx.cleanup
-		db = await createDb(root)
+		const result = await createDb(root)
+		db = result.db
 	}
 
 	function getRawDb(): Database {
@@ -66,7 +67,7 @@ describe('migration', () => {
 	it('should be idempotent — running createDb twice should not fail', async () => {
 		await setup()
 		// Second call should not throw
-		const db2 = await createDb(root)
+		const { db: db2 } = await createDb(root)
 		const raw2 = (db2 as unknown as { $client: Database }).$client
 		const tables = raw2.prepare(
 			"SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'"

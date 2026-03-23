@@ -101,7 +101,7 @@ export class Orchestrator {
 			console.log(`[orchestrator] storage backend initialized (mode: ${storageMode})`)
 
 			if (storageMode === 'sqlite') {
-				const db = await createDb(root)
+				const { db } = await createDb(root)
 				const indexer = new Indexer(db, root, this.embeddingService)
 				const counts = await indexer.reindexAll()
 				const total = counts.tasks + counts.messages + counts.knowledge + counts.pins

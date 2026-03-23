@@ -296,7 +296,7 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 				try {
 					const { createDb } = await import('../db')
 					const { searchFts: fts } = await import('../db/search-index')
-					const db = await createDb(companyRoot)
+					const { db } = await createDb(companyRoot)
 					const typeFilter = args.type as import('../db/search-index').EntityType | undefined
 					const results = await fts(db, args.query, { type: typeFilter, limit: maxResults })
 
@@ -330,7 +330,7 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 				try {
 					const { createDb } = await import('../db')
 					const { searchFts: unifiedFts } = await import('../db/search-index')
-					const db = await createDb(companyRoot)
+					const { db } = await createDb(companyRoot)
 					const unifiedResults = await unifiedFts(db, args.query, { type: 'knowledge', limit: maxResults })
 
 					if (unifiedResults.length > 0) {
@@ -353,7 +353,7 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 				try {
 					const { createDb } = await import('../db')
 					const { searchKnowledge } = await import('../db/knowledge-index')
-					const db = await createDb(companyRoot)
+					const { db } = await createDb(companyRoot)
 					let ftsResults = searchKnowledge(db, args.query, maxResults)
 
 					// Filter by scope if provided

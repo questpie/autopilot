@@ -102,9 +102,6 @@ program.addCommand(
 
 			// Initialize git repository
 			const gitignoreContent = [
-				'# Auth & sessions (ephemeral, not versioned)',
-				'.auth/',
-				'',
 				'# SQLite operational databases',
 				'.data/',
 				'',

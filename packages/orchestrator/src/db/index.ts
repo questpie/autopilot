@@ -8,6 +8,11 @@ import * as schema from './schema'
 
 export type AutopilotDb = ReturnType<typeof drizzle<typeof schema>>
 
+export interface DbResult {
+	db: AutopilotDb
+	raw: Database
+}
+
 /**
  * Create a Drizzle-wrapped bun:sqlite database for the given company root.
  *
@@ -16,8 +21,11 @@ export type AutopilotDb = ReturnType<typeof drizzle<typeof schema>>
  *
  * Loads sqlite-vec extension for vector search and runs Drizzle migrations
  * (including custom SQL for FTS5 / vec0 virtual tables).
+ *
+ * Returns both the Drizzle ORM instance and the raw bun:sqlite Database
+ * so callers (e.g. Better Auth) can share the same underlying connection.
  */
-export async function createDb(companyRoot: string): Promise<AutopilotDb> {
+export async function createDb(companyRoot: string): Promise<DbResult> {
 	const dataDir = join(companyRoot, '.data')
 	await mkdir(dataDir, { recursive: true })
 
@@ -40,6 +48,9 @@ export async function createDb(companyRoot: string): Promise<AutopilotDb> {
 	// Run drizzle migrations (regular tables)
 	migrate(db, { migrationsFolder: join(__dirname, '..', '..', 'drizzle') })
 
+	// Migrate: rename legacy "sessions" table → "agent_sessions" if it exists
+	migrateSessionsTable(sqlite)
+
 	// Create FTS5 virtual table + triggers for unified search index
 	// (must be raw SQL — drizzle migrator cannot handle trigger semicolons)
 	initSearchFts(sqlite)
@@ -56,7 +67,33 @@ export async function createDb(companyRoot: string): Promise<AutopilotDb> {
 		// sqlite-vec not available — vector search will be unavailable
 	}
 
-	return db
+	return { db, raw: sqlite }
+}
+
+/**
+ * Rename the legacy "sessions" table to "agent_sessions" if it exists.
+ * This is a one-time migration for databases created before the consolidation.
+ */
+function migrateSessionsTable(sqlite: Database): void {
+	try {
+		const exists = sqlite.prepare(
+			"SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
+		).all() as Array<{ name: string }>
+		if (exists.length > 0) {
+			sqlite.exec('ALTER TABLE sessions RENAME TO agent_sessions')
+			// Recreate indexes with new names
+			sqlite.exec('DROP INDEX IF EXISTS idx_sessions_agent')
+			sqlite.exec('DROP INDEX IF EXISTS idx_sessions_task')
+			sqlite.exec('DROP INDEX IF EXISTS idx_sessions_status')
+			sqlite.exec('DROP INDEX IF EXISTS idx_sessions_started')
+			sqlite.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent ON agent_sessions(agent_id)')
+			sqlite.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_task ON agent_sessions(task_id)')
+			sqlite.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_status ON agent_sessions(status)')
+			sqlite.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_started ON agent_sessions(started_at)')
+		}
+	} catch {
+		// Table doesn't exist or already renamed — safe to ignore
+	}
 }
 
 /**

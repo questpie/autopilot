@@ -39,7 +39,8 @@ describe('knowledge-index', () => {
 			'# Brand Guidelines\n\nQUESTPIE is always written in ALL CAPS.\nPrimary color: #B700FF (purple).\nDark theme with #0A0A0A background.\n',
 		)
 
-		db = await createDb(root)
+		const result = await createDb(root)
+		db = result.db
 	}
 
 	it('should initialize FTS table via createDb migrations', async () => {

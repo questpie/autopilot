@@ -89,9 +89,9 @@ export const activity = sqliteTable('activity', {
 	index('idx_activity_time').on(table.created_at),
 ])
 
-// ─── Sessions ───────────────────────────────────────────────────────────────
+// ─── Agent Sessions ─────────────────────────────────────────────────────────
 
-export const sessions = sqliteTable('sessions', {
+export const agentSessions = sqliteTable('agent_sessions', {
 	id: text('id').primaryKey(),
 	agent_id: text('agent_id').notNull(),
 	task_id: text('task_id'),
@@ -104,10 +104,10 @@ export const sessions = sqliteTable('sessions', {
 	error: text('error'),
 	log_path: text('log_path'),
 }, (table) => [
-	index('idx_sessions_agent').on(table.agent_id),
-	index('idx_sessions_task').on(table.task_id),
-	index('idx_sessions_status').on(table.status),
-	index('idx_sessions_started').on(table.started_at),
+	index('idx_agent_sessions_agent').on(table.agent_id),
+	index('idx_agent_sessions_task').on(table.task_id),
+	index('idx_agent_sessions_status').on(table.status),
+	index('idx_agent_sessions_started').on(table.started_at),
 ])
 
 // ─── Search Index ────────────────────────────────────────────────────────
