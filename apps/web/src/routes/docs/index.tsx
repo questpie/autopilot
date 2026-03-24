@@ -31,13 +31,13 @@ function DocsOverview() {
 						Filesystem as Database
 					</h3>
 					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						No database. YAML for structured data, Markdown for documents. The
-						entire company state lives in files you can{' '}
+						YAML for structured data, Markdown for documents, SQLite + Drizzle
+						ORM for indexes and search. The company state lives in files you can{' '}
 						<code className="font-mono text-xs text-purple">ls</code>,{' '}
 						<code className="font-mono text-xs text-purple">cat</code>,{' '}
 						<code className="font-mono text-xs text-purple">grep</code>, back
-						up, and version with Git. Tasks move between folders by status.
-						Agent memory is YAML. Communication lives in Markdown channels.
+						up, and version with Git. FTS5 full-text search and sqlite-vec
+						embeddings provide unified search across all content.
 					</p>
 				</div>
 
@@ -307,7 +307,7 @@ autopilot attach max`}
 						Skills
 					</div>
 					<div className="text-ghost text-xs">
-						Markdown knowledge packages, agentskills.io format, built-in skills
+						Markdown knowledge packages, agentskills.io format, customizable skill templates
 					</div>
 				</Link>
 				<Link

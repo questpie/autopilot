@@ -220,7 +220,10 @@ git_create_pr({
   branch: 'feat/stripe-checkout',
   target: 'main',
   reviewers: ['marek']
-})`}
+})
+// Note: git_create_pr uses the GitHub MCP server or
+// http_request to the GitHub API under the hood.
+// Requires a GitHub secret with a personal access token.`}
 			</CodeBlock>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">

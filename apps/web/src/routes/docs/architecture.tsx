@@ -25,7 +25,7 @@ function Architecture() {
 			<CodeBlock title="system overview">
 				{`┌───────────────────────────────────────────────────────────┐
 │  LAYER 1 — HUMAN                                          │
-│  CLI · Dashboard · Mobile · WhatsApp · External APIs      │
+│  CLI · Dashboard · Telegram · External APIs      │
 │  Thin consumers. No business logic.                       │
 └──────────────────────────┬────────────────────────────────┘
                            │ calls SDK functions
@@ -41,7 +41,7 @@ function Architecture() {
 │  Scheduler → cron-based recurring agent jobs              │
 │  Webhook → HTTP event receiver (port 7777)                │
 │  Session → SSE realtime streaming (port 7778)             │
-│  Notifier → transport dispatcher (email, Slack, etc.)     │
+│  Notifier → transport dispatcher (Telegram, dashboard)     │
 │  Artifact → lazy cold-start preview server                │
 │  Skills → reusable knowledge packages                     │
 └──────────────────────────┬────────────────────────────────┘
@@ -183,12 +183,13 @@ import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestra
 				</table>
 			</div>
 			<p className="text-ghost leading-relaxed mb-4">
-				The Agent SDK supports both API key authentication and Claude
-				Max subscription. Set{' '}
+				Works with an Anthropic API key or a Claude Max
+				subscription. Set{' '}
 				<code className="font-mono text-xs text-purple">
 					ANTHROPIC_API_KEY
 				</code>{' '}
-				to either an API key or a Max session token.
+				for Claude models. Codex SDK is available for GPT
+				models via OpenAI API key.
 			</p>
 
 			{/* ── Module Map ─────────────────────────────── */}
@@ -333,8 +334,8 @@ import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestra
 								Notifier
 							</td>
 							<td className="py-2 text-xs">
-								Transport dispatcher. Routes notifications to
-								email, Slack, webhooks based on config.
+								Transport dispatcher. Routes notifications via pluggable
+								transports. Telegram built-in, Slack/email planned.
 							</td>
 						</tr>
 					</tbody>

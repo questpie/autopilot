@@ -97,7 +97,7 @@ autopilot attach max
 
 **Living Dashboard** -- Real-time dashboard on port 3001. Agent activity, task status, board pins, approval gates. Widget runtime with theme overrides.
 
-**Skills as knowledge** -- Agents learn from markdown knowledge docs. Built-in skills for code review, testing, API design, deployment, security, and more. Add your own.
+**Skills as knowledge** -- Agents learn from markdown knowledge docs. Customizable skill templates for code review, testing, API design, deployment, security, and more. Add your own.
 
 **CLI-first** -- Full lifecycle from the terminal: init, start, ask, status, tasks, agents, inbox, attach, board, channels, knowledge, artifacts, dashboard, auth, git.
 
@@ -107,11 +107,11 @@ autopilot attach max
 
 **Git auto-commit** -- Every filesystem change is automatically committed. Full audit trail of every agent action.
 
-**Transport registry** -- Pluggable notification transports. Telegram adapter built-in, extensible for Slack, email, WhatsApp.
+**Transport registry** -- Pluggable notification transports. Telegram adapter built-in. Slack, email, WhatsApp, and push adapters coming soon.
 
 **Language configuration** -- Multi-language support via `language` and `languages` fields in company.yaml. Agents respond in the configured language.
 
-**Provider abstraction** -- Works with Claude API key or Claude Max subscription via the Agent SDK, or OpenAI Codex SDK.
+**Provider abstraction** -- Works with Anthropic API key or Claude Max subscription via the Claude Agent SDK. Codex SDK available for GPT models.
 
 **Artifact serving** -- Agents create previews (React apps, HTML pages) that are served via a lazy cold-start router. Get a live link to what your agent built.
 
@@ -122,7 +122,7 @@ autopilot attach max
 ## Architecture
 
 ```
-Human         CLI · Dashboard · WhatsApp · Slack · Email
+Human         CLI · Dashboard · Telegram · Slack (soon) · Email (soon)
   ↓
 Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · Webhooks · SSE
   ↓

@@ -235,7 +235,8 @@ usage: |
           GITHUB_TOKEN: "secret_ref:github"    # Auto-injected from secrets`}
 			</CodeBlock>
 			<CodeBlock title="agent-usage.ts">
-				{`// With MCP server: use the typed git_create_pr primitive
+				{`// With MCP server: git_create_pr is provided by the GitHub
+// MCP server (not a built-in primitive)
 git_create_pr({
   repo: "projects/web-app/code",
   title: "feat: Pricing page with Stripe checkout",

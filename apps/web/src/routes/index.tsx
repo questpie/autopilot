@@ -594,7 +594,7 @@ changelog:
 
 				{/* TRANSPORTS */}
 				<Section id="transport">
-					<SectionHeader sub="Email, WhatsApp, Slack, Telegram, push. Per-priority routing. Quiet hours. Or message agents directly from WhatsApp.">
+					<SectionHeader sub="Pluggable notification transports with per-priority routing and quiet hours. Telegram available now, more coming soon.">
 						Transports
 					</SectionHeader>
 					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -603,19 +603,19 @@ changelog:
 
 notification_routing:
   urgent:
-    transports: [whatsapp, push, email]
+    transports: [telegram, dashboard]
     throttle: null           # Always deliver
 
   high:
-    transports: [push, email]
+    transports: [telegram, dashboard]
     throttle: "5m"           # Max 1 per 5 min
 
   normal:
-    transports: [email]
+    transports: [dashboard]
     throttle: "15m"          # Batch
 
   low:
-    transports: [email]
+    transports: [dashboard]
     throttle: "1h"           # Hourly digest
 
 quiet_hours:
@@ -623,8 +623,8 @@ quiet_hours:
   end: "07:00"
   except: [urgent]`}
 						</CodeBlock>
-						<CodeBlock title="WhatsApp \u2192 Agent">
-							{`# You text your Autopilot WhatsApp number:
+						<CodeBlock title="Telegram \u2192 Agent">
+							{`# You text your Autopilot Telegram bot:
 
 You: @max how's the landing page going?
 
@@ -634,11 +634,11 @@ Max: FeatureGrid and Testimonials done.
   when done.
 
 # Under the hood:
-# 1. Twilio receives message
+# 1. Telegram webhook receives message
 # 2. Orchestrator parses @max mention
 # 3. Spawns max with message context
 # 4. Max reads his task state, responds
-# 5. Response sent back via WhatsApp`}
+# 5. Response sent back via Telegram`}
 						</CodeBlock>
 					</div>
 				</Section>
@@ -652,7 +652,7 @@ Max: FeatureGrid and Testimonials done.
 						{[
 							{
 								label: 'HUMAN',
-								desc: 'CLI \u00B7 Dashboard \u00B7 WhatsApp \u00B7 Slack \u00B7 Email',
+								desc: 'CLI \u00B7 Dashboard \u00B7 Telegram \u00B7 Slack (soon) \u00B7 Email (soon)',
 								color: 'border-l-accent-green',
 								textColor: 'text-accent-green',
 							},

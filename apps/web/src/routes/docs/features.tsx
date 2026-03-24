@@ -250,13 +250,22 @@ agents:
 								Planned. SMTP or transactional email service.
 							</td>
 						</tr>
-						<tr>
+						<tr className="border-b border-border/50">
 							<td className="py-2 pr-4 text-xs text-fg">WhatsApp</td>
 							<td className="py-2 pr-4 font-mono text-xs text-muted">
 								Coming Soon
 							</td>
 							<td className="py-2 text-xs">
 								Planned. Twilio-based adapter.
+							</td>
+						</tr>
+						<tr>
+							<td className="py-2 pr-4 text-xs text-fg">Push</td>
+							<td className="py-2 pr-4 font-mono text-xs text-muted">
+								Coming Soon
+							</td>
+							<td className="py-2 text-xs">
+								Planned. Web push notifications.
 							</td>
 						</tr>
 					</tbody>

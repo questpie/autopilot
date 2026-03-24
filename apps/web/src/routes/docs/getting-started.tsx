@@ -319,6 +319,12 @@ autopilot reject TASK-001 --reason "Needs error handling for edge cases"`}
 			</h2>
 			<ul className="text-ghost leading-relaxed space-y-1">
 				<li>
+					<Link to="/docs/features" className="text-purple">
+						Features
+					</Link>{' '}
+					-- unified search, embeddings, multiple providers, transport plugins
+				</li>
+				<li>
 					<Link to="/docs/architecture" className="text-purple">
 						Architecture
 					</Link>{' '}

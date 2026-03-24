@@ -3,7 +3,7 @@ import { CodeBlock } from '@/components/CodeBlock'
 import { seoHead } from '@/lib/seo'
 
 export const Route = createFileRoute('/docs/skills')({
-	head: () => ({ ...seoHead({ title: 'Skills', description: 'Markdown knowledge packages in agentskills.io format. Built-in skills, creating custom skills, and 3-stage lazy loading.', path: '/docs/skills', ogImage: 'https://autopilot.questpie.com/og-skills.png' }) }),
+	head: () => ({ ...seoHead({ title: 'Skills', description: 'Markdown knowledge packages in agentskills.io format. Skill templates, creating custom skills, and 3-stage lazy loading.', path: '/docs/skills', ogImage: 'https://autopilot.questpie.com/og-skills.png' }) }),
 	component: Skills,
 })
 
@@ -207,14 +207,15 @@ To use a skill, call: skill_request({ skill_id: "code-review" })
 # Agent can then also read references/ files if needed`}
 			</CodeBlock>
 
-			{/* ── Built-in Skills ────────────────────────────────── */}
+			{/* ── Skill Templates ────────────────────────────────── */}
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Built-in Skills
+				Skill Templates
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				The Solo Dev Shop template ships with 16 skills covering the
-				full product lifecycle:
+				The Solo Dev Shop template ships with 16 customizable skill
+				templates covering the full product lifecycle. Each is a
+				markdown knowledge doc that agents load on demand:
 			</p>
 			<div className="overflow-x-auto mb-4">
 				<table className="w-full text-sm border-collapse">
