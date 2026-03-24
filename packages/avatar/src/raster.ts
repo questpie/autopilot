@@ -283,6 +283,59 @@ export function renderPixels(options: RasterOptions): RasterResult {
 	return { pixels: buf, size: resolution }
 }
 
+// ── Minimal zlib (stored, no compression) ───────────────────────────────
+
+/** Adler-32 checksum for zlib footer. */
+function adler32(data: Uint8Array): number {
+	let a = 1
+	let b = 0
+	for (let i = 0; i < data.length; i++) {
+		a = (a + data[i]!) % 65521
+		b = (b + a) % 65521
+	}
+	return ((b << 16) | a) >>> 0
+}
+
+/**
+ * Wrap raw data in zlib format with stored (uncompressed) deflate blocks.
+ * Max block size is 65535 bytes — splits into multiple blocks if needed.
+ */
+function zlibStored(data: Uint8Array): Uint8Array {
+	const maxBlock = 65535
+	const numBlocks = Math.ceil(data.length / maxBlock) || 1
+	// 2 byte zlib header + (5 byte block header + block data) per block + 4 byte adler32
+	const outLen = 2 + numBlocks * 5 + data.length + 4
+	const out = new Uint8Array(outLen)
+	const view = new DataView(out.buffer)
+
+	// Zlib header: CMF=0x78 (deflate, window=32K), FLG=0x01 (no dict, check bits)
+	out[0] = 0x78
+	out[1] = 0x01
+
+	let pos = 2
+	let remaining = data.length
+	let offset = 0
+
+	while (remaining > 0 || offset === 0) {
+		const blockLen = Math.min(remaining, maxBlock)
+		const isLast = remaining <= maxBlock
+		out[pos++] = isLast ? 1 : 0 // BFINAL + BTYPE=00 (stored)
+		out[pos++] = blockLen & 0xff
+		out[pos++] = (blockLen >> 8) & 0xff
+		out[pos++] = ~blockLen & 0xff
+		out[pos++] = (~blockLen >> 8) & 0xff
+		out.set(data.subarray(offset, offset + blockLen), pos)
+		pos += blockLen
+		offset += blockLen
+		remaining -= blockLen
+	}
+
+	// Adler-32 checksum (big-endian)
+	view.setUint32(pos, adler32(data))
+
+	return out.subarray(0, pos + 4)
+}
+
 // ── Minimal PNG encoder ─────────────────────────────────────────────────
 
 function crc32(buf: Uint8Array): number {
@@ -334,9 +387,8 @@ export function renderPng(options: RasterOptions): Uint8Array {
 		raw.set(pixels.subarray(y * size * 4, (y + 1) * size * 4), rowOffset + 1)
 	}
 
-	// Deflate
-	const { deflateSync } = require('node:zlib') as typeof import('node:zlib')
-	const compressed = deflateSync(raw) as Uint8Array
+	// Wrap in zlib stored (no compression) — works in browser, no deps
+	const compressed = zlibStored(raw)
 
 	// Assemble PNG
 	const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
@@ -356,7 +408,11 @@ export function renderPng(options: RasterOptions): Uint8Array {
 
 export function renderDataUrl(options: RasterOptions): string {
 	const png = renderPng(options)
-	// Use Buffer for base64 encoding (available in Bun and Node)
-	const b64 = Buffer.from(png).toString('base64')
+	// Browser-safe base64 encoding (no Buffer dependency)
+	let binary = ''
+	for (let i = 0; i < png.length; i++) {
+		binary += String.fromCharCode(png[i]!)
+	}
+	const b64 = typeof btoa === 'function' ? btoa(binary) : Buffer.from(png).toString('base64')
 	return `data:image/png;base64,${b64}`
 }
