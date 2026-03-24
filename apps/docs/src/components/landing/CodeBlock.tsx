@@ -1,68 +1,91 @@
 function highlightCode(code: string, lang?: string): string {
-	let html = code
+	// Escape HTML first
+	const escaped = code
 		.replace(/&/g, '&amp;')
 		.replace(/</g, '&lt;')
 		.replace(/>/g, '&gt;')
 
-	// Comments
-	html = html.replace(
-		/(#[^\n]*)/g,
-		'<span style="color: var(--syntax-comment)">$1</span>',
-	)
-	html = html.replace(
-		/(\/\/[^\n]*)/g,
-		'<span style="color: var(--syntax-comment)">$1</span>',
-	)
+	// Tokenize: protect strings first, then highlight the rest
+	const tokens: Array<{ type: 'string' | 'raw'; value: string }> = []
+	let remaining = escaped
 
-	// Strings
-	html = html.replace(
-		/"([^"\\]*(?:\\.[^"\\]*)*)"/g,
-		'"<span style="color: var(--syntax-string)">$1</span>"',
-	)
-	html = html.replace(
-		/'([^'\\]*(?:\\.[^'\\]*)*)'/g,
-		"'<span style=\"color: var(--syntax-string)\">$1</span>'",
-	)
+	// Extract all double-quoted and single-quoted strings
+	const stringRegex = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g
+	let lastIndex = 0
+	let match: RegExpExecArray | null = stringRegex.exec(remaining)
 
-	// YAML/config keys
-	if (lang === 'yaml' || lang === 'install' || lang === 'shell' || !lang) {
-		html = html.replace(
-			/^(\s*[\w-]+):/gm,
-			'<span style="color: var(--syntax-keyword)">$1</span>:',
-		)
+	while (match !== null) {
+		if (match.index > lastIndex) {
+			tokens.push({ type: 'raw', value: remaining.slice(lastIndex, match.index) })
+		}
+		tokens.push({ type: 'string', value: match[0] })
+		lastIndex = match.index + match[0].length
+		match = stringRegex.exec(remaining)
+	}
+	if (lastIndex < remaining.length) {
+		tokens.push({ type: 'raw', value: remaining.slice(lastIndex) })
 	}
 
-	// JS/TS keywords
-	if (lang === 'js' || lang === 'ts' || lang === 'tsx') {
+	// Process each token
+	return tokens.map(token => {
+		if (token.type === 'string') {
+			return `<span style="color: var(--syntax-string)">${token.value}</span>`
+		}
+
+		let html = token.value
+
+		// Comments: # at start of line only
 		html = html.replace(
-			/\b(const|let|var|function|export|default|import|from|return|if|else|new|typeof|async|await)\b/g,
+			/^(\s*#[^\n]*)/gm,
+			'<span style="color: var(--syntax-comment)">$1</span>',
+		)
+
+		// Comments: // only when preceded by whitespace or start of line (not in URLs)
+		html = html.replace(
+			/(^|\s)(\/\/[^\n]*)/gm,
+			'$1<span style="color: var(--syntax-comment)">$2</span>',
+		)
+
+		// YAML keys
+		if (lang === 'yaml' || lang === 'shell' || !lang) {
+			html = html.replace(
+				/^(\s*[\w_-]+):/gm,
+				'<span style="color: var(--syntax-keyword)">$1</span>:',
+			)
+		}
+
+		// JS/TS keywords
+		if (lang === 'js' || lang === 'ts' || lang === 'tsx') {
+			html = html.replace(
+				/\b(const|let|var|function|export|default|import|from|return|if|else|new|typeof|async|await)\b/g,
+				'<span style="color: var(--syntax-keyword)">$1</span>',
+			)
+			html = html.replace(
+				/\b(true|false|null|undefined)\b/g,
+				'<span style="color: var(--syntax-number)">$1</span>',
+			)
+		}
+
+		// Shell prompt
+		html = html.replace(
+			/^(\$\s)/gm,
 			'<span style="color: var(--syntax-keyword)">$1</span>',
 		)
+
+		// Numbers (not inside words)
 		html = html.replace(
-			/\b(true|false|null|undefined)\b/g,
+			/(?<![a-zA-Z_-])(\d+)(?![a-zA-Z_])/g,
 			'<span style="color: var(--syntax-number)">$1</span>',
 		)
-	}
 
-	// Shell commands (lines starting with $)
-	html = html.replace(
-		/^(\$\s)/gm,
-		'<span style="color: var(--syntax-keyword)">$1</span>',
-	)
+		// Arrows
+		html = html.replace(
+			/(-&gt;|\u2192)/g,
+			'<span style="color: var(--syntax-punctuation)">$1</span>',
+		)
 
-	// Numbers
-	html = html.replace(
-		/\b(\d+)\b/g,
-		'<span style="color: var(--syntax-number)">$1</span>',
-	)
-
-	// Arrows
-	html = html.replace(
-		/(-&gt;|\u2192)/g,
-		'<span style="color: var(--syntax-punctuation)">$1</span>',
-	)
-
-	return html
+		return html
+	}).join('')
 }
 
 function detectLang(title?: string): string | undefined {
@@ -71,12 +94,8 @@ function detectLang(title?: string): string | undefined {
 	if (t.includes('.tsx') || t.includes('.ts')) return 'tsx'
 	if (t.includes('.js') || t.includes('.jsx')) return 'js'
 	if (t.includes('.yaml') || t.includes('.yml')) return 'yaml'
-	if (
-		t.includes('terminal')
-		|| t.includes('cli')
-		|| t.includes('install')
-		|| t.includes('filter')
-	) return 'shell'
+	if (t.includes('terminal') || t.includes('cli') || t.includes('install') || t.includes('filter')) return 'shell'
+	if (t.includes('what agents')) return 'tsx'
 	if (t.includes('/') || t.includes('company') || t.includes('memory')) return 'yaml'
 	return 'yaml'
 }
@@ -90,7 +109,7 @@ export function CodeBlock({
 	const highlighted = raw ? highlightCode(raw, lang) : ''
 
 	return (
-		<div className="bg-lp-bg border border-lp-border overflow-hidden flex flex-col h-full">
+		<div className="bg-lp-bg overflow-hidden flex flex-col h-full">
 			{title && (
 				<div className="px-4 py-2 border-b border-lp-border flex items-center gap-2">
 					<div className="flex gap-1">

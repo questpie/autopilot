@@ -128,8 +128,8 @@ autopilot attach max`}
 								OpenAI API key or ChatGPT Plus subscription
 							</div>
 							<div>
-								<strong className="text-lp-fg">No API key?</strong>{' '}
-								Use local models via Ollama
+								<strong className="text-lp-fg">Embeddings:</strong>{' '}
+								Gemini API key (optional, free tier available)
 							</div>
 						</div>
 					</div>

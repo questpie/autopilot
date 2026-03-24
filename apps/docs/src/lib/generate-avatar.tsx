@@ -1,280 +1,935 @@
 /**
- * Arithmetic generative avatar — deterministic SVG face from a string seed.
+ * Construct avatar generator — deterministic SVG robot from a string seed.
  * Brutalist aesthetic: all rects, zero border-radius, sharp geometry.
- * QuestPie brand palette with purple accent hair option.
+ * Uses xmur3 + mulberry32 PRNG for 2M+ unique variations.
+ * Ported from the QUESTPIE AI Studio construct generator.
  */
 
-// ── Hash ────────────────────────────────────────────────────────────────
-function hash(seed: string): number {
-	let h = 5381
-	for (let i = 0; i < seed.length; i++) {
-		h = ((h << 5) + h + seed.charCodeAt(i)) >>> 0
+// ── PRNG Algorithms ────────────────────────────────────────────────────
+function xmur3(str: string): () => number {
+	let h = 1779033703 ^ str.length
+	for (let i = 0; i < str.length; i++) {
+		h = Math.imul(h ^ str.charCodeAt(i), 3432918353)
+		h = (h << 13) | (h >>> 19)
 	}
-	return h
+	return () => {
+		h = Math.imul(h ^ (h >>> 16), 2246822507)
+		h = Math.imul(h ^ (h >>> 13), 3266489909)
+		return (h ^= h >>> 16) >>> 0
+	}
 }
 
-/** Deterministic 0–1 float at index `i` from hash `h` */
-function t(h: number, i: number): number {
-	return (((h * (i + 1) * 2654435761) >>> 0) % 10000) / 10000
+function mulberry32(a: number): () => number {
+	let state = a
+	return () => {
+		let t = (state += 0x6d2b79f5)
+		t = Math.imul(t ^ (t >>> 15), t | 1)
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+	}
 }
 
-function pick<T>(arr: readonly T[], v: number): T {
-	return arr[Math.floor(v * arr.length) % arr.length]!
+// ── Data ───────────────────────────────────────────────────────────────
+interface HeadDef {
+	x: number
+	y: number
+	w: number
+	h: number
+	name: string
 }
 
-function lerp(a: number, b: number, v: number): number {
-	return Math.round(a + (b - a) * v)
-}
-
-function darken(hex: string, amount: number): string {
-	const r = parseInt(hex.slice(1, 3), 16)
-	const g = parseInt(hex.slice(3, 5), 16)
-	const b = parseInt(hex.slice(5, 7), 16)
-	const f = 1 - amount
-	return `#${(Math.round(r * f) | 0).toString(16).padStart(2, '0')}${(Math.round(g * f) | 0).toString(16).padStart(2, '0')}${(Math.round(b * f) | 0).toString(16).padStart(2, '0')}`
-}
-
-// ── Palettes ────────────────────────────────────────────────────────────
-const SKIN = ['#FDDCB5', '#F0C8A0', '#E0B08A', '#D4A574', '#C68642', '#8D5524', '#6B3A1F', '#5C3018'] as const
-const HAIR = ['#0A0A0A', '#1A1209', '#2C1810', '#4A2C1A', '#8B4513', '#C4956A', '#9E9E9E', '#B700FF'] as const
-const EYES = ['#1A1A1A', '#2C1810', '#2D4A3E', '#3D2B1F', '#4A6741'] as const
-
-// ── Types ───────────────────────────────────────────────────────────────
-type R = { x: number; y: number; w: number; h: number }
-
-// ── Hair styles: fn(faceWidth, faceX, faceY) → rects ───────────────────
-type HairFn = (fw: number, fx: number, fy: number) => R[]
-
-const HAIR_STYLES: HairFn[] = [
-	// 0: Short crop
-	(fw, fx, fy) => [{ x: fx - 2, y: fy - 8, w: fw + 4, h: 12 }],
-	// 1: Side swept left
-	(fw, fx, fy) => [
-		{ x: fx - 2, y: fy - 8, w: fw + 4, h: 12 },
-		{ x: fx - 6, y: fy - 4, w: 8, h: 18 },
-	],
-	// 2: Side swept right
-	(fw, fx, fy) => [
-		{ x: fx - 2, y: fy - 8, w: fw + 4, h: 12 },
-		{ x: fx + fw - 2, y: fy - 4, w: 8, h: 18 },
-	],
-	// 3: Long / bob
-	(fw, fx, fy) => [
-		{ x: fx - 3, y: fy - 8, w: fw + 6, h: 12 },
-		{ x: fx - 5, y: fy - 2, w: 7, h: 28 },
-		{ x: fx + fw - 2, y: fy - 2, w: 7, h: 28 },
-	],
-	// 4: Flat top / tall
-	(fw, fx, fy) => [{ x: fx - 1, y: fy - 14, w: fw + 2, h: 18 }],
-	// 5: Bald
-	() => [],
-	// 6: Mohawk
-	(_fw, _fx, fy) => [{ x: 36, y: fy - 14, w: 8, h: 18 }],
-	// 7: Wide / afro
-	(fw, fx, fy) => [
-		{ x: fx - 6, y: fy - 12, w: fw + 12, h: 18 },
-		{ x: fx - 4, y: fy + 2, w: 5, h: 8 },
-		{ x: fx + fw - 1, y: fy + 2, w: 5, h: 8 },
-	],
-	// 8: Curtains / middle part
-	(fw, fx, fy) => [
-		{ x: fx - 3, y: fy - 8, w: (fw + 6) / 2 - 2, h: 12 },
-		{ x: 40 + 2, y: fy - 8, w: (fw + 6) / 2 - 2, h: 12 },
-		{ x: fx - 4, y: fy - 2, w: 6, h: 14 },
-		{ x: fx + fw - 2, y: fy - 2, w: 6, h: 14 },
-	],
-	// 9: Buzz with widow's peak
-	(fw, fx, fy) => [
-		{ x: fx - 1, y: fy - 6, w: fw + 2, h: 8 },
-		{ x: 37, y: fy - 8, w: 6, h: 6 },
-	],
+const HEADS: HeadDef[] = [
+	{ x: 3, y: 3, w: 10, h: 10, name: 'The Block' },
+	{ x: 4, y: 2, w: 8, h: 12, name: 'The Server' },
+	{ x: 2, y: 4, w: 12, h: 8, name: 'The Terminal' },
+	{ x: 3, y: 2, w: 10, h: 11, name: 'The Dual' },
+	{ x: 5, y: 1, w: 6, h: 14, name: 'The Tower' },
+	{ x: 1, y: 5, w: 14, h: 7, name: 'The Mainframe' },
+	{ x: 4, y: 4, w: 8, h: 9, name: 'The Compact' },
+	{ x: 2, y: 3, w: 11, h: 10, name: 'The Offset' },
 ]
 
-// ── Mouth shapes: rects relative to (0,0) ──────────────────────────────
-const MOUTHS: R[][] = [
-	[{ x: -7, y: 0, w: 14, h: 2 }],
-	[{ x: -9, y: 0, w: 18, h: 2 }],
-	[{ x: -5, y: 0, w: 10, h: 2 }],
-	[
-		{ x: -7, y: 0, w: 14, h: 2 },
-		{ x: -7, y: 2, w: 3, h: 2 },
-		{ x: 4, y: 2, w: 3, h: 2 },
-	],
-	[{ x: -6, y: 0, w: 12, h: 3 }],
-]
+const LED_COLORS = ['#00E676', '#FF3D57', '#FFB300', '#40C4FF'] as const
 
-// ── Component ───────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────
 export interface GenerativeAvatarProps {
 	seed: string
 	size?: number
+	style?: 'solid' | 'wireframe'
+	theme?: 'dark' | 'light'
 	className?: string
 }
 
-export function GenerativeAvatar({ seed, size = 80, className }: GenerativeAvatarProps) {
-	const h = hash(seed)
+export function GenerativeAvatar({
+	seed,
+	size = 80,
+	style = 'solid',
+	theme = 'dark',
+	className,
+}: GenerativeAvatarProps) {
+	const seedFn = xmur3(seed || 'QUESTPIE')
+	const random = mulberry32(seedFn())
 
-	// Face shape
-	const faceW = lerp(32, 42, t(h, 0))
-	const faceH = lerp(38, 48, t(h, 1))
-	const faceX = 40 - faceW / 2
-	const faceY = 20 + (48 - faceH) / 2
+	// Extract 8 DNA attributes
+	const dna = {
+		head: Math.floor(random() * 8),
+		eye: Math.floor(random() * 8),
+		jaw: Math.floor(random() * 8),
+		top: Math.floor(random() * 8),
+		side: Math.floor(random() * 8),
+		pattern: Math.floor(random() * 4),
+		bg: Math.floor(random() * 4),
+		led: Math.floor(random() * 4),
+	}
 
-	// Colors
-	const skin = pick(SKIN, t(h, 2))
-	const hairColor = pick(HAIR, t(h, 3))
-	const eyeColor = pick(EYES, t(h, 4))
-	const skinDark = darken(skin, 0.15)
-	const mouthClr = darken(skin, 0.35)
+	// Colors based on theme
+	const isDark = theme === 'dark'
+	const bg = isDark ? '#0a0a0a' : '#ffffff'
+	const fg = isDark ? '#ffffff' : '#0a0a0a'
+	const surface = isDark ? '#111111' : '#f8f8f8'
+	const mid = isDark ? '#333333' : '#e5e5e5'
+	const brand = '#B700FF'
+	const ledColor = LED_COLORS[dna.led]!
 
-	// Hair
-	const hairFn = pick(HAIR_STYLES, t(h, 5))
-	const hairRects = hairFn(faceW, faceX, faceY)
+	const cell = 16
+	const strokeW = 4
+	const fillStyle = style === 'wireframe' ? 'none' : surface
 
-	// Eyes
-	const eyeW = lerp(5, 8, t(h, 6))
-	const eyeH = lerp(3, 6, t(h, 7))
-	const eyeSpacing = lerp(7, 11, t(h, 8))
-	const eyeY = faceY + Math.round(faceH * 0.36)
+	const h = HEADS[dna.head]!
+	const cut = 3
+	const jY = h.y + h.h
 
-	// Eyebrows
-	const browH = lerp(1, 3, t(h, 9))
-	const browGap = lerp(3, 5, t(h, 10))
+	const eyeColor = fg
+	const eyeFill = style === 'wireframe' ? 'none' : eyeColor
+	const eyeStrokeWidth = style === 'wireframe' ? strokeW : 0
 
-	// Nose
-	const noseW = lerp(3, 6, t(h, 11))
-	const noseH = lerp(5, 10, t(h, 12))
-	const noseY = eyeY + eyeH + 3
+	// Head path for the cutout shape
+	const headPath = `M ${h.x * cell} ${h.y * cell} H ${(h.x + h.w) * cell} V ${(h.y + h.h - cut) * cell} H ${(h.x + h.w - cut) * cell} V ${(h.y + h.h) * cell} H ${h.x * cell} Z`
 
-	// Mouth
-	const mouth = pick(MOUTHS, t(h, 13))
-	const mouthY = noseY + noseH + lerp(3, 6, t(h, 14))
+	// Build elements arrays for cleaner JSX
+	const elements: React.ReactNode[] = []
+	let key = 0
+	const k = () => `e${key++}`
 
-	// Accessories
-	const hasGlasses = t(h, 15) > 0.7
-	const hasFacialHair = t(h, 16) > 0.75
-	const facialHairStyle = t(h, 17)
+	// 1. Background Grid
+	const bgGridDefs: React.ReactNode[] = []
+	const bgGridRects: React.ReactNode[] = []
 
-	// Ears
-	const earH = lerp(6, 10, t(h, 18))
-	const earY = eyeY - 1
+	if (dna.bg === 0) {
+		bgGridDefs.push(
+			<pattern key={k()} id="g0" width="16" height="16" patternUnits="userSpaceOnUse">
+				<path d="M 16 0 L 0 0 0 16" fill="none" stroke={mid} strokeWidth="1" opacity="0.4" />
+			</pattern>,
+		)
+		bgGridRects.push(<rect key={k()} width="256" height="256" fill="url(#g0)" />)
+	} else if (dna.bg === 1) {
+		bgGridDefs.push(
+			<pattern key={k()} id="g1" width="32" height="32" patternUnits="userSpaceOnUse">
+				<path d="M 32 0 L 0 0 0 32" fill="none" stroke={mid} strokeWidth="1" opacity="0.6" />
+			</pattern>,
+		)
+		bgGridRects.push(<rect key={k()} width="256" height="256" fill="url(#g1)" />)
+	} else if (dna.bg === 2) {
+		bgGridDefs.push(
+			<pattern key={k()} id="g2" width="32" height="32" patternUnits="userSpaceOnUse">
+				<path d="M 15 16 H 17 M 16 15 V 17" stroke={mid} strokeWidth="2" />
+			</pattern>,
+		)
+		bgGridRects.push(<rect key={k()} width="256" height="256" fill="url(#g2)" />)
+	} else if (dna.bg === 3) {
+		bgGridDefs.push(
+			<pattern key={k()} id="g3" width="16" height="16" patternUnits="userSpaceOnUse">
+				<rect x="0" y="0" width="2" height="2" fill={mid} opacity="0.8" />
+			</pattern>,
+		)
+		bgGridRects.push(<rect key={k()} width="256" height="256" fill="url(#g3)" />)
+	}
 
-	// Pupil offset (gaze direction)
-	const gazeX = lerp(-1, 1, t(h, 19))
+	// 2. Top Decor
+	const topDecor: React.ReactNode[] = []
+
+	if (dna.top === 0) {
+		// Antenna
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + Math.floor(h.w / 2)) * cell}
+				y={(h.y - 2) * cell}
+				width={1 * cell}
+				height={2 * cell}
+				fill="none"
+				stroke={fg}
+				strokeWidth={strokeW}
+				strokeLinejoin="miter"
+			/>,
+		)
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + Math.floor(h.w / 2) - 1) * cell}
+				y={(h.y - 3) * cell}
+				width={3 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.top === 1) {
+		// Double Vent
+		topDecor.push(
+			<rect key={k()} x={(h.x + 1) * cell} y={(h.y - 1) * cell} width={2 * cell} height={1 * cell} fill={fg} />,
+		)
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + h.w - 4) * cell}
+				y={(h.y - 1) * cell}
+				width={2 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.top === 2) {
+		// Flat Heatsink
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(h.y - 2) * cell}
+				width={(h.w - 2) * cell}
+				height={2 * cell}
+				fill="none"
+				stroke={fg}
+				strokeWidth={strokeW}
+			/>,
+		)
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + 2) * cell}
+				y={(h.y - 1.5) * cell}
+				width={(h.w - 4) * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.top === 3) {
+		// Offset node
+		topDecor.push(
+			<rect key={k()} x={(h.x + 1) * cell} y={(h.y - 2) * cell} width={1 * cell} height={2 * cell} fill={fg} />,
+		)
+	} else if (dna.top === 4) {
+		// Stepped Roof
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + 2) * cell}
+				y={(h.y - 1) * cell}
+				width={(h.w - 4) * cell}
+				height={1 * cell}
+				fill={fillStyle}
+				stroke={fg}
+				strokeWidth={strokeW}
+			/>,
+		)
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + 3) * cell}
+				y={(h.y - 2) * cell}
+				width={(h.w - 6) * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.top === 5) {
+		// Radar dish
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + h.w - 3) * cell}
+				y={(h.y - 3) * cell}
+				width={2 * cell}
+				height={2 * cell}
+				fill="none"
+				stroke={fg}
+				strokeWidth={strokeW}
+			/>,
+		)
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + h.w - 2.5) * cell}
+				y={(h.y - 2.5) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + h.w - 2.5) * cell}
+				y={(h.y - 1) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.top === 6) {
+		// Handle
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(h.y - 2) * cell}
+				width={(h.w - 2) * cell}
+				height={2 * cell}
+				fill="none"
+				stroke={fg}
+				strokeWidth={strokeW}
+			/>,
+		)
+		topDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + 2) * cell}
+				y={(h.y - 1) * cell}
+				width={(h.w - 4) * cell}
+				height={2 * cell}
+				fill={bg}
+			/>,
+		)
+	}
+	// dna.top === 7: no top decor
+
+	// 3. Side Decor
+	const sideDecor: React.ReactNode[] = []
+
+	if (dna.side === 0) {
+		// Left Nodes
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 2) * cell}
+				y={(h.y + 2) * cell}
+				width={2 * cell}
+				height={3 * cell}
+				fill="none"
+				stroke={fg}
+				strokeWidth={strokeW}
+			/>,
+		)
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 3) * cell}
+				y={(h.y + 3) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.side === 1) {
+		// Left bracket
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 1) * cell}
+				y={(h.y + 1) * cell}
+				width={1 * cell}
+				height={4 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.side === 2) {
+		// Floating blocks
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 2) * cell}
+				y={(h.y + 3) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 2) * cell}
+				y={(h.y + 5) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.side === 3) {
+		// Exhaust
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 2) * cell}
+				y={(h.y + 4) * cell}
+				width={2 * cell}
+				height={2 * cell}
+				fill="none"
+				stroke={fg}
+				strokeWidth={strokeW}
+			/>,
+		)
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 1) * cell}
+				y={(h.y + 4.5) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.side === 4) {
+		// Large Heatsink
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 2) * cell}
+				y={(h.y + 2) * cell}
+				width={2 * cell}
+				height={4 * cell}
+				fill={fillStyle}
+				stroke={fg}
+				strokeWidth={strokeW}
+			/>,
+		)
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 1.5) * cell}
+				y={(h.y + 3) * cell}
+				width={1.5 * cell}
+				height={0.5 * cell}
+				fill={fg}
+			/>,
+		)
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 1.5) * cell}
+				y={(h.y + 4.5) * cell}
+				width={1.5 * cell}
+				height={0.5 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.side === 5) {
+		// Both sides pins
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 1) * cell}
+				y={(h.y + 2) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x + h.w) * cell}
+				y={(h.y + 2) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+	} else if (dna.side === 6) {
+		// Side Antenna
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 2) * cell}
+				y={(h.y + 2) * cell}
+				width={2 * cell}
+				height={1 * cell}
+				fill={fg}
+			/>,
+		)
+		sideDecor.push(
+			<rect
+				key={k()}
+				x={(h.x - 3) * cell}
+				y={(h.y + 1) * cell}
+				width={1 * cell}
+				height={3 * cell}
+				fill={fillStyle}
+				stroke={fg}
+				strokeWidth={strokeW}
+			/>,
+		)
+	}
+	// dna.side === 7: no side decor
+
+	// 4. Pattern elements (only in solid mode)
+	const patternElements: React.ReactNode[] = []
+	const patternDefs: React.ReactNode[] = []
+
+	if (style === 'solid') {
+		if (dna.pattern === 1) {
+			// Horizontal Ribbing
+			patternElements.push(
+				<rect
+					key={k()}
+					x={(h.x + 1) * cell}
+					y={(h.y + 1) * cell}
+					width={(h.w - cut - 1) * cell}
+					height={1 * cell}
+					fill={mid}
+					opacity="0.3"
+				/>,
+			)
+			patternElements.push(
+				<rect
+					key={k()}
+					x={(h.x + 1) * cell}
+					y={(h.y + 3) * cell}
+					width={(h.w - cut - 1) * cell}
+					height={1 * cell}
+					fill={mid}
+					opacity="0.3"
+				/>,
+			)
+			patternElements.push(
+				<rect
+					key={k()}
+					x={(h.x + 1) * cell}
+					y={(h.y + 5) * cell}
+					width={(h.w - cut - 1) * cell}
+					height={1 * cell}
+					fill={mid}
+					opacity="0.3"
+				/>,
+			)
+		} else if (dna.pattern === 2) {
+			// Vertical Shading
+			patternElements.push(
+				<rect
+					key={k()}
+					x={(h.x + 1) * cell}
+					y={(h.y + 1) * cell}
+					width={2 * cell}
+					height={(h.h - 2) * cell}
+					fill={mid}
+					opacity="0.2"
+				/>,
+			)
+		} else if (dna.pattern === 3) {
+			// Inner Dot Grid
+			patternDefs.push(
+				<pattern key={k()} id="pg" width="8" height="8" patternUnits="userSpaceOnUse">
+					<rect width="2" height="2" fill={mid} opacity="0.3" />
+				</pattern>,
+			)
+			patternElements.push(<path key={k()} d={headPath} fill="url(#pg)" pointerEvents="none" />)
+		}
+	}
+
+	// 5. Eyes / Sensors
+	const eyeElements: React.ReactNode[] = []
+
+	if (dna.eye === 0) {
+		// Wide Visor
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(h.y + 2) * cell}
+				width={(h.w - 2) * cell}
+				height={1 * cell}
+				fill={eyeFill}
+				stroke={eyeColor}
+				strokeWidth={eyeStrokeWidth}
+			/>,
+		)
+	} else if (dna.eye === 1) {
+		// Dual Sensors
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(h.y + 2) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + h.w - 2) * cell}
+				y={(h.y + 2) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.eye === 2) {
+		// Asymmetric
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(h.y + 2) * cell}
+				width={2 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + h.w - 2) * cell}
+				y={(h.y + 2) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.eye === 3) {
+		// Cyclops Core
+		const cx = h.x + Math.floor(h.w / 2) - 1
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={cx * cell}
+				y={(h.y + 2) * cell}
+				width={2 * cell}
+				height={2 * cell}
+				fill="none"
+				stroke={eyeColor}
+				strokeWidth={strokeW}
+			/>,
+		)
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(cx + 0.5) * cell}
+				y={(h.y + 2.5) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.eye === 4) {
+		// Grid Matrix
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(h.y + 2) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 2.5) * cell}
+				y={(h.y + 2) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+		if (h.w > 6) {
+			eyeElements.push(
+				<rect
+					key={k()}
+					x={(h.x + 4) * cell}
+					y={(h.y + 2) * cell}
+					width={1 * cell}
+					height={1 * cell}
+					fill={eyeColor}
+				/>,
+			)
+		}
+	} else if (dna.eye === 5) {
+		// Vertical Slit
+		const cx = h.x + Math.floor(h.w / 2) - 0.5
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={cx * cell}
+				y={(h.y + 1.5) * cell}
+				width={1 * cell}
+				height={3 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.eye === 6) {
+		// Offset Squares
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(h.y + 2) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 2) * cell}
+				y={(h.y + 3) * cell}
+				width={1 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.eye === 7) {
+		// Scanning Bar
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(h.y + 2) * cell}
+				width={(h.w - 2) * cell}
+				height={1 * cell}
+				fill="none"
+				stroke={eyeColor}
+				strokeWidth={strokeW}
+			/>,
+		)
+		eyeElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1.5) * cell}
+				y={(h.y + 2.25) * cell}
+				width={1.5 * cell}
+				height={0.5 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	}
+
+	// 6. Jaw / Port
+	const jawElements: React.ReactNode[] = []
+
+	if (dna.jaw === 0) {
+		// Standard block
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(jY - 2) * cell}
+				width={2 * cell}
+				height={1 * cell}
+				fill={eyeFill}
+				stroke={eyeColor}
+				strokeWidth={eyeStrokeWidth}
+			/>,
+		)
+	} else if (dna.jaw === 1) {
+		// Split grille
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(jY - 2) * cell}
+				width={0.5 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 2) * cell}
+				y={(jY - 2) * cell}
+				width={0.5 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.jaw === 2) {
+		// Wide slot
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 0.5) * cell}
+				y={(jY - 2.5) * cell}
+				width={2.5 * cell}
+				height={0.5 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.jaw === 3) {
+		// Outline jaw
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(jY - 2) * cell}
+				width={2 * cell}
+				height={1 * cell}
+				fill="none"
+				stroke={eyeColor}
+				strokeWidth={strokeW}
+			/>,
+		)
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1.5) * cell}
+				y={(jY - 1.75) * cell}
+				width={0.5 * cell}
+				height={0.5 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.jaw === 4) {
+		// Barcode
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(jY - 2) * cell}
+				width={0.25 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1.5) * cell}
+				y={(jY - 2) * cell}
+				width={0.5 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 2.25) * cell}
+				y={(jY - 2) * cell}
+				width={0.25 * cell}
+				height={1 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.jaw === 5) {
+		// Micro-vent
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(jY - 3) * cell}
+				width={2 * cell}
+				height={2 * cell}
+				fill="none"
+				stroke={eyeColor}
+				strokeWidth={strokeW}
+			/>,
+		)
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(jY - 2) * cell}
+				width={2 * cell}
+				height={0.25 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.jaw === 6) {
+		// Asym port
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(jY - 3) * cell}
+				width={1 * cell}
+				height={2 * cell}
+				fill={eyeColor}
+			/>,
+		)
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 2.5) * cell}
+				y={(jY - 1.5) * cell}
+				width={0.5 * cell}
+				height={0.5 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	} else if (dna.jaw === 7) {
+		// Heavy Intake
+		jawElements.push(
+			<rect
+				key={k()}
+				x={(h.x + 1) * cell}
+				y={(jY - 2.5) * cell}
+				width={2 * cell}
+				height={1.5 * cell}
+				fill={eyeColor}
+			/>,
+		)
+	}
 
 	return (
 		<svg
-			viewBox="0 0 80 80"
+			viewBox="0 0 256 256"
 			width={size}
 			height={size}
 			className={className}
 			xmlns="http://www.w3.org/2000/svg"
 			role="img"
-			aria-label={`Avatar for ${seed}`}
+			aria-label={`Construct avatar for ${seed}`}
 		>
-			{/* Neck */}
-			<rect x={36} y={faceY + faceH - 2} width={8} height={14} fill={skin} />
+			{/* Background */}
+			<rect width="256" height="256" fill={bg} />
 
-			{/* Ears */}
-			<rect x={faceX - 4} y={earY} width={4} height={earH} fill={skin} />
-			<rect x={faceX + faceW} y={earY} width={4} height={earH} fill={skin} />
-			<rect x={faceX - 3} y={earY + 1} width={2} height={earH - 2} fill={skinDark} opacity={0.3} />
-			<rect x={faceX + faceW + 1} y={earY + 1} width={2} height={earH - 2} fill={skinDark} opacity={0.3} />
-
-			{/* Head */}
-			<rect x={faceX} y={faceY} width={faceW} height={faceH} fill={skin} />
-
-			{/* Hair */}
-			{hairRects.map((r, i) => (
-				<rect key={`h${i}`} x={r.x} y={r.y} width={r.w} height={r.h} fill={hairColor} />
-			))}
-
-			{/* Eyebrows */}
-			<rect x={40 - eyeSpacing - eyeW / 2} y={eyeY - browGap - browH} width={eyeW + 2} height={browH} fill={hairColor} />
-			<rect x={40 + eyeSpacing - eyeW / 2 - 2} y={eyeY - browGap - browH} width={eyeW + 2} height={browH} fill={hairColor} />
-
-			{/* Eyes — sclera */}
-			<rect x={40 - eyeSpacing - eyeW / 2} y={eyeY} width={eyeW} height={eyeH} fill="#F5F5F5" />
-			<rect x={40 + eyeSpacing - eyeW / 2} y={eyeY} width={eyeW} height={eyeH} fill="#F5F5F5" />
-
-			{/* Eyes — pupils */}
-			<rect
-				x={40 - eyeSpacing - 1.5 + gazeX}
-				y={eyeY + Math.max(0, (eyeH - 3) / 2)}
-				width={3}
-				height={Math.min(eyeH, 3)}
-				fill={eyeColor}
-			/>
-			<rect
-				x={40 + eyeSpacing - 1.5 + gazeX}
-				y={eyeY + Math.max(0, (eyeH - 3) / 2)}
-				width={3}
-				height={Math.min(eyeH, 3)}
-				fill={eyeColor}
-			/>
-
-			{/* Nose */}
-			<rect x={40 - noseW / 2} y={noseY} width={noseW} height={noseH} fill={skinDark} opacity={0.3} />
-			{/* Nostril hint */}
-			<rect x={40 - noseW / 2} y={noseY + noseH - 2} width={noseW} height={2} fill={skinDark} opacity={0.15} />
-
-			{/* Mouth */}
-			{mouth.map((r, i) => (
-				<rect key={`m${i}`} x={40 + r.x} y={mouthY + r.y} width={r.w} height={r.h} fill={mouthClr} />
-			))}
-
-			{/* Glasses */}
-			{hasGlasses && (
-				<>
-					{/* Left lens */}
-					<rect
-						x={40 - eyeSpacing - eyeW / 2 - 2}
-						y={eyeY - 2}
-						width={eyeW + 4}
-						height={eyeH + 4}
-						fill="none"
-						stroke="#333"
-						strokeWidth={1.5}
-					/>
-					{/* Right lens */}
-					<rect
-						x={40 + eyeSpacing - eyeW / 2 - 2}
-						y={eyeY - 2}
-						width={eyeW + 4}
-						height={eyeH + 4}
-						fill="none"
-						stroke="#333"
-						strokeWidth={1.5}
-					/>
-					{/* Bridge */}
-					<rect
-						x={40 - eyeSpacing + eyeW / 2 + 2}
-						y={eyeY + eyeH / 2 - 0.5}
-						width={Math.max(0, 2 * eyeSpacing - eyeW - 4)}
-						height={1.5}
-						fill="#333"
-					/>
-					{/* Temple arms */}
-					<rect x={faceX - 2} y={eyeY + eyeH / 2 - 0.5} width={4} height={1.5} fill="#333" />
-					<rect x={faceX + faceW - 2} y={eyeY + eyeH / 2 - 0.5} width={4} height={1.5} fill="#333" />
-				</>
+			{/* Background Grid Defs + Fill */}
+			{(bgGridDefs.length > 0 || patternDefs.length > 0) && (
+				<defs>
+					{bgGridDefs}
+					{patternDefs}
+				</defs>
 			)}
+			{bgGridRects}
 
-			{/* Facial hair */}
-			{hasFacialHair && facialHairStyle < 0.33 && (
-				/* Goatee */
-				<rect x={40 - 4} y={mouthY + 3} width={8} height={5} fill={hairColor} opacity={0.6} />
-			)}
-			{hasFacialHair && facialHairStyle >= 0.33 && facialHairStyle < 0.66 && (
-				/* Full beard */
-				<>
-					<rect x={40 - 8} y={mouthY + 2} width={16} height={6} fill={hairColor} opacity={0.5} />
-					<rect x={40 - 6} y={mouthY + 8} width={12} height={3} fill={hairColor} opacity={0.4} />
-				</>
-			)}
-			{hasFacialHair && facialHairStyle >= 0.66 && (
-				/* Mustache */
-				<rect x={40 - 6} y={mouthY - 3} width={12} height={3} fill={hairColor} opacity={0.6} />
-			)}
+			{/* Top Decor */}
+			{topDecor}
+
+			{/* Side Decor */}
+			{sideDecor}
+
+			{/* Head Base with Brand Cutout */}
+			<path d={headPath} fill={fillStyle} stroke={fg} strokeWidth={strokeW} strokeLinejoin="miter" />
+
+			{/* Patterns */}
+			{patternElements}
+
+			{/* Eyes / Sensors */}
+			{eyeElements}
+
+			{/* Jaw / Port */}
+			{jawElements}
+
+			{/* Semantic LED */}
+			<rect x={(h.x + 0.5) * cell} y={(h.y + 0.5) * cell} width={0.5 * cell} height={0.5 * cell} fill={ledColor} />
+
+			{/* Brand Accent — Purple Missing Piece */}
+			<rect x={(h.x + h.w - 2) * cell} y={(h.y + h.h - 2) * cell} width={2 * cell} height={2 * cell} fill={brand} />
+
+			{/* Frame border */}
+			<rect width="256" height="256" fill="none" stroke={mid} strokeWidth="8" />
 		</svg>
 	)
 }
