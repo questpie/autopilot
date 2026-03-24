@@ -92,8 +92,9 @@ export function TaskDetailPanel({ task, onClose, onApprove, onReject }: TaskDeta
 								{task.blockers.map((b, i) => (
 									<div
 										key={i}
-										className="border-l-2 border-destructive pl-3 py-2 text-sm text-destructive"
+										className="border border-border bg-card p-3 text-sm text-destructive flex items-start gap-2"
 									>
+										<span className="w-2 h-2 bg-destructive shrink-0 mt-1.5" />
 										{b.reason}
 									</div>
 								))}

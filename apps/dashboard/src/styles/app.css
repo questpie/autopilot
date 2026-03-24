@@ -12,7 +12,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 @theme inline {
-	--font-heading: 'Geist Variable', sans-serif;
+	--font-heading: 'JetBrains Mono', 'Courier New', monospace;
 	--font-sans: 'Geist Variable', sans-serif;
 	--font-mono: 'JetBrains Mono', 'Courier New', monospace;
 	--color-sidebar-ring: var(--sidebar-ring);
@@ -175,11 +175,20 @@
 }
 
 ::-webkit-scrollbar-track {
-	background: var(--background);
+	background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
 	background: var(--border);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--muted-foreground);
+}
+
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--border) transparent;
 }
 
 /* ═══ Grid Texture Overlay ═══ */

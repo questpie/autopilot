@@ -50,7 +50,7 @@ export function AgentDetailPanel({ agent, onClose }: AgentDetailPanelProps) {
 					<div className="flex items-center gap-3">
 						<AgentAvatar name={agent.name} role={agent.role} size="lg" />
 						<div>
-							<div className="text-sm font-semibold">{agent.name}</div>
+							<div className="font-mono text-sm font-bold tracking-tight">{agent.name}</div>
 							<div className="flex items-center gap-2">
 								<Badge variant="outline" className="font-mono text-[9px]">
 									{agent.role}

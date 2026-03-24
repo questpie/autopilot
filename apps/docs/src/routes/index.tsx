@@ -42,35 +42,26 @@ function LandingPage() {
 			<div className="max-w-[860px] mx-auto px-4 sm:px-6">
 				{/* ========== 1. HERO ========== */}
 				<section className="pt-12 pb-12 sm:pt-20 sm:pb-20 border-b border-lp-border">
-					<div className="flex items-center gap-3 mb-2">
-						<span className="font-mono text-[10px] text-lp-bg bg-lp-purple px-2.5 py-1 tracking-[2px] font-bold">
-							BETA
-						</span>
-						<span className="font-mono text-[10px] text-lp-purple tracking-[2px]">
-							AVAILABLE NOW
-						</span>
+					<div className="flex justify-center mb-8">
+						<QSymbol size={48} />
 					</div>
-					<h1 className="font-sans text-[40px] sm:text-[64px] font-black text-white m-0 leading-none tracking-tight">
-						Agents that act,
+					<h1 className="font-mono text-[40px] sm:text-[64px] font-bold text-white m-0 leading-tight tracking-[-0.03em] text-center">
+						Your AI-native
 						<br />
-						not chat.
+						company operating system
 					</h1>
-					<p className="font-sans text-base sm:text-[20px] text-lp-muted mt-5 font-light leading-relaxed max-w-[640px]">
-						Autopilot agents don't generate text for you to read. They call structured
-						primitives that create tasks, write code, deploy services, and build dashboards.
+					<p className="font-sans text-base sm:text-[20px] text-lp-muted mt-5 font-light leading-relaxed max-w-[640px] mx-auto text-center">
+						AI agents that don't chat -- they act. Structured primitives create tasks,
+						write code, deploy services, and build dashboards.
 						You approve the results.
 					</p>
-					<div className="mt-5 font-mono text-[13px] text-lp-ghost">
-						13 structured primitives. Session replay. Git audit trail. Human gates.
-					</div>
-					<div className="w-[60px] h-[3px] bg-lp-purple mt-8" />
-					<div className="mt-8 flex gap-2 flex-wrap">
+					<div className="mt-8 flex gap-2 flex-wrap justify-center">
 						<Tag>OPEN SOURCE</Tag>
-						<Tag color="cyan">CLI-FIRST</Tag>
-						<Tag color="green">ZERO INFRA</Tag>
-						<Tag color="orange">MIT LICENSE</Tag>
+						<Tag>CLI-FIRST</Tag>
+						<Tag>ZERO INFRA</Tag>
+						<Tag>MIT LICENSE</Tag>
 					</div>
-					<div className="mt-10 flex gap-3 flex-wrap">
+					<div className="mt-10 flex gap-3 flex-wrap justify-center">
 						<a
 							href="/docs/getting-started"
 							className="font-mono text-xs text-white bg-lp-purple px-6 py-2.5 no-underline hover:bg-lp-purple-light transition-colors"
@@ -116,7 +107,7 @@ autopilot ask "Build me a landing page"
 # Watch agents work in real-time
 autopilot attach max`}
 					</CodeBlock>
-					<div className="mt-4 bg-lp-purple-faint border border-lp-border border-l-[3px] border-l-lp-purple p-3">
+					<div className="mt-4 bg-lp-card border border-lp-border p-3">
 						<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
 							<strong className="text-lp-fg">What you need:</strong>{' '}
 							Bun runtime + Anthropic API key. That's it.
@@ -211,7 +202,7 @@ create_artifact({
 					</CodeBlock>
 					<div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
 						<div className="bg-lp-card border border-lp-border p-4">
-							<div className="font-mono text-[10px] text-lp-accent-green tracking-[2px] mb-2">
+							<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
 								AUTOPILOT AGENTS
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
@@ -220,7 +211,7 @@ create_artifact({
 							</div>
 						</div>
 						<div className="bg-lp-card border border-lp-border p-4">
-							<div className="font-mono text-[10px] text-lp-accent-red tracking-[2px] mb-2">
+							<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
 								CHATBOT AGENTS
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
@@ -264,27 +255,21 @@ create_artifact({
 						</CodeBlock>
 						<div className="flex flex-col gap-4">
 							<div className="bg-lp-card border border-lp-border p-4">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[2px] mb-2.5">
+								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2.5">
 									ARCHITECTURE
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-2">
-									<div className="flex items-start gap-2">
-										<div className="w-[3px] h-4 bg-lp-accent-cyan mt-0.5 shrink-0" />
-										<span>
-											<strong className="text-lp-fg">Immutable core</strong> -- npm package. Base
-											components, hooks, API client, router. Agents cannot break it.
-										</span>
+									<div>
+										<strong className="text-lp-fg">Immutable core</strong> -- npm package. Base
+										components, hooks, API client, router. Agents cannot break it.
 									</div>
-									<div className="flex items-start gap-2">
-										<div className="w-[3px] h-4 bg-lp-purple mt-0.5 shrink-0" />
-										<span>
-											<strong className="text-lp-fg">Company layer</strong> -- in your filesystem.
-											Custom widgets, pages, theme overrides, layout config. Agents edit this.
-										</span>
+									<div>
+										<strong className="text-lp-fg">Company layer</strong> -- in your filesystem.
+										Custom widgets, pages, theme overrides, layout config. Agents edit this.
 									</div>
 								</div>
 							</div>
-							<div className="bg-lp-purple-faint border border-lp-border border-l-[3px] border-l-lp-purple p-3">
+							<div className="bg-lp-card border border-lp-border p-3">
 								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
 									<strong className="text-lp-fg">"Add a revenue chart to the dashboard."</strong>{' '}
 									Agent writes <code className="font-mono text-[11px] text-lp-purple">widget.tsx</code>,
@@ -333,29 +318,25 @@ steps:
 								{
 									label: 'HUMAN GATES',
 									desc: 'Explicit approval points for merge, deploy, spend, and publish. Defined in workflow YAML, not bolted-on permissions.',
-									color: 'border-l-lp-purple',
 								},
 								{
 									label: 'DENY PATTERNS',
 									desc: 'Agents cannot touch .auth/, .master-key, .data/, or .git/. Hardcoded. Per-agent filesystem scoping on top.',
-									color: 'border-l-lp-accent-red',
 								},
 								{
 									label: 'SESSION ATTACH',
 									desc: 'Watch any agent work in real-time. autopilot attach max streams the live session. Like kubectl logs -f for AI agents.',
-									color: 'border-l-lp-accent-cyan',
 								},
 								{
 									label: 'GIT AUDIT TRAIL',
 									desc: 'Every agent action is a git commit (5s batch). Your company has version control. git diff to see what changed. git revert to undo.',
-									color: 'border-l-lp-accent-green',
 								},
 							].map((item) => (
 								<div
 									key={item.label}
-									className={`bg-lp-card border border-lp-border border-l-[3px] ${item.color} p-3`}
+									className="bg-lp-card border border-lp-border p-3"
 								>
-									<div className="font-mono text-[10px] text-lp-ghost tracking-[2px] mb-1">
+									<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-1">
 										{item.label}
 									</div>
 									<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
@@ -402,7 +383,7 @@ $ autopilot sessions search "PricingTable"`}
 					<SectionHeader sub="Same Autopilot kernel. Different skills. Different company. Three flagship use cases, validated in production.">
 						Use Cases
 					</SectionHeader>
-					<div className="flex flex-col gap-4">
+					<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 						{[
 							{
 								label: 'SOLO DEV SHOP',
@@ -410,8 +391,6 @@ $ autopilot sessions search "PricingTable"`}
 								what: 'CEO decomposes, strategist scopes, planner plans, developer implements, reviewer reviews',
 								see: 'Task progress on dashboard, PR for merge, live preview via artifact router',
 								outcome: 'Feature shipped without micromanaging a single step',
-								color: 'border-l-lp-purple',
-								textColor: 'text-lp-purple',
 							},
 							{
 								label: 'SELF-BUILDING INTERNAL TOOLS',
@@ -419,8 +398,6 @@ $ autopilot sessions search "PricingTable"`}
 								what: 'Developer agent writes widget.tsx, registers it in layout.yaml',
 								see: 'New widget appears on dashboard within seconds via HMR',
 								outcome: 'Internal tools built without Retool, without deployment, evolved by agents',
-								color: 'border-l-lp-accent-cyan',
-								textColor: 'text-lp-accent-cyan',
 							},
 							{
 								label: 'INFRASTRUCTURE MANAGEMENT',
@@ -428,15 +405,13 @@ $ autopilot sessions search "PricingTable"`}
 								what: 'DevOps agent reads infra skills, builds Docker image, creates k8s manifests, applies them, sets up DNS',
 								see: 'Service deployed and verified, URL pinned to dashboard',
 								outcome: 'Infrastructure managed by an agent who knows your stack via skills',
-								color: 'border-l-lp-accent-green',
-								textColor: 'text-lp-accent-green',
 							},
 						].map((uc) => (
 							<div
 								key={uc.label}
-								className={`bg-lp-card border border-lp-border border-l-[3px] ${uc.color} p-4`}
+								className="bg-lp-card border border-lp-border p-4 flex flex-col"
 							>
-								<div className={`font-mono text-[10px] ${uc.textColor} tracking-[2px] mb-2`}>
+								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
 									{uc.label}
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-1.5">
@@ -521,10 +496,10 @@ $ autopilot sessions search "PricingTable"`}
 							status="schd"
 						/>
 					</div>
-					<div className="bg-lp-purple-faint border border-lp-border border-l-[3px] border-l-lp-purple p-3">
+					<div className="bg-lp-card border border-lp-border p-3">
 						<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
 							<strong className="text-lp-fg">Example above:</strong>{' '}
-							The <strong className="text-lp-purple">Solo Dev Shop</strong> template.
+							The <strong className="text-lp-fg">Solo Dev Shop</strong> template.
 							Start with 2-3 agents, add as you need. You choose the names, the roles, and
 							the tools. Same kernel, different distribution.
 						</div>
@@ -541,34 +516,26 @@ $ autopilot sessions search "PricingTable"`}
 							{
 								label: 'HUMAN',
 								desc: 'CLI \u00B7 Dashboard \u00B7 Telegram \u00B7 Slack (soon) \u00B7 Email (soon)',
-								color: 'border-l-lp-accent-green',
-								textColor: 'text-lp-accent-green',
 							},
 							{
 								label: 'ORCHESTRATOR',
 								desc: 'Watcher \u00B7 Workflows \u00B7 Spawner \u00B7 Context \u00B7 Memory \u00B7 Cron \u00B7 Webhooks \u00B7 SSE Stream',
-								color: 'border-l-lp-purple',
-								textColor: 'text-lp-purple',
 							},
 							{
 								label: 'AGENTS',
 								desc: 'Claude Agent SDK \u00B7 Codex SDK \u00B7 Role templates \u00B7 13 primitives \u00B7 MCPs \u00B7 Sandboxed FS \u00B7 Memory',
-								color: 'border-l-lp-accent-cyan',
-								textColor: 'text-lp-accent-cyan',
 							},
 							{
 								label: 'STORAGE',
 								desc: 'SQLite + Drizzle \u00B7 YAML/Markdown/JSON \u00B7 FTS5 + sqlite-vec \u00B7 Git auto-commit \u00B7 Better Auth',
-								color: 'border-l-lp-accent-orange',
-								textColor: 'text-lp-accent-orange',
 							},
 						].map((l, i) => (
 							<div key={l.label}>
 								<div
-									className={`flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 bg-lp-card border border-lp-border border-l-[3px] ${l.color}`}
+									className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 bg-lp-card border border-lp-border"
 								>
 									<span
-										className={`font-mono text-[11px] ${l.textColor} tracking-[3px] sm:min-w-[120px]`}
+										className="font-mono text-[11px] text-lp-fg tracking-[0.15em] sm:min-w-[120px]"
 									>
 										{l.label}
 									</span>
@@ -582,20 +549,12 @@ $ autopilot sessions search "PricingTable"`}
 							</div>
 						))}
 					</div>
-					<div className="mt-6 bg-lp-purple-faint border border-lp-border border-l-[3px] border-l-lp-purple p-4">
-						<div className="font-mono text-[10px] text-lp-purple tracking-[2px] mb-2">
+					<div className="mt-6 bg-lp-card border border-lp-border p-4">
+						<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
 							ZERO INFRASTRUCTURE
 						</div>
 						<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-							<strong className="text-lp-fg">What you need for Autopilot:</strong>{' '}
-							Bun runtime + Anthropic API key.
-							<br />
-							<strong className="text-lp-fg">What you need for alternatives:</strong>{' '}
-							Docker + Postgres + Redis + vector DB + message queue + ...
-							<br />
-							<span className="text-lp-ghost mt-1 inline-block">
-								Run an AI company for ~$0.30/day in API costs.
-							</span>
+							No Docker, no Postgres, no Redis, no vector DB. Just Bun + an API key.
 						</div>
 					</div>
 				</Section>
@@ -610,29 +569,36 @@ $ autopilot sessions search "PricingTable"`}
 							{`\u251C\u2500\u2500 company.yaml             # Settings, budget
 \u251C\u2500\u2500 team/
 \u2502   \u251C\u2500\u2500 agents.yaml          # Agent definitions
+\u2502   \u251C\u2500\u2500 roles.yaml           # Role templates
+\u2502   \u251C\u2500\u2500 humans.yaml          # Human team members
 \u2502   \u251C\u2500\u2500 workflows/           # Process definitions
 \u2502   \u251C\u2500\u2500 schedules.yaml       # Cron jobs
 \u2502   \u251C\u2500\u2500 webhooks.yaml        # External triggers
 \u2502   \u2514\u2500\u2500 policies/            # Approval gates
 \u251C\u2500\u2500 tasks/
+\u2502   \u251C\u2500\u2500 backlog/             # Queued
 \u2502   \u251C\u2500\u2500 active/              # In progress
 \u2502   \u251C\u2500\u2500 review/              # Awaiting approval
-\u2502   \u2514\u2500\u2500 blocked/             # Needs human
+\u2502   \u251C\u2500\u2500 blocked/             # Needs human
+\u2502   \u2514\u2500\u2500 done/                # Completed
 \u251C\u2500\u2500 comms/channels/          # Agent communication
 \u251C\u2500\u2500 knowledge/               # Company brain
 \u251C\u2500\u2500 context/memory/          # Per-agent memories
 \u251C\u2500\u2500 skills/                  # Agent Skills (SKILL.md)
 \u251C\u2500\u2500 projects/                # Code, docs, assets
 \u251C\u2500\u2500 secrets/                 # Encrypted API keys
+\u251C\u2500\u2500 infra/                   # Infrastructure config
+\u251C\u2500\u2500 logs/                    # Activity, sessions, errors
 \u251C\u2500\u2500 dashboard/               # Living dashboard
 \u2502   \u251C\u2500\u2500 widgets/             # Custom widgets
 \u2502   \u251C\u2500\u2500 pages/               # Custom pages
+\u2502   \u251C\u2500\u2500 pins/                # Dashboard pins
 \u2502   \u2514\u2500\u2500 overrides/           # Theme, layout
 \u2514\u2500\u2500 .data/autopilot.db       # SQLite (FTS5 + vec)`}
 						</CodeBlock>
 						<div className="flex flex-col gap-4">
 							<div className="bg-lp-card border border-lp-border p-4">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[2px] mb-2.5">
+								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2.5">
 									HYBRID SEARCH
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
@@ -643,22 +609,17 @@ $ autopilot sessions search "PricingTable"`}
 									{
 										label: 'FTS5',
 										desc: 'Exact keywords, task IDs, file paths',
-										color: 'bg-lp-accent-green',
-										textColor: 'text-lp-accent-green',
 									},
 									{
 										label: 'sqlite-vec',
 										desc: 'Semantic similarity, natural language',
-										color: 'bg-lp-purple',
-										textColor: 'text-lp-purple',
 									},
 								].map((s) => (
 									<div
 										key={s.label}
 										className="flex items-center gap-2 py-1.5"
 									>
-										<div className={`w-[3px] h-4 ${s.color}`} />
-										<span className={`font-mono text-[11px] ${s.textColor} min-w-[70px]`}>
+										<span className="font-mono text-[11px] text-lp-fg min-w-[70px]">
 											{s.label}
 										</span>
 										<span className="font-sans text-[11px] text-lp-ghost">
@@ -668,7 +629,7 @@ $ autopilot sessions search "PricingTable"`}
 								))}
 							</div>
 							<div className="bg-lp-card border border-lp-border p-4">
-								<div className="font-mono text-[10px] text-lp-accent-green tracking-[2px] mb-2">
+								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
 									GIT-VERSIONED COMPANY
 								</div>
 								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
@@ -718,7 +679,7 @@ patterns:
 						</CodeBlock>
 						<div className="flex flex-col gap-4">
 							<div className="bg-lp-card border border-lp-border p-4">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[2px] mb-2.5">
+								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2.5">
 									CONTEXT ASSEMBLY
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
@@ -730,29 +691,21 @@ patterns:
 										label: 'Identity',
 										desc: 'Role, rules, team',
 										tokens: '~2K',
-										color: 'bg-lp-purple',
-										textColor: 'text-lp-purple',
 									},
 									{
 										label: 'Company State',
 										desc: 'Role-scoped snapshot',
 										tokens: '~5K',
-										color: 'bg-lp-accent-cyan',
-										textColor: 'text-lp-accent-cyan',
 									},
 									{
 										label: 'Memory',
 										desc: 'Facts, decisions, learnings',
 										tokens: '~20K',
-										color: 'bg-lp-accent-green',
-										textColor: 'text-lp-accent-green',
 									},
 									{
 										label: 'Task Context',
 										desc: 'Spec, plan, code, history',
 										tokens: '~15K',
-										color: 'bg-lp-accent-orange',
-										textColor: 'text-lp-accent-orange',
 									},
 								].map((l, i) => (
 									<div
@@ -760,7 +713,6 @@ patterns:
 										className={`flex justify-between items-center py-1.5 ${i < 3 ? 'border-b border-lp-border' : ''}`}
 									>
 										<div className="flex items-center gap-2">
-											<div className={`w-[3px] h-4 ${l.color}`} />
 											<span className="font-sans text-xs text-lp-fg font-semibold">
 												{l.label}
 											</span>
@@ -768,13 +720,13 @@ patterns:
 												-- {l.desc}
 											</span>
 										</div>
-										<span className={`font-mono text-[10px] ${l.textColor}`}>
+										<span className="font-mono text-[10px] text-lp-muted">
 											{l.tokens}
 										</span>
 									</div>
 								))}
 							</div>
-							<div className="bg-lp-purple-faint border border-lp-border border-l-[3px] border-l-lp-purple p-4">
+							<div className="bg-lp-card border border-lp-border p-4">
 								<div className="font-sans text-[13px] text-lp-fg leading-relaxed">
 									<strong className="text-white">Isolation rule:</strong> No
 									agent reads another agent's memory. Cross-agent info sharing
@@ -841,9 +793,11 @@ steps:
 
 				{/* ========== FOOTER ========== */}
 				<section className="py-12 sm:py-20 pb-12 text-center">
-					<QSymbol size={36} />
-					<h2 className="font-sans text-2xl sm:text-[32px] font-black text-white mt-6 tracking-tight">
-						Your company, on autopilot.
+					<div className="flex justify-center">
+						<QSymbol size={36} />
+					</div>
+					<h2 className="font-mono text-2xl sm:text-[32px] font-bold text-white mt-6 tracking-[-0.03em]">
+						Your AI-native company OS.
 					</h2>
 					<p className="font-sans text-[15px] text-lp-muted mt-2">
 						Open Source. CLI-first. Zero infra. MIT License.

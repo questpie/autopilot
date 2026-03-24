@@ -69,9 +69,9 @@ export function renderMarkdown(text: string): string {
 
 /** Prose classes for rendered markdown content */
 export const PROSE_CLASSES = `prose prose-invert prose-sm max-w-none
-	[&_h1]:font-sans [&_h1]:text-lg [&_h1]:font-bold [&_h1]:tracking-[-0.03em] [&_h1]:mt-4 [&_h1]:mb-2
-	[&_h2]:font-sans [&_h2]:text-base [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:mt-3 [&_h2]:mb-1.5
-	[&_h3]:font-sans [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1
+	[&_h1]:font-mono [&_h1]:text-lg [&_h1]:font-bold [&_h1]:tracking-tight [&_h1]:mt-4 [&_h1]:mb-2
+	[&_h2]:font-mono [&_h2]:text-base [&_h2]:font-bold [&_h2]:tracking-tight [&_h2]:mt-3 [&_h2]:mb-1.5
+	[&_h3]:font-mono [&_h3]:text-sm [&_h3]:font-bold [&_h3]:tracking-tight [&_h3]:mt-2 [&_h3]:mb-1
 	[&_p]:text-sm [&_p]:leading-[1.7] [&_p]:text-muted-foreground [&_p]:mb-2
 	[&_ul]:list-disc [&_ul]:pl-4 [&_ul]:mb-2
 	[&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:mb-2

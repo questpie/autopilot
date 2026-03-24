@@ -46,7 +46,7 @@ export function ChatBubble({ message, agentRole }: ChatBubbleProps) {
 					className={cn(
 						'p-3',
 						isHuman
-							? 'bg-card border border-border border-l-2 border-l-primary'
+							? 'bg-card border border-border'
 							: 'bg-card border border-border',
 					)}
 				>

@@ -51,7 +51,7 @@ export function DashboardMock() {
 					>
 						<span className="text-sm">{item.icon}</span>
 						<div className="flex-1 min-w-0">
-							<div className="font-sans text-[13px] text-white font-semibold truncate">
+							<div className="font-mono text-[13px] text-white font-semibold truncate">
 								{item.title}
 							</div>
 							<div className="font-sans text-[11px] text-lp-ghost">

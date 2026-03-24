@@ -14,7 +14,7 @@ export function AgentCard({ agent, activity, onClick }: AgentCardProps) {
 	return (
 		<div
 			onClick={onClick}
-			className="border border-border bg-card p-4 cursor-pointer transition-colors hover:bg-accent"
+			className="border border-border bg-card p-4 cursor-pointer transition-colors hover:bg-accent h-full"
 		>
 			<div className="flex items-start gap-3 mb-3">
 				<AgentAvatar name={agent.name} role={agent.role} size="md" />

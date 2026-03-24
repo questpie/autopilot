@@ -11,13 +11,13 @@ const PIN_TYPE_ICONS: Record<string, string> = {
 	info: '\u2139\uFE0F',
 }
 
-const PIN_TYPE_BORDER: Record<string, string> = {
-	update: 'border-l-primary',
-	success: 'border-l-success',
-	warning: 'border-l-warning',
-	error: 'border-l-destructive',
-	question: 'border-l-info',
-	info: 'border-l-info',
+const PIN_TYPE_BADGE: Record<string, string> = {
+	update: 'bg-primary text-primary-foreground',
+	success: 'bg-success text-success-foreground',
+	warning: 'bg-warning text-warning-foreground',
+	error: 'bg-destructive text-destructive-foreground',
+	question: 'bg-info text-info-foreground',
+	info: 'bg-info text-info-foreground',
 }
 
 interface PinCardProps {
@@ -32,13 +32,17 @@ export function PinCard({ pin, agentRole, onClick }: PinCardProps) {
 	return (
 		<div
 			onClick={onClick}
-			className={cn(
-				'border border-border bg-card p-3 border-l-2 transition-colors cursor-pointer hover:bg-accent',
-				PIN_TYPE_BORDER[pin.type] ?? 'border-l-muted-foreground',
-			)}
+			className="border border-border bg-card p-3 transition-colors cursor-pointer hover:bg-accent h-full"
 		>
 			<div className="flex items-start gap-2 mb-1">
-				<span className="shrink-0">{PIN_TYPE_ICONS[pin.type] ?? '\uD83D\uDCCC'}</span>
+				<span
+					className={cn(
+						'inline-flex items-center justify-center w-5 h-5 text-[10px] font-mono font-bold shrink-0',
+						PIN_TYPE_BADGE[pin.type] ?? 'bg-muted text-muted-foreground',
+					)}
+				>
+					{PIN_TYPE_ICONS[pin.type] ?? '\uD83D\uDCCC'}
+				</span>
 				<div className="text-sm font-medium">{pin.title}</div>
 			</div>
 			{pin.content && (

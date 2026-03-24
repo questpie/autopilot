@@ -168,10 +168,10 @@ function TreeFile({
 			className={cn(
 				'flex items-center gap-1.5 w-full text-left py-1 px-2 text-[13px] transition-colors cursor-pointer',
 				isSelected
-					? 'bg-accent border-l-2 border-l-primary text-primary'
+					? 'bg-accent text-primary'
 					: 'hover:bg-accent',
 			)}
-			style={{ paddingLeft: depth * 16 + (isSelected ? 14 : 16) }}
+			style={{ paddingLeft: depth * 16 + 16 }}
 		>
 			<File size={14} className="text-muted-foreground shrink-0" />
 			<span className="truncate">{name}</span>

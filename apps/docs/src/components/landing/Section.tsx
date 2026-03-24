@@ -15,7 +15,7 @@ export function SectionHeader({
 }: { children: React.ReactNode; sub?: string }) {
 	return (
 		<div className="mb-8">
-			<h2 className="font-sans text-2xl sm:text-4xl font-black text-white m-0 tracking-tight">
+			<h2 className="font-mono text-2xl sm:text-4xl font-bold text-white m-0 tracking-[-0.03em]">
 				{children}
 			</h2>
 			{sub && (

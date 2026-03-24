@@ -102,7 +102,7 @@ function InboxPage() {
 								<div className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.12em] mb-3">
 									Pins with actions
 								</div>
-								<div className="grid grid-cols-2 gap-2">
+								<div className="grid grid-cols-2 gap-2" style={{ gridAutoRows: '1fr' }}>
 									{inbox.pins.map((pin) => (
 										<PinCard
 											key={pin.id}

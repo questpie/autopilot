@@ -134,7 +134,7 @@ function TaskDetailPage() {
 								</Badge>
 							)}
 						</div>
-						<h1 className="text-lg font-semibold tracking-[-0.02em]">{task.title}</h1>
+						<h1 className="font-mono text-lg font-bold tracking-tight">{task.title}</h1>
 						{task.assigned_to && (
 							<div className="flex items-center gap-2">
 								<AgentAvatar
@@ -300,14 +300,17 @@ function DescriptionTab({ task }: { task: import('@/lib/types').Task }) {
 					{task.blockers.map((b, i) => (
 						<div
 							key={i}
-							className="border-l-2 border-destructive pl-3 py-2 text-sm text-destructive mb-2"
+							className="border border-border bg-card p-3 text-sm text-destructive mb-2 flex items-start gap-2"
 						>
-							{b.reason}
-							{b.assigned_to && (
-								<div className="font-mono text-[10px] text-muted-foreground mt-1">
-									assigned to {b.assigned_to}
-								</div>
-							)}
+							<span className="w-2 h-2 bg-destructive shrink-0 mt-1.5" />
+							<div>
+								{b.reason}
+								{b.assigned_to && (
+									<div className="font-mono text-[10px] text-muted-foreground mt-1">
+										assigned to {b.assigned_to}
+									</div>
+								)}
+							</div>
 						</div>
 					))}
 				</div>
@@ -478,20 +481,18 @@ function DependenciesTab({ task }: { task: import('@/lib/types').Task }) {
 }
 
 function DepLink({ id, type }: { id: string; type: 'depends' | 'blocks' | 'related' }) {
-	const colors = {
-		depends: 'border-l-warning',
-		blocks: 'border-l-destructive',
-		related: 'border-l-info',
+	const badgeColors = {
+		depends: 'bg-warning',
+		blocks: 'bg-destructive',
+		related: 'bg-info',
 	}
 	return (
 		<Link
 			to="/tasks/$taskId"
 			params={{ taskId: id }}
-			className={cn(
-				'flex items-center gap-2 border border-border bg-card p-2 border-l-2 hover:bg-accent transition-colors',
-				colors[type],
-			)}
+			className="flex items-center gap-2 border border-border bg-card p-2 hover:bg-accent transition-colors"
 		>
+			<span className={cn('w-2 h-2 shrink-0', badgeColors[type])} />
 			<span className="font-mono text-[11px] text-primary">{id}</span>
 		</Link>
 	)

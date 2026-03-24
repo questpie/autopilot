@@ -45,7 +45,7 @@ function AgentsPage() {
 						description="Define agents in your company.yaml to see them here."
 					/>
 				) : (
-					<div className="grid grid-cols-3 gap-4">
+					<div className="grid grid-cols-3 gap-4" style={{ gridAutoRows: '1fr' }}>
 						{agents.map((agent) => (
 							<AgentCard
 								key={agent.id}

@@ -38,7 +38,7 @@ function ArtifactsPage() {
 						description="Artifacts will appear here when agents build them."
 					/>
 				) : (
-					<div className="grid grid-cols-3 gap-4">
+					<div className="grid grid-cols-3 gap-4" style={{ gridAutoRows: '1fr' }}>
 						{artifacts.map((artifact) => (
 							<ArtifactCard key={artifact.id} artifact={artifact} />
 						))}
@@ -61,7 +61,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
 	}
 
 	return (
-		<div className="border border-border bg-card p-4 space-y-3">
+		<div className="border border-border bg-card p-4 space-y-3 h-full">
 			<div className="flex items-start justify-between">
 				<div>
 					<div className="text-sm font-medium">{artifact.name}</div>
