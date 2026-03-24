@@ -53,7 +53,7 @@ export function PinCard({ pin, agentRole, onClick }: PinCardProps) {
 
 			{pin.created_by && (
 				<div className="flex items-center gap-2 mb-1">
-					<AgentAvatar name={pin.created_by} role={agentRole} size="sm" />
+					<AgentAvatar name={pin.created_by} size="sm" />
 					<span className="font-mono text-[10px] text-muted-foreground">
 						{pin.created_by} {timeAgo && `\u00B7 ${timeAgo}`}
 					</span>

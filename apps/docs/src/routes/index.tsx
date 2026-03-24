@@ -39,9 +39,9 @@ function LandingPage() {
 	return (
 		<div className="landing-page">
 			<Header />
-			<div className="max-w-[860px] mx-auto px-4 sm:px-6">
+			<main className="border-lp-border mx-auto max-w-[1200px] border-x">
 				{/* ========== 1. HERO ========== */}
-				<section className="pt-12 pb-12 sm:pt-20 sm:pb-20 border-b border-lp-border">
+				<section className="mt-14 px-4 py-24 md:px-8">
 					<div className="flex justify-center mb-8">
 						<QSymbol size={48} />
 					</div>
@@ -792,7 +792,7 @@ steps:
 				</Section>
 
 				{/* ========== FOOTER ========== */}
-				<section className="py-12 sm:py-20 pb-12 text-center">
+				<section className="border-t border-lp-border px-4 py-24 text-center md:px-8 md:py-32">
 					<div className="flex justify-center">
 						<QSymbol size={36} />
 					</div>
@@ -830,7 +830,7 @@ steps:
 						</a>
 					</div>
 				</section>
-			</div>
+			</main>
 		</div>
 	)
 }

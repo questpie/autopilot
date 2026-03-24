@@ -17,13 +17,8 @@ const PRIORITY_COLORS: Record<string, string> = {
 	low: 'bg-muted text-muted-foreground border-border',
 }
 
-function labelColor(label: string): string {
-	let hash = 0
-	for (let i = 0; i < label.length; i++) {
-		hash = label.charCodeAt(i) + ((hash << 5) - hash)
-	}
-	const hue = Math.abs(hash) % 360
-	return `oklch(0.7 0.15 ${hue})`
+function labelColor(_label: string): string {
+	return '#B700FF'
 }
 
 export function KanbanCard({ task, onClick, onDragStart }: KanbanCardProps) {

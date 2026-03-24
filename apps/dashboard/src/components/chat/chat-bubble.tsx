@@ -30,7 +30,7 @@ export function ChatBubble({ message, agentRole }: ChatBubbleProps) {
 
 	return (
 		<div className={cn('flex gap-3', isHuman ? 'justify-end' : 'justify-start')}>
-			{!isHuman && <AgentAvatar name={message.sender} role={agentRole} size="md" />}
+			{!isHuman && <AgentAvatar name={message.sender} size="md" />}
 			<div className={cn('max-w-[70%]')}>
 				{!isHuman && (
 					<div className="flex items-center gap-2 mb-1">

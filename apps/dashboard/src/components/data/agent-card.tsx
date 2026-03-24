@@ -17,7 +17,7 @@ export function AgentCard({ agent, activity, onClick }: AgentCardProps) {
 			className="border border-border bg-card p-4 cursor-pointer transition-colors hover:bg-accent h-full"
 		>
 			<div className="flex items-start gap-3 mb-3">
-				<AgentAvatar name={agent.name} role={agent.role} size="md" />
+				<AgentAvatar name={agent.name} size="md" />
 				<div className="min-w-0">
 					<div className="text-sm font-medium truncate">{agent.name}</div>
 					<div className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.1em]">
@@ -48,9 +48,9 @@ export function AgentCard({ agent, activity, onClick }: AgentCardProps) {
 
 function AgentStatusDot({ status }: { status: string }) {
 	const colors: Record<string, string> = {
-		active: 'bg-success animate-[pulse-dot_2s_ease-in-out_infinite]',
-		idle: 'bg-info',
-		scheduled: 'bg-warning',
+		active: 'bg-primary animate-[pulse-dot_2s_ease-in-out_infinite]',
+		idle: 'bg-primary/40',
+		scheduled: 'bg-primary/60',
 		offline: 'bg-muted-foreground',
 	}
 

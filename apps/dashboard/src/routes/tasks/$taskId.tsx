@@ -137,11 +137,7 @@ function TaskDetailPage() {
 						<h1 className="font-mono text-lg font-bold tracking-tight">{task.title}</h1>
 						{task.assigned_to && (
 							<div className="flex items-center gap-2">
-								<AgentAvatar
-									name={task.assigned_to}
-									role={agentRoleMap[task.assigned_to]}
-									size="md"
-								/>
+								<AgentAvatar name={task.assigned_to} size="md" />
 								<span className="font-mono text-[11px]">{task.assigned_to}</span>
 								{agentRoleMap[task.assigned_to] && (
 									<Badge variant="outline" className="text-[8px]">
@@ -420,7 +416,7 @@ function HistoryTab({
 							<span className="font-mono text-[10px] text-muted-foreground">
 								{formatTime(entry.at)}
 							</span>
-							<AgentAvatar name={entry.by} role={agentRoleMap[entry.by]} size="sm" />
+							<AgentAvatar name={entry.by} size="sm" />
 							<span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">
 								{entry.by}
 							</span>

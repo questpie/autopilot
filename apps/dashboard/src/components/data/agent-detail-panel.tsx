@@ -48,7 +48,7 @@ export function AgentDetailPanel({ agent, onClose }: AgentDetailPanelProps) {
 				{/* Header */}
 				<div className="flex items-start justify-between p-4 border-b border-border">
 					<div className="flex items-center gap-3">
-						<AgentAvatar name={agent.name} role={agent.role} size="lg" />
+						<AgentAvatar name={agent.name} size="lg" />
 						<div>
 							<div className="font-mono text-sm font-bold tracking-tight">{agent.name}</div>
 							<div className="flex items-center gap-2">

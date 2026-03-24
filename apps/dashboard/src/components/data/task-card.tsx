@@ -19,13 +19,8 @@ const PRIORITY_COLORS: Record<string, string> = {
 	low: 'bg-muted text-muted-foreground',
 }
 
-function labelColor(label: string): string {
-	let hash = 0
-	for (let i = 0; i < label.length; i++) {
-		hash = label.charCodeAt(i) + ((hash << 5) - hash)
-	}
-	const hue = Math.abs(hash) % 360
-	return `oklch(0.7 0.15 ${hue})`
+function labelColor(_label: string): string {
+	return '#B700FF'
 }
 
 export function TaskCard({ task, onClick, onApprove, onReject }: TaskCardProps) {
@@ -57,7 +52,7 @@ export function TaskCard({ task, onClick, onApprove, onReject }: TaskCardProps) 
 							{task.assigned_to}
 						</span>
 						{task.status === 'in_progress' && (
-							<span className="w-1.5 h-1.5 bg-success animate-[pulse-dot_2s_ease-in-out_infinite]" />
+							<span className="w-1.5 h-1.5 bg-primary animate-[pulse-dot_2s_ease-in-out_infinite]" />
 						)}
 					</div>
 				)}

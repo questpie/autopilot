@@ -33,7 +33,7 @@ const agents = [
 
 export function DashboardMock() {
 	return (
-		<div className="bg-lp-card border border-lp-border overflow-hidden">
+		<div className="bg-lp-card overflow-hidden">
 			<div className="px-4 py-2.5 border-b border-lp-border flex items-center gap-2.5 bg-lp-surface">
 				<QSymbol size={16} />
 				<span className="font-mono text-[11px] text-lp-ghost truncate">

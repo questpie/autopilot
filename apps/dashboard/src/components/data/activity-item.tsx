@@ -32,7 +32,7 @@ export function ActivityItem({ entry, agentRole }: { entry: ActivityEntry; agent
 			<span className="font-mono text-[10px] text-muted-foreground shrink-0 w-16 pt-0.5">
 				{time}
 			</span>
-			<AgentAvatar name={entry.agent} role={agentRole} size="sm" />
+			<AgentAvatar name={entry.agent} size="sm" />
 			<div className="min-w-0 flex-1">
 				<div className="flex items-center gap-2">
 					<span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">
