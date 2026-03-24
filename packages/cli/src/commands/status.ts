@@ -20,7 +20,8 @@ async function fetchSessions(): Promise<Array<{ sessionId: string; agentId: stri
 program.addCommand(
 	new Command('status')
 		.description('Show company overview, agents, and task summary')
-		.action(async () => {
+		.option('-a, --activity <count>', 'Number of recent activity entries to show (default: 3)', '3')
+		.action(async (options: { activity?: string }) => {
 			try {
 				const root = await findCompanyRoot()
 				const company = await loadCompany(root)
@@ -52,9 +53,11 @@ program.addCommand(
 				}
 
 				// Last activity
-				const activity = await readActivity(root, { limit: 3 })
+				const activityLimit = Math.min(Math.max(parseInt(options.activity || '3', 10) || 3, 1), 20)
+				const activity = await readActivity(root, { limit: activityLimit })
 				if (activity.length > 0) {
-					console.log(header('Recent Activity'))
+					const activityHeader = activityLimit > 3 ? `Recent Activity (${activityLimit})` : 'Recent Activity'
+					console.log(header(activityHeader))
 					for (const entry of activity) {
 						const time = new Date(entry.at).toLocaleTimeString('en-GB', {
 							hour: '2-digit',

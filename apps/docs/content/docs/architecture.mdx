@@ -25,8 +25,8 @@ Four layers. Single process. SQLite + filesystem hybrid storage. SDK-first.
 │  Spawner → creates Claude Agent SDK sessions              │
 │  Scheduler → cron-based recurring agent jobs              │
 │  Webhook → HTTP event receiver (port 7777)                │
-│  Session → SSE realtime streaming (port 7778)             │
-│  Notifier → transport dispatcher (Telegram, dashboard)    │
+│  API → REST + SSE realtime streaming (port 7778)          │
+│  Notifier → transport dispatcher (Telegram built-in)      │
 │  Artifact → lazy cold-start preview server                │
 │  Skills → reusable knowledge packages                     │
 └──────────────────────────┬────────────────────────────────┘
@@ -82,13 +82,13 @@ import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestra
 │       ├── @questpie/autopilot-cli   (published as @questpie/autopilot)
 │       │    Commander.js commands → calls orchestrator
 │       │
-│       └── @questpie/autopilot-dashboard  (future)
-│            React UI → calls orchestrator via API
+│       └── @questpie/autopilot-dashboard  (apps/dashboard)
+│            React UI → calls orchestrator via REST API + SSE
 ```
 
 ## Provider Abstraction
 
-The agent spawner uses a provider abstraction. Two providers are available: **Claude Agent SDK** (primary) and **Codex SDK**. The Claude provider gives agents built-in infrastructure -- file I/O, shell access, sub-agents, MCP support, and lifecycle hooks. The Codex provider offers an alternative runtime. Configure per-agent or company-wide in `company.yaml`.
+The agent spawner uses a provider abstraction. Three providers are available: **Claude Agent SDK** (primary), **Anthropic SDK** (raw API with agentic loop), and **Codex SDK** (OpenAI). The Claude Agent SDK provider gives agents built-in infrastructure -- file I/O, shell access, sub-agents, MCP support, and lifecycle hooks. The Anthropic provider uses the raw `@anthropic-ai/sdk` with tool use. The Codex provider offers an OpenAI GPT runtime. Configure per-agent or company-wide in `company.yaml`.
 
 | Capability | Agent SDK Provides | We Build On Top |
 |------------|-------------------|-----------------|
@@ -99,7 +99,7 @@ The agent spawner uses a provider abstraction. Two providers are available: **Cl
 | MCP | `Built-in MCP support` | Custom primitives as MCP tools |
 | Hooks | `PreToolUse, PostToolUse, SessionEnd` | Activity logging, memory extraction |
 
-Works with an Anthropic API key or a Claude Max subscription. Set `ANTHROPIC_API_KEY` for Claude models. Codex SDK is available for GPT models via OpenAI API key.
+Works with an Anthropic API key or a Claude Max subscription. Set `ANTHROPIC_API_KEY` for Claude models. The Anthropic provider uses the raw SDK with an agentic tool-use loop. Codex SDK is available for GPT models (gpt-4o, gpt-4.1, o3, o4-mini) via `OPENAI_API_KEY`.
 
 ## Orchestrator Module Map
 
@@ -114,11 +114,11 @@ The orchestrator is a single Bun process composed of focused modules. Each modul
 | scheduler/ | `Scheduler` | Cron-based recurring agent tasks from schedules.yaml. Standups, health checks, weekly metrics. |
 | watcher/ | `FSWatcher` | Monitors company filesystem via chokidar. Detects new tasks, status changes, messages, config updates. |
 | webhook/ | `WebhookServer` | HTTP event receiver on port 7777. Verifies HMAC-SHA256 signatures. GitHub, Stripe, etc. |
-| session/ | `SessionManager` | SSE server on port 7778. Powers `autopilot attach` for real-time observation. |
+| session/ | `SessionStreamManager` | In-memory session stream management. Powers `autopilot attach` for real-time observation. |
+| api/ | `ApiServer` | REST API + SSE event stream on port 7778. Dashboard and CLI consumer endpoint. |
 | artifact/ | `ArtifactRouter` | Lazy cold-start server for agent-created previews. React components, HTML pages, API docs. |
 | skills/ | `loadSkillCatalog` | Reusable knowledge packages. Loaded into context assembly Layer 2 (company state). |
-| api/ | `API routes` | HTTP API for dashboard and external consumers. Status, activity feed, task management. |
-| notifier/ | `Notifier` | Transport dispatcher. Routes notifications via pluggable transports. Telegram built-in, Slack/email planned. |
+| notifier/ | `Notifier` | Logs notifications to stdout and activity feed. Telegram transport built-in, Slack/email planned. |
 
 ## Data Flow: Intent to Completion
 

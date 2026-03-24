@@ -118,17 +118,17 @@ The company-level `company.yaml` sets the default model for all agents. Individu
 ```yaml title="model-selection.yaml"
 # company.yaml -- default model for all agents
 settings:
-  model: claude-sonnet-4-20250514
+  agent_model: "claude-sonnet-4-6"
 
 # agents.yaml -- per-agent overrides
 agents:
   - id: max
     role: developer
-    model: claude-sonnet-4-20250514          # Complex implementation
+    model: "claude-sonnet-4-20250514"     # Full model ID
 
   - id: riley
     role: reviewer
-    model: claude-sonnet-4-20250514      # Code review
+    model: "claude-sonnet-4-6"            # Short alias
 ```
 
 ## Filesystem Scope
@@ -245,3 +245,4 @@ Agents interact with the system through structured primitives. Each primitive is
 | External | `http_request, run_command` | Developer, DevOps, Marketing |
 
 See the [Primitives](/docs/primitives) page for full documentation on every primitive with code examples.
+examples.

@@ -105,20 +105,37 @@ function Features() {
 						<tr className="border-b border-border/50">
 							<td className="py-2 pr-4 text-xs text-fg">Gemini</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
-								text-embedding-004
+								gemini-embedding-2-preview
 							</td>
 							<td className="py-2 text-xs">
-								Primary. High quality, fast. Requires GOOGLE_API_KEY.
+								Multimodal (text, images, PDF, video, audio). 768 dims. Requires GEMINI_API_KEY.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">Multilingual E5</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								multilingual-e5-small
+							</td>
+							<td className="py-2 text-xs">
+								Local text embeddings. 100+ languages (SK/CS/DE). 384 dims. No API key needed.
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">Nomic Vision</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								nomic-embed-vision-v1.5
+							</td>
+							<td className="py-2 text-xs">
+								Local image embeddings. 768 dims. No API key needed.
 							</td>
 						</tr>
 						<tr>
-							<td className="py-2 pr-4 text-xs text-fg">Local fallback</td>
+							<td className="py-2 pr-4 text-xs text-fg">None</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
-								TF-IDF hashing
+								—
 							</td>
 							<td className="py-2 text-xs">
-								Zero-cost fallback when no API key is configured. Lower quality
-								but works offline.
+								Default. Disables vector search — FTS5 only. Graceful degradation.
 							</td>
 						</tr>
 					</tbody>

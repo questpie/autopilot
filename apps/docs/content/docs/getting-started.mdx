@@ -86,7 +86,11 @@ logs/
   sessions/                   # Agent session streams
   errors/                     # Error logs
 infra/                        # Infrastructure configuration
+.data/
+  autopilot.db                # SQLite database (FTS5 search, embeddings, auth, sessions)
 ```
+
+> The `.data/` directory is auto-created on first `autopilot start`. It contains the SQLite database used for fast indexed queries, full-text search, vector embeddings, and Better Auth sessions. If deleted, it is fully rebuilt from the YAML/Markdown files.
 
 ## Configuration
 
@@ -152,7 +156,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 autopilot start
 ```
 
-This starts the filesystem watcher, scheduler, webhook server, SSE stream, and the dashboard on port 3001. It runs until you stop it.
+This starts the filesystem watcher, scheduler, webhook server (port 7777), REST API + SSE stream (port 7778), and initializes the SQLite database. It runs until you stop it.
 
 ### Open the dashboard
 
@@ -221,7 +225,7 @@ autopilot reject TASK-001 --reason "Needs error handling for edge cases"
 
 ## Docker Mode
 
-For production, run the company in an isolated Docker container. The container mounts the company filesystem and exposes webhook and WebSocket ports:
+For production, run the company in an isolated Docker container. The container mounts the company filesystem and exposes webhook and API ports:
 
 ```yaml title="docker-compose.yaml"
 services:
@@ -230,8 +234,8 @@ services:
     volumes:
       - ./my-company:/company
     ports:
-      - "7777:7777"    # Webhook server + dashboard
-      - "7778:7778"    # WebSocket (session streaming)
+      - "7777:7777"    # Webhook server
+      - "7778:7778"    # REST API + SSE event stream + dashboard
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     restart: unless-stopped
