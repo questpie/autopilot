@@ -29,7 +29,7 @@ COPY --from=pruner /app/out/bun.lock ./bun.lock
 COPY --from=pruner /app/out/full/ .
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Build docs app
 WORKDIR /app/apps/docs
