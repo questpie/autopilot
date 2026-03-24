@@ -2,8 +2,13 @@ import { readdir, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Schedule, Webhook } from '@questpie/autopilot-spec'
 import { loadCompany, loadAgents, readTask, updateTask, moveTask, createStorage } from './fs'
+import { reloadRoles } from './auth/roles'
 import type { StorageBackend, StorageMode } from './fs'
 import { createDb } from './db'
+import type { AutopilotDb } from './db'
+import type { Database } from 'bun:sqlite'
+import { createAuth } from './auth'
+import type { Auth } from './auth'
 import { Indexer } from './db/indexer'
 import { spawnAgent } from './agent'
 import { evaluateTransition, advanceWorkflow } from './workflow'
@@ -50,6 +55,9 @@ export class Orchestrator {
 	private gitManager: GitManager | null = null
 	private embeddingService: EmbeddingService | null = null
 	private storage: StorageBackend | null = null
+	private db: AutopilotDb | null = null
+	private rawDb: Database | null = null
+	private auth: Auth | null = null
 	private running = false
 	private activeAgentCount = 0
 	private maxConcurrentAgents = 5
@@ -94,15 +102,25 @@ export class Orchestrator {
 			console.error('[orchestrator] failed to initialize embedding service:', err instanceof Error ? err.message : err)
 		}
 
-		// 1c. Initialize storage backend + knowledge index
+		// 1c. Initialize shared database + auth
+		try {
+			const { db, raw } = await createDb(root)
+			this.db = db
+			this.rawDb = raw
+			this.auth = await createAuth(raw)
+			console.log('[orchestrator] database + auth initialized (shared autopilot.db)')
+		} catch (err) {
+			console.error('[orchestrator] failed to initialize database/auth:', err)
+		}
+
+		// 1d. Initialize storage backend + knowledge index
 		try {
 			const storageMode = this.options.storageMode ?? 'sqlite'
 			this.storage = await createStorage(root, storageMode)
 			console.log(`[orchestrator] storage backend initialized (mode: ${storageMode})`)
 
-			if (storageMode === 'sqlite') {
-				const { db } = await createDb(root)
-				const indexer = new Indexer(db, root, this.embeddingService)
+			if (storageMode === 'sqlite' && this.db) {
+				const indexer = new Indexer(this.db, root, this.embeddingService)
 				const counts = await indexer.reindexAll()
 				const total = counts.tasks + counts.messages + counts.knowledge + counts.pins
 				console.log(`[orchestrator] search index: ${total} entities indexed (tasks=${counts.tasks}, messages=${counts.messages}, knowledge=${counts.knowledge}, pins=${counts.pins})`)
@@ -163,6 +181,7 @@ export class Orchestrator {
 		this.apiServer = new ApiServer({
 			companyRoot: root,
 			port: apiPort,
+			auth: this.auth ?? undefined,
 		})
 		try {
 			await this.apiServer.start()
@@ -333,6 +352,10 @@ export class Orchestrator {
 					if (event.file === 'schedules.yaml' && this.scheduler) {
 						console.log('[orchestrator] reloading scheduler...')
 						await this.scheduler.reload()
+					}
+					if (event.file === 'roles.yaml') {
+						await reloadRoles(this.options.companyRoot)
+						console.log('[orchestrator] roles reloaded')
 					}
 					break
 			}

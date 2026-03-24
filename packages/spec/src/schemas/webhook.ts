@@ -23,6 +23,7 @@ export const WebhookSchema = z.object({
 	description: z.string().default(''),
 	auth: z.enum(['hmac_sha256', 'bearer_token', 'none']).default('hmac_sha256'),
 	secret_ref: z.string().optional(),
+	signature_header: z.string().optional(),
 	filter: WebhookFilterSchema.optional(),
 	action: WebhookActionSchema,
 	create_task_if: WebhookTaskConditionSchema.optional(),

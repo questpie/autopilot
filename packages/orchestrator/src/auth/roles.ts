@@ -30,6 +30,12 @@ export function getCachedRoles(): RolesFile | null {
 	return cachedRoles
 }
 
+/** Clear cached roles and reload from disk. */
+export async function reloadRoles(companyRoot: string): Promise<void> {
+	cachedRoles = null
+	await loadRoles(companyRoot)
+}
+
 /**
  * Resolve a role name into a permissions map.
  * Returns { resource: [actions] } based on the YAML role definition.

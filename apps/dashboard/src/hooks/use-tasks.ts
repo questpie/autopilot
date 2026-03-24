@@ -1,5 +1,5 @@
 import { toast } from '@/hooks/use-toast'
-import { REFETCH, apiFetch, apiPost, apiPut, queryKeys } from '@/lib/api'
+import { apiFetch, apiPost, apiPut, queryKeys } from '@/lib/api'
 import type { Task } from '@/lib/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -7,7 +7,6 @@ export function useTasks() {
 	return useQuery({
 		queryKey: queryKeys.tasks,
 		queryFn: () => apiFetch<Task[]>('/api/tasks'),
-		refetchInterval: REFETCH.tasks,
 	})
 }
 
@@ -59,7 +58,6 @@ export function useTask(taskId: string) {
 		queryKey: queryKeys.task(taskId),
 		queryFn: () => apiFetch<Task>(`/api/tasks/${taskId}`),
 		enabled: !!taskId,
-		refetchInterval: REFETCH.tasks,
 	})
 }
 

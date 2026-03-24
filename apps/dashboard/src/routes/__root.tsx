@@ -3,6 +3,7 @@ import { createRootRoute, HeadContent, Outlet, Scripts, useNavigate, useLocation
 import type * as React from 'react'
 import { useState, useEffect } from 'react'
 import { AppShell } from '@/components/layout/app-shell'
+import { useRealtime } from '@/hooks/use-realtime'
 import { ToastContainer } from '@/components/feedback/toast-container'
 import { createQueryClient } from '@/lib/query-client'
 import appCss from '@/styles/app.css?url'
@@ -40,7 +41,6 @@ function useThemeOverride() {
 			if (!res.ok) return null
 			return res.text()
 		},
-		refetchInterval: 30_000,
 		staleTime: 10_000,
 		retry: false,
 	})
@@ -98,6 +98,7 @@ function RootComponent() {
 function AuthAwareLayout() {
 	const location = useLocation()
 	useAuthGuard()
+	useRealtime()
 
 	// Auth pages render without the app shell
 	if (location.pathname.startsWith('/auth')) {

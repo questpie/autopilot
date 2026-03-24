@@ -155,10 +155,9 @@ export async function searchVec(
 				sv.distance as score
 			FROM search_vec sv
 			JOIN search_index si ON si.id = sv.search_id
-			WHERE sv.embedding MATCH ?
+			WHERE sv.embedding MATCH ? AND sv.k = ?
 			${typeFilter}
 			ORDER BY sv.distance
-			LIMIT ?
 		`).all(embeddingBuffer, limit) as Array<{
 			entity_type: string
 			entity_id: string

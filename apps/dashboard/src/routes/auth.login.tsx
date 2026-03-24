@@ -5,6 +5,14 @@ export const Route = createFileRoute('/auth/login')({
 	component: LoginPage,
 })
 
+/**
+ * Login page component.
+ *
+ * CSRF protection is handled server-side by Better Auth which validates the
+ * Origin header on all mutation requests. Session cookies use SameSite=Strict
+ * to prevent cross-site request forgery. No additional client-side CSRF token
+ * is needed.
+ */
 function LoginPage() {
 	const navigate = useNavigate()
 	const [email, setEmail] = useState('')

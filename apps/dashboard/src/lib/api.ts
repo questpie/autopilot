@@ -90,15 +90,3 @@ export const queryKeys = {
 		['search', query, type, mode] as const,
 }
 
-// Auto-refresh intervals
-export const REFETCH = {
-	status: 10_000,
-	tasks: 5_000,
-	agents: 10_000,
-	pins: 5_000,
-	activity: 3_000,
-	chat: 2_000,
-	inbox: 5_000,
-	artifacts: 10_000,
-	channels: 10_000,
-} as const

@@ -116,7 +116,9 @@ export class WebhookServer {
 		}
 
 		if (webhook.auth === 'hmac_sha256') {
-			const signature = request.headers.get('x-signature-256') ?? request.headers.get('x-hub-signature-256')
+			const signature = webhook.signature_header
+				? request.headers.get(webhook.signature_header)
+				: request.headers.get('x-signature-256') ?? request.headers.get('x-hub-signature-256')
 			if (!signature) return false
 
 			if (!webhook.secret_ref) return true

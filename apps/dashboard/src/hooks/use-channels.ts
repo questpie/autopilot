@@ -1,5 +1,5 @@
 import { toast } from '@/hooks/use-toast'
-import { REFETCH, apiFetch, apiPost, queryKeys } from '@/lib/api'
+import { apiFetch, apiPost, queryKeys } from '@/lib/api'
 import type { ChannelInfo } from '@/lib/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -32,7 +32,6 @@ export function useChannels() {
 	return useQuery({
 		queryKey: queryKeys.channels,
 		queryFn: fetchChannels,
-		refetchInterval: REFETCH.channels,
 	})
 }
 

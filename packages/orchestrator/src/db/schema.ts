@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // ─── Tasks ──────────────────────────────────────────────────────────────────
 
@@ -123,4 +123,5 @@ export const searchIndex = sqliteTable('search_index', {
 }, (table) => [
 	index('idx_search_entity_type').on(table.entityType),
 	index('idx_search_entity_id').on(table.entityId),
+	uniqueIndex('uq_search_entity').on(table.entityType, table.entityId),
 ])

@@ -23,6 +23,20 @@ export async function createAuth(rawDb: Database): Promise<{
 		session: {
 			expiresIn: 60 * 60 * 24 * 30,
 			updateAge: 60 * 60 * 24,
+			cookieCache: {
+				enabled: true,
+				maxAge: 60 * 5,
+			},
+		},
+
+		advanced: {
+			// Better Auth validates Origin header on mutations by default (CSRF).
+			// SameSite=Strict prevents cookies from being sent on cross-origin requests.
+			defaultCookieAttributes: {
+				sameSite: 'strict',
+				secure: process.env.NODE_ENV === 'production',
+				httpOnly: true,
+			},
 		},
 
 		rateLimit: {

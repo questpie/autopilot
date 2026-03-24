@@ -6,7 +6,7 @@
  * 2. secrets/.master-key file (for local development)
  */
 import { existsSync } from 'node:fs'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, chmod } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const IV_LENGTH = 12
@@ -24,6 +24,7 @@ export async function ensureMasterKey(companyRoot: string): Promise<void> {
 		const keyBytes = crypto.getRandomValues(new Uint8Array(32))
 		await mkdir(join(companyRoot, 'secrets'), { recursive: true })
 		await writeFile(keyPath, Buffer.from(keyBytes).toString('base64'), 'utf-8')
+		await chmod(keyPath, 0o600)
 		console.warn('[secrets] Master key generated at secrets/.master-key')
 		console.warn('[secrets] For production, set AUTOPILOT_MASTER_KEY env variable instead')
 	}

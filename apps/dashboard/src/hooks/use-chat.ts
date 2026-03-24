@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiFetch, apiFetchText, apiPost, queryKeys, REFETCH } from '@/lib/api'
+import { apiFetch, apiFetchText, apiPost, queryKeys } from '@/lib/api'
 import type { ChatMessage } from '@/lib/types'
 
 interface FsEntry {
@@ -78,7 +78,6 @@ export function useChat(channel: string) {
 	return useQuery({
 		queryKey: queryKeys.chat(channel),
 		queryFn: () => fetchChannelMessages(channel),
-		refetchInterval: REFETCH.chat,
 	})
 }
 

@@ -8,3 +8,29 @@ webhooks:
       type: spawn_agent
       priority: normal
     enabled: false  # Enable after setting up bot token via: autopilot secrets add telegram --value "YOUR_TOKEN"
+
+  # Example: GitHub webhook with default signature header (x-hub-signature-256)
+  # - id: github
+  #   path: "/hooks/github"
+  #   agent: dev
+  #   description: "GitHub push/PR events"
+  #   auth: hmac_sha256
+  #   secret_ref: github-webhook
+  #   signature_header: x-hub-signature-256
+  #   action:
+  #     type: spawn_agent
+  #     priority: normal
+  #   enabled: false
+
+  # Example: Stripe webhook with custom signature header
+  # - id: stripe
+  #   path: "/hooks/stripe"
+  #   agent: ceo
+  #   description: "Stripe payment events"
+  #   auth: hmac_sha256
+  #   secret_ref: stripe-webhook
+  #   signature_header: stripe-signature
+  #   action:
+  #     type: spawn_agent
+  #     priority: urgent
+  #   enabled: false

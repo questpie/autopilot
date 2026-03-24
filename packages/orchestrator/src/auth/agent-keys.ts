@@ -6,6 +6,7 @@
  */
 import { randomBytes, createHash } from 'node:crypto'
 import { join } from 'node:path'
+import { chmod } from 'node:fs/promises'
 import { readYamlUnsafe, writeYaml, fileExists } from '../fs/yaml'
 import type { AgentKeyEntry } from './types'
 
@@ -37,6 +38,7 @@ export async function ensureAgentKeys(
 	}
 
 	await writeYaml(keysPath, { keys: entries })
+	await chmod(keysPath, 0o600)
 	return keyMap
 }
 

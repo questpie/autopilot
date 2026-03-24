@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiFetch, queryKeys, REFETCH } from '@/lib/api'
+import { apiFetch, queryKeys } from '@/lib/api'
 import type { ActivityEntry } from '@/lib/types'
 
 export function useActivity(agent?: string) {
@@ -9,6 +9,5 @@ export function useActivity(agent?: string) {
 			const params = agent ? `?agent=${agent}` : ''
 			return apiFetch<ActivityEntry[]>(`/api/activity${params}`)
 		},
-		refetchInterval: REFETCH.activity,
 	})
 }

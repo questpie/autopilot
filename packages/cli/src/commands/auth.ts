@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { program } from '../program'
@@ -18,6 +18,7 @@ const CREDS_PATH = join(CREDS_DIR, 'credentials.json')
 export function saveCredentials(creds: Credentials): void {
 	mkdirSync(CREDS_DIR, { recursive: true })
 	writeFileSync(CREDS_PATH, JSON.stringify(creds, null, '\t'), 'utf-8')
+	chmodSync(CREDS_PATH, 0o600)
 }
 
 export function loadCredentials(): Credentials | null {
