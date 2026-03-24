@@ -11,6 +11,7 @@ interface Credentials {
 	token?: string
 	key?: string
 	port: number
+	url?: string
 }
 
 const CREDS_DIR = join(homedir(), '.autopilot')
@@ -51,11 +52,14 @@ authCmd.addCommand(
 		.description('Login to the orchestrator')
 		.option('--api-key <key>', 'Login with an API key')
 		.option('--port <port>', 'Orchestrator port', '7778')
-		.action(async (opts: { apiKey?: string; port: string }) => {
+		.option('--url <url>', 'Remote orchestrator URL (e.g. https://autopilot.mycompany.com)')
+		.action(async (opts: { apiKey?: string; port: string; url?: string }) => {
 			const port = parseInt(opts.port, 10)
+			const baseUrl = opts.url ?? getBaseUrl(port)
+			const credBase = opts.url ? { port, url: opts.url } : { port }
 
 			if (opts.apiKey) {
-				saveCredentials({ type: 'api-key', key: opts.apiKey, port })
+				saveCredentials({ type: 'api-key', key: opts.apiKey, ...credBase })
 				console.log(success('API key saved'))
 				return
 			}
@@ -70,7 +74,6 @@ authCmd.addCommand(
 			}
 
 			try {
-				const baseUrl = getBaseUrl(port)
 				const res = await fetch(`${baseUrl}/api/auth/sign-in/email`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
@@ -85,7 +88,7 @@ authCmd.addCommand(
 
 				const data = await res.json() as { token?: string }
 				if (data.token) {
-					saveCredentials({ type: 'bearer', token: data.token, port })
+					saveCredentials({ type: 'bearer', token: data.token, ...credBase })
 					console.log(success('Logged in successfully'))
 				} else {
 					console.error(error('Login response did not contain a token'))
@@ -93,7 +96,7 @@ authCmd.addCommand(
 				}
 			} catch (err) {
 				console.error(error('Could not connect to orchestrator. Is it running?'))
-				console.error(dim(`Tried ${getBaseUrl(port)}`))
+				console.error(dim(`Tried ${baseUrl}`))
 				process.exit(1)
 			}
 		}),
@@ -103,8 +106,11 @@ authCmd.addCommand(
 	new Command('setup')
 		.description('Create the initial owner account (first run)')
 		.option('--port <port>', 'Orchestrator port', '7778')
-		.action(async (opts: { port: string }) => {
+		.option('--url <url>', 'Remote orchestrator URL (e.g. https://autopilot.mycompany.com)')
+		.action(async (opts: { port: string; url?: string }) => {
 			const port = parseInt(opts.port, 10)
+			const baseUrl = opts.url ?? getBaseUrl(port)
+			const credBase = opts.url ? { port, url: opts.url } : { port }
 
 			console.log(header('First-Time Setup'))
 			console.log(dim('  Create the owner account for this autopilot instance.\n'))
@@ -119,7 +125,6 @@ authCmd.addCommand(
 			}
 
 			try {
-				const baseUrl = getBaseUrl(port)
 				const res = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
@@ -134,7 +139,7 @@ authCmd.addCommand(
 
 				const data = await res.json() as { token?: string }
 				if (data.token) {
-					saveCredentials({ type: 'bearer', token: data.token, port })
+					saveCredentials({ type: 'bearer', token: data.token, ...credBase })
 				}
 				console.log(success('Owner account created'))
 				console.log(dim('  You can now use all autopilot commands.'))
@@ -159,7 +164,7 @@ authCmd.addCommand(
 			}
 
 			console.log(`  ${badge('Type', 'cyan')}: ${creds.type}`)
-			console.log(`  ${badge('Port', 'cyan')}: ${creds.port}`)
+			console.log(`  ${badge('URL', 'cyan')}: ${creds.url ?? `http://localhost:${creds.port}`}`)
 
 			if (creds.type === 'bearer') {
 				console.log(`  ${badge('Token', 'cyan')}: ${creds.token?.slice(0, 8)}...`)
