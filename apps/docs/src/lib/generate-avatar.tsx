@@ -882,6 +882,12 @@ export function GenerativeAvatar({
 		)
 	}
 
+	// LOD — strip detail at small render sizes to avoid sub-pixel noise
+	// S (≤48): head + eyes + brand cutout + LED only
+	// M (49-96): + top/side decor, jaw, frame
+	// L (97+): everything (bg grid, patterns)
+	const lod = size <= 48 ? 'S' : size <= 96 ? 'M' : 'L'
+
 	return (
 		<svg
 			viewBox="0 0 256 256"
@@ -895,32 +901,32 @@ export function GenerativeAvatar({
 			{/* Background */}
 			<rect width="256" height="256" fill={bg} />
 
-			{/* Background Grid Defs + Fill */}
-			{(bgGridDefs.length > 0 || patternDefs.length > 0) && (
+			{/* Background Grid + Pattern Defs (L only) */}
+			{lod === 'L' && (bgGridDefs.length > 0 || patternDefs.length > 0) && (
 				<defs>
 					{bgGridDefs}
 					{patternDefs}
 				</defs>
 			)}
-			{bgGridRects}
+			{lod === 'L' && bgGridRects}
 
-			{/* Top Decor */}
-			{topDecor}
+			{/* Top Decor (M+) */}
+			{lod !== 'S' && topDecor}
 
-			{/* Side Decor */}
-			{sideDecor}
+			{/* Side Decor (M+) */}
+			{lod !== 'S' && sideDecor}
 
 			{/* Head Base with Brand Cutout */}
 			<path d={headPath} fill={fillStyle} stroke={fg} strokeWidth={strokeW} strokeLinejoin="miter" />
 
-			{/* Patterns */}
-			{patternElements}
+			{/* Patterns (L only) */}
+			{lod === 'L' && patternElements}
 
 			{/* Eyes / Sensors */}
 			{eyeElements}
 
-			{/* Jaw / Port */}
-			{jawElements}
+			{/* Jaw / Port (M+) */}
+			{lod !== 'S' && jawElements}
 
 			{/* Semantic LED */}
 			<rect x={(h.x + 0.5) * cell} y={(h.y + 0.5) * cell} width={0.5 * cell} height={0.5 * cell} fill={ledColor} />
@@ -928,8 +934,8 @@ export function GenerativeAvatar({
 			{/* Brand Accent — Purple Missing Piece */}
 			<rect x={(h.x + h.w - 2) * cell} y={(h.y + h.h - 2) * cell} width={2 * cell} height={2 * cell} fill={brand} />
 
-			{/* Frame border */}
-			<rect width="256" height="256" fill="none" stroke={mid} strokeWidth="8" />
+			{/* Frame border (M+) */}
+			{lod !== 'S' && <rect width="256" height="256" fill="none" stroke={mid} strokeWidth="8" />}
 		</svg>
 	)
 }

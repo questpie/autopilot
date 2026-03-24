@@ -100,78 +100,84 @@ function generateSvg(
 	const eyeFill = style === 'wireframe' ? 'none' : eyeColor
 	const eyeStrokeW = style === 'wireframe' ? strokeW : 0
 
+	// LOD — strip detail at small render sizes to avoid sub-pixel noise
+	// S (≤48): head + eyes + brand cutout + LED only
+	// M (49-96): + top/side decor, jaw, frame
+	// L (97+): everything (bg grid, patterns)
+	const lod = size <= 48 ? 'S' : size <= 96 ? 'M' : 'L'
+
 	let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="${size}" height="${size}">`
 	svg += `<rect width="256" height="256" fill="${bg}" />`
 
-	// 1. Background Grid
-	if (dna.bg === 0) {
+	// 1. Background Grid (L only)
+	if (lod === 'L' && dna.bg === 0) {
 		svg += `<defs><pattern id="g0" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M 16 0 L 0 0 0 16" fill="none" stroke="${mid}" stroke-width="1" opacity="0.4" /></pattern></defs><rect width="256" height="256" fill="url(#g0)" />`
-	} else if (dna.bg === 1) {
+	} else if (lod === 'L' && dna.bg === 1) {
 		svg += `<defs><pattern id="g1" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 32 0 L 0 0 0 32" fill="none" stroke="${mid}" stroke-width="1" opacity="0.6" /></pattern></defs><rect width="256" height="256" fill="url(#g1)" />`
-	} else if (dna.bg === 2) {
+	} else if (lod === 'L' && dna.bg === 2) {
 		svg += `<defs><pattern id="g2" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 15 16 H 17 M 16 15 V 17" stroke="${mid}" stroke-width="2" /></pattern></defs><rect width="256" height="256" fill="url(#g2)" />`
-	} else if (dna.bg === 3) {
+	} else if (lod === 'L' && dna.bg === 3) {
 		svg += `<defs><pattern id="g3" width="16" height="16" patternUnits="userSpaceOnUse"><rect x="0" y="0" width="2" height="2" fill="${mid}" opacity="0.8" /></pattern></defs><rect width="256" height="256" fill="url(#g3)" />`
 	}
 
-	// 2. Top Decor (8 variants)
-	if (dna.top === 0) {
+	// 2. Top Decor — M+ only
+	if (lod !== 'S' && dna.top === 0) {
 		// Antenna
 		svg += `<rect x="${(h.x + Math.floor(h.w / 2)) * cell}" y="${(h.y - 2) * cell}" width="${1 * cell}" height="${2 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" stroke-linejoin="miter"/>`
 		svg += `<rect x="${(h.x + Math.floor(h.w / 2) - 1) * cell}" y="${(h.y - 3) * cell}" width="${3 * cell}" height="${1 * cell}" fill="${fg}" />`
-	} else if (dna.top === 1) {
+	} else if (lod !== 'S' && dna.top === 1) {
 		// Double Vent
 		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y - 1) * cell}" width="${2 * cell}" height="${1 * cell}" fill="${fg}" />`
 		svg += `<rect x="${(h.x + h.w - 4) * cell}" y="${(h.y - 1) * cell}" width="${2 * cell}" height="${1 * cell}" fill="${fg}" />`
-	} else if (dna.top === 2) {
+	} else if (lod !== 'S' && dna.top === 2) {
 		// Flat Heatsink
 		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y - 2) * cell}" width="${(h.w - 2) * cell}" height="${2 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" />`
 		svg += `<rect x="${(h.x + 2) * cell}" y="${(h.y - 1.5) * cell}" width="${(h.w - 4) * cell}" height="${1 * cell}" fill="${fg}" />`
-	} else if (dna.top === 3) {
+	} else if (lod !== 'S' && dna.top === 3) {
 		// Offset node
 		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y - 2) * cell}" width="${1 * cell}" height="${2 * cell}" fill="${fg}" />`
-	} else if (dna.top === 4) {
+	} else if (lod !== 'S' && dna.top === 4) {
 		// Stepped Roof
 		svg += `<rect x="${(h.x + 2) * cell}" y="${(h.y - 1) * cell}" width="${(h.w - 4) * cell}" height="${1 * cell}" fill="${fillStyle}" stroke="${fg}" stroke-width="${strokeW}" />`
 		svg += `<rect x="${(h.x + 3) * cell}" y="${(h.y - 2) * cell}" width="${(h.w - 6) * cell}" height="${1 * cell}" fill="${fg}" />`
-	} else if (dna.top === 5) {
+	} else if (lod !== 'S' && dna.top === 5) {
 		// Radar dish
 		svg += `<rect x="${(h.x + h.w - 3) * cell}" y="${(h.y - 3) * cell}" width="${2 * cell}" height="${2 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" />`
 		svg += `<rect x="${(h.x + h.w - 2.5) * cell}" y="${(h.y - 2.5) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
 		svg += `<rect x="${(h.x + h.w - 2.5) * cell}" y="${(h.y - 1) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
-	} else if (dna.top === 6) {
+	} else if (lod !== 'S' && dna.top === 6) {
 		// Handle
 		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y - 2) * cell}" width="${(h.w - 2) * cell}" height="${2 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" />`
 		svg += `<rect x="${(h.x + 2) * cell}" y="${(h.y - 1) * cell}" width="${(h.w - 4) * cell}" height="${2 * cell}" fill="${bg}" />`
 	}
 	// dna.top === 7: no top decor
 
-	// 3. Side Decor (8 variants)
-	if (dna.side === 0) {
+	// 3. Side Decor — M+ only
+	if (lod !== 'S' && dna.side === 0) {
 		// Left Nodes
 		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 2) * cell}" width="${2 * cell}" height="${3 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" />`
 		svg += `<rect x="${(h.x - 3) * cell}" y="${(h.y + 3) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
-	} else if (dna.side === 1) {
+	} else if (lod !== 'S' && dna.side === 1) {
 		// Left bracket
 		svg += `<rect x="${(h.x - 1) * cell}" y="${(h.y + 1) * cell}" width="${1 * cell}" height="${4 * cell}" fill="${fg}" />`
-	} else if (dna.side === 2) {
+	} else if (lod !== 'S' && dna.side === 2) {
 		// Floating blocks
 		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 3) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
 		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 5) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
-	} else if (dna.side === 3) {
+	} else if (lod !== 'S' && dna.side === 3) {
 		// Exhaust
 		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 4) * cell}" width="${2 * cell}" height="${2 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" />`
 		svg += `<rect x="${(h.x - 1) * cell}" y="${(h.y + 4.5) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
-	} else if (dna.side === 4) {
+	} else if (lod !== 'S' && dna.side === 4) {
 		// Large Heatsink
 		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 2) * cell}" width="${2 * cell}" height="${4 * cell}" fill="${fillStyle}" stroke="${fg}" stroke-width="${strokeW}" />`
 		svg += `<rect x="${(h.x - 1.5) * cell}" y="${(h.y + 3) * cell}" width="${1.5 * cell}" height="${0.5 * cell}" fill="${fg}" />`
 		svg += `<rect x="${(h.x - 1.5) * cell}" y="${(h.y + 4.5) * cell}" width="${1.5 * cell}" height="${0.5 * cell}" fill="${fg}" />`
-	} else if (dna.side === 5) {
+	} else if (lod !== 'S' && dna.side === 5) {
 		// Both sides pins
 		svg += `<rect x="${(h.x - 1) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
 		svg += `<rect x="${(h.x + h.w) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
-	} else if (dna.side === 6) {
+	} else if (lod !== 'S' && dna.side === 6) {
 		// Side Antenna
 		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 2) * cell}" width="${2 * cell}" height="${1 * cell}" fill="${fg}" />`
 		svg += `<rect x="${(h.x - 3) * cell}" y="${(h.y + 1) * cell}" width="${1 * cell}" height="${3 * cell}" fill="${fillStyle}" stroke="${fg}" stroke-width="${strokeW}" />`
@@ -182,8 +188,8 @@ function generateSvg(
 	const headPath = `M ${h.x * cell} ${h.y * cell} H ${(h.x + h.w) * cell} V ${(h.y + h.h - cut) * cell} H ${(h.x + h.w - cut) * cell} V ${(h.y + h.h) * cell} H ${h.x * cell} Z`
 	svg += `<path d="${headPath}" fill="${fillStyle}" stroke="${fg}" stroke-width="${strokeW}" stroke-linejoin="miter" />`
 
-	// 5. Pattern (solid only)
-	if (style === 'solid') {
+	// 5. Pattern (L only, solid only)
+	if (lod === 'L' && style === 'solid') {
 		if (dna.pattern === 1) {
 			// Horizontal Ribbing
 			svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 1) * cell}" width="${(h.w - cut - 1) * cell}" height="${1 * cell}" fill="${mid}" opacity="0.3" />`
@@ -235,7 +241,8 @@ function generateSvg(
 		svg += `<rect x="${(h.x + 1.5) * cell}" y="${(h.y + 2.25) * cell}" width="${1.5 * cell}" height="${0.5 * cell}" fill="${eyeColor}" />`
 	}
 
-	// 7. Jaw / Port (8 variants)
+	// 7. Jaw / Port — M+ only
+	if (lod !== 'S') {
 	if (dna.jaw === 0) {
 		// Standard block
 		svg += `<rect x="${(h.x + 1) * cell}" y="${(jY - 2) * cell}" width="${2 * cell}" height="${1 * cell}" fill="${eyeFill}" stroke="${eyeColor}" stroke-width="${eyeStrokeW}" />`
@@ -267,6 +274,7 @@ function generateSvg(
 		// Heavy Intake
 		svg += `<rect x="${(h.x + 1) * cell}" y="${(jY - 2.5) * cell}" width="${2 * cell}" height="${1.5 * cell}" fill="${eyeColor}" />`
 	}
+	} // end lod !== 'S' jaw block
 
 	// 8. Semantic LED
 	svg += `<rect x="${(h.x + 0.5) * cell}" y="${(h.y + 0.5) * cell}" width="${0.5 * cell}" height="${0.5 * cell}" fill="${ledColor}" />`
@@ -274,8 +282,8 @@ function generateSvg(
 	// 9. Brand Accent — Purple Missing Piece
 	svg += `<rect x="${(h.x + h.w - 2) * cell}" y="${(h.y + h.h - 2) * cell}" width="${2 * cell}" height="${2 * cell}" fill="${brand}" />`
 
-	// 10. Frame border
-	svg += `<rect width="256" height="256" fill="none" stroke="${mid}" stroke-width="8" />`
+	// 10. Frame border (M+ only)
+	if (lod !== 'S') svg += `<rect width="256" height="256" fill="none" stroke="${mid}" stroke-width="8" />`
 
 	svg += '</svg>'
 	return svg

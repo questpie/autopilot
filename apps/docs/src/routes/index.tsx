@@ -42,7 +42,7 @@ function LandingPage() {
 			<Header />
 			<main className="border-lp-border mx-auto max-w-[1200px] border-x">
 				{/* ========== 1. HERO ========== */}
-				<section className="mt-14 px-4 py-24 md:px-8">
+				<section className="px-4 py-24 md:px-8">
 					<div className="flex justify-center mb-8">
 						<QSymbol size={48} />
 					</div>
@@ -407,24 +407,24 @@ $ autopilot sessions search "PricingTable"`}
 					{/* UC 1: Solo Dev Shop */}
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-lp-border mb-6">
 						<div className="p-6 md:p-8 flex flex-col justify-center">
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-4">
-								01 / SOLO DEV SHOP
+							<div className="font-mono text-[14px] text-white font-bold tracking-[-0.03em] mb-4">
+								<span className="text-lp-purple">01</span> / SOLO DEV SHOP
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-3">
 								<div>
-									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">INPUT</span>
+									<span className="font-mono text-[11px] text-lp-purple font-bold tracking-[0.15em]">INPUT</span>
 									<div className="text-lp-fg mt-1">"Build a pricing page with Stripe"</div>
 								</div>
 								<div>
-									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT HAPPENS</span>
+									<span className="font-mono text-[11px] text-lp-purple font-bold tracking-[0.15em]">WHAT HAPPENS</span>
 									<div className="mt-1">CEO decomposes, strategist scopes, planner plans, developer implements, reviewer reviews</div>
 								</div>
 								<div>
-									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT YOU SEE</span>
+									<span className="font-mono text-[11px] text-lp-purple font-bold tracking-[0.15em]">WHAT YOU SEE</span>
 									<div className="mt-1">Task progress on dashboard, PR for merge, live preview via artifact router</div>
 								</div>
 								<div className="pt-2 border-t border-lp-border">
-									<strong className="text-lp-accent-green font-mono text-[11px]">OUTCOME:</strong>{' '}
+									<strong className="text-lp-purple font-mono text-[11px] font-bold tracking-[0.15em]">OUTCOME</strong>{' '}
 									<span className="text-lp-fg">Feature shipped without micromanaging a single step</span>
 								</div>
 							</div>
@@ -453,24 +453,24 @@ $ autopilot attach max
 					{/* UC 2: Self-Building Internal Tools */}
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-lp-border mb-6">
 						<div className="p-6 md:p-8 flex flex-col justify-center">
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-4">
-								02 / SELF-BUILDING INTERNAL TOOLS
+							<div className="font-mono text-[14px] text-white font-bold tracking-[-0.03em] mb-4">
+								<span className="text-lp-purple">02</span> / SELF-BUILDING INTERNAL TOOLS
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-3">
 								<div>
-									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">INPUT</span>
+									<span className="font-mono text-[11px] text-lp-purple font-bold tracking-[0.15em]">INPUT</span>
 									<div className="text-lp-fg mt-1">"Add a revenue chart to the dashboard"</div>
 								</div>
 								<div>
-									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT HAPPENS</span>
+									<span className="font-mono text-[11px] text-lp-purple font-bold tracking-[0.15em]">WHAT HAPPENS</span>
 									<div className="mt-1">Developer agent writes widget.tsx, registers it in layout.yaml</div>
 								</div>
 								<div>
-									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT YOU SEE</span>
+									<span className="font-mono text-[11px] text-lp-purple font-bold tracking-[0.15em]">WHAT YOU SEE</span>
 									<div className="mt-1">New widget appears on dashboard within seconds via HMR</div>
 								</div>
 								<div className="pt-2 border-t border-lp-border">
-									<strong className="text-lp-accent-green font-mono text-[11px]">OUTCOME:</strong>{' '}
+									<strong className="text-lp-purple font-mono text-[11px] font-bold tracking-[0.15em]">OUTCOME</strong>{' '}
 									<span className="text-lp-fg">Internal tools built without Retool, without deployment, evolved by agents</span>
 								</div>
 							</div>
@@ -503,24 +503,24 @@ $ autopilot attach max
 					{/* UC 3: Infrastructure Management */}
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-lp-border">
 						<div className="p-6 md:p-8 flex flex-col justify-center">
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-4">
-								03 / INFRASTRUCTURE MANAGEMENT
+							<div className="font-mono text-[14px] text-white font-bold tracking-[-0.03em] mb-4">
+								<span className="text-lp-purple">03</span> / INFRASTRUCTURE MANAGEMENT
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-3">
 								<div>
-									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">INPUT</span>
+									<span className="font-mono text-[11px] text-lp-purple font-bold tracking-[0.15em]">INPUT</span>
 									<div className="text-lp-fg mt-1">"Deploy the billing service to billing.company.com"</div>
 								</div>
 								<div>
-									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT HAPPENS</span>
+									<span className="font-mono text-[11px] text-lp-purple font-bold tracking-[0.15em]">WHAT HAPPENS</span>
 									<div className="mt-1">DevOps agent reads infra skills, builds Docker image, creates k8s manifests, applies them, sets up DNS</div>
 								</div>
 								<div>
-									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT YOU SEE</span>
+									<span className="font-mono text-[11px] text-lp-purple font-bold tracking-[0.15em]">WHAT YOU SEE</span>
 									<div className="mt-1">Service deployed and verified, URL pinned to dashboard</div>
 								</div>
 								<div className="pt-2 border-t border-lp-border">
-									<strong className="text-lp-accent-green font-mono text-[11px]">OUTCOME:</strong>{' '}
+									<strong className="text-lp-purple font-mono text-[11px] font-bold tracking-[0.15em]">OUTCOME</strong>{' '}
 									<span className="text-lp-fg">Infrastructure managed by an agent who knows your stack via skills</span>
 								</div>
 							</div>
@@ -894,6 +894,12 @@ steps:
 							className="font-mono text-xs text-lp-purple border border-lp-border px-6 py-2.5 no-underline hover:border-lp-purple transition-colors"
 						>
 							Documentation
+						</a>
+						<a
+							href="/playground"
+							className="font-mono text-xs text-lp-muted border border-lp-border px-6 py-2.5 no-underline hover:border-lp-purple hover:text-lp-purple transition-colors"
+						>
+							Construct Generator
 						</a>
 					</div>
 					<div className="font-mono text-[11px] text-lp-dim mt-12">
