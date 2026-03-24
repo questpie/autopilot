@@ -93,7 +93,7 @@ autopilot attach max
 
 **Embedding service** -- Gemini embeddings with local fallback. Automatic indexing of knowledge docs, tasks, and agent memory for semantic search.
 
-**Session attach** -- `autopilot attach max` streams an agent's work in real-time via SSE. Like `kubectl logs -f` for your AI team. Ctrl+C to detach -- agent keeps working.
+**Session attach** -- `autopilot attach max` streams an agent's work in real-time via SSE. Watch your AI team members think and act. Ctrl+C to detach -- agent keeps working.
 
 **Living Dashboard** -- Real-time dashboard on port 3001. Agent activity, task status, board pins, approval gates. Widget runtime with theme overrides.
 

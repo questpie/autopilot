@@ -1,0 +1,89 @@
+---
+title: Features
+description: Complete feature list for QUESTPIE Autopilot — hybrid storage, unified search, multiple agent providers, transport plugins, and more.
+---
+
+Everything QUESTPIE Autopilot can do today, and what is coming next.
+
+## Unified Search (FTS5 + Vector)
+
+Search across tasks, knowledge docs, channels, and agent memory with a single query. Two search engines run in parallel:
+
+| Engine | Technology | Best For |
+|--------|-----------|----------|
+| Full-text | SQLite FTS5 | Exact keyword matches, task IDs, agent names, file paths |
+| Semantic | sqlite-vec embeddings | Conceptual similarity, natural language queries, related content |
+
+Results from both engines are merged and ranked.
+
+## Embedding Service
+
+Vector embeddings power semantic search and knowledge retrieval:
+
+| Provider | Model | Notes |
+|----------|-------|-------|
+| Gemini | `text-embedding-004` | Primary. High quality, fast. Requires GOOGLE_API_KEY. |
+| Local fallback | TF-IDF hashing | Zero-cost fallback when no API key is configured. |
+
+## Multiple Agent Providers
+
+The agent spawner supports multiple AI backends through a provider abstraction:
+
+| Provider | Config Value | Features |
+|----------|-------------|----------|
+| Claude Agent SDK | `claude-agent-sdk` | Primary. File tools, MCP, sandboxing, hooks, sub-agents. |
+| Codex SDK | `codex-sdk` | OpenAI Codex runtime. Alternative provider for specific agents. |
+
+## Transport Registry
+
+Notification transports are pluggable via a registry pattern:
+
+| Transport | Status | Notes |
+|-----------|--------|-------|
+| Telegram | Available | Built-in adapter + webhook handler. Two-way messaging. |
+| Dashboard | Available | SSE-based realtime notifications in the Living Dashboard. |
+| Slack | Coming Soon | Planned. Knowledge-doc based integration pattern. |
+| Email | Coming Soon | Planned. SMTP or transactional email service. |
+
+## Language Configuration
+
+Configure the primary language and supported languages in `company.yaml`:
+
+```yaml title="company.yaml"
+language: "en"
+languages: ["en", "sk", "de"]
+```
+
+## Hybrid Storage (SQLite + Filesystem)
+
+YAML and Markdown files remain the source of truth -- human-readable, git-versioned, and portable. SQLite + Drizzle ORM provides:
+
+- **Fast indexed queries** -- task lists, agent lookups, status counts
+- **FTS5 full-text search** -- search across all content types
+- **sqlite-vec embeddings** -- vector similarity search
+- **Better Auth** -- dashboard and API authentication
+- **Automatic sync** -- the indexer watches filesystem changes
+
+If you delete the SQLite database, it is fully rebuilt from files.
+
+## SSE Realtime
+
+All realtime communication uses Server-Sent Events (SSE):
+
+- **Session streaming** -- `autopilot attach` connects to SSE endpoint
+- **Dashboard updates** -- task status changes, board pins update instantly
+- **No polling overhead** -- single HTTP connection per subscriber
+
+## Git Auto-Commit
+
+Every agent action that modifies the filesystem is automatically committed to Git, providing a complete audit trail.
+
+## Core Features
+
+- **Multi-agent orchestration** -- 8 built-in role templates, custom agents, concurrent execution
+- **Workflow engine** -- YAML-defined state machines with human gates
+- **Persistent memory** -- per-agent facts, decisions, mistakes, patterns
+- **4-layer context assembly** -- identity, company state, memory, task context
+- **Skills system** -- markdown knowledge packages loaded into context
+- **Artifact serving** -- lazy cold-start preview server for agent outputs
+- **Living Dashboard** -- widget runtime, theme overrides, dev/prod mode

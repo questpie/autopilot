@@ -1,0 +1,96 @@
+---
+title: Integration Setup
+description: Step-by-step guide to setting up integrations. Secret management, knowledge docs, webhook configuration, and OAuth.
+---
+
+How agents set up integrations. 3-part pattern: Secret + Knowledge Doc + Primitive. No code, no plugins, no adapters.
+
+## How Agents Set Up Integrations
+
+Integration setup is not manual configuration. You tell the CEO agent what you need and the agents handle the rest:
+
+```bash title="terminal"
+$ autopilot ask "Set up Slack integration so agents can post to #releases"
+
+# CEO agent:
+#   1. Creates secret: autopilot secrets add slack
+#   2. Asks you for the bot token (human approval gate)
+#   3. Writes knowledge doc: knowledge/integrations/slack.md
+#   4. Configures webhook: team/webhooks.yaml
+#   5. Tests it: posts a test message to #releases
+```
+
+## Secret Management
+
+Secrets are stored in `/company/secrets/` as YAML files. Values are encrypted at rest using AES-256-GCM. Agents never see the raw key.
+
+```bash title="terminal"
+# Add a secret
+$ autopilot secrets add stripe
+
+# List secrets (values always hidden)
+$ autopilot secrets list
+```
+
+```yaml title="/company/secrets/stripe.yaml"
+service: stripe
+type: api_key
+value: "sk_live_xxx"                    # Encrypted at rest
+allowed_agents: [max, ops, ceo]
+usage: |
+  Use with Authorization: Bearer {value}
+  Base URL: https://api.stripe.com/v1/
+```
+
+## Knowledge Docs
+
+Knowledge docs teach agents how to use the API. Include authentication format, endpoints, common operations, and your company's conventions.
+
+```md title="/company/knowledge/integrations/stripe.md"
+# Stripe Integration
+
+## Authentication
+- API key via Authorization header
+- Secret ref: `stripe`
+- Content-Type: application/x-www-form-urlencoded
+
+## Common Operations
+
+### Create a Product
+POST https://api.stripe.com/v1/products
+Body: name=Premium+Plan&active=true
+
+## Our Conventions
+- Always use test keys in development
+- Always set metadata.task_id on checkout sessions
+```
+
+## Webhook Setup
+
+The orchestrator's webhook server (port 7777) receives events from external services and routes them to agents.
+
+```yaml title="/company/team/webhooks.yaml"
+webhooks:
+  - id: github-push
+    path: /webhooks/github
+    auth:
+      type: hmac-sha256
+      secret_ref: "github_webhook_secret"
+    handler: ops
+
+  - id: stripe-events
+    path: /webhooks/stripe
+    auth:
+      type: stripe-signature
+      secret_ref: "stripe_webhook_secret"
+    handler: ops
+```
+
+## Complete Setup Checklist
+
+1. **Add the secret** -- `autopilot secrets add <service>`
+2. **Write the knowledge doc** -- create `knowledge/integrations/<service>.md`
+3. **Set allowed agents** -- only agents who need the service get access
+4. **(Optional) Add webhook** -- if the service sends events
+5. **(Optional) Configure MCP** -- if an MCP server exists
+6. **Test it** -- give an intent that uses the integration

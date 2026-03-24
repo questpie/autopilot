@@ -1,0 +1,95 @@
+---
+title: Artifacts
+description: Agent-created live previews — React apps, HTML pages, and static sites. Artifact router with cold-start, port pool, and idle timeout.
+---
+
+Agent-created previews. Agents write code, run dev servers, and pin live URLs to the dashboard. You click and see a running app.
+
+## What Are Artifacts
+
+Artifacts are live previews created by agents. No special system needed -- agents have filesystem and terminal access. They write code, run a dev server, and pin the URL to the dashboard. You click the link and see a running React app, HTML page, or static site.
+
+## create_artifact Tool
+
+The `create_artifact` primitive is a convenience wrapper. Under the hood it writes files, creates the `.artifact.yaml` config, and pins the URL. Available to Developer and Design agents.
+
+```ts title="create_artifact.ts"
+// React artifact — full Vite + React app
+create_artifact({
+  name: "landing-v2",
+  type: "react",
+  files: {
+    "src/App.tsx": `export default function App() { ... }`,
+    "src/main.tsx": `import App from './App' ...`
+  }
+})
+
+// HTML artifact — single page, no build step
+create_artifact({
+  name: "email-template",
+  type: "html",
+  files: {
+    "index.html": `<!DOCTYPE html>...`
+  }
+})
+```
+
+## Artifact Types
+
+| Type | How Agent Creates It | Preview |
+|------|---------------------|---------|
+| `react` | Writes JSX + Vite config, runs `bun run dev` | Live iframe with HMR |
+| `html` | Writes HTML/CSS/JS to `/artifacts/{name}/index.html` | Static file serving |
+| `static` | Pre-built files (OpenAPI spec, SVG, docs site) | Direct file render |
+
+## .artifact.yaml Format
+
+```yaml title="/artifacts/landing-v2/.artifact.yaml"
+name: landing-v2
+serve: "bun run dev --port {port}"
+build: "bun install"
+health: "/"
+timeout: 5m
+```
+
+## Artifact Router
+
+The artifact router manages dev server processes with cold-start and idle-timeout. Like serverless, but for artifacts -- zero idle cost.
+
+```text title="artifact-router-flow"
+Request → /artifacts/landing-v2/
+  │
+  ▼
+Router checks registry:
+  ├── Process running? → proxy to port → reset idle timer
+  └── Not running?     → cold start:
+                           1. Read .artifact.yaml
+                           2. Run build command (bun install)
+                           3. Assign port from pool (4100-4199)
+                           4. Run serve command
+                           5. Wait for health check
+                           6. Proxy request
+```
+
+## How to View Artifacts
+
+```bash title="terminal"
+# CLI — list all artifacts
+$ autopilot artifacts
+
+# CLI — open in browser
+$ autopilot artifacts open landing-v2
+
+# CLI — stop a running artifact
+$ autopilot artifacts stop landing-v2
+```
+
+On the dashboard, artifacts appear as cards. Click to open in an iframe or fullscreen.
+
+## When Agents Create Artifacts
+
+- **UI mockups** -- Designer agent creates a React artifact to prototype
+- **Landing pages** -- Developer builds a complete landing page for review
+- **Demo apps** -- Quick prototype to validate an approach
+- **Documentation sites** -- Static HTML docs for an API
+- **Content previews** -- Email templates, marketing pages

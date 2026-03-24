@@ -1,0 +1,165 @@
+---
+title: Primitives
+description: Structured tool calls agents use to interact with the system — tasks, messages, files, git, dashboard pins, and approval gates.
+---
+
+Structured tool calls. Not chat. Every agent action is a typed function call with clear targets and effects.
+
+## What are Primitives?
+
+Agents don't generate text output. They call primitives -- structured tool calls that produce visible effects in the company filesystem. Agent thinking is private and messy. Only primitive calls produce observable results.
+
+## Communication
+
+Inter-agent and agent-to-human communication. Messages are written to the `/company/comms/` directory.
+
+```ts title="primitives/communication.ts"
+send_message({
+  to: 'channel:dev',
+  content: 'PR is ready for review. Branch: feat/auth-flow',
+  priority: 'normal',
+  references: ['TASK-042']
+})
+
+ask_agent({
+  to: 'agent:peter',
+  question: 'What auth library did you use for the login flow?',
+  reason: 'Need to document the API endpoints',
+  urgency: 'normal',
+  references: ['TASK-043']
+})
+```
+
+## Tasks
+
+Task lifecycle management. Tasks are YAML files that move between status folders (`backlog/ -> active/ -> review/ -> done/`).
+
+```ts title="primitives/tasks.ts"
+create_task({
+  title: 'Implement Stripe checkout flow',
+  type: 'feature',
+  priority: 'high',
+  assigned_to: 'peter',
+  workflow: 'development',
+})
+
+update_task({
+  task_id: 'TASK-042',
+  status: 'review',
+  note: 'Implementation complete. PR #17 ready for review.'
+})
+```
+
+## Dashboard
+
+Agents pin information to the dashboard for human visibility.
+
+```ts title="primitives/dashboard.ts"
+pin_to_board({
+  group: 'deployments',
+  title: 'Staging Deploy: v1.2.0',
+  content: 'Deployed to staging. All health checks passing.',
+  type: 'status',
+  metadata: {
+    progress: 100,
+    expires_at: '2026-03-23T00:00:00Z',
+  }
+})
+```
+
+## Knowledge
+
+Search and update the company knowledge base. Supports both keyword and semantic search.
+
+```ts title="primitives/knowledge.ts"
+search_knowledge({
+  query: 'authentication flow',
+  scope: 'technical',
+  max_results: 5
+})
+
+semantic_search({
+  query: 'how do we handle user sessions',
+  index: 'codebase',
+  max_results: 10,
+  threshold: 0.7
+})
+```
+
+## Files & Git
+
+Scoped filesystem access and git operations.
+
+```ts title="primitives/files-git.ts"
+read_file({ path: 'projects/web-app/code/src/auth.ts' })
+
+write_file({
+  path: 'projects/web-app/code/src/checkout.ts',
+  content: 'import Stripe from "stripe"\n...'
+})
+
+git_commit({
+  repo: 'projects/web-app/code',
+  message: 'feat: add Stripe checkout flow',
+  files: ['src/checkout.ts', 'src/lib/stripe.ts']
+})
+
+git_create_pr({
+  repo: 'projects/web-app/code',
+  title: 'feat: Stripe checkout integration',
+  branch: 'feat/stripe-checkout',
+  target: 'main',
+  reviewers: ['marek']
+})
+```
+
+## External
+
+Interact with external services and run system commands.
+
+```ts title="primitives/external.ts"
+http_request({
+  method: 'POST',
+  url: 'https://api.stripe.com/v1/products',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: 'name=Premium+Plan&active=true',
+  secret_ref: 'secrets/stripe.yaml#api_key'
+})
+
+run_command({
+  command: 'bun test',
+  working_directory: 'projects/web-app/code',
+  timeout_seconds: 120
+})
+```
+
+## Approval Gates
+
+Some actions require human approval, others agents handle between themselves.
+
+**Requires human approval:**
+- Merge to main branch
+- Deploy to production
+- Publish external content
+- Spend money (>$10)
+- Create/delete infrastructure
+- Modify team structure or policies
+
+**Agents approve between themselves:**
+- Code review
+- Plan review
+- Spec review
+- Deploy to staging
+- Knowledge base updates
+- Health checks and monitoring
+
+## Primitive Summary
+
+| Category | Primitives | Used by |
+|----------|-----------|---------|
+| Communication | `send_message, ask_agent` | All agents |
+| Tasks | `create_task, update_task, add_blocker, resolve_blocker` | All agents |
+| Dashboard | `pin_to_board, unpin_from_board` | All agents |
+| Knowledge | `search_knowledge, semantic_search, update_knowledge` | Strategist, Planner, Developer |
+| Files & Git | `read_file, write_file, list_directory, git_*` | Scoped per agent role |
+| External | `http_request, run_command, install_tool` | Developer, DevOps |

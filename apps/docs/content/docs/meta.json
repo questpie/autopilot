@@ -1,0 +1,22 @@
+{
+	"pages": [
+		"---Getting Started---",
+		"index",
+		"getting-started",
+		"---Core Concepts---",
+		"architecture",
+		"agents",
+		"workflows",
+		"memory",
+		"primitives",
+		"---Features---",
+		"features",
+		"skills",
+		"artifacts",
+		"living-dashboard",
+		"---Reference---",
+		"cli",
+		"integrations",
+		"use-cases"
+	]
+}

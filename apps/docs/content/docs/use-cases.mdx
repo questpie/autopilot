@@ -1,0 +1,64 @@
+---
+title: Use Cases
+description: Software dev shop, marketing agency, e-commerce, consulting, and solo SaaS — same system, different configuration.
+---
+
+Autopilot is not a dev tool. It is a company OS. Same system, different configuration. Same kernel, different distribution.
+
+## The Principle
+
+Every use case is a combination of the same building blocks. The orchestrator, CLI, dashboard, and agent spawner never change. Only the contents of the filesystem change:
+
+```text title="building-blocks"
+Skills       → teach agents WHAT to do
+Knowledge    → provide CONTEXT (API docs, brand, conventions)
+Workflows    → define HOW work flows
+Widgets      → visualize STATE (dashboard)
+Secrets      → authenticate ACCESS (API keys)
+Schedules    → automate WHEN (cron)
+```
+
+> **Autopilot = kernel.** Company template = distribution. Like Linux -- same kernel, different distro for each use case.
+
+## 1. Software Development Shop
+
+The default template. Full product lifecycle from intent to deployed feature.
+
+## 2. Marketing Agency
+
+Content calendar, social media scheduling, campaign management, analytics reporting.
+
+## 3. E-commerce Operations
+
+Inventory management, customer support, order fulfillment, pricing strategy.
+
+## 4. Consulting / Agency
+
+Client management, proposals, project tracking, invoicing, meeting notes.
+
+## 5. Solo SaaS Creator
+
+Feature development, content marketing, metrics tracking -- one person, full team of agents.
+
+## Adding a New Use Case
+
+```bash title="terminal"
+# 1. Create a company
+autopilot init my-agency
+
+# 2. Add skills for your domain
+mkdir -p skills/content-strategy
+
+# 3. Add knowledge
+autopilot knowledge add brand/our-brand.md --file brand-guidelines.pdf
+
+# 4. Add secrets
+autopilot secrets add twitter --value "bearer_xxx" --agents marketer
+
+# 5. Add custom workflow
+# Edit team/workflows/content.yaml
+
+# 6. Done — same Autopilot, different content
+autopilot start
+autopilot ask "Plan next week's social media content"
+```

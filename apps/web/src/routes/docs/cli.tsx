@@ -31,21 +31,18 @@ bunx @questpie/autopilot init my-company`}
 			</CodeBlock>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				kubectl Analogy
+				CLI Quick Reference
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				If you know Kubernetes, you already know Autopilot. Agents are
-				pods, the orchestrator is the control plane, tasks are workloads.
+				The autopilot CLI manages your AI company. Agents are team members,
+				tasks are work items, and workflows are business processes.
 			</p>
 			<div className="overflow-x-auto mb-8">
 				<table className="w-full text-sm border-collapse">
 					<thead>
 						<tr className="border-b border-border">
 							<th className="text-left text-ghost font-mono text-xs py-2 pr-4">
-								kubectl
-							</th>
-							<th className="text-left text-ghost font-mono text-xs py-2 pr-4">
-								autopilot
+								Command
 							</th>
 							<th className="text-left text-ghost font-mono text-xs py-2">
 								What it does
@@ -54,85 +51,58 @@ bunx @questpie/autopilot init my-company`}
 					</thead>
 					<tbody className="text-ghost">
 						<tr className="border-b border-border/50">
-							<td className="py-2 pr-4 font-mono text-xs text-muted">
-								kubectl create ns
-							</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								autopilot init
 							</td>
-							<td className="py-2 text-xs">Create workspace</td>
+							<td className="py-2 text-xs">Create a new company workspace</td>
 						</tr>
 						<tr className="border-b border-border/50">
-							<td className="py-2 pr-4 font-mono text-xs text-muted">
-								kubectl apply -f ...
-							</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								autopilot ask &quot;...&quot;
 							</td>
-							<td className="py-2 text-xs">Submit work</td>
+							<td className="py-2 text-xs">Assign work to your team</td>
 						</tr>
 						<tr className="border-b border-border/50">
-							<td className="py-2 pr-4 font-mono text-xs text-muted">
-								kubectl get pods
-							</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								autopilot agents
 							</td>
-							<td className="py-2 text-xs">List workers</td>
+							<td className="py-2 text-xs">See your team members</td>
 						</tr>
 						<tr className="border-b border-border/50">
-							<td className="py-2 pr-4 font-mono text-xs text-muted">
-								kubectl describe pod/web
-							</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								autopilot agents show max
 							</td>
-							<td className="py-2 text-xs">Worker details</td>
+							<td className="py-2 text-xs">View agent details</td>
 						</tr>
 						<tr className="border-b border-border/50">
-							<td className="py-2 pr-4 font-mono text-xs text-muted">
-								kubectl logs -f pod/web
-							</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								autopilot attach max
 							</td>
-							<td className="py-2 text-xs">Live-stream output</td>
+							<td className="py-2 text-xs">Watch an agent work live</td>
 						</tr>
 						<tr className="border-b border-border/50">
-							<td className="py-2 pr-4 font-mono text-xs text-muted">
-								kubectl logs pod/web
-							</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								autopilot replay max
 							</td>
-							<td className="py-2 text-xs">Read past output</td>
+							<td className="py-2 text-xs">Review past work sessions</td>
 						</tr>
 						<tr className="border-b border-border/50">
-							<td className="py-2 pr-4 font-mono text-xs text-muted">
-								kubectl get jobs
-							</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								autopilot tasks
 							</td>
-							<td className="py-2 text-xs">List workloads</td>
+							<td className="py-2 text-xs">List work items</td>
 						</tr>
 						<tr className="border-b border-border/50">
-							<td className="py-2 pr-4 font-mono text-xs text-muted">
-								kubectl get events
-							</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								autopilot inbox
 							</td>
-							<td className="py-2 text-xs">Items needing attention</td>
+							<td className="py-2 text-xs">Items needing your attention</td>
 						</tr>
 						<tr>
-							<td className="py-2 pr-4 font-mono text-xs text-muted">
-								kubectl get configmaps
-							</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
 								autopilot knowledge
 							</td>
-							<td className="py-2 text-xs">View configuration</td>
+							<td className="py-2 text-xs">Browse shared knowledge base</td>
 						</tr>
 					</tbody>
 				</table>
@@ -499,11 +469,8 @@ $ autopilot agents show max
 			</h3>
 			<p className="text-ghost leading-relaxed mb-4">
 				Live-stream an agent's activity feed. Polls the orchestrator
-				API every 2 seconds and prints events as they arrive. Like{' '}
-				<code className="font-mono text-xs text-purple">
-					kubectl logs -f
-				</code>
-				. Press Ctrl+C to detach.
+				API every 2 seconds and prints events as they arrive. Press
+				Ctrl+C to detach — the agent keeps working.
 			</p>
 			<CodeBlock title="syntax">
 				{`autopilot attach <agent> [options]

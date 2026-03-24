@@ -1,0 +1,174 @@
+---
+title: Architecture
+description: Four-layer stack, orchestrator internals, filesystem conventions, and how QUESTPIE Autopilot manages agent sessions.
+---
+
+Four layers. Single process. SQLite + filesystem hybrid storage. SDK-first.
+
+## 4-Layer Stack
+
+```text title="system overview"
+┌───────────────────────────────────────────────────────────┐
+│  LAYER 1 — HUMAN                                          │
+│  CLI · Dashboard · Telegram · External APIs                │
+│  Thin consumers. No business logic.                       │
+└──────────────────────────┬────────────────────────────────┘
+                           │ calls SDK functions
+                           ▼
+┌───────────────────────────────────────────────────────────┐
+│  LAYER 2 — ORCHESTRATOR                                   │
+│  Single Bun process per company                           │
+│                                                           │
+│  Watcher → detects FS changes (new tasks, status moves)   │
+│  Workflow → state machine routing (YAML-defined steps)    │
+│  Context → 4-layer prompt assembly (identity+state+mem)   │
+│  Spawner → creates Claude Agent SDK sessions              │
+│  Scheduler → cron-based recurring agent jobs              │
+│  Webhook → HTTP event receiver (port 7777)                │
+│  Session → SSE realtime streaming (port 7778)             │
+│  Notifier → transport dispatcher (Telegram, dashboard)    │
+│  Artifact → lazy cold-start preview server                │
+│  Skills → reusable knowledge packages                     │
+└──────────────────────────┬────────────────────────────────┘
+                           │ spawns
+                           ▼
+┌───────────────────────────────────────────────────────────┐
+│  LAYER 3 — AGENTS                                         │
+│  Claude Agent SDK sessions with tools + MCP servers       │
+│  Role-scoped FS access, sandboxed shell, custom MCP tools │
+│  8 default roles: CEO, strategist, planner, developer,    │
+│  reviewer, devops, designer, marketing                    │
+└──────────────────────────┬────────────────────────────────┘
+                           │ reads/writes
+                           ▼
+┌───────────────────────────────────────────────────────────┐
+│  LAYER 4 — STORAGE                                        │
+│  Hybrid: YAML/Markdown/JSON files + SQLite (Drizzle ORM) │
+│  FTS5 full-text search + sqlite-vec embeddings            │
+│  Better Auth for security · Git auto-commit audit trail   │
+│  Write queue (file-level async mutex)                     │
+└───────────────────────────────────────────────────────────┘
+```
+
+## SDK-First Architecture
+
+All business logic lives in the orchestrator SDK. CLI, dashboard, and API are thin consumers that call the same functions. No logic is duplicated across consumers.
+
+```ts title="consumer pattern"
+// CLI — thin shell over SDK
+import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
+
+// Dashboard — same SDK, different UI
+import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
+
+// External API — same SDK, HTTP wrapper
+import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
+```
+
+```text title="package dependency graph"
+@questpie/autopilot-spec          (published)
+│  Zod schemas, types, path conventions
+│  Zero runtime deps except zod + yaml
+│
+├── @questpie/autopilot-agents    (internal)
+│   │  System prompt templates per role
+│   │  buildSystemPrompt() assembler
+│   │
+│   └── @questpie/autopilot-orchestrator  (internal)
+│       │  ALL business logic lives here
+│       │  FS ops, workflow, context, scheduler,
+│       │  watcher, webhooks, sessions, notifier
+│       │
+│       ├── @questpie/autopilot-cli   (published as @questpie/autopilot)
+│       │    Commander.js commands → calls orchestrator
+│       │
+│       └── @questpie/autopilot-dashboard  (future)
+│            React UI → calls orchestrator via API
+```
+
+## Provider Abstraction
+
+The agent spawner uses a provider abstraction. Two providers are available: **Claude Agent SDK** (primary) and **Codex SDK**. The Claude provider gives agents built-in infrastructure -- file I/O, shell access, sub-agents, MCP support, and lifecycle hooks. The Codex provider offers an alternative runtime. Configure per-agent or company-wide in `company.yaml`.
+
+| Capability | Agent SDK Provides | We Build On Top |
+|------------|-------------------|-----------------|
+| File I/O | `Read, Write, Edit, Glob, Grep` | FS scope enforcement per role |
+| Shell | `Bash tool` | Command sandboxing |
+| Sandboxing | `Permission modes` | Role-based scoping |
+| Sub-agents | `Agent tool` | Team delegation |
+| MCP | `Built-in MCP support` | Custom primitives as MCP tools |
+| Hooks | `PreToolUse, PostToolUse, SessionEnd` | Activity logging, memory extraction |
+
+Works with an Anthropic API key or a Claude Max subscription. Set `ANTHROPIC_API_KEY` for Claude models. Codex SDK is available for GPT models via OpenAI API key.
+
+## Orchestrator Module Map
+
+The orchestrator is a single Bun process composed of focused modules. Each module is small and independent.
+
+| Module | Export | Responsibility |
+|--------|--------|----------------|
+| fs/ | `readYaml, writeYaml, createTask, listTasks, moveTask` | YAML CRUD with write queue. File-level async mutex prevents concurrent write corruption. |
+| workflow/ | `WorkflowEngine` | State machine engine. Reads YAML workflows, checks transitions, handles reviews and conditional routing. |
+| context/ | `ContextAssembler` | Builds role-scoped system prompts from 4 layers: identity, company state, memory, and task context. |
+| agent/ | `AgentSpawner` | Creates Claude Agent SDK sessions. Injects context, configures tools/MCP, streams output. |
+| scheduler/ | `Scheduler` | Cron-based recurring agent tasks from schedules.yaml. Standups, health checks, weekly metrics. |
+| watcher/ | `FSWatcher` | Monitors company filesystem via chokidar. Detects new tasks, status changes, messages, config updates. |
+| webhook/ | `WebhookServer` | HTTP event receiver on port 7777. Verifies HMAC-SHA256 signatures. GitHub, Stripe, etc. |
+| session/ | `SessionManager` | SSE server on port 7778. Powers `autopilot attach` for real-time observation. |
+| artifact/ | `ArtifactRouter` | Lazy cold-start server for agent-created previews. React components, HTML pages, API docs. |
+| skills/ | `loadSkillCatalog` | Reusable knowledge packages. Loaded into context assembly Layer 2 (company state). |
+| api/ | `API routes` | HTTP API for dashboard and external consumers. Status, activity feed, task management. |
+| notifier/ | `Notifier` | Transport dispatcher. Routes notifications via pluggable transports. Telegram built-in, Slack/email planned. |
+
+## Data Flow: Intent to Completion
+
+```text title="data flow"
+Human: "Build a pricing page"
+  │
+  ▼
+CLI: autopilot ask "Build a pricing page"
+  │ Creates task in /tasks/backlog/ (type: intent, assigned: ceo)
+  ▼
+Watcher: detects new task file
+  │
+  ▼
+Orchestrator: routes to CEO agent
+  │ Context assembler builds 4-layer prompt:
+  │   Layer 1: Agent identity (role, personality, tools)
+  │   Layer 2: Company state (knowledge, team, projects)
+  │   Layer 3: Agent memory (facts, decisions, past sessions)
+  │   Layer 4: Task context (description, dependencies, history)
+  ▼
+CEO Agent Session:
+  │ Reads company knowledge, evaluates scope
+  │ Calls: create_task("Scope requirements") → sam
+  │ Calls: create_task("Plan implementation") → alex
+  │ Calls: create_task("Implement + Stripe")  → max
+  │ Calls: create_task("Review PR")           → riley
+  │ Sets dependencies: implement → plan → scope
+  ▼
+Watcher: detects new tasks
+  │
+  ▼
+Sam (strategist): writes spec
+  │ Calls: update_task(status: done)
+  ▼
+Workflow Engine: scope → plan transition
+  │ Activates Alex's task
+  ▼
+Alex (planner): writes plan
+  │ Calls: update_task(status: done)
+  ▼
+Max (developer): implements
+  │ Creates branch, writes code, runs tests
+  │ Creates PR, marks task done
+  ▼
+Riley (reviewer): reviews PR
+  │ Approves or requests changes
+  ▼
+Workflow Engine: human gate
+  │ Task moves to review, appears in inbox
+  ▼
+Human: autopilot tasks approve TASK-003
+  │ Task moves to done, workflow continues
+```

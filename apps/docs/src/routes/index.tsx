@@ -1,50 +1,64 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { AgentCard } from '@/components/AgentCard'
-import { CodeBlock } from '@/components/CodeBlock'
-import { DashboardMock } from '@/components/DashboardMock'
-import { Header } from '@/components/Header'
-import { LiveStream } from '@/components/LiveStream'
-import { QSymbol } from '@/components/QSymbol'
-import { Section, SectionHeader } from '@/components/Section'
-import { Tag } from '@/components/Tag'
-import { seoHead } from '@/lib/seo'
+
+import { AgentCard } from '@/components/landing/AgentCard'
+import { CodeBlock } from '@/components/landing/CodeBlock'
+import { DashboardMock } from '@/components/landing/DashboardMock'
+import { Header } from '@/components/landing/Header'
+import { LiveStream } from '@/components/landing/LiveStream'
+import { QSymbol } from '@/components/landing/QSymbol'
+import { Section, SectionHeader } from '@/components/landing/Section'
+import { Tag } from '@/components/landing/Tag'
 
 export const Route = createFileRoute('/')({
 	head: () => ({
-		...seoHead({
-			title: 'QUESTPIE Autopilot',
-			description:
-				'AI-native company operating system. Define your company as a filesystem, staff it with AI agents backed by Claude, and give high-level intents. Open source, CLI-first.',
-			path: '/',
-		}),
+		meta: [
+			{ title: 'QUESTPIE Autopilot — AI-Native Company Operating System' },
+			{
+				name: 'description',
+				content:
+					'AI-native company operating system. Define your company as a filesystem, staff it with AI agents backed by Claude, and give high-level intents. Open source, CLI-first.',
+			},
+			{ property: 'og:title', content: 'QUESTPIE Autopilot — AI-Native Company Operating System' },
+			{
+				property: 'og:description',
+				content:
+					'AI-native company operating system. Define your company as a filesystem, staff it with AI agents backed by Claude, and give high-level intents. Open source, CLI-first.',
+			},
+			{ property: 'og:type', content: 'website' },
+			{ property: 'og:url', content: 'https://autopilot.questpie.com' },
+			{ property: 'og:site_name', content: 'QUESTPIE Autopilot' },
+			{ name: 'twitter:card', content: 'summary_large_image' },
+			{ name: 'twitter:title', content: 'QUESTPIE Autopilot — AI-Native Company Operating System' },
+		],
+		links: [{ rel: 'canonical', href: 'https://autopilot.questpie.com' }],
 	}),
 	component: LandingPage,
 })
 
 function LandingPage() {
 	return (
-		<>
+		<div className="landing-page">
 			<Header />
 			<div className="max-w-[860px] mx-auto px-4 sm:px-6">
 				{/* HERO */}
-				<section className="pt-12 pb-12 sm:pt-20 sm:pb-20 border-b border-border">
+				<section className="pt-12 pb-12 sm:pt-20 sm:pb-20 border-b border-lp-border">
 					<div className="flex items-center gap-3 mb-2">
-						<span className="font-mono text-[10px] text-bg bg-purple px-2.5 py-1 tracking-[2px] font-bold">
+						<span className="font-mono text-[10px] text-lp-bg bg-lp-purple px-2.5 py-1 tracking-[2px] font-bold">
 							BETA
 						</span>
-						<span className="font-mono text-[10px] text-purple tracking-[2px]">
+						<span className="font-mono text-[10px] text-lp-purple tracking-[2px]">
 							AVAILABLE NOW
 						</span>
 					</div>
 					<h1 className="font-sans text-[40px] sm:text-[64px] font-black text-white m-0 leading-none tracking-tight">
 						Autopilot
 					</h1>
-					<p className="font-sans text-base sm:text-[22px] text-muted mt-4 font-light leading-relaxed">
+					<p className="font-sans text-base sm:text-[22px] text-lp-muted mt-4 font-light leading-relaxed">
 						AI-native company operating system.
 						<br />
 						Define agents. Give intent. They handle the rest.
 					</p>
-					<div className="w-[60px] h-[3px] bg-purple mt-8" />
+					<div className="w-[60px] h-[3px] bg-lp-purple mt-8" />
 					<div className="mt-8 flex gap-2 flex-wrap">
 						<Tag>OPEN SOURCE</Tag>
 						<Tag color="cyan">CLAUDE AGENT SDK</Tag>
@@ -54,7 +68,7 @@ function LandingPage() {
 					<div className="mt-10 flex gap-3 flex-wrap">
 						<a
 							href="/docs/getting-started"
-							className="font-mono text-xs text-white bg-purple px-6 py-2.5 no-underline hover:bg-purple-light transition-colors"
+							className="font-mono text-xs text-white bg-lp-purple px-6 py-2.5 no-underline hover:bg-lp-purple-light transition-colors"
 						>
 							Install
 						</a>
@@ -62,14 +76,14 @@ function LandingPage() {
 							href="https://github.com/questpie/autopilot"
 							target="_blank"
 							rel="noopener noreferrer"
-							className="font-mono text-xs text-purple border border-border px-6 py-2.5 no-underline hover:border-purple transition-colors"
+							className="font-mono text-xs text-lp-purple border border-lp-border px-6 py-2.5 no-underline hover:border-lp-purple transition-colors"
 						>
 							GitHub
 						</a>
 					</div>
 				</section>
 
-				{/* QUICK START — BETA INSTALL */}
+				{/* QUICK START */}
 				<Section id="quickstart">
 					<SectionHeader sub="Install globally, scaffold a company, and start giving intents in under a minute.">
 						Get Started in 60 Seconds
@@ -131,7 +145,7 @@ Created 4 tasks:
 Sam is starting on task-050 now.
 You'll be notified when approvals are needed.`}
 					</CodeBlock>
-					<p className="font-sans text-sm text-ghost mt-6 leading-relaxed">
+					<p className="font-sans text-sm text-lp-ghost mt-6 leading-relaxed">
 						This isn't a chatbot. It's a company. Sam writes the spec. Alex plans
 						the implementation. Max codes it. Riley reviews it. You merge. Ops
 						deploys. Morgan announces. Each agent has persistent memory, scoped
@@ -144,9 +158,9 @@ You'll be notified when approvals are needed.`}
 					<SectionHeader sub="Define agents in YAML. Give them names, roles, tools, and filesystem scope. Start from a template or build your own team.">
 						Define Your Team
 					</SectionHeader>
-					<p className="font-sans text-[13px] text-ghost mb-4 leading-relaxed">
+					<p className="font-sans text-[13px] text-lp-ghost mb-4 leading-relaxed">
 						Every agent is defined in{' '}
-						<code className="font-mono text-xs text-purple">agents.yaml</code>.
+						<code className="font-mono text-xs text-lp-purple">agents.yaml</code>.
 						Pick from built-in role templates or create your own. Add or remove
 						agents anytime via CLI or the CEO agent.
 					</p>
@@ -208,10 +222,10 @@ You'll be notified when approvals are needed.`}
 							status="schd"
 						/>
 					</div>
-					<div className="bg-purple-faint border border-border border-l-[3px] border-l-purple p-3">
-						<div className="font-sans text-[12px] text-muted leading-relaxed">
-							<strong className="text-fg">Example above:</strong>{' '}
-							The <strong className="text-purple">Solo Dev Shop</strong> template.
+					<div className="bg-lp-purple-faint border border-lp-border border-l-[3px] border-l-lp-purple p-3">
+						<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
+							<strong className="text-lp-fg">Example above:</strong>{' '}
+							The <strong className="text-lp-purple">Solo Dev Shop</strong> template.
 							You choose the names, the roles, and how many agents you need.
 							Multiple agents can share the same role.
 						</div>
@@ -392,11 +406,11 @@ patterns:
      reviews"`}
 						</CodeBlock>
 						<div className="flex flex-col gap-4">
-							<div className="bg-card border border-border p-4">
-								<div className="font-mono text-[10px] text-purple tracking-[2px] mb-2.5">
+							<div className="bg-lp-card border border-lp-border p-4">
+								<div className="font-mono text-[10px] text-lp-purple tracking-[2px] mb-2.5">
 									CONTEXT ASSEMBLY
 								</div>
-								<div className="font-sans text-[13px] text-muted leading-relaxed mb-3">
+								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
 									Before every session, 4 layers are assembled into the
 									agent&apos;s context window:
 								</div>
@@ -405,41 +419,41 @@ patterns:
 										label: 'Identity',
 										desc: 'Role, rules, team',
 										tokens: '~2K',
-										color: 'bg-purple',
-										textColor: 'text-purple',
+										color: 'bg-lp-purple',
+										textColor: 'text-lp-purple',
 									},
 									{
 										label: 'Company State',
 										desc: 'Role-scoped snapshot',
 										tokens: '~5K',
-										color: 'bg-accent-cyan',
-										textColor: 'text-accent-cyan',
+										color: 'bg-lp-accent-cyan',
+										textColor: 'text-lp-accent-cyan',
 									},
 									{
 										label: 'Memory',
 										desc: 'Facts, decisions, learnings',
 										tokens: '~20K',
-										color: 'bg-accent-green',
-										textColor: 'text-accent-green',
+										color: 'bg-lp-accent-green',
+										textColor: 'text-lp-accent-green',
 									},
 									{
 										label: 'Task Context',
 										desc: 'Spec, plan, code, history',
 										tokens: '~15K',
-										color: 'bg-accent-orange',
-										textColor: 'text-accent-orange',
+										color: 'bg-lp-accent-orange',
+										textColor: 'text-lp-accent-orange',
 									},
 								].map((l, i) => (
 									<div
 										key={l.label}
-										className={`flex justify-between items-center py-1.5 ${i < 3 ? 'border-b border-border' : ''}`}
+										className={`flex justify-between items-center py-1.5 ${i < 3 ? 'border-b border-lp-border' : ''}`}
 									>
 										<div className="flex items-center gap-2">
 											<div className={`w-[3px] h-4 ${l.color}`} />
-											<span className="font-sans text-xs text-fg font-semibold">
+											<span className="font-sans text-xs text-lp-fg font-semibold">
 												{l.label}
 											</span>
-											<span className="font-sans text-[11px] text-ghost">
+											<span className="font-sans text-[11px] text-lp-ghost">
 												— {l.desc}
 											</span>
 										</div>
@@ -449,13 +463,13 @@ patterns:
 									</div>
 								))}
 							</div>
-							<div className="bg-purple-faint border border-border border-l-[3px] border-l-purple p-4">
-								<div className="font-sans text-[13px] text-fg leading-relaxed">
+							<div className="bg-lp-purple-faint border border-lp-border border-l-[3px] border-l-lp-purple p-4">
+								<div className="font-sans text-[13px] text-lp-fg leading-relaxed">
 									<strong className="text-white">Isolation rule:</strong> No
 									agent reads another agent's memory. Cross-agent info sharing
 									only through channels and task history. If you need info
 									outside your scope, use{' '}
-									<code className="font-mono text-[11px] text-purple">
+									<code className="font-mono text-[11px] text-lp-purple">
 										ask_agent
 									</code>{' '}
 									— the owning agent decides to share or escalate.
@@ -581,9 +595,9 @@ changelog:
 						Dashboard
 					</SectionHeader>
 					<DashboardMock />
-					<p className="font-sans text-[13px] text-ghost mt-4 leading-relaxed">
+					<p className="font-sans text-[13px] text-lp-ghost mt-4 leading-relaxed">
 						The dashboard is NOT an app — it's a view over{' '}
-						<code className="font-mono text-xs text-purple">
+						<code className="font-mono text-xs text-lp-purple">
 							/company/dashboard/pins/
 						</code>
 						. Agents write YAML pin files. The UI renders them. When you click
@@ -653,41 +667,41 @@ Max: FeatureGrid and Testimonials done.
 							{
 								label: 'HUMAN',
 								desc: 'CLI \u00B7 Dashboard \u00B7 Telegram \u00B7 Slack (soon) \u00B7 Email (soon)',
-								color: 'border-l-accent-green',
-								textColor: 'text-accent-green',
+								color: 'border-l-lp-accent-green',
+								textColor: 'text-lp-accent-green',
 							},
 							{
 								label: 'ORCHESTRATOR',
 								desc: 'Watcher \u00B7 Workflows \u00B7 Spawner \u00B7 Context \u00B7 Memory \u00B7 Cron \u00B7 Webhooks \u00B7 SSE Stream',
-								color: 'border-l-purple',
-								textColor: 'text-purple',
+								color: 'border-l-lp-purple',
+								textColor: 'text-lp-purple',
 							},
 							{
 								label: 'AGENTS',
 								desc: 'Claude Agent SDK \u00B7 Codex SDK \u00B7 Role templates \u00B7 Tools \u00B7 MCPs \u00B7 Sandboxed FS \u00B7 Memory',
-								color: 'border-l-accent-cyan',
-								textColor: 'text-accent-cyan',
+								color: 'border-l-lp-accent-cyan',
+								textColor: 'text-lp-accent-cyan',
 							},
 							{
 								label: 'STORAGE',
 								desc: 'SQLite + Drizzle \u00B7 YAML/Markdown/JSON \u00B7 FTS5 + vector search \u00B7 Git auto-commit \u00B7 Better Auth',
-								color: 'border-l-accent-orange',
-								textColor: 'text-accent-orange',
+								color: 'border-l-lp-accent-orange',
+								textColor: 'text-lp-accent-orange',
 							},
 						].map((l, i) => (
 							<div key={l.label}>
 								<div
-									className={`flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 bg-card border border-border border-l-[3px] ${l.color}`}
+									className={`flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 bg-lp-card border border-lp-border border-l-[3px] ${l.color}`}
 								>
 									<span
 										className={`font-mono text-[11px] ${l.textColor} tracking-[3px] sm:min-w-[120px]`}
 									>
 										{l.label}
 									</span>
-									<span className="font-sans text-[11px] sm:text-xs text-muted">{l.desc}</span>
+									<span className="font-sans text-[11px] sm:text-xs text-lp-muted">{l.desc}</span>
 								</div>
 								{i < 3 && (
-									<div className="text-center font-mono text-xs text-dim py-0.5">
+									<div className="text-center font-mono text-xs text-lp-dim py-0.5">
 										{'\u25BC'}
 									</div>
 								)}
@@ -718,7 +732,7 @@ Max: FeatureGrid and Testimonials done.
 					<h2 className="font-sans text-2xl sm:text-[32px] font-black text-white mt-6 tracking-tight">
 						Your company, on autopilot.
 					</h2>
-					<p className="font-sans text-[15px] text-muted mt-2">
+					<p className="font-sans text-[15px] text-lp-muted mt-2">
 						Open Source. CLI-first. MIT License.
 					</p>
 					<div className="flex flex-col sm:flex-row justify-center gap-3 mt-8">
@@ -726,30 +740,30 @@ Max: FeatureGrid and Testimonials done.
 							href="https://github.com/questpie/autopilot"
 							target="_blank"
 							rel="noopener noreferrer"
-							className="font-mono text-xs text-white bg-purple px-6 py-2.5 no-underline hover:bg-purple-light transition-colors"
+							className="font-mono text-xs text-white bg-lp-purple px-6 py-2.5 no-underline hover:bg-lp-purple-light transition-colors"
 						>
 							github.com/questpie/autopilot
 						</a>
 						<a
 							href="/docs"
-							className="font-mono text-xs text-purple border border-border px-6 py-2.5 no-underline hover:border-purple transition-colors"
+							className="font-mono text-xs text-lp-purple border border-lp-border px-6 py-2.5 no-underline hover:border-lp-purple transition-colors"
 						>
 							Documentation
 						</a>
 					</div>
-					<div className="font-mono text-[11px] text-dim mt-12">
+					<div className="font-mono text-[11px] text-lp-dim mt-12">
 						Built by{' '}
 						<a
 							href="https://questpie.com"
 							target="_blank"
 							rel="noopener noreferrer"
-							className="text-ghost hover:text-fg transition-colors"
+							className="text-lp-ghost hover:text-lp-fg transition-colors"
 						>
 							QUESTPIE s.r.o.
 						</a>
 					</div>
 				</section>
 			</div>
-		</>
+		</div>
 	)
 }

@@ -1,0 +1,195 @@
+---
+title: CLI Reference
+description: Complete CLI reference for QUESTPIE Autopilot — init, start, ask, attach, inbox, agents, status, secrets, and more.
+---
+
+Complete command reference for the `autopilot` CLI. Your terminal into the AI company.
+
+## Installation
+
+```bash title="terminal"
+# Install globally
+bun add -g @questpie/autopilot
+
+# Or run directly (no install)
+bunx @questpie/autopilot init my-company
+```
+
+## kubectl Analogy
+
+If you know Kubernetes, you already know Autopilot. Agents are pods, the orchestrator is the control plane, tasks are workloads.
+
+| kubectl | autopilot | What it does |
+|---------|-----------|-------------|
+| `kubectl create ns` | `autopilot init` | Create workspace |
+| `kubectl apply -f ...` | `autopilot ask "..."` | Submit work |
+| `kubectl get pods` | `autopilot agents` | List workers |
+| `kubectl logs -f pod/web` | `autopilot attach max` | Live-stream output |
+| `kubectl get jobs` | `autopilot tasks` | List workloads |
+| `kubectl get events` | `autopilot inbox` | Items needing attention |
+
+## Setup Commands
+
+### autopilot init
+
+Scaffold a new company directory from a template.
+
+```text title="syntax"
+autopilot init [name] [options]
+
+Arguments:
+  name                    Company name (default: "My Company")
+
+Options:
+  -f, --force             Overwrite existing directory
+```
+
+### autopilot start
+
+Start the orchestrator process. Launches the FS watcher, workflow engine, scheduler, webhook server, and session streaming.
+
+```text title="syntax"
+autopilot start [options]
+
+Options:
+  -p, --port <port>       Webhook server port (default: 7777)
+
+Environment:
+  ANTHROPIC_API_KEY       Required. Your Anthropic API key.
+```
+
+### autopilot status
+
+Display a company overview: agent roster, task counts by status, and totals.
+
+## Intent & Task Commands
+
+### autopilot ask
+
+Submit a high-level intent. Creates a task of type `intent` in the backlog assigned to the CEO agent.
+
+```text title="syntax"
+autopilot ask <intent>
+```
+
+### autopilot tasks
+
+List all tasks. Filter by status or assigned agent.
+
+```text title="syntax"
+autopilot tasks [options]
+autopilot tasks show <id>
+autopilot tasks approve <id>
+autopilot tasks reject <id> [reason]
+
+Options:
+  -s, --status <status>   Filter: backlog, active, review, blocked, done
+  -a, --agent <agent>     Filter by assigned agent ID
+```
+
+### autopilot inbox
+
+Show tasks requiring human attention. Displays all tasks in `review` or `blocked` status.
+
+## Agents & Observation
+
+### autopilot agents
+
+List all defined agents with their role, name, ID, and model.
+
+```text title="syntax"
+autopilot agents
+autopilot agents show <id>
+```
+
+### autopilot attach
+
+Live-stream an agent's activity feed. Like `kubectl logs -f`. Press Ctrl+C to detach.
+
+```text title="syntax"
+autopilot attach <agent> [options]
+
+Options:
+  --compact               One line per event
+  --tools-only            Only show tool_call and tool_result events
+```
+
+### autopilot replay
+
+Replay an agent's past activity.
+
+```text title="syntax"
+autopilot replay <agent> [options]
+
+Options:
+  --limit <n>             Number of entries to show (default: 50)
+```
+
+## Knowledge & Config
+
+### autopilot knowledge
+
+Manage the company knowledge base.
+
+```text title="syntax"
+autopilot knowledge                        List knowledge tree
+autopilot knowledge show <path>            Print a knowledge doc
+autopilot knowledge add <path> [--file f]  Add a doc
+autopilot knowledge scan                   Show parsed skill catalog
+```
+
+### autopilot secrets
+
+Manage secrets for integrations.
+
+```text title="syntax"
+autopilot secrets                           List secret names
+autopilot secrets list                     List with type and agent scope
+autopilot secrets add <name> [options]     Add a secret
+autopilot secrets remove <name>            Remove a secret
+```
+
+### autopilot board
+
+View and manage dashboard pins created by agents.
+
+```text title="syntax"
+autopilot board                             List all pins
+autopilot board clear                      Remove all pins
+```
+
+## Communication
+
+### autopilot channels
+
+List, read, and send messages to agent communication channels.
+
+```text title="syntax"
+autopilot channels                          List all channels
+autopilot channels show <channel>          Show messages
+autopilot channels send <channel> "msg"    Send a message
+
+Options for show:
+  -n, --limit <n>         Number of messages (default: 20)
+  -f, --follow            Live follow mode
+```
+
+### autopilot chat
+
+Send a message to a specific agent and get a streamed response.
+
+```text title="syntax"
+autopilot chat <agent> <message> [options]
+
+Options:
+  -c, --channel <channel> Channel to load history from (default: general)
+```
+
+### autopilot approve / reject
+
+Top-level shortcuts for task approval and rejection. Triggers workflow advancement.
+
+```text title="syntax"
+autopilot approve <task-id>
+autopilot reject <task-id> [--reason "..."]
+```

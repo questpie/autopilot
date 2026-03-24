@@ -1,0 +1,114 @@
+---
+title: Skills
+description: Markdown knowledge packages in agentskills.io format. Skill templates, creating custom skills, and 3-stage lazy loading.
+---
+
+Markdown knowledge packages that teach agents domain expertise. Like Claude Code skills, but for company agents. Based on the open `agentskills.io` standard.
+
+## What Are Skills
+
+Skills are packaged knowledge documents with optional scripts and references that teach agents how to do specific things. Code review conventions, deployment checklists, API design patterns, incident response playbooks -- anything an agent needs to know is a skill.
+
+## Skill Format
+
+```text title="directory-structure"
+skills/
+├── code-review/
+│   ├── SKILL.md              # Main knowledge document
+│   ├── scripts/              # Optional automation scripts
+│   ├── references/           # Optional reference materials
+│   └── assets/               # Optional images, templates
+├── deployment/
+│   └── SKILL.md
+└── git-workflow/
+    └── SKILL.md
+```
+
+### SKILL.md Frontmatter
+
+```md title="skills/code-review/SKILL.md"
+---
+name: code-review
+description: |
+  Code review standards, checklist, and conventions.
+  Use when reviewing PRs or providing code feedback.
+license: MIT
+metadata:
+  author: QUESTPIE
+  version: 1.0.0
+  tags: [code-quality, review, standards]
+  roles: [reviewer, developer]
+---
+
+# Code Review
+
+## When to Use
+When reviewing pull requests or providing code feedback...
+```
+
+## 3-Stage Loading
+
+Skills are loaded lazily to minimize context window usage:
+
+1. **Metadata** -- on startup, the loader scans all skill directories and reads only the frontmatter
+2. **Body** -- when an agent requests a skill via `skill_request`, the full markdown body is loaded
+3. **Resources** -- if the skill has a `references/` directory, those files are listed and available on demand
+
+## Skill Templates
+
+The Solo Dev Shop template ships with 16 customizable skill templates:
+
+| Skill | Roles | Description |
+|-------|-------|-------------|
+| `code-review` | reviewer, developer | Code review standards and checklist |
+| `testing-strategy` | developer, reviewer | How to write unit, integration, and E2E tests |
+| `api-design` | developer, strategist | REST/GraphQL API design conventions |
+| `deployment` | devops | Deploy checklist, rollback, health checks |
+| `document-creation` | all | Spec, ADR, and plan templates |
+| `git-workflow` | developer, reviewer | Branch strategy, PR conventions |
+| `incident-response` | devops, meta | Incident triage, communication, post-mortem |
+| `project-scoping` | strategist, planner | Feature scoping, estimation |
+| `ceo-watchdog` | meta | Autonomous monitoring, health scans |
+| `workflow-design` | meta, strategist | How to design workflow definitions |
+| `task-decomposition` | meta, planner | Breaking intents into actionable tasks |
+| `team-management` | meta | Agent roster, role assignment |
+| `dashboard-customization` | design, developer, meta | Theme, widgets, layout |
+
+## Creating Your Own Skill
+
+1. **Create the directory** -- `mkdir -p skills/my-skill`
+2. **Write SKILL.md** -- add frontmatter with name, description, and roles
+3. **(Optional) Add references** -- put supporting docs in `references/`
+4. **(Optional) Add scripts** -- put automation scripts in `scripts/`
+5. **Test it** -- run `autopilot skills` to verify it appears in the catalog
+
+## CLI Commands
+
+```bash title="terminal"
+# List all available skills
+$ autopilot skills
+
+# Show a specific skill
+$ autopilot skills show code-review
+```
+
+## How Agents Use Skills
+
+When an agent starts a session, it sees the list of available skills (filtered by role) in its context. When it needs domain knowledge, it calls `skill_request` and the full skill content is loaded.
+
+```ts title="agent-skill-usage.ts"
+// Agent calls:
+skill_request({ skill_id: "code-review" })
+
+// → Full SKILL.md body injected into agent context
+// → Agent follows the checklist and conventions
+```
+
+## Marketplace (Future)
+
+Community-created skills will be available via the QUESTPIE Marketplace:
+
+```bash title="terminal"
+$ autopilot marketplace install @community/skill-seo-expert
+$ autopilot marketplace publish ./skills/seo-optimization
+```

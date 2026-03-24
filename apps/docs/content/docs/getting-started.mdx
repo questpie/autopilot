@@ -1,0 +1,247 @@
+---
+title: Getting Started
+description: Install QUESTPIE Autopilot, create your first company, and run AI agents in minutes. Prerequisites, project structure, and first commands.
+---
+
+Install Autopilot, scaffold a company, and give your first intent.
+
+## Prerequisites
+
+- **[Bun](https://bun.sh) v1.3+** -- runtime, package manager, and test runner
+  ```bash title="terminal"
+  curl -fsSL https://bun.sh/install | bash
+  ```
+- **Anthropic API key** -- agents run on Claude via the Agent SDK. Get a key from [console.anthropic.com](https://console.anthropic.com)
+- **Git** -- required for versioning company state and code operations
+- **Docker** (optional) -- for containerized production mode
+
+## Quick Start
+
+```bash title="terminal"
+bun add -g @questpie/autopilot
+autopilot init my-company
+cd my-company
+
+# Configure your API key
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Start the orchestrator + dashboard
+autopilot start
+
+# Open dashboard
+open http://localhost:3001
+
+# Send your first task
+autopilot ask "Build me a landing page"
+
+# Watch agents work
+autopilot attach max
+```
+
+## Project Structure
+
+After `autopilot init`, you get a complete company filesystem based on the `solo-dev-shop` template:
+
+```text title="my-company/"
+company.yaml                  # Company identity and global settings
+team/
+  agents.yaml                 # 8 AI agents: ceo, sam, alex, max, riley, ops, morgan, jordan
+  humans.yaml                 # Human team members and notification preferences
+  workflows/
+    development.yaml          # Intent -> Scope -> Plan -> Implement -> Review -> Deploy
+    marketing.yaml            # Brief -> Content -> Design -> Review -> Publish
+    incident.yaml             # Triage -> Fix -> Review -> Deploy -> Verify
+  schedules.yaml              # Cron jobs (daily standup, weekly metrics)
+  webhooks.yaml               # Inbound webhook definitions (GitHub, Stripe)
+  policies/
+    approval-gates.yaml       # What requires human approval
+tasks/
+  backlog/                    # Unassigned tasks
+  active/                     # Tasks being worked on
+  review/                     # Awaiting human review or approval
+  blocked/                    # Waiting on external dependency
+  done/                       # Completed (auto-archived)
+comms/
+  channels/
+    general/                  # Company-wide channel
+    dev/                      # Development channel
+  direct/                     # Agent-to-agent direct messages
+knowledge/
+  brand/                      # Brand guidelines, tone of voice
+  technical/                  # Stack conventions, architecture decisions
+  business/                   # Strategy, pricing, market research
+  onboarding/                 # How-we-work docs for agent context
+projects/                     # Code repos, design assets, marketing materials
+context/
+  memory/                     # Per-agent persistent memory (YAML)
+skills/                       # Agent Skills (agentskills.io standard)
+  code-review/SKILL.md        # Each skill = directory + SKILL.md
+  deployment/SKILL.md
+  ...
+secrets/                      # Encrypted API keys and credentials
+dashboard/
+  pins/                       # Board pins from agents
+logs/
+  activity/                   # Activity feed
+  sessions/                   # Agent session streams
+  errors/                     # Error logs
+infra/                        # Infrastructure configuration
+```
+
+## Configuration
+
+The root `company.yaml` controls company identity, agent runtime settings, and budget limits. This is the default from the template:
+
+```yaml title="company.yaml"
+name: "My Company"
+slug: "my-company"
+description: "A solo developer shop powered by QUESTPIE Autopilot"
+timezone: "UTC"
+language: "en"
+languages: ["en"]
+
+owner:
+  name: "Founder"
+  email: "founder@example.com"
+  notification_channels: []
+
+settings:
+  auto_assign: true
+  require_approval: ["merge", "deploy", "spend", "publish"]
+  max_concurrent_agents: 4
+  agent_provider: "claude-agent-sdk"
+  agent_model: "claude-sonnet-4-6"
+  budget:
+    daily_token_limit: 2000000
+    alert_at: 80
+
+integrations: {}
+```
+
+Agents are defined in `team/agents.yaml`. Each agent has an ID, role template, filesystem scope, and available tools:
+
+```yaml title="team/agents.yaml (excerpt)"
+agents:
+  - id: ceo
+    name: "CEO Agent"
+    role: meta
+    description: "Decomposes high-level intents into tasks, manages company structure"
+    fs_scope:
+      read: ["/**"]
+      write: ["/tasks/**", "/team/**", "/comms/**", "/dashboard/**"]
+    tools: ["fs", "terminal", "task", "message", "board"]
+
+  - id: max
+    name: "Max"
+    role: developer
+    description: "Implements features, writes code, creates branches and PRs"
+    fs_scope:
+      read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
+      write: ["/projects/*/code/**", "/tasks/**", "/comms/**"]
+    tools: ["fs", "terminal", "task", "message", "git"]
+```
+
+## First Commands
+
+### Start the orchestrator
+
+```bash title="terminal"
+cd my-company
+export ANTHROPIC_API_KEY=sk-ant-...
+
+autopilot start
+```
+
+This starts the filesystem watcher, scheduler, webhook server, SSE stream, and the dashboard on port 3001. It runs until you stop it.
+
+### Open the dashboard
+
+```bash title="terminal"
+autopilot dashboard
+
+# Or open directly
+open http://localhost:3001
+```
+
+The Living Dashboard shows agent activity, task status, board pins, and approval gates. It updates in realtime via SSE.
+
+### Check company status
+
+```bash title="terminal"
+autopilot status
+
+# QUESTPIE Autopilot — my-company
+# Agents: 8 defined, 0 active
+# Tasks:  0 backlog, 0 active, 0 review, 0 blocked
+# Uptime: 2m 14s
+```
+
+### Give your first intent
+
+```bash title="terminal"
+autopilot ask "Set up a Next.js project with authentication"
+
+# The CEO agent decomposes this into scoped tasks:
+# 1. Sam (strategist) scopes the feature and writes a spec
+# 2. Alex (planner) creates a file-level implementation plan
+# 3. Max (developer) writes the code and opens a PR
+# 4. Riley (reviewer) reviews for quality and spec compliance
+# 5. You approve the merge (human gate)
+# 6. Ops (devops) deploys to staging, then production
+```
+
+### Watch agents work
+
+```bash title="terminal"
+# List all agents and their current status
+autopilot agents
+
+# Live-stream an agent's session
+autopilot attach max
+
+# Compact mode -- one line per tool call
+autopilot attach max --compact
+
+# Only show tool calls, skip thinking
+autopilot attach max --tools-only
+```
+
+### Handle approvals
+
+```bash title="terminal"
+# Check your inbox for items needing attention
+autopilot inbox
+
+# Approve a task at a human gate
+autopilot approve TASK-001
+
+# Reject with feedback -- agent will rework
+autopilot reject TASK-001 --reason "Needs error handling for edge cases"
+```
+
+## Docker Mode
+
+For production, run the company in an isolated Docker container. The container mounts the company filesystem and exposes webhook and WebSocket ports:
+
+```yaml title="docker-compose.yaml"
+services:
+  autopilot:
+    image: ghcr.io/questpie/autopilot:latest
+    volumes:
+      - ./my-company:/company
+    ports:
+      - "7777:7777"    # Webhook server + dashboard
+      - "7778:7778"    # WebSocket (session streaming)
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    restart: unless-stopped
+```
+
+## Next Steps
+
+- [Features](/docs/features) -- unified search, embeddings, multiple providers, transport plugins
+- [Architecture](/docs/architecture) -- understand the four-layer stack and orchestrator internals
+- [Agents](/docs/agents) -- role templates, filesystem scopes, and context assembly
+- [Primitives](/docs/primitives) -- the structured tool calls agents use
+- [Workflows](/docs/workflows) -- how tasks flow through development, marketing, and incident pipelines
+- [CLI Reference](/docs/cli) -- all available commands and options

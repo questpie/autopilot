@@ -525,7 +525,7 @@ http_request({
 								A CLI tool exists and is installed on the host.
 							</td>
 							<td className="py-2 text-xs">
-								kubectl, terraform, aws-cli, gh
+								terraform, aws-cli, gh, ffmpeg
 							</td>
 						</tr>
 						<tr>

@@ -1,0 +1,67 @@
+---
+title: QUESTPIE Autopilot
+description: Complete documentation for QUESTPIE Autopilot — architecture, agents, primitives, workflows, skills, and CLI reference.
+---
+
+QUESTPIE Autopilot is an AI-native company operating system. You define a company as a filesystem, staff it with AI agents backed by Claude, and give high-level intents. The agents decompose, plan, implement, review, and deploy -- you approve at human gates.
+
+## Core Concepts
+
+### 01 — Filesystem as Database
+
+YAML for structured data, Markdown for documents, SQLite + Drizzle ORM for indexes and search. The company state lives in files you can `ls`, `cat`, `grep`, back up, and version with Git. FTS5 full-text search and sqlite-vec embeddings provide unified search across all content.
+
+### 02 — Agents as Employees
+
+Each agent is defined in YAML with an ID, role template, filesystem scope, and tool set. The default template ships 8 agents: `ceo` (meta), `sam` (strategist), `alex` (planner), `max` (developer), `riley` (reviewer), `ops` (devops), `morgan` (marketing), `jordan` (design). Each agent runs as a Claude session via the Anthropic Agent SDK with a 4-layer context assembly.
+
+### 03 — Primitives, Not Chat
+
+Agents don't produce text output. They call structured primitives -- tool calls with clear targets and effects. `create_task()`, `send_message()`, `git_commit()`, `pin_to_board()`. Agent thinking is internal. Only primitive calls produce visible effects in the filesystem.
+
+### 04 — Workflows as Files
+
+Workflows define how work moves through the company. They are YAML files in `team/workflows/`. The template includes three: development (intent to deployed feature), marketing (brief to published content), and incident (triage to post-mortem). The CEO agent owns workflow definitions; any agent can propose changes with evidence.
+
+### 05 — Orchestrator
+
+A single Bun process that watches the filesystem for changes, matches events against workflow rules, spawns agent sessions, routes tasks, runs cron schedules, handles webhooks, and captures session streams for observability. It is the only long-running process -- agents are ephemeral.
+
+## Packages
+
+| Package | npm | Description |
+|---------|-----|-------------|
+| `packages/spec` | `@questpie/autopilot-spec` | Zod schemas, constants, path helpers, validators for all filesystem formats |
+| `packages/orchestrator` | `@questpie/autopilot-orchestrator` | Filesystem watcher, workflow engine, agent spawner, scheduler, webhook server |
+| `packages/agents` | `@questpie/autopilot-agents` | Agent runtime, system prompts, primitive implementations, memory extraction |
+| `packages/cli` | `@questpie/autopilot` | CLI interface -- init, start, ask, attach, inbox, agents, status |
+| `apps/web` | -- | TanStack Start landing page and documentation site |
+
+## Quick Start
+
+```bash title="terminal"
+bun add -g @questpie/autopilot
+autopilot init my-company
+cd my-company
+export ANTHROPIC_API_KEY=sk-ant-xxx
+
+autopilot start
+autopilot ask "Build a landing page for our product"
+autopilot attach max
+```
+
+## Documentation
+
+- [Getting Started](/docs/getting-started) — Prerequisites, installation, project structure, first commands
+- [Features](/docs/features) — Unified search, embeddings, multiple providers, transport plugins
+- [Architecture](/docs/architecture) — Four-layer stack, orchestrator internals, hybrid storage
+- [Agents](/docs/agents) — Agent definitions, role templates, memory isolation, context assembly
+- [Primitives](/docs/primitives) — Structured tool calls, categories, approval gates, code examples
+- [Workflows](/docs/workflows) — Development, marketing, and incident workflows as YAML files
+- [Context & Memory](/docs/memory) — 4-layer context assembly, persistent memory, memory extraction
+- [Skills](/docs/skills) — Markdown knowledge packages, agentskills.io format, customizable skill templates
+- [Artifacts](/docs/artifacts) — Agent-created previews, artifact router, cold-start, port pool
+- [Living Dashboard](/docs/living-dashboard) — Widgets, theme overrides, layout config, custom pages, dev/prod mode
+- [Integrations](/docs/integrations) — 3-part pattern, secret management, GitHub, Linear, Slack, Stripe
+- [Use Cases](/docs/use-cases) — Dev shop, marketing, e-commerce, consulting, solo SaaS
+- [CLI Reference](/docs/cli) — All Autopilot commands -- init, ask, attach, inbox, agents, status
