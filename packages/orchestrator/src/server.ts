@@ -99,7 +99,16 @@ export class Orchestrator {
 			console.error('[orchestrator] indexer failed:', err)
 		}
 
-		// 4. Notifier + StreamManager
+		// 4. Load roles (needed for RBAC before first request)
+		try {
+			const { loadRoles } = await import('./auth/roles')
+			await loadRoles(root)
+			console.log('[orchestrator] roles loaded')
+		} catch (err) {
+			console.error('[orchestrator] failed to load roles:', err)
+		}
+
+		// 5. Notifier + StreamManager
 		await container.resolveAsync([notifierFactory, streamManagerFactory])
 
 		// 5. Start watcher

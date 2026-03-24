@@ -11,7 +11,7 @@ import type { Database } from 'bun:sqlite'
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export async function createAuth(rawDb: Database) {
-	return betterAuth({
+	const auth = betterAuth({
 		database: rawDb,
 		basePath: '/api/auth',
 
@@ -58,6 +58,15 @@ export async function createAuth(rawDb: Database) {
 			}),
 		],
 	})
+
+	// Better Auth does NOT auto-create tables — we must run migrations explicitly.
+	// This creates all required tables (user, session, account, verification,
+	// twoFactor, apikey, etc.) if they don't already exist, and adds any missing
+	// columns for plugin-provided fields.
+	const ctx = await auth.$context
+	await ctx.runMigrations()
+
+	return auth
 }
 
 export type Auth = Awaited<ReturnType<typeof createAuth>>
