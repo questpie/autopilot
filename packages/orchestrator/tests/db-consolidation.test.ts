@@ -27,18 +27,18 @@ describe('DB consolidation (ADR-019)', () => {
 		expect(result.raw.filename).toBe(join(root, '.data', 'autopilot.db'))
 	})
 
-	it('createAuth accepts raw Database from createDb (shared connection)', async () => {
+	it('createAuth accepts Drizzle db from createDb (shared connection)', async () => {
 		await setup()
-		const { raw } = await createDb(root)
-		const auth = await createAuth(raw)
+		const { db } = await createDb(root)
+		const auth = await createAuth(db)
 		expect(auth).toBeDefined()
 		expect(auth.handler).toBeInstanceOf(Function)
 	})
 
 	it('.auth/ directory is NOT created by createDb + createAuth', async () => {
 		await setup()
-		const { raw } = await createDb(root)
-		await createAuth(raw)
+		const { db } = await createDb(root)
+		await createAuth(db)
 		expect(existsSync(join(root, '.auth'))).toBe(false)
 	})
 
@@ -46,8 +46,8 @@ describe('DB consolidation (ADR-019)', () => {
 		await setup()
 		const { db, raw } = await createDb(root)
 
-		// Auth uses the same raw connection
-		const auth = await createAuth(raw)
+		// Auth uses the Drizzle instance (same underlying connection)
+		const auth = await createAuth(db)
 		expect(auth).toBeDefined()
 
 		// Verify both operate on the same file

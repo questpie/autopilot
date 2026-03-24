@@ -1,5 +1,11 @@
 import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
+// Re-export Better Auth tables so they're included in the Drizzle schema
+export {
+	user, session, account, verification,
+	twoFactor, apikey, rateLimit,
+} from './auth-schema'
+
 // ─── Tasks ──────────────────────────────────────────────────────────────────
 
 export const tasks = sqliteTable('tasks', {

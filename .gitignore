@@ -46,3 +46,4 @@ tmp/
 local_specs/*
 claude.md
 docs/internal/*
+test-company/

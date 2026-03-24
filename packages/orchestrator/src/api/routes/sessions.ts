@@ -22,20 +22,20 @@ const sessions = new Hono<AppEnv>()
 			return c.json({ error: 'Failed to list sessions' }, 500)
 		}
 	})
-	// DELETE /api/sessions/:id — revoke a specific session
-	.delete('/:id', async (c) => {
+	// DELETE /api/sessions/:token — revoke a specific session by its token
+	.delete('/:token', async (c) => {
 		const actor = c.get('actor')
 		if (!actor) return c.json({ error: 'Unauthorized' }, 401)
 
-		const sessionId = c.req.param('id')
+		const token = c.req.param('token')
 		const auth = c.get('auth')
 
 		try {
 			const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
-			const revokeFn = authApi.revokeSession ?? authApi.revokeUserSession
+			const revokeFn = authApi.revokeSession
 			if (!revokeFn) return c.json({ error: 'Session revocation not available' }, 501)
 
-			await revokeFn({ body: { sessionId } })
+			await revokeFn({ headers: c.req.raw.headers, body: { token } })
 			return c.json({ ok: true })
 		} catch {
 			return c.json({ error: 'Failed to revoke session' }, 500)

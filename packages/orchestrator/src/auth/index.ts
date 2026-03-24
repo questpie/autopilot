@@ -1,18 +1,23 @@
 /**
  * Better Auth instance for QUESTPIE Autopilot.
  *
- * Uses a shared bun:sqlite Database instance (the same autopilot.db used by
- * Drizzle ORM) so that all data lives in a single SQLite file.
+ * Uses the Drizzle adapter so that all tables are managed by Drizzle
+ * migrations — no more Kysely internal migrations.
  */
 import { betterAuth } from 'better-auth'
 import { bearer, admin, openAPI, twoFactor } from 'better-auth/plugins'
 import { apiKey } from '@better-auth/api-key'
-import type { Database } from 'bun:sqlite'
+import { drizzleAdapter } from '@better-auth/drizzle-adapter'
+import type { AutopilotDb } from '../db'
+import * as authSchema from '../db/auth-schema'
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export async function createAuth(rawDb: Database) {
+export async function createAuth(db: AutopilotDb) {
 	const auth = betterAuth({
-		database: rawDb,
+		database: drizzleAdapter(db, {
+			provider: 'sqlite',
+			schema: authSchema,
+		}),
 		basePath: '/api/auth',
 
 		emailAndPassword: { enabled: true },
@@ -59,12 +64,7 @@ export async function createAuth(rawDb: Database) {
 		],
 	})
 
-	// Better Auth does NOT auto-create tables — we must run migrations explicitly.
-	// This creates all required tables (user, session, account, verification,
-	// twoFactor, apikey, etc.) if they don't already exist, and adds any missing
-	// columns for plugin-provided fields.
-	const ctx = await auth.$context
-	await ctx.runMigrations()
+	// No runMigrations() — Drizzle migrations handle all table creation now.
 
 	return auth
 }
@@ -75,6 +75,6 @@ import { container } from '../container'
 import { dbFactory } from '../db'
 
 export const authFactory = container.registerAsync('auth', async (c) => {
-	const { db } = await c.resolveAsync([dbFactory])
-	return createAuth(db.raw)
+	const { db: dbResult } = await c.resolveAsync([dbFactory])
+	return createAuth(dbResult.db)
 })
