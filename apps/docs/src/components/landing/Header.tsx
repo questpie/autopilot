@@ -7,7 +7,7 @@ export function Header() {
 			<div className="max-w-[860px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
 				<Link to="/" className="flex items-center gap-2 text-white no-underline">
 					<QSymbol size={18} />
-					<span className="font-mono text-[11px] text-lp-ghost tracking-[3px]">
+					<span className="font-mono text-lg font-bold">
 						QUESTPIE
 					</span>
 				</Link>
