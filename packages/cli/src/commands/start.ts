@@ -11,8 +11,6 @@ program.addCommand(
 		.action(async (opts: { port: string }) => {
 			try {
 				const root = await findCompanyRoot()
-				const company = await loadCompany(root)
-				const agents = await loadAgents(root)
 				const port = Number.parseInt(opts.port, 10)
 
 				const orchestrator = new Orchestrator({
@@ -22,6 +20,8 @@ program.addCommand(
 
 				await orchestrator.start()
 
+				const company = await loadCompany(root)
+				const agents = await loadAgents(root)
 				const apiPort = port + 1
 
 				console.log('')

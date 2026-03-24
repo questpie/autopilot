@@ -10,12 +10,13 @@ import { Container } from '@drepkovsky/tinydi'
 export const container = new Container()
 
 /** Company root path — must be configured before resolving any service. */
-export const companyRootFactory = container.register(
+const _companyRootFactory = container.register(
 	'companyRoot',
 	() => {
 		throw new Error('companyRoot not configured — call configureContainer() first')
 	},
 )
+export const companyRootFactory = container.reference<typeof _companyRootFactory>('companyRoot')
 
 /** Set the company root path. Must be called once at startup. */
 export function configureContainer(companyRoot: string) {
