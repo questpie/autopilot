@@ -7,6 +7,7 @@ import { Header } from '@/components/landing/Header'
 import { LiveStream } from '@/components/landing/LiveStream'
 import { QSymbol } from '@/components/landing/QSymbol'
 import { Section, SectionHeader } from '@/components/landing/Section'
+import { ArchitectureDiagram } from '@/components/landing/ArchitectureDiagram'
 import { Tag } from '@/components/landing/Tag'
 
 export const Route = createFileRoute('/')({
@@ -625,44 +626,7 @@ pin_to_board({
 					<SectionHeader sub="Single Bun process. One SQLite file. No Docker, no Postgres, no Redis. The entire company runs as files you can ls, grep, back up with cp, and fork with git clone.">
 						Architecture
 					</SectionHeader>
-					<div className="flex flex-col gap-1.5">
-						{[
-							{
-								label: 'HUMAN',
-								desc: 'CLI \u00B7 Dashboard \u00B7 Telegram \u00B7 Slack (soon) \u00B7 Email (soon)',
-							},
-							{
-								label: 'ORCHESTRATOR',
-								desc: 'Watcher \u00B7 Workflows \u00B7 Spawner \u00B7 Context \u00B7 Memory \u00B7 Cron \u00B7 Webhooks \u00B7 SSE Stream',
-							},
-							{
-								label: 'AGENTS',
-								desc: 'Claude Agent SDK \u00B7 Codex SDK \u00B7 Role templates \u00B7 13 primitives \u00B7 MCPs \u00B7 Sandboxed FS \u00B7 Memory',
-							},
-							{
-								label: 'STORAGE',
-								desc: 'SQLite + Drizzle \u00B7 YAML/Markdown/JSON \u00B7 FTS5 + sqlite-vec \u00B7 Git auto-commit \u00B7 Better Auth',
-							},
-						].map((l, i) => (
-							<div key={l.label}>
-								<div
-									className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 bg-lp-card"
-								>
-									<span
-										className="font-mono text-[11px] text-lp-fg tracking-[0.15em] sm:min-w-[120px]"
-									>
-										{l.label}
-									</span>
-									<span className="font-sans text-[11px] sm:text-xs text-lp-muted">{l.desc}</span>
-								</div>
-								{i < 3 && (
-									<div className="text-center font-mono text-xs text-lp-dim py-0.5">
-										{'\u25BC'}
-									</div>
-								)}
-							</div>
-						))}
-					</div>
+					<ArchitectureDiagram />
 					<div className="mt-6 bg-lp-card p-6">
 						<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
 							ZERO INFRASTRUCTURE

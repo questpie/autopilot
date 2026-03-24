@@ -1,206 +1,284 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 /**
- * Generative avatar API — deterministic SVG face from a seed string.
+ * Construct avatar API — deterministic SVG robot from a seed string.
  *
- * Usage:  GET /api/avatar?seed=my-agent&size=120
- *   seed  — any string (agent ID, name, email hash, etc.)
- *   size  — pixel width/height of the output SVG (default 80, max 512)
+ * Usage:  GET /api/avatar?seed=my-agent&size=120&style=solid&theme=dark
+ *   seed   — any string (agent ID, name, etc.) — default 'default'
+ *   size   — pixel width/height 16-512 — default 80
+ *   style  — 'solid' | 'wireframe' — default 'solid'
+ *   theme  — 'dark' | 'light' — default 'dark'
  *
  * Returns image/svg+xml, cacheable for 7 days.
  */
 
-// ── Hash ────────────────────────────────────────────────────────────────
-function hash(seed: string): number {
-	let h = 5381
-	for (let i = 0; i < seed.length; i++) {
-		h = ((h << 5) + h + seed.charCodeAt(i)) >>> 0
+// ── PRNG Algorithms ────────────────────────────────────────────────────
+function xmur3(str: string): () => number {
+	let h = 1779033703 ^ str.length
+	for (let i = 0; i < str.length; i++) {
+		h = Math.imul(h ^ str.charCodeAt(i), 3432918353)
+		h = (h << 13) | (h >>> 19)
 	}
-	return h
+	return () => {
+		h = Math.imul(h ^ (h >>> 16), 2246822507)
+		h = Math.imul(h ^ (h >>> 13), 3266489909)
+		return (h ^= h >>> 16) >>> 0
+	}
 }
 
-function t(h: number, i: number): number {
-	return (((h * (i + 1) * 2654435761) >>> 0) % 10000) / 10000
+function mulberry32(a: number): () => number {
+	let state = a
+	return () => {
+		let t = (state += 0x6d2b79f5)
+		t = Math.imul(t ^ (t >>> 15), t | 1)
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+	}
 }
 
-function pick<T>(arr: readonly T[], v: number): T {
-	return arr[Math.floor(v * arr.length) % arr.length]!
+// ── Data ───────────────────────────────────────────────────────────────
+interface HeadDef {
+	x: number
+	y: number
+	w: number
+	h: number
 }
 
-function lerp(a: number, b: number, v: number): number {
-	return Math.round(a + (b - a) * v)
-}
-
-function darken(hex: string, amount: number): string {
-	const r = parseInt(hex.slice(1, 3), 16)
-	const g = parseInt(hex.slice(3, 5), 16)
-	const b = parseInt(hex.slice(5, 7), 16)
-	const f = 1 - amount
-	return `#${(Math.round(r * f) | 0).toString(16).padStart(2, '0')}${(Math.round(g * f) | 0).toString(16).padStart(2, '0')}${(Math.round(b * f) | 0).toString(16).padStart(2, '0')}`
-}
-
-// ── Palettes ────────────────────────────────────────────────────────────
-const SKIN = ['#FDDCB5', '#F0C8A0', '#E0B08A', '#D4A574', '#C68642', '#8D5524', '#6B3A1F', '#5C3018'] as const
-const HAIR = ['#0A0A0A', '#1A1209', '#2C1810', '#4A2C1A', '#8B4513', '#C4956A', '#9E9E9E', '#B700FF'] as const
-const EYES = ['#1A1A1A', '#2C1810', '#2D4A3E', '#3D2B1F', '#4A6741'] as const
-
-type R = { x: number; y: number; w: number; h: number }
-type HairFn = (fw: number, fx: number, fy: number) => R[]
-
-const HAIR_STYLES: HairFn[] = [
-	(fw, fx, fy) => [{ x: fx - 2, y: fy - 8, w: fw + 4, h: 12 }],
-	(fw, fx, fy) => [
-		{ x: fx - 2, y: fy - 8, w: fw + 4, h: 12 },
-		{ x: fx - 6, y: fy - 4, w: 8, h: 18 },
-	],
-	(fw, fx, fy) => [
-		{ x: fx - 2, y: fy - 8, w: fw + 4, h: 12 },
-		{ x: fx + fw - 2, y: fy - 4, w: 8, h: 18 },
-	],
-	(fw, fx, fy) => [
-		{ x: fx - 3, y: fy - 8, w: fw + 6, h: 12 },
-		{ x: fx - 5, y: fy - 2, w: 7, h: 28 },
-		{ x: fx + fw - 2, y: fy - 2, w: 7, h: 28 },
-	],
-	(fw, fx, fy) => [{ x: fx - 1, y: fy - 14, w: fw + 2, h: 18 }],
-	() => [],
-	(_fw, _fx, fy) => [{ x: 36, y: fy - 14, w: 8, h: 18 }],
-	(fw, fx, fy) => [
-		{ x: fx - 6, y: fy - 12, w: fw + 12, h: 18 },
-		{ x: fx - 4, y: fy + 2, w: 5, h: 8 },
-		{ x: fx + fw - 1, y: fy + 2, w: 5, h: 8 },
-	],
-	(fw, fx, fy) => [
-		{ x: fx - 3, y: fy - 8, w: (fw + 6) / 2 - 2, h: 12 },
-		{ x: 42, y: fy - 8, w: (fw + 6) / 2 - 2, h: 12 },
-		{ x: fx - 4, y: fy - 2, w: 6, h: 14 },
-		{ x: fx + fw - 2, y: fy - 2, w: 6, h: 14 },
-	],
-	(fw, fx, fy) => [
-		{ x: fx - 1, y: fy - 6, w: fw + 2, h: 8 },
-		{ x: 37, y: fy - 8, w: 6, h: 6 },
-	],
+const HEADS: HeadDef[] = [
+	{ x: 3, y: 3, w: 10, h: 10 },
+	{ x: 4, y: 2, w: 8, h: 12 },
+	{ x: 2, y: 4, w: 12, h: 8 },
+	{ x: 3, y: 2, w: 10, h: 11 },
+	{ x: 5, y: 1, w: 6, h: 14 },
+	{ x: 1, y: 5, w: 14, h: 7 },
+	{ x: 4, y: 4, w: 8, h: 9 },
+	{ x: 2, y: 3, w: 11, h: 10 },
 ]
 
-const MOUTHS: R[][] = [
-	[{ x: -7, y: 0, w: 14, h: 2 }],
-	[{ x: -9, y: 0, w: 18, h: 2 }],
-	[{ x: -5, y: 0, w: 10, h: 2 }],
-	[
-		{ x: -7, y: 0, w: 14, h: 2 },
-		{ x: -7, y: 2, w: 3, h: 2 },
-		{ x: 4, y: 2, w: 3, h: 2 },
-	],
-	[{ x: -6, y: 0, w: 12, h: 3 }],
-]
+const LED_COLORS = ['#00E676', '#FF3D57', '#FFB300', '#40C4FF'] as const
 
-// ── SVG Builder ─────────────────────────────────────────────────────────
-function rect(x: number, y: number, w: number, h: number, fill: string, opts = ''): string {
-	return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"${opts}/>`
-}
+// ── SVG Builder ────────────────────────────────────────────────────────
+function generateSvg(
+	seed: string,
+	size: number,
+	style: 'solid' | 'wireframe',
+	theme: 'dark' | 'light',
+): string {
+	const seedFn = xmur3(seed || 'QUESTPIE')
+	const random = mulberry32(seedFn())
 
-function generateSvg(seed: string, size: number): string {
-	const h = hash(seed)
-
-	const faceW = lerp(32, 42, t(h, 0))
-	const faceH = lerp(38, 48, t(h, 1))
-	const faceX = 40 - faceW / 2
-	const faceY = 20 + (48 - faceH) / 2
-
-	const skin = pick(SKIN, t(h, 2))
-	const hairColor = pick(HAIR, t(h, 3))
-	const eyeColor = pick(EYES, t(h, 4))
-	const skinDark = darken(skin, 0.15)
-	const mouthClr = darken(skin, 0.35)
-
-	const hairRects = pick(HAIR_STYLES, t(h, 5))(faceW, faceX, faceY)
-
-	const eyeW = lerp(5, 8, t(h, 6))
-	const eyeH = lerp(3, 6, t(h, 7))
-	const eyeSpacing = lerp(7, 11, t(h, 8))
-	const eyeY = faceY + Math.round(faceH * 0.36)
-
-	const browH = lerp(1, 3, t(h, 9))
-	const browGap = lerp(3, 5, t(h, 10))
-
-	const noseW = lerp(3, 6, t(h, 11))
-	const noseH = lerp(5, 10, t(h, 12))
-	const noseY = eyeY + eyeH + 3
-
-	const mouth = pick(MOUTHS, t(h, 13))
-	const mouthY = noseY + noseH + lerp(3, 6, t(h, 14))
-
-	const hasGlasses = t(h, 15) > 0.7
-	const hasFH = t(h, 16) > 0.75
-	const fhStyle = t(h, 17)
-
-	const earH = lerp(6, 10, t(h, 18))
-	const earY = eyeY - 1
-	const gazeX = lerp(-1, 1, t(h, 19))
-
-	let s = `<svg viewBox="0 0 80 80" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">`
-
-	// Neck
-	s += rect(36, faceY + faceH - 2, 8, 14, skin)
-
-	// Ears
-	s += rect(faceX - 4, earY, 4, earH, skin)
-	s += rect(faceX + faceW, earY, 4, earH, skin)
-	s += rect(faceX - 3, earY + 1, 2, earH - 2, skinDark, ' opacity="0.3"')
-	s += rect(faceX + faceW + 1, earY + 1, 2, earH - 2, skinDark, ' opacity="0.3"')
-
-	// Head
-	s += rect(faceX, faceY, faceW, faceH, skin)
-
-	// Hair
-	for (const r of hairRects) s += rect(r.x, r.y, r.w, r.h, hairColor)
-
-	// Eyebrows
-	s += rect(40 - eyeSpacing - eyeW / 2, eyeY - browGap - browH, eyeW + 2, browH, hairColor)
-	s += rect(40 + eyeSpacing - eyeW / 2 - 2, eyeY - browGap - browH, eyeW + 2, browH, hairColor)
-
-	// Eyes — sclera
-	s += rect(40 - eyeSpacing - eyeW / 2, eyeY, eyeW, eyeH, '#F5F5F5')
-	s += rect(40 + eyeSpacing - eyeW / 2, eyeY, eyeW, eyeH, '#F5F5F5')
-
-	// Eyes — pupils
-	const pupilY = eyeY + Math.max(0, (eyeH - 3) / 2)
-	const pupilH = Math.min(eyeH, 3)
-	s += rect(40 - eyeSpacing - 1.5 + gazeX, pupilY, 3, pupilH, eyeColor)
-	s += rect(40 + eyeSpacing - 1.5 + gazeX, pupilY, 3, pupilH, eyeColor)
-
-	// Nose
-	s += rect(40 - noseW / 2, noseY, noseW, noseH, skinDark, ' opacity="0.3"')
-	s += rect(40 - noseW / 2, noseY + noseH - 2, noseW, 2, skinDark, ' opacity="0.15"')
-
-	// Mouth
-	for (const r of mouth) s += rect(40 + r.x, mouthY + r.y, r.w, r.h, mouthClr)
-
-	// Glasses
-	if (hasGlasses) {
-		const gx1 = 40 - eyeSpacing - eyeW / 2 - 2
-		const gx2 = 40 + eyeSpacing - eyeW / 2 - 2
-		const gw = eyeW + 4
-		const gh = eyeH + 4
-		s += `<rect x="${gx1}" y="${eyeY - 2}" width="${gw}" height="${gh}" fill="none" stroke="#555" stroke-width="1.5"/>`
-		s += `<rect x="${gx2}" y="${eyeY - 2}" width="${gw}" height="${gh}" fill="none" stroke="#555" stroke-width="1.5"/>`
-		s += rect(40 - eyeSpacing + eyeW / 2 + 2, eyeY + eyeH / 2 - 0.5, Math.max(0, 2 * eyeSpacing - eyeW - 4), 1.5, '#555')
-		s += rect(faceX - 2, eyeY + eyeH / 2 - 0.5, 4, 1.5, '#555')
-		s += rect(faceX + faceW - 2, eyeY + eyeH / 2 - 0.5, 4, 1.5, '#555')
+	// Extract 8 DNA attributes
+	const dna = {
+		head: Math.floor(random() * 8),
+		eye: Math.floor(random() * 8),
+		jaw: Math.floor(random() * 8),
+		top: Math.floor(random() * 8),
+		side: Math.floor(random() * 8),
+		pattern: Math.floor(random() * 4),
+		bg: Math.floor(random() * 4),
+		led: Math.floor(random() * 4),
 	}
 
-	// Facial hair
-	if (hasFH && fhStyle < 0.33) {
-		s += rect(36, mouthY + 3, 8, 5, hairColor, ' opacity="0.6"')
-	} else if (hasFH && fhStyle < 0.66) {
-		s += rect(32, mouthY + 2, 16, 6, hairColor, ' opacity="0.5"')
-		s += rect(34, mouthY + 8, 12, 3, hairColor, ' opacity="0.4"')
-	} else if (hasFH) {
-		s += rect(34, mouthY - 3, 12, 3, hairColor, ' opacity="0.6"')
+	// Colors based on theme
+	const isDark = theme === 'dark'
+	const bg = isDark ? '#0a0a0a' : '#ffffff'
+	const fg = isDark ? '#ffffff' : '#0a0a0a'
+	const surface = isDark ? '#111111' : '#f8f8f8'
+	const mid = isDark ? '#333333' : '#e5e5e5'
+	const brand = '#B700FF'
+	const ledColor = LED_COLORS[dna.led]!
+
+	const cell = 16
+	const strokeW = 4
+	const fillStyle = style === 'wireframe' ? 'none' : surface
+
+	const h = HEADS[dna.head]!
+	const cut = 3
+	const jY = h.y + h.h
+
+	const eyeColor = fg
+	const eyeFill = style === 'wireframe' ? 'none' : eyeColor
+	const eyeStrokeW = style === 'wireframe' ? strokeW : 0
+
+	let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="${size}" height="${size}">`
+	svg += `<rect width="256" height="256" fill="${bg}" />`
+
+	// 1. Background Grid
+	if (dna.bg === 0) {
+		svg += `<defs><pattern id="g0" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M 16 0 L 0 0 0 16" fill="none" stroke="${mid}" stroke-width="1" opacity="0.4" /></pattern></defs><rect width="256" height="256" fill="url(#g0)" />`
+	} else if (dna.bg === 1) {
+		svg += `<defs><pattern id="g1" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 32 0 L 0 0 0 32" fill="none" stroke="${mid}" stroke-width="1" opacity="0.6" /></pattern></defs><rect width="256" height="256" fill="url(#g1)" />`
+	} else if (dna.bg === 2) {
+		svg += `<defs><pattern id="g2" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 15 16 H 17 M 16 15 V 17" stroke="${mid}" stroke-width="2" /></pattern></defs><rect width="256" height="256" fill="url(#g2)" />`
+	} else if (dna.bg === 3) {
+		svg += `<defs><pattern id="g3" width="16" height="16" patternUnits="userSpaceOnUse"><rect x="0" y="0" width="2" height="2" fill="${mid}" opacity="0.8" /></pattern></defs><rect width="256" height="256" fill="url(#g3)" />`
 	}
 
-	s += '</svg>'
-	return s
+	// 2. Top Decor (8 variants)
+	if (dna.top === 0) {
+		// Antenna
+		svg += `<rect x="${(h.x + Math.floor(h.w / 2)) * cell}" y="${(h.y - 2) * cell}" width="${1 * cell}" height="${2 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" stroke-linejoin="miter"/>`
+		svg += `<rect x="${(h.x + Math.floor(h.w / 2) - 1) * cell}" y="${(h.y - 3) * cell}" width="${3 * cell}" height="${1 * cell}" fill="${fg}" />`
+	} else if (dna.top === 1) {
+		// Double Vent
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y - 1) * cell}" width="${2 * cell}" height="${1 * cell}" fill="${fg}" />`
+		svg += `<rect x="${(h.x + h.w - 4) * cell}" y="${(h.y - 1) * cell}" width="${2 * cell}" height="${1 * cell}" fill="${fg}" />`
+	} else if (dna.top === 2) {
+		// Flat Heatsink
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y - 2) * cell}" width="${(h.w - 2) * cell}" height="${2 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(h.x + 2) * cell}" y="${(h.y - 1.5) * cell}" width="${(h.w - 4) * cell}" height="${1 * cell}" fill="${fg}" />`
+	} else if (dna.top === 3) {
+		// Offset node
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y - 2) * cell}" width="${1 * cell}" height="${2 * cell}" fill="${fg}" />`
+	} else if (dna.top === 4) {
+		// Stepped Roof
+		svg += `<rect x="${(h.x + 2) * cell}" y="${(h.y - 1) * cell}" width="${(h.w - 4) * cell}" height="${1 * cell}" fill="${fillStyle}" stroke="${fg}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(h.x + 3) * cell}" y="${(h.y - 2) * cell}" width="${(h.w - 6) * cell}" height="${1 * cell}" fill="${fg}" />`
+	} else if (dna.top === 5) {
+		// Radar dish
+		svg += `<rect x="${(h.x + h.w - 3) * cell}" y="${(h.y - 3) * cell}" width="${2 * cell}" height="${2 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(h.x + h.w - 2.5) * cell}" y="${(h.y - 2.5) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
+		svg += `<rect x="${(h.x + h.w - 2.5) * cell}" y="${(h.y - 1) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
+	} else if (dna.top === 6) {
+		// Handle
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y - 2) * cell}" width="${(h.w - 2) * cell}" height="${2 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(h.x + 2) * cell}" y="${(h.y - 1) * cell}" width="${(h.w - 4) * cell}" height="${2 * cell}" fill="${bg}" />`
+	}
+	// dna.top === 7: no top decor
+
+	// 3. Side Decor (8 variants)
+	if (dna.side === 0) {
+		// Left Nodes
+		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 2) * cell}" width="${2 * cell}" height="${3 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(h.x - 3) * cell}" y="${(h.y + 3) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
+	} else if (dna.side === 1) {
+		// Left bracket
+		svg += `<rect x="${(h.x - 1) * cell}" y="${(h.y + 1) * cell}" width="${1 * cell}" height="${4 * cell}" fill="${fg}" />`
+	} else if (dna.side === 2) {
+		// Floating blocks
+		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 3) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
+		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 5) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
+	} else if (dna.side === 3) {
+		// Exhaust
+		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 4) * cell}" width="${2 * cell}" height="${2 * cell}" fill="none" stroke="${fg}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(h.x - 1) * cell}" y="${(h.y + 4.5) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
+	} else if (dna.side === 4) {
+		// Large Heatsink
+		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 2) * cell}" width="${2 * cell}" height="${4 * cell}" fill="${fillStyle}" stroke="${fg}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(h.x - 1.5) * cell}" y="${(h.y + 3) * cell}" width="${1.5 * cell}" height="${0.5 * cell}" fill="${fg}" />`
+		svg += `<rect x="${(h.x - 1.5) * cell}" y="${(h.y + 4.5) * cell}" width="${1.5 * cell}" height="${0.5 * cell}" fill="${fg}" />`
+	} else if (dna.side === 5) {
+		// Both sides pins
+		svg += `<rect x="${(h.x - 1) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
+		svg += `<rect x="${(h.x + h.w) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${fg}" />`
+	} else if (dna.side === 6) {
+		// Side Antenna
+		svg += `<rect x="${(h.x - 2) * cell}" y="${(h.y + 2) * cell}" width="${2 * cell}" height="${1 * cell}" fill="${fg}" />`
+		svg += `<rect x="${(h.x - 3) * cell}" y="${(h.y + 1) * cell}" width="${1 * cell}" height="${3 * cell}" fill="${fillStyle}" stroke="${fg}" stroke-width="${strokeW}" />`
+	}
+	// dna.side === 7: no side decor
+
+	// 4. Head Base with Brand Cutout
+	const headPath = `M ${h.x * cell} ${h.y * cell} H ${(h.x + h.w) * cell} V ${(h.y + h.h - cut) * cell} H ${(h.x + h.w - cut) * cell} V ${(h.y + h.h) * cell} H ${h.x * cell} Z`
+	svg += `<path d="${headPath}" fill="${fillStyle}" stroke="${fg}" stroke-width="${strokeW}" stroke-linejoin="miter" />`
+
+	// 5. Pattern (solid only)
+	if (style === 'solid') {
+		if (dna.pattern === 1) {
+			// Horizontal Ribbing
+			svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 1) * cell}" width="${(h.w - cut - 1) * cell}" height="${1 * cell}" fill="${mid}" opacity="0.3" />`
+			svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 3) * cell}" width="${(h.w - cut - 1) * cell}" height="${1 * cell}" fill="${mid}" opacity="0.3" />`
+			svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 5) * cell}" width="${(h.w - cut - 1) * cell}" height="${1 * cell}" fill="${mid}" opacity="0.3" />`
+		} else if (dna.pattern === 2) {
+			// Vertical Shading
+			svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 1) * cell}" width="${2 * cell}" height="${(h.h - 2) * cell}" fill="${mid}" opacity="0.2" />`
+		} else if (dna.pattern === 3) {
+			// Inner Dot Grid
+			svg += `<defs><pattern id="pg" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="2" height="2" fill="${mid}" opacity="0.3"/></pattern></defs>`
+			svg += `<path d="${headPath}" fill="url(#pg)" pointer-events="none" />`
+		}
+	}
+
+	// 6. Eyes / Sensors (8 variants)
+	if (dna.eye === 0) {
+		// Wide Visor
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 2) * cell}" width="${(h.w - 2) * cell}" height="${1 * cell}" fill="${eyeFill}" stroke="${eyeColor}" stroke-width="${eyeStrokeW}" />`
+	} else if (dna.eye === 1) {
+		// Dual Sensors
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+		svg += `<rect x="${(h.x + h.w - 2) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+	} else if (dna.eye === 2) {
+		// Asymmetric
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 2) * cell}" width="${2 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+		svg += `<rect x="${(h.x + h.w - 2) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+	} else if (dna.eye === 3) {
+		// Cyclops Core
+		const cx = h.x + Math.floor(h.w / 2) - 1
+		svg += `<rect x="${cx * cell}" y="${(h.y + 2) * cell}" width="${2 * cell}" height="${2 * cell}" fill="none" stroke="${eyeColor}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(cx + 0.5) * cell}" y="${(h.y + 2.5) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+	} else if (dna.eye === 4) {
+		// Grid Matrix
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+		svg += `<rect x="${(h.x + 2.5) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+		if (h.w > 6) svg += `<rect x="${(h.x + 4) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+	} else if (dna.eye === 5) {
+		// Vertical Slit
+		const cx = h.x + Math.floor(h.w / 2) - 0.5
+		svg += `<rect x="${cx * cell}" y="${(h.y + 1.5) * cell}" width="${1 * cell}" height="${3 * cell}" fill="${eyeColor}" />`
+	} else if (dna.eye === 6) {
+		// Offset Squares
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 2) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+		svg += `<rect x="${(h.x + 2) * cell}" y="${(h.y + 3) * cell}" width="${1 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+	} else if (dna.eye === 7) {
+		// Scanning Bar
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(h.y + 2) * cell}" width="${(h.w - 2) * cell}" height="${1 * cell}" fill="none" stroke="${eyeColor}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(h.x + 1.5) * cell}" y="${(h.y + 2.25) * cell}" width="${1.5 * cell}" height="${0.5 * cell}" fill="${eyeColor}" />`
+	}
+
+	// 7. Jaw / Port (8 variants)
+	if (dna.jaw === 0) {
+		// Standard block
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(jY - 2) * cell}" width="${2 * cell}" height="${1 * cell}" fill="${eyeFill}" stroke="${eyeColor}" stroke-width="${eyeStrokeW}" />`
+	} else if (dna.jaw === 1) {
+		// Split grille
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(jY - 2) * cell}" width="${0.5 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+		svg += `<rect x="${(h.x + 2) * cell}" y="${(jY - 2) * cell}" width="${0.5 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+	} else if (dna.jaw === 2) {
+		// Wide slot
+		svg += `<rect x="${(h.x + 0.5) * cell}" y="${(jY - 2.5) * cell}" width="${2.5 * cell}" height="${0.5 * cell}" fill="${eyeColor}" />`
+	} else if (dna.jaw === 3) {
+		// Outline jaw
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(jY - 2) * cell}" width="${2 * cell}" height="${1 * cell}" fill="none" stroke="${eyeColor}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(h.x + 1.5) * cell}" y="${(jY - 1.75) * cell}" width="${0.5 * cell}" height="${0.5 * cell}" fill="${eyeColor}" />`
+	} else if (dna.jaw === 4) {
+		// Barcode
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(jY - 2) * cell}" width="${0.25 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+		svg += `<rect x="${(h.x + 1.5) * cell}" y="${(jY - 2) * cell}" width="${0.5 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+		svg += `<rect x="${(h.x + 2.25) * cell}" y="${(jY - 2) * cell}" width="${0.25 * cell}" height="${1 * cell}" fill="${eyeColor}" />`
+	} else if (dna.jaw === 5) {
+		// Micro-vent
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(jY - 3) * cell}" width="${2 * cell}" height="${2 * cell}" fill="none" stroke="${eyeColor}" stroke-width="${strokeW}" />`
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(jY - 2) * cell}" width="${2 * cell}" height="${0.25 * cell}" fill="${eyeColor}" />`
+	} else if (dna.jaw === 6) {
+		// Asym port
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(jY - 3) * cell}" width="${1 * cell}" height="${2 * cell}" fill="${eyeColor}" />`
+		svg += `<rect x="${(h.x + 2.5) * cell}" y="${(jY - 1.5) * cell}" width="${0.5 * cell}" height="${0.5 * cell}" fill="${eyeColor}" />`
+	} else if (dna.jaw === 7) {
+		// Heavy Intake
+		svg += `<rect x="${(h.x + 1) * cell}" y="${(jY - 2.5) * cell}" width="${2 * cell}" height="${1.5 * cell}" fill="${eyeColor}" />`
+	}
+
+	// 8. Semantic LED
+	svg += `<rect x="${(h.x + 0.5) * cell}" y="${(h.y + 0.5) * cell}" width="${0.5 * cell}" height="${0.5 * cell}" fill="${ledColor}" />`
+
+	// 9. Brand Accent — Purple Missing Piece
+	svg += `<rect x="${(h.x + h.w - 2) * cell}" y="${(h.y + h.h - 2) * cell}" width="${2 * cell}" height="${2 * cell}" fill="${brand}" />`
+
+	// 10. Frame border
+	svg += `<rect width="256" height="256" fill="none" stroke="${mid}" stroke-width="8" />`
+
+	svg += '</svg>'
+	return svg
 }
 
 // ── Route Handler ───────────────────────────────────────────────────────
@@ -210,10 +288,14 @@ export const Route = createFileRoute('/api/avatar')({
 			GET: async ({ request }) => {
 				const url = new URL(request.url)
 				const seed = url.searchParams.get('seed') || 'default'
-				const sizeParam = parseInt(url.searchParams.get('size') || '80', 10)
+				const sizeParam = Number.parseInt(url.searchParams.get('size') || '80', 10)
 				const size = Math.max(16, Math.min(512, Number.isNaN(sizeParam) ? 80 : sizeParam))
+				const styleParam = url.searchParams.get('style')
+				const style: 'solid' | 'wireframe' = styleParam === 'wireframe' ? 'wireframe' : 'solid'
+				const themeParam = url.searchParams.get('theme')
+				const theme: 'dark' | 'light' = themeParam === 'light' ? 'light' : 'dark'
 
-				const svg = generateSvg(seed, size)
+				const svg = generateSvg(seed, size, style, theme)
 
 				return new Response(svg, {
 					headers: {
