@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { generateAvatarSvg } from '@questpie/avatar'
+import { renderPng } from '@questpie/avatar'
 
 /**
- * Construct avatar API — deterministic SVG robot from a seed string.
+ * Construct avatar API — deterministic pixel-art PNG from a seed string.
  *
  * Usage:  GET /api/avatar?seed=my-agent&size=120&style=solid&theme=dark
  *   seed   — any string (agent ID, name, etc.) — default 'default'
@@ -10,7 +10,7 @@ import { generateAvatarSvg } from '@questpie/avatar'
  *   style  — 'solid' | 'wireframe' — default 'solid'
  *   theme  — 'dark' | 'light' — default 'dark'
  *
- * Returns image/svg+xml, cacheable for 7 days.
+ * Returns image/png with nearest-neighbor scaling intent, cacheable for 7 days.
  */
 
 export const Route = createFileRoute('/api/avatar')({
@@ -26,11 +26,12 @@ export const Route = createFileRoute('/api/avatar')({
 				const themeParam = url.searchParams.get('theme')
 				const theme: 'dark' | 'light' = themeParam === 'light' ? 'light' : 'dark'
 
-				const svg = generateAvatarSvg({ seed, size, style, theme })
+				const resolution = size <= 48 ? 16 : size <= 96 ? 32 : 64
+				const png = renderPng({ seed, resolution, style, theme })
 
-				return new Response(svg, {
+				return new Response(png, {
 					headers: {
-						'Content-Type': 'image/svg+xml',
+						'Content-Type': 'image/png',
 						'Cache-Control': 'public, max-age=604800, s-maxage=604800, immutable',
 						'Access-Control-Allow-Origin': '*',
 					},

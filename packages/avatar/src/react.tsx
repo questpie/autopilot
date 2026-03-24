@@ -1,8 +1,8 @@
 /**
  * React component for the construct avatar.
- * Thin wrapper around the SVG string builder — single source of truth.
+ * Renders as a crisp pixel-art PNG with nearest-neighbor scaling.
  */
-import { generateAvatarSvg } from './generate'
+import { renderDataUrl } from './raster'
 
 export interface GenerativeAvatarProps {
 	seed: string
@@ -19,15 +19,17 @@ export function GenerativeAvatar({
 	theme = 'dark',
 	className,
 }: GenerativeAvatarProps) {
-	const svg = generateAvatarSvg({ seed, size, style, theme })
+	const resolution = size <= 48 ? 16 : size <= 96 ? 32 : 64
+	const dataUrl = renderDataUrl({ seed, resolution, style, theme })
 
 	return (
-		<div
+		<img
+			src={dataUrl}
+			width={size}
+			height={size}
+			alt={`Construct avatar for ${seed}`}
 			className={className}
-			style={{ width: size, height: size, lineHeight: 0 }}
-			role="img"
-			aria-label={`Construct avatar for ${seed}`}
-			dangerouslySetInnerHTML={{ __html: svg }}
+			style={{ imageRendering: 'pixelated' }}
 		/>
 	)
 }
