@@ -23,7 +23,7 @@ export function AgentCard({
 		<div className="bg-lp-card border border-lp-border p-6">
 			<div className="flex items-center gap-3 mb-1.5">
 				<div className="shrink-0 w-8 h-8 overflow-hidden bg-lp-surface">
-					<GenerativeAvatar seed={name} size={32} />
+					<GenerativeAvatar seed={name} />
 				</div>
 				<div className="flex-1 min-w-0">
 					<div className="flex justify-between items-center">

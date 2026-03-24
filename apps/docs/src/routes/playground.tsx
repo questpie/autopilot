@@ -57,8 +57,8 @@ function PlaygroundPage() {
 						</span>
 					</div>
 					<p className="font-sans text-sm text-lp-muted">
-						Deterministic generative avatars powered by seeded PRNG.
-						Same seed always produces the same construct. Pure SVG, zero dependencies.
+						Deterministic generative pixel-art avatars powered by seeded PRNG.
+						Same seed always produces the same construct. Pure TypeScript, zero dependencies.
 					</p>
 				</div>
 
@@ -74,6 +74,7 @@ function PlaygroundPage() {
 								alt={`Construct avatar for "${seed}"`}
 								width={Math.max(size, 200)}
 								height={Math.max(size, 200)}
+								style={{ imageRendering: 'pixelated' }}
 							/>
 						</div>
 						<div className="mt-6 font-mono text-[10px] text-lp-ghost uppercase tracking-[0.15em] text-center">
@@ -204,6 +205,7 @@ function PlaygroundPage() {
 										alt=""
 										width={s}
 										height={s}
+										style={{ imageRendering: 'pixelated' }}
 									/>
 								</div>
 								<div className="font-mono text-[9px] text-lp-ghost">{s}px</div>
@@ -236,6 +238,7 @@ function PlaygroundPage() {
 										alt={s}
 										width={80}
 										height={80}
+										style={{ imageRendering: 'pixelated' }}
 									/>
 								</div>
 								<div className="font-mono text-[9px] text-lp-ghost truncate">{s}</div>
