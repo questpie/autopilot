@@ -1,13 +1,7 @@
+// YAML utilities (for config loading)
 export { readYaml, writeYaml, readYamlUnsafe, fileExists } from './yaml'
-export { WriteQueue, writeQueue } from './write-queue'
-export { createTask, readTask, updateTask, moveTask, listTasks, findTask } from './tasks'
-export type { ListTasksOptions, TaskOutput } from './tasks'
-export { sendChannelMessage, sendDirectMessage, readChannelMessages } from './messages'
-export type { MessageOutput } from './messages'
-export { createPin, removePin, listPins, updatePin } from './pins'
-export type { PinOutput } from './pins'
-export { appendActivity, readActivity } from './activity'
-export type { ActivityEntry, ReadActivityOptions } from './activity'
+
+// Company config loaders (YAML — human-editable, git-versioned)
 export {
 	loadCompany,
 	loadAgents,
@@ -17,9 +11,10 @@ export {
 	loadWebhooks,
 } from './company'
 
-// Storage backend abstraction
-export { createStorage } from './storage-factory'
-export type { StorageMode } from './storage-factory'
-export type { StorageBackend, Task, Message, TaskFilter, MessageFilter, ActivityFilter } from './storage'
+// Pins (YAML — to be migrated to StorageBackend)
+export { createPin, removePin, listPins, updatePin } from './pins'
+export type { PinOutput } from './pins'
+
+// Storage backend (SQLite)
+export type { StorageBackend, Task, Message, TaskFilter, MessageFilter, ActivityFilter, ActivityEntry } from './storage'
 export { SqliteBackend } from './sqlite-backend'
-export { YamlFsBackend } from './yaml-backend'

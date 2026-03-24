@@ -1,14 +1,15 @@
 import type { Agent, Task } from '@questpie/autopilot-spec'
 import { assembleContext } from '../context/assembler'
 import { extractMemory } from './memory-extractor'
-import type { SessionStreamManager } from '../session/stream'
-import { appendActivity } from '../fs/activity'
+import type { StorageBackend } from '../fs/storage'
 import { createAutopilotTools } from './tools'
 import type { ToolContext } from './tools'
 import type { AgentProvider, AgentEvent } from './provider'
 import { ClaudeAgentSDKProvider } from './providers/claude-agent-sdk'
 import { CodexSDKProvider } from './providers/codex-sdk'
 import { eventBus } from '../events'
+import { container, companyRootFactory } from '../container'
+import { streamManagerFactory } from '../session/stream'
 
 /** Registry of available agent providers, keyed by name. */
 const providers: Map<string, AgentProvider> = new Map()
@@ -51,12 +52,11 @@ registerProvider(new CodexSDKProvider())
 
 /** Options required to spawn an agent session. */
 export interface SpawnOptions {
-	companyRoot: string
 	agent: Agent
 	company: { name: string; slug: string; [key: string]: unknown }
 	allAgents: Agent[]
 	task?: Task
-	streamManager: SessionStreamManager
+	storage: StorageBackend
 	trigger: { type: string; task_id?: string; schedule_id?: string }
 	/** Optional human message to use as the prompt (e.g. from `autopilot chat`). */
 	message?: string
@@ -82,7 +82,9 @@ export interface SpawnResult {
  * 6. Delegate to the provider's `spawn()` for the actual LLM loop.
  */
 export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
-	const { companyRoot, agent, company, allAgents, task, streamManager, trigger, message } = options
+	const { agent, company, allAgents, task, storage, trigger, message } = options
+	const { companyRoot } = container.resolve([companyRootFactory])
+	const { streamManager } = container.resolve([streamManagerFactory])
 	const sessionId = `session-${Date.now().toString(36)}-${agent.id}`
 
 	// 1. Resolve provider (from agent definition or company default)
@@ -97,12 +99,13 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		agent,
 		company: company as Parameters<typeof assembleContext>[0]['company'],
 		allAgents,
+		storage,
 		task,
 	})
 
 	// 3. Create custom tools
-	const autopilotTools = createAutopilotTools(companyRoot)
-	const toolContext: ToolContext = { companyRoot, agentId: agent.id }
+	const autopilotTools = createAutopilotTools(companyRoot, storage)
+	const toolContext: ToolContext = { companyRoot, agentId: agent.id, storage }
 
 	// 4. Build prompt
 	const prompt = message
@@ -115,7 +118,8 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	streamManager.createStream(sessionId, agent.id)
 
 	// 6. Log session start
-	await appendActivity(companyRoot, {
+	await storage.appendActivity({
+		at: new Date().toISOString(),
 		agent: agent.id,
 		type: 'session_start',
 		summary: `Session started: ${task?.title ?? trigger.type} [${provider.name}/${agent.model}]`,
@@ -133,7 +137,8 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		})
 
 		if (event.type === 'tool_call') {
-			appendActivity(companyRoot, {
+			storage.appendActivity({
+				at: new Date().toISOString(),
 				agent: agent.id,
 				type: 'tool_call',
 				summary: event.tool ?? 'unknown',
@@ -164,7 +169,8 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	} finally {
 		streamManager.endStream(sessionId)
 
-		await appendActivity(companyRoot, {
+		await storage.appendActivity({
+			at: new Date().toISOString(),
 			agent: agent.id,
 			type: 'session_end',
 			summary: sessionResult!.error
@@ -176,7 +182,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 
 		// Extract and persist memory from this session (best-effort)
 		try {
-			await extractMemory(companyRoot, agent.id, sessionId)
+			await extractMemory(companyRoot, agent.id, sessionId, storage)
 		} catch {
 			// Memory extraction failure must not crash the session
 		}

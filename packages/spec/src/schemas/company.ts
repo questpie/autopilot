@@ -27,6 +27,12 @@ export const CompanySettingsSchema = z.object({
 			alert_at: z.number().int().min(0).max(100).default(80),
 		})
 		.default({}),
+	auth: z
+		.object({
+			enabled: z.boolean().default(false),
+			cors_origin: z.string().optional(),
+		})
+		.default({}),
 	embeddings: z
 		.object({
 			provider: z.enum(['gemini', 'multilingual-e5', 'nomic', 'none']).default('none'),

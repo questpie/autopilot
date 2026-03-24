@@ -166,3 +166,18 @@ export async function createEmbeddingService(config?: EmbeddingConfig): Promise<
 
 	return new EmbeddingService(primary, fallback)
 }
+
+import { container, companyRootFactory } from '../container'
+import { loadCompany } from '../fs'
+
+export const embeddingServiceFactory = container.registerAsync('embeddingService', async (c) => {
+	const { companyRoot } = c.resolve([companyRootFactory])
+	try {
+		const company = await loadCompany(companyRoot)
+		const settings = company.settings as Record<string, unknown>
+		const embeddingsConfig = settings?.embeddings as Parameters<typeof createEmbeddingService>[0]
+		return createEmbeddingService(embeddingsConfig)
+	} catch {
+		return createEmbeddingService()
+	}
+})

@@ -1,9 +1,11 @@
-import { appendActivity } from './fs'
+import { container } from './container'
+import { storageFactory } from './fs/sqlite-backend'
+import type { StorageBackend } from './fs/storage'
 
 /** Configuration for the {@link Notifier}. */
 export interface NotificationOptions {
-	/** Absolute path to the company root directory on disk. */
-	companyRoot: string
+	/** Storage backend for persisting notifications to the activity feed. */
+	storage: StorageBackend
 }
 
 /** A structured notification emitted by the orchestrator. */
@@ -39,7 +41,8 @@ export class Notifier {
 		)
 
 		try {
-			await appendActivity(this.options.companyRoot, {
+			await this.options.storage.appendActivity({
+				at: new Date().toISOString(),
 				agent: notification.agentId ?? 'orchestrator',
 				type: `notification:${notification.type}`,
 				summary: notification.title,
@@ -55,3 +58,8 @@ export class Notifier {
 		}
 	}
 }
+
+export const notifierFactory = container.registerAsync('notifier', async (c) => {
+	const { storage } = await c.resolveAsync([storageFactory])
+	return new Notifier({ storage })
+})

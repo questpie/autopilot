@@ -6,6 +6,9 @@ import { eq, and } from 'drizzle-orm'
 import { Database } from 'bun:sqlite'
 import { indexEntity, removeEntity, type EntityType } from './search-index'
 import { schema } from './index'
+import { container, companyRootFactory } from '../container'
+import { dbFactory } from './index'
+import { embeddingServiceFactory } from '../embeddings'
 import type { EmbeddingService } from '../embeddings'
 
 /**
@@ -216,3 +219,12 @@ export class Indexer {
 		return fallback.replace(/\.md$/, '')
 	}
 }
+
+export const indexerFactory = container.registerAsync('indexer', async (c) => {
+	const { db, embeddingService, companyRoot } = await c.resolveAsync([
+		dbFactory, embeddingServiceFactory, companyRootFactory
+	])
+	const indexer = new Indexer(db.db, companyRoot, embeddingService)
+	await indexer.reindexAll()
+	return indexer
+})

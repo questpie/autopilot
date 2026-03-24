@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
-import { readActivity } from '../fs/activity'
+import type { StorageBackend } from '../fs/storage'
 
 /**
  * Extract structured memory from a completed agent session.
@@ -15,9 +15,10 @@ export async function extractMemory(
 	companyRoot: string,
 	agentId: string,
 	sessionId: string,
+	storage: StorageBackend,
 ): Promise<void> {
 	// 1. Read recent activity for this agent's session
-	const activities = await readActivity(companyRoot, {
+	const activities = await storage.readActivity({
 		agent: agentId,
 		limit: 100,
 	})

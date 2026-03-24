@@ -21,7 +21,7 @@ A filesystem-native operating system where AI agents run your company through st
 
 Autopilot agents don't generate text for you to read. They call **13 structured primitives** that create tasks, write code, deploy services, and build dashboards. You approve the results at explicit human gates.
 
-Your company is a filesystem. Your employees are agents defined in YAML. Work flows through YAML-defined workflows -- from intent to shipped feature. The entire state lives in files you can `ls`, `grep`, back up with `cp`, and fork with `git clone`. One Bun process. One SQLite file. Zero infrastructure.
+Your company is a filesystem. Your employees are agents defined in YAML. Work flows through YAML-defined workflows -- from intent to shipped feature. The entire state lives in files you can `ls`, `grep`, back up with `cp`, and fork with `git clone`.
 
 ```bash
 $ autopilot ask "Build a pricing page with Stripe integration"
@@ -44,7 +44,7 @@ Sam is starting now. You'll be notified when approvals are needed.
 
 **Living dashboard.** A React app in the company filesystem that agents edit in real time. Custom widgets, custom pages, theme overrides. Changes appear in seconds via HMR. Your agents build your internal tools.
 
-**Zero infrastructure.** One Bun process. One SQLite file. No Docker, no Postgres, no Redis, no vector DB. Install and run in 60 seconds. Run an AI company for ~$0.30/day in API costs.
+**Zero infrastructure.** One Bun process. One SQLite file. No Docker, no Postgres, no Redis. Vector search and full-text search are embedded in SQLite via sqlite-vec and FTS5. No external services required.
 
 **Human gates.** Explicit approval points for merge, deploy, spend, and publish -- defined in workflow YAML. Hardcoded deny patterns prevent agents from touching auth files. Every agent action is a git commit.
 
@@ -64,8 +64,8 @@ bun add -g @questpie/autopilot
 autopilot init my-company
 cd my-company
 
-# Configure your API key
-export ANTHROPIC_API_KEY=sk-ant-...
+# Configure (API key or Claude Max subscription)
+export ANTHROPIC_API_KEY=sk-ant-...  # or OPENAI_API_KEY=sk-...
 
 # Start the orchestrator + dashboard
 autopilot start
@@ -80,23 +80,23 @@ autopilot ask "Build me a landing page"
 autopilot attach max
 ```
 
-**What you need:** Bun runtime + Anthropic API key. That's it.
+**What you need:** Bun 1.3.0+ and either an API key (Anthropic or OpenAI) or a Claude Max subscription.
 
 ---
 
 ## Architecture
 
 ```
-Human         CLI · Dashboard · Telegram · Slack (soon) · Email (soon)
+Human         CLI · Dashboard · Telegram · Webhooks
   |
 Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · Webhooks · SSE
   |
-Agents        Claude Agent SDK · Codex SDK · 13 Primitives · MCPs · Sandboxed FS · Memory
+Agents        Claude Agent SDK · Codex SDK · 13 Primitives · Sandboxed FS · Memory
   |
 Storage       SQLite + Drizzle · YAML/Markdown/JSON · FTS5 + sqlite-vec · Git · Better Auth
 ```
 
-Each company is a directory with a SQLite sidecar. One Bun process watches the filesystem, matches workflows, spawns agents, and routes notifications.
+Each company is a directory with a SQLite sidecar (`.data/autopilot.db`). One Bun process watches the filesystem, matches workflows, spawns agents, and routes notifications. The dashboard runs as a separate Vite dev server on port 3001.
 
 ---
 

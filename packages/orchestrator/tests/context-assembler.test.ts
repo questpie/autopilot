@@ -7,6 +7,24 @@ import { writeYaml } from '../src/fs/yaml'
 import { join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import type { Agent, Company, Task } from '@questpie/autopilot-spec'
+import type { StorageBackend } from '../src/fs/storage'
+
+const mockStorage: StorageBackend = {
+	initialize: async () => {},
+	close: async () => {},
+	createTask: async (t) => t,
+	readTask: async () => null,
+	updateTask: async (id, u, by) => ({ ...u } as any),
+	moveTask: async (id, s, by) => ({} as any),
+	listTasks: async () => [],
+	countTasks: async () => 0,
+	deleteTask: async () => {},
+	sendMessage: async (m) => m,
+	readMessages: async () => [],
+	searchMessages: async () => [],
+	appendActivity: async () => {},
+	readActivity: async () => [],
+}
 
 const testCompany: Company = {
 	name: 'TestCorp',
@@ -127,6 +145,7 @@ describe('context assembler', () => {
 			agent: testAgent,
 			company: testCompany,
 			allAgents: testAgents,
+			storage: mockStorage,
 		})
 
 		expect(result.systemPrompt).toBeTruthy()
@@ -141,6 +160,7 @@ describe('context assembler', () => {
 			agent: testAgent,
 			company: testCompany,
 			allAgents: testAgents,
+			storage: mockStorage,
 		})
 
 		// Token estimate should be roughly prompt length / 4
@@ -158,6 +178,7 @@ describe('context assembler', () => {
 			agent: testAgent,
 			company: testCompany,
 			allAgents: testAgents,
+			storage: mockStorage,
 		})
 
 		expect(result.systemPrompt).toContain('Peter')
@@ -172,6 +193,7 @@ describe('context assembler', () => {
 			agent: testAgent,
 			company: testCompany,
 			allAgents: testAgents,
+			storage: mockStorage,
 		})
 
 		expect(result.systemPrompt).toContain('TestCorp')
@@ -186,6 +208,7 @@ describe('context assembler', () => {
 			company: testCompany,
 			task: testTask,
 			allAgents: testAgents,
+			storage: mockStorage,
 		})
 
 		expect(result.systemPrompt).toContain('Implement login page')
@@ -203,6 +226,7 @@ describe('context assembler', () => {
 			agent: testAgent,
 			company: testCompany,
 			allAgents: testAgents,
+			storage: mockStorage,
 		})
 
 		expect(result.systemPrompt).not.toContain('## Current Task')
@@ -234,6 +258,7 @@ describe('context assembler', () => {
 			agent: testAgent,
 			company: testCompany,
 			allAgents: testAgents,
+			storage: mockStorage,
 		})
 
 		expect(result.systemPrompt).toContain('Agent Memory')
@@ -249,6 +274,7 @@ describe('context assembler', () => {
 			agent: testAgent,
 			company: testCompany,
 			allAgents: testAgents,
+			storage: mockStorage,
 		})
 
 		expect(result.systemPrompt).not.toContain('Agent Memory')
@@ -262,6 +288,7 @@ describe('context assembler', () => {
 			agent: testAgent,
 			company: testCompany,
 			allAgents: testAgents,
+			storage: mockStorage,
 		})
 
 		expect(result.systemPrompt).toContain('Sophia')
@@ -323,7 +350,7 @@ describe('buildCompanySnapshot', () => {
 		// Write agents.yaml so loadAgents works
 		await writeYaml(join(root, 'team', 'agents.yaml'), { agents: testAgents })
 
-		const snapshot = await buildCompanySnapshot(root, testAgent)
+		const snapshot = await buildCompanySnapshot(root, testAgent, mockStorage)
 
 		expect(snapshot.activeTasks).toEqual([])
 		expect(snapshot.recentMessages).toEqual([])
@@ -338,8 +365,7 @@ describe('buildCompanySnapshot', () => {
 
 		await writeYaml(join(root, 'team', 'agents.yaml'), { agents: testAgents })
 
-		// Create an active task
-		await writeYaml(join(root, 'tasks', 'active', 'task-1.yaml'), {
+		const taskData = {
 			id: 'task-1',
 			title: 'Build feature X',
 			description: '',
@@ -358,9 +384,14 @@ describe('buildCompanySnapshot', () => {
 			created_at: '2025-01-01T00:00:00.000Z',
 			updated_at: '2025-01-01T00:00:00.000Z',
 			history: [],
-		})
+		}
 
-		const snapshot = await buildCompanySnapshot(root, testAgent)
+		const storageWithTask: StorageBackend = {
+			...mockStorage,
+			listTasks: async () => [taskData as any],
+		}
+
+		const snapshot = await buildCompanySnapshot(root, testAgent, storageWithTask)
 
 		expect(snapshot.activeTasks).toHaveLength(1)
 		expect(snapshot.activeTasks[0]?.title).toBe('Build feature X')

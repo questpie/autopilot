@@ -6,12 +6,9 @@
  * incoming payloads to the first matching handler.
  */
 
-import type { SessionStreamManager } from '../session'
-
 /** Context passed to every webhook handler. */
 export interface WebhookContext {
 	companyRoot: string
-	streamManager: SessionStreamManager
 }
 
 /** Result returned by a webhook handler after processing a payload. */

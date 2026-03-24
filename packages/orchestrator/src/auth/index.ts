@@ -5,15 +5,12 @@
  * Drizzle ORM) so that all data lives in a single SQLite file.
  */
 import { betterAuth } from 'better-auth'
-import { bearer, admin } from 'better-auth/plugins'
+import { bearer, admin, openAPI } from 'better-auth/plugins'
 import { apiKey } from '@better-auth/api-key'
 import type { Database } from 'bun:sqlite'
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export async function createAuth(rawDb: Database): Promise<{
-	handler: (request: Request) => Promise<Response> | Response
-	api: Record<string, unknown>
-}> {
+export async function createAuth(rawDb: Database) {
 	return betterAuth({
 		database: rawDb,
 		basePath: '/api/auth',
@@ -52,8 +49,17 @@ export async function createAuth(rawDb: Database): Promise<{
 			bearer(),
 			apiKey(),
 			admin(),
+			openAPI(),
 		],
 	})
 }
 
 export type Auth = Awaited<ReturnType<typeof createAuth>>
+
+import { container } from '../container'
+import { dbFactory } from '../db'
+
+export const authFactory = container.registerAsync('auth', async (c) => {
+	const { db } = await c.resolveAsync([dbFactory])
+	return createAuth(db.raw)
+})

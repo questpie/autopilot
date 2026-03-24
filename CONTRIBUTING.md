@@ -4,7 +4,7 @@ Thanks for your interest in contributing to QUESTPIE Autopilot. This document co
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) v1.0+ — runtime, package manager, and test runner
+- [Bun](https://bun.sh) v1.3.0+ — runtime, package manager, and test runner
 - [Node.js](https://nodejs.org) v20+ — required by some tooling
 - [Git](https://git-scm.com)
 
@@ -35,7 +35,9 @@ This is a Bun monorepo managed with Turbo.
 | `@questpie/autopilot-orchestrator` | `packages/orchestrator/` | Core engine — FS watcher, workflow engine, agent spawner, context assembler, memory extractor, cron scheduler, webhook server, session stream, write queue, API server |
 | `@questpie/autopilot-agents` | `packages/agents/` | Agent system prompt templates and prompt builder for all 8 agent roles |
 | `@questpie/autopilot` | `packages/cli/` | CLI interface — `autopilot init`, `start`, `ask`, `attach`, `inbox`, `agents`, `status`, `tasks` |
-| Landing page | `apps/web/` | TanStack Start landing page and documentation site with Tailwind CSS |
+| `@questpie/autopilot-dashboard` | `apps/dashboard/` | Living Dashboard — React 19 + TanStack Router + Tailwind CSS 4 |
+| `@questpie/autopilot-docs` | `apps/docs/` | Documentation site (Fumadocs) |
+| `@questpie/avatar` | `packages/avatar/` | Deterministic SVG avatar generator |
 
 ### Architecture Overview
 
@@ -216,22 +218,31 @@ test(spec): add schema validation for nested task refs
 6. Commit with a conventional commit message
 7. Open a PR against `main`
 
-## Landing Page Development
+## Dashboard Development
 
-The landing page is a TanStack Start app in `apps/web/`:
+The Living Dashboard is a React 19 + TanStack Router app in `apps/dashboard/`:
 
 ```bash
-cd apps/web
+cd apps/dashboard
 bun run dev
-# Opens at http://localhost:3000
+# Opens at http://localhost:3001
 ```
 
-- Design system: dark theme (#0A0A0A), purple accent (#B700FF), sharp edges
-- Fonts: JetBrains Mono (code) + Inter (UI)
-- Tailwind CSS with custom tokens defined in `app.css`
-- Pages live in `src/routes/`
-- Components in `src/components/`
-- Documentation pages at `/docs/*`
+- React 19 + TanStack Router + TanStack Query
+- Tailwind CSS 4 + Base UI components
+- Vite 6 with HMR
+
+## Docs Development
+
+The documentation site is in `apps/docs/`:
+
+```bash
+cd apps/docs
+bun run dev
+```
+
+- Fumadocs-based documentation
+- MDX content in `content/docs/`
 
 ## Questions?
 

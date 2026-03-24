@@ -3,10 +3,8 @@ import { join } from 'path'
 import { stringify } from 'yaml'
 import { z } from 'zod'
 import { PATHS } from '@questpie/autopilot-spec'
-import { createTask, readTask, findTask, updateTask, moveTask } from '../fs/tasks'
-import { sendChannelMessage, sendDirectMessage } from '../fs/messages'
+import type { StorageBackend } from '../fs/storage'
 import { createPin, removePin } from '../fs/pins'
-import { appendActivity } from '../fs/activity'
 import { readYamlUnsafe, writeYaml } from '../fs/yaml'
 import { loadSkillContent } from '../skills'
 
@@ -24,6 +22,7 @@ export interface ToolDefinition<T extends z.ZodType = z.ZodType> {
 export interface ToolContext {
 	companyRoot: string
 	agentId: string
+	storage: StorageBackend
 }
 
 /** Structured result returned to the LLM after a tool call. */
@@ -53,7 +52,7 @@ function defineTool<T extends z.ZodType>(
  * `search_knowledge`, `update_knowledge`, `http_request`, `ask_agent`,
  * and `resolve_blocker`.
  */
-export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
+export function createAutopilotTools(companyRoot: string, storage: StorageBackend): ToolDefinition[] {
 	// biome-ignore lint: generic variance is intentional
 	const tools: Array<ToolDefinition<any>> = [
 		// Communication
@@ -80,9 +79,9 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 					external: false,
 				}
 				if (type === 'channel') {
-					await sendChannelMessage(companyRoot, target!, msgData)
+					await storage.sendMessage({ ...msgData, channel: target! } as any)
 				} else {
-					await sendDirectMessage(companyRoot, ctx.agentId, target!, msgData)
+					await storage.sendMessage({ ...msgData, to: target!, from_id: ctx.agentId } as any)
 				}
 				return { content: [{ type: 'text' as const, text: `Message sent to ${args.to}` }] }
 			},
@@ -103,7 +102,7 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 				workflow: z.string().optional(),
 			}),
 			async (args, ctx) => {
-				const task = await createTask(companyRoot, {
+				const task = await storage.createTask({
 					title: args.title,
 					description: args.description ?? '',
 					type: args.type,
@@ -116,7 +115,7 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 					workflow: args.workflow,
 					created_at: new Date().toISOString(),
 					updated_at: new Date().toISOString(),
-				})
+				} as any)
 				return { content: [{ type: 'text' as const, text: `Created task ${task.id}: ${task.title}` }] }
 			},
 		),
@@ -132,9 +131,9 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 			async (args, ctx) => {
 				const updates: Record<string, unknown> = {}
 				if (args.status) updates.status = args.status
-				await updateTask(companyRoot, args.task_id, updates, ctx.agentId)
+				await storage.updateTask(args.task_id, updates, ctx.agentId)
 				if (args.status) {
-					await moveTask(companyRoot, args.task_id, args.status, ctx.agentId)
+					await storage.moveTask(args.task_id, args.status, ctx.agentId)
 				}
 				return { content: [{ type: 'text' as const, text: `Updated task ${args.task_id}` }] }
 			},
@@ -149,15 +148,14 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 				assigned_to: z.string().describe('Who should resolve this (human ID)'),
 			}),
 			async (args, ctx) => {
-				await updateTask(
-					companyRoot,
+				await storage.updateTask(
 					args.task_id,
 					{
 						status: 'blocked',
 					},
 					ctx.agentId,
 				)
-				await moveTask(companyRoot, args.task_id, 'blocked', ctx.agentId)
+				await storage.moveTask(args.task_id, 'blocked', ctx.agentId)
 				return { content: [{ type: 'text' as const, text: `Task ${args.task_id} blocked: ${args.reason}` }] }
 			},
 		),
@@ -433,7 +431,8 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 				await mkdir(dirPath, { recursive: true })
 				await Bun.write(filePath, args.content)
 
-				await appendActivity(companyRoot, {
+				await storage.appendActivity({
+					at: new Date().toISOString(),
 					agent: ctx.agentId,
 					type: 'knowledge_update',
 					summary: `Updated knowledge: ${args.path}`,
@@ -524,11 +523,15 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 			async (args, ctx) => {
 				const msgId = `msg-${Date.now().toString(36)}`
 				const content = `**Question from ${ctx.agentId}:**\n${args.question}\n\n**Reason:** ${args.reason}`
-				await sendDirectMessage(companyRoot, ctx.agentId, args.to, {
+				await storage.sendMessage({
 					id: msgId,
+					from: ctx.agentId,
+					at: new Date().toISOString(),
 					content,
+					to: args.to,
+					from_id: ctx.agentId,
 					references: [],
-				})
+				} as any)
 
 				await createPin(companyRoot, {
 					id: `pin-${Date.now().toString(36)}`,
@@ -556,7 +559,7 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 				note: z.string().describe('How the blocker was resolved'),
 			}),
 			async (args, ctx) => {
-				const task = await readTask(companyRoot, args.task_id)
+				const task = await storage.readTask(args.task_id)
 				if (!task) {
 					return {
 						content: [{ type: 'text' as const, text: `Task not found: ${args.task_id}` }],
@@ -581,12 +584,10 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 					resolved_note: args.note,
 				}
 
-				// Write blockers directly via yaml since updateTask doesn't support blockers field
-				const found = await findTask(companyRoot, args.task_id)
-				if (found) {
-					const timestamp = new Date().toISOString()
-					const patched = {
-						...task,
+				const timestamp = new Date().toISOString()
+				await storage.updateTask(
+					args.task_id,
+					{
 						blockers: updatedBlockers,
 						updated_at: timestamp,
 						history: [
@@ -598,14 +599,14 @@ export function createAutopilotTools(companyRoot: string): ToolDefinition[] {
 								note: args.note,
 							},
 						],
-					}
-					await writeYaml(found.path, patched)
-				}
+					} as any,
+					ctx.agentId,
+				)
 
 				// If task was blocked and all blockers now resolved, move back to active
 				const allResolved = updatedBlockers.every((b) => b.resolved)
 				if (task.status === 'blocked' && allResolved) {
-					await moveTask(companyRoot, args.task_id, 'in_progress', ctx.agentId)
+					await storage.moveTask(args.task_id, 'in_progress', ctx.agentId)
 				}
 
 				return {

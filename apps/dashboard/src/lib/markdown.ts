@@ -1,70 +1,27 @@
-/**
- * Simple markdown → HTML renderer.
- * Handles: headings, bold, italic, code, links, lists, blockquotes, hr, code blocks.
- * No external deps — just regex transforms.
- */
+import { Marked } from 'marked'
+import { linkifyHtml } from './link-patterns'
+
+const marked = new Marked({
+	gfm: true,
+	breaks: true,
+	renderer: {
+		// Open external links in new tab, leave internal links alone
+		link({ href, text }) {
+			const isInternal = href.startsWith('/') || href.includes('data-internal')
+			if (isInternal) {
+				return `<a href="${href}">${text}</a>`
+			}
+			return `<a href="${href}" target="_blank" rel="noopener">${text}</a>`
+		},
+		// Linkify internal references in plain text nodes
+		text({ text }) {
+			return linkifyHtml(text)
+		},
+	},
+})
+
 export function renderMarkdown(text: string): string {
-	// Escape HTML first (prevent XSS)
-	let html = text
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-
-	// Code blocks (``` ... ```) — must be before other transforms
-	html = html.replace(/```(\w*)\n([\s\S]*?)```/gm, (_m, _lang, code) => {
-		return `<pre><code>${code.trim()}</code></pre>`
-	})
-
-	// Inline code
-	html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-
-	// Headings
-	html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>')
-	html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-	html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-	html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-
-	// Blockquotes
-	html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
-
-	// Horizontal rules
-	html = html.replace(/^---$/gm, '<hr />')
-
-	// Bold + italic
-	html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-	html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
-	html = html.replace(/__(.+?)__/g, '<strong>$1</strong>')
-	html = html.replace(/_(.+?)_/g, '<em>$1</em>')
-
-	// Links
-	html = html.replace(
-		/\[([^\]]+)\]\(([^)]+)\)/g,
-		'<a href="$2" target="_blank" rel="noopener">$1</a>',
-	)
-
-	// Unordered lists (- item)
-	html = html.replace(/^- (.+)$/gm, '<li>$1</li>')
-
-	// Ordered lists (1. item)
-	html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-
-	// Wrap consecutive <li> in <ul>
-	html = html.replace(/((?:<li>.*<\/li>\n?)+)/gm, '<ul>$1</ul>')
-
-	// Paragraphs — wrap remaining plain text lines
-	html = html
-		.split('\n\n')
-		.map((block) => {
-			const trimmed = block.trim()
-			if (!trimmed) return ''
-			// Skip blocks that are already wrapped in HTML tags
-			if (/^<(h[1-6]|pre|ul|ol|blockquote|hr|div)/.test(trimmed)) return trimmed
-			// Wrap in <p> and handle single newlines as <br>
-			return `<p>${trimmed.replace(/\n/g, '<br />')}</p>`
-		})
-		.join('\n')
-
-	return html
+	return marked.parse(text) as string
 }
 
 /** Prose classes for rendered markdown content */

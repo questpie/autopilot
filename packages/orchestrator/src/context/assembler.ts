@@ -5,6 +5,7 @@ import { buildCompanySnapshot } from './snapshot'
 import { loadAgentMemory } from './memory-loader'
 import { getSkillsForRole } from '../skills'
 import { stringify as stringifyYaml } from 'yaml'
+import type { StorageBackend } from '../fs/storage'
 
 /** The final output of the context assembly pipeline. */
 export interface AssembledContext {
@@ -21,6 +22,7 @@ export interface ContextOptions {
 	company: Company
 	task?: Task
 	allAgents: Agent[]
+	storage: StorageBackend
 	maxTokens?: number
 }
 
@@ -85,7 +87,7 @@ function formatPins(
  * (default 42 000).
  */
 export async function assembleContext(options: ContextOptions): Promise<AssembledContext> {
-	const { companyRoot, agent, company, task, allAgents, maxTokens = DEFAULT_MAX_TOKENS } = options
+	const { companyRoot, agent, company, task, allAgents, storage, maxTokens = DEFAULT_MAX_TOKENS } = options
 
 	const sections: string[] = []
 
@@ -102,7 +104,7 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 	sections.push(identityPrompt)
 
 	// Layer 2: Company State (~5K tokens) — role-scoped snapshot
-	const snapshot = await buildCompanySnapshot(companyRoot, agent)
+	const snapshot = await buildCompanySnapshot(companyRoot, agent, storage)
 	const stateLines: string[] = ['## Current Company State']
 
 	const tasksSummary = formatTasksSummary(snapshot.activeTasks)

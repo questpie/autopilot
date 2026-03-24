@@ -1,5 +1,6 @@
 import type { Agent } from '@questpie/autopilot-spec'
-import { listTasks, readChannelMessages, listPins, loadAgents } from '../fs'
+import { listPins, loadAgents } from '../fs'
+import type { StorageBackend } from '../fs/storage'
 
 /** A point-in-time snapshot of company state scoped to a single agent. */
 export interface CompanySnapshot {
@@ -12,18 +13,19 @@ export interface CompanySnapshot {
 /**
  * Build a role-scoped company snapshot for context assembly.
  *
- * Reads active tasks, recent channel messages (scoped by the agent's
- * `fs_scope.read`), dashboard pins, and agent statuses.
+ * Reads active tasks from storage, recent channel messages, dashboard pins,
+ * and agent statuses.
  */
 export async function buildCompanySnapshot(
 	companyRoot: string,
 	agent: Agent,
+	storage: StorageBackend,
 ): Promise<CompanySnapshot> {
-	// Load active tasks, filtered by agent's readable scopes
-	const allTasks = await listTasks(companyRoot)
+	// Load active tasks from SQLite
+	const allTasks = await storage.listTasks()
 	const activeTasks = allTasks
-		.filter((t) => t.status !== 'done' && t.status !== 'cancelled')
-		.map((t) => ({
+		.filter((t: { status: string }) => t.status !== 'done' && t.status !== 'cancelled')
+		.map((t: { id: string; title: string; status: string; assigned_to?: string }) => ({
 			id: t.id,
 			title: t.title,
 			status: t.status,
@@ -32,25 +34,24 @@ export async function buildCompanySnapshot(
 
 	// Load recent messages from channels the agent can read
 	const readableChannels = agent.fs_scope.read
-		.filter((p) => p.includes('comms/channels/'))
-		.map((p) => {
+		.filter((p: string) => p.includes('comms/channels/'))
+		.map((p: string) => {
 			const match = p.match(/comms\/channels\/([^/*]+)/)
 			return match?.[1]
 		})
 		.filter((c): c is string => c != null)
 
-	// If agent has wildcard read access to comms, read from general + dev
 	const channelsToRead =
 		readableChannels.length > 0
 			? readableChannels
-			: agent.fs_scope.read.some((p) => p.includes('comms/**') || p.includes('comms/*'))
+			: agent.fs_scope.read.some((p: string) => p.includes('comms/**') || p.includes('comms/*'))
 				? ['general', 'dev']
 				: []
 
 	const recentMessages: CompanySnapshot['recentMessages'] = []
 	for (const channel of channelsToRead.slice(0, 5)) {
 		try {
-			const msgs = await readChannelMessages(companyRoot, channel, 5)
+			const msgs = await storage.readMessages({ channel, limit: 5 })
 			for (const msg of msgs) {
 				recentMessages.push({
 					from: msg.from,
@@ -63,7 +64,7 @@ export async function buildCompanySnapshot(
 		}
 	}
 
-	// Load dashboard pins
+	// Load dashboard pins (still YAML-based)
 	const allPins = await listPins(companyRoot)
 	const dashboardPins = allPins.map((p) => ({
 		title: p.title,
@@ -71,7 +72,7 @@ export async function buildCompanySnapshot(
 		content: p.content ?? '',
 	}))
 
-	// Load agent statuses
+	// Load agent statuses (YAML)
 	let agentStatuses: CompanySnapshot['agentStatuses'] = []
 	try {
 		const agents = await loadAgents(companyRoot)

@@ -99,9 +99,11 @@ export class WebhookServer {
 			const authHeader = request.headers.get('authorization')
 			if (!authHeader?.startsWith('Bearer ')) return false
 
-			// In production, verify against secret_ref
-			// For MVP, accept any bearer token if secret_ref is not set
-			if (!webhook.secret_ref) return true
+			// Fail-secure: reject if no secret_ref configured
+			if (!webhook.secret_ref) {
+				console.warn(`[webhook] bearer_token auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`)
+				return false
+			}
 
 			const secretPath = join(this.options.companyRoot, 'secrets', `${webhook.secret_ref}.yaml`)
 			try {
@@ -121,7 +123,11 @@ export class WebhookServer {
 				: request.headers.get('x-signature-256') ?? request.headers.get('x-hub-signature-256')
 			if (!signature) return false
 
-			if (!webhook.secret_ref) return true
+			// Fail-secure: reject if no secret_ref configured
+			if (!webhook.secret_ref) {
+				console.warn(`[webhook] hmac_sha256 auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`)
+				return false
+			}
 
 			const secretPath = join(this.options.companyRoot, 'secrets', `${webhook.secret_ref}.yaml`)
 			try {

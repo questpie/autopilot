@@ -1,3 +1,4 @@
+import { container, companyRootFactory } from '../container'
 import { eq, and, sql, desc, asc } from 'drizzle-orm'
 import { Database } from 'bun:sqlite'
 import { TaskSchema, MessageSchema } from '@questpie/autopilot-spec'
@@ -473,3 +474,10 @@ export class SqliteBackend implements StorageBackend {
 		})
 	}
 }
+
+export const storageFactory = container.registerAsync('storage', async (c) => {
+	const { companyRoot } = c.resolve([companyRootFactory])
+	const backend = new SqliteBackend(companyRoot)
+	await backend.initialize()
+	return backend as StorageBackend
+})

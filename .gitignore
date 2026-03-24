@@ -16,6 +16,12 @@ build/
 .env.local
 .env.*.local
 
+# Secrets & auth (company directory)
+.master-key
+.auth/
+credentials.json
+service-account.json
+
 # IDE
 .vscode/
 .idea/

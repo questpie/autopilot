@@ -1,5 +1,6 @@
 import type { Agent, Task } from '@questpie/autopilot-spec'
-import { listTasks } from '../fs/tasks'
+import { container } from '../container'
+import { storageFactory } from '../fs/sqlite-backend'
 
 /**
  * Routes an incoming human message to the most relevant agent.
@@ -15,6 +16,7 @@ export async function routeMessage(
 	agents: Agent[],
 	companyRoot: string,
 ): Promise<{ agent: Agent; reason: string }> {
+	const { storage } = await container.resolveAsync([storageFactory])
 	// 1. Explicit @mention
 	const mentionMatch = message.match(/@([a-z0-9-]+)/)
 	if (mentionMatch) {
@@ -27,7 +29,7 @@ export async function routeMessage(
 	const taskMatch = message.match(/task-[a-z0-9]+/i)
 	if (taskMatch) {
 		try {
-			const tasks = await listTasks(companyRoot)
+			const tasks = await storage.listTasks()
 			const task = tasks.find(t => t.id === taskMatch[0])
 			if (task?.assigned_to) {
 				const agent = agents.find(a => a.id === task.assigned_to)

@@ -179,3 +179,10 @@ export function initFts(db: AutopilotDb): void {
 }
 
 export { schema }
+
+import { container, companyRootFactory } from '../container'
+
+export const dbFactory = container.registerAsync('db', async (c) => {
+	const { companyRoot } = c.resolve([companyRootFactory])
+	return createDb(companyRoot)
+})

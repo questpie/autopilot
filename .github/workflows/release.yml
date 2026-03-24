@@ -21,8 +21,8 @@ jobs:
         with:
           bun-version: latest
       - run: bun install
-      - run: bunx turbo build
-      - run: bunx turbo test
+      - run: bunx turbo build --filter='./packages/*'
+      - run: bunx turbo test --filter='./packages/*'
       - name: Configure npm for provenance
         run: echo "//registry.npmjs.org/:_authToken=" > .npmrc
       - name: Create Release PR or Publish

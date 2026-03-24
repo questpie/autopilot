@@ -14,6 +14,8 @@ import {
 import { loadAgents, loadCompany } from '../../fs'
 import { readYamlUnsafe } from '../../fs/yaml'
 import { spawnAgent } from '../../agent'
+import { container } from '../../container'
+import { storageFactory } from '../../fs/sqlite-backend'
 import type { WebhookHandler, WebhookContext, WebhookResult } from '../handler'
 
 /**
@@ -45,7 +47,8 @@ export const telegramWebhookHandler: WebhookHandler = {
 	},
 
 	async handle(payload: unknown, ctx: WebhookContext): Promise<WebhookResult> {
-		const { companyRoot, streamManager } = ctx
+		const { companyRoot } = ctx
+		const { storage } = await container.resolveAsync([storageFactory])
 
 		// 1. Parse the Telegram update
 		const update = parseTelegramUpdate(payload)
@@ -99,11 +102,10 @@ export const telegramWebhookHandler: WebhookHandler = {
 		// 6. Spawn agent with the message as context
 		try {
 			const result = await spawnAgent({
-				companyRoot,
 				agent,
 				company,
 				allAgents: agents,
-				streamManager,
+				storage,
 				trigger: {
 					type: 'telegram',
 					task_id: undefined,

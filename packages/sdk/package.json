@@ -1,0 +1,32 @@
+{
+	"name": "@questpie/autopilot-sdk",
+	"version": "1.0.0-beta.1",
+	"private": false,
+	"type": "module",
+	"description": "Type-safe API client for QUESTPIE Autopilot",
+	"keywords": ["questpie", "autopilot", "sdk", "api", "client", "hono"],
+	"homepage": "https://autopilot.questpie.com",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/questpie/autopilot",
+		"directory": "packages/sdk"
+	},
+	"license": "MIT",
+	"author": "QUESTPIE s.r.o.",
+	"main": "src/index.ts",
+	"types": "src/index.ts",
+	"files": [
+		"src/"
+	],
+	"scripts": {
+		"typecheck": "bunx tsc --noEmit"
+	},
+	"dependencies": {
+		"hono": "^4.12.0",
+		"@questpie/autopilot-orchestrator": "1.0.0-beta.1"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.11",
+		"typescript": "^5.9.3"
+	}
+}

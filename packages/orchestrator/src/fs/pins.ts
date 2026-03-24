@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { PinSchema, PATHS, pinPath, PIN_TYPES } from '@questpie/autopilot-spec'
 import { readYaml, writeYaml, fileExists } from './yaml'
-import { writeQueue } from './write-queue'
 import { eventBus } from '../events'
 
 /** Resolved (validated) dashboard pin object. */
@@ -54,11 +53,9 @@ export async function createPin(
 /** Delete a pin file from disk (no-op if already gone). */
 export async function removePin(companyRoot: string, pinId: string): Promise<void> {
 	const filePath = resolvePath(companyRoot, pinPath(pinId))
-	await writeQueue.withLock(filePath, async () => {
-		if (await fileExists(filePath)) {
-			await rm(filePath)
-		}
-	})
+	if (await fileExists(filePath)) {
+		await rm(filePath)
+	}
 	eventBus.emit({ type: 'pin_changed', pinId, action: 'removed' })
 }
 
@@ -106,21 +103,19 @@ export async function updatePin(
 ): Promise<PinOutput> {
 	const filePath = resolvePath(companyRoot, pinPath(pinId))
 
-	return writeQueue.withLock(filePath, async () => {
-		if (!(await fileExists(filePath))) {
-			throw new Error(`Pin not found: ${pinId}`)
-		}
+	if (!(await fileExists(filePath))) {
+		throw new Error(`Pin not found: ${pinId}`)
+	}
 
-		const existing = await readYaml(filePath, PinSchema)
-		const updated = PinSchema.parse({
-			...existing,
-			...updates,
-			id: existing.id,
-			created_at: existing.created_at,
-			created_by: existing.created_by,
-		})
-
-		await writeYaml(filePath, updated)
-		return updated
+	const existing = await readYaml(filePath, PinSchema)
+	const updated = PinSchema.parse({
+		...existing,
+		...updates,
+		id: existing.id,
+		created_at: existing.created_at,
+		created_by: existing.created_by,
 	})
+
+	await writeYaml(filePath, updated)
+	return updated
 }

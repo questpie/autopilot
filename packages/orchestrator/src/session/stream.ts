@@ -72,3 +72,9 @@ export class SessionStreamManager {
 		}))
 	}
 }
+
+import { container } from '../container'
+
+export const streamManagerFactory = container.register('streamManager', () => {
+	return new SessionStreamManager()
+})
