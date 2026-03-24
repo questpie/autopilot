@@ -742,8 +742,8 @@ pin_to_board({
 									</div>
 								))}
 							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
+							<div className="bg-lp-card p-6">
+								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
 									GIT-VERSIONED COMPANY
 								</div>
 								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
@@ -792,8 +792,8 @@ patterns:
      reviews"`}
 						</CodeBlock>
 						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2.5">
+							<div className="bg-lp-card p-6">
+								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
 									CONTEXT ASSEMBLY
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
@@ -840,7 +840,7 @@ patterns:
 									</div>
 								))}
 							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
+							<div className="bg-lp-card p-6">
 								<div className="font-sans text-[13px] text-lp-fg leading-relaxed">
 									<strong className="text-white">Isolation rule:</strong> No
 									agent reads another agent's memory. Cross-agent info sharing
