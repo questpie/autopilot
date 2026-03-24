@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path'
 import { loadSkillCatalog } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, dim, table, success, error, badge } from '../utils/format'
+import { section, dim, table, success, error, badge, separator } from '../utils/format'
 
 async function buildTree(dir: string, prefix: string = ''): Promise<string[]> {
 	let entries: string[]
@@ -45,7 +45,7 @@ const knowledgeCmd = new Command('knowledge')
 			const root = await findCompanyRoot()
 			const dir = join(root, 'knowledge')
 
-			console.log(header('Knowledge'))
+			console.log(section('Knowledge'))
 			console.log(dim('  knowledge/'))
 
 			const tree = await buildTree(dir)
@@ -72,7 +72,7 @@ knowledgeCmd.addCommand(
 				const root = await findCompanyRoot()
 				const dir = join(root, 'knowledge')
 
-				console.log(header('Knowledge'))
+				console.log(section('Knowledge'))
 				console.log(dim('  knowledge/'))
 
 				const tree = await buildTree(dir)
@@ -103,7 +103,7 @@ knowledgeCmd.addCommand(
 
 				try {
 					const content = await readFile(filePath, 'utf-8')
-					console.log(header(`knowledge/${docPath}`))
+					console.log(section(`knowledge/${docPath}`))
 					console.log('')
 					console.log(content)
 				} catch {
@@ -160,7 +160,7 @@ knowledgeCmd.addCommand(
 				const root = await findCompanyRoot()
 				const catalog = await loadSkillCatalog(root)
 
-				console.log(header('Skill Catalog'))
+				console.log(section('Skill Catalog'))
 				if (catalog.skills.length === 0) {
 					console.log(dim('  No skills found'))
 					return
@@ -177,6 +177,7 @@ knowledgeCmd.addCommand(
 					),
 				)
 				console.log('')
+				console.log(separator())
 				console.log(dim(`${catalog.skills.length} skill(s)`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))

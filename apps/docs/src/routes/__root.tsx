@@ -49,7 +49,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			<head>
 				<HeadContent />
 			</head>
-			<body className="flex min-h-screen flex-col">
+			<body className="flex min-h-screen flex-col bg-background text-foreground">
 				<RootProvider>{children}</RootProvider>
 				<Scripts />
 			</body>

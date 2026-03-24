@@ -22,7 +22,7 @@ function ArchLayer({
 }) {
 	return (
 		<div
-			className={`px-4 sm:px-6 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 ${
+			className={`px-4 sm:px-6 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 border border-lp-border ${
 				accent ? 'bg-lp-purple-faint' : 'bg-lp-card'
 			}`}
 		>

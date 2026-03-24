@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import { loadCompany, loadAgents, listTasks, readActivity } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, badge, dim, table, error } from '../utils/format'
+import { brandHeader, section, badge, dim, table, error, dot, separator } from '../utils/format'
 
 const API_BASE = 'http://localhost:7778'
 
@@ -33,18 +33,17 @@ program.addCommand(
 					statusCounts[task.status] = (statusCounts[task.status] ?? 0) + 1
 				}
 
-				console.log(header(`QUESTPIE Autopilot \u2014 ${company.name}`))
-				console.log(dim(`slug: ${company.slug} | timezone: ${company.timezone}`))
+				console.log(brandHeader(`${company.name}  \u2502  slug: ${company.slug}  \u2502  tz: ${company.timezone}`))
 				console.log('')
 
 				// Running sessions
 				const sessions = await fetchSessions()
 				if (sessions.length > 0) {
-					console.log(header('Running Sessions'))
+					console.log(section('Running Sessions'))
 					console.log(
 						table(
 							sessions.map((s) => [
-								badge(s.agentId, 'green'),
+								`${dot('green')} ${s.agentId}`,
 								dim(s.sessionId),
 							]),
 						),
@@ -57,7 +56,7 @@ program.addCommand(
 				const activity = await readActivity(root, { limit: activityLimit })
 				if (activity.length > 0) {
 					const activityHeader = activityLimit > 3 ? `Recent Activity (${activityLimit})` : 'Recent Activity'
-					console.log(header(activityHeader))
+					console.log(section(activityHeader))
 					for (const entry of activity) {
 						const time = new Date(entry.at).toLocaleTimeString('en-GB', {
 							hour: '2-digit',
@@ -68,7 +67,7 @@ program.addCommand(
 					console.log('')
 				}
 
-				console.log(header('Agents'))
+				console.log(section('Agents'))
 				console.log(
 					table(
 						agents.map((a) => [
@@ -80,7 +79,7 @@ program.addCommand(
 				)
 				console.log('')
 
-				console.log(header('Tasks'))
+				console.log(section('Tasks'))
 				if (Object.keys(statusCounts).length === 0) {
 					console.log(dim('  No tasks yet'))
 				} else {
@@ -93,7 +92,7 @@ program.addCommand(
 						),
 					)
 				}
-				console.log('')
+				console.log(separator())
 				console.log(dim(`Total: ${tasks.length} tasks | ${agents.length} agents`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { listPins } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, dim, table, success, error, badge } from '../utils/format'
+import { section, dim, table, success, error, badge, separator } from '../utils/format'
 
 const boardCmd = new Command('board')
 	.description('Show dashboard pins and alerts')
@@ -14,7 +14,7 @@ const boardCmd = new Command('board')
 			const root = await findCompanyRoot()
 			const pins = await listPins(root, opts.group)
 
-			console.log(header('Dashboard Board'))
+			console.log(section('Dashboard Board'))
 			if (pins.length === 0) {
 				console.log(dim('  No pins found'))
 				return
@@ -30,7 +30,7 @@ const boardCmd = new Command('board')
 
 			for (const [group, groupPins] of groups) {
 				console.log('')
-				console.log(header(`  ${group.toUpperCase()}`))
+				console.log(section(group.toUpperCase()))
 				console.log(
 					table(
 						groupPins.map((p) => {
@@ -57,6 +57,7 @@ const boardCmd = new Command('board')
 			}
 
 			console.log('')
+			console.log(separator())
 			console.log(dim(`${pins.length} pin(s) in ${groups.size} group(s)`))
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))

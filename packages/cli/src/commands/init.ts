@@ -3,7 +3,7 @@ import { cp, readFile, writeFile, access, readdir, symlink, mkdir } from 'node:f
 import { join, resolve } from 'node:path'
 import simpleGit from 'simple-git'
 import { program } from '../program'
-import { header, success, dim, error, warning } from '../utils/format'
+import { brandHeader, success, dim, error, warning, separator } from '../utils/format'
 
 const CLI_ROOT = resolve(import.meta.dir, '..', '..')
 
@@ -55,8 +55,8 @@ program.addCommand(
 
 				const targetDir = resolve(process.cwd(), slug)
 
-				console.log(header('QUESTPIE Autopilot'))
-				console.log(dim(`Initializing company: ${name}\n`))
+				console.log(brandHeader(`Initializing company: ${name}`))
+				console.log('')
 
 				// Check if directory already exists
 				try {
@@ -137,12 +137,13 @@ program.addCommand(
 
 			console.log(success('Company initialized successfully!'))
 				console.log(dim('Dashboard template installed'))
-				console.log('')
+				console.log(separator())
 				console.log(`  ${dim('Directory:')}  ${targetDir}`)
 				console.log(`  ${dim('Company:')}    ${name}`)
 				console.log(`  ${dim('Slug:')}       ${slug}`)
 				console.log('')
 
+				console.log(separator())
 				console.log(dim('Company structure:'))
 				console.log(`${slug}/`)
 				await printTree(targetDir)

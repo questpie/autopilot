@@ -1,89 +1,90 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { GenerativeAvatar } from '@/lib/generate-avatar'
+import { Brain, BookOpen, PencilSimple, ChatDots, PushPin, CheckCircle, Package } from '@phosphor-icons/react'
+import { GenerativeAvatar } from '@questpie/avatar'
 
-const lines = [
+const lines: { t: string; icon: React.ReactNode; agent: string; color: string; msg: string }[] = [
 	{
 		t: '14:30:12',
-		icon: '\u{1F4AD}',
+		icon: <Brain size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: 'Reading spec to understand feature grid requirements...',
 	},
 	{
 		t: '14:30:15',
-		icon: '\u{1F4D6}',
+		icon: <BookOpen size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: 'read_file \u2192 landing-spec.md',
 	},
 	{
 		t: '14:30:22',
-		icon: '\u{1F4AD}',
+		icon: <Brain size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: 'Need 2x3 grid. Creating FeatureGrid component...',
 	},
 	{
 		t: '14:30:45',
-		icon: '\u{1F4DD}',
+		icon: <PencilSimple size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: 'write_file \u2192 FeatureGrid.tsx (142 lines)',
 	},
 	{
 		t: '14:30:48',
-		icon: '\u{1F4DD}',
+		icon: <PencilSimple size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: 'write_file \u2192 FeatureGrid.module.css (67 lines)',
 	},
 	{
 		t: '14:31:00',
-		icon: '\u{1F4AC}',
+		icon: <ChatDots size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: '\u2192 dev: "FeatureGrid done. Moving to testimonials."',
 	},
 	{
 		t: '14:31:02',
-		icon: '\u{1F4CC}',
+		icon: <PushPin size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: 'pin_to_board \u2192 "Landing Page: 50%"',
 	},
 	{
 		t: '14:32:00',
-		icon: '\u2705',
+		icon: <CheckCircle size={14} className="text-lp-accent-green" />,
 		agent: 'ops',
 		color: 'text-lp-purple',
 		msg: 'Health check passed (CPU 23%, Mem 41%)',
 	},
 	{
 		t: '14:33:10',
-		icon: '\u{1F4AD}',
+		icon: <Brain size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: 'Checking if spec has testimonials section...',
 	},
 	{
 		t: '14:33:12',
-		icon: '\u{1F4D6}',
+		icon: <BookOpen size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: 'read_file \u2192 landing-spec.md (section: testimonials)',
 	},
 	{
 		t: '14:34:00',
-		icon: '\u{1F4DD}',
+		icon: <PencilSimple size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: 'write_file \u2192 Testimonials.tsx (89 lines)',
 	},
 	{
 		t: '14:34:30',
-		icon: '\u{1F4E6}',
+		icon: <Package size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
 		msg: 'git_commit \u2192 "feat: add FeatureGrid and Testimonials"',
@@ -122,7 +123,7 @@ export function LiveStream() {
 						className={`mb-1 flex gap-2 ${i >= visible - 1 ? 'opacity-100' : 'opacity-70'}`}
 					>
 						<span className="text-lp-dim min-w-[60px]">{l.t}</span>
-						<span>{l.icon}</span>
+						<span className="flex items-center shrink-0">{l.icon}</span>
 						<span className="shrink-0 w-4 h-4 overflow-hidden">
 							<GenerativeAvatar seed={l.agent} size={16} />
 						</span>

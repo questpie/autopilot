@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { header, table, badge, dim, success, error, warning } from '../src/utils/format'
+import { header, table, badge, dim, success, error, warning, dot, separator, section, box, brandHeader, stripAnsi } from '../src/utils/format'
 
 describe('format utilities', () => {
 	it('header returns a string with bold formatting', () => {
@@ -57,5 +57,57 @@ describe('format utilities', () => {
 		const result = warning('warn')
 		expect(result).toContain('warn')
 		expect(result).toContain('\x1b[33m')
+	})
+
+	it('dot returns a colored circle', () => {
+		const result = dot('green')
+		expect(stripAnsi(result)).toBe('●')
+		expect(result).toContain('\x1b[32m')
+	})
+
+	it('dot defaults to magenta', () => {
+		const result = dot()
+		expect(result).toContain('\x1b[35m')
+	})
+
+	it('separator returns a horizontal line', () => {
+		const result = separator(10)
+		const clean = stripAnsi(result)
+		expect(clean).toBe('──────────')
+	})
+
+	it('section returns header with separator lines', () => {
+		const result = section('Agents')
+		const clean = stripAnsi(result)
+		expect(clean).toContain('Agents')
+		expect(clean).toContain('──')
+	})
+
+	it('box wraps lines in rounded corners', () => {
+		const result = box(['Hello', 'World'])
+		const clean = stripAnsi(result)
+		expect(clean).toContain('╭')
+		expect(clean).toContain('╰')
+		expect(clean).toContain('│')
+		expect(clean).toContain('Hello')
+		expect(clean).toContain('World')
+	})
+
+	it('brandHeader renders the brand box', () => {
+		const result = brandHeader('test subtitle')
+		const clean = stripAnsi(result)
+		expect(clean).toContain('QUESTPIE Autopilot')
+		expect(clean).toContain('test subtitle')
+		expect(clean).toContain('╭')
+	})
+
+	it('brandHeader works without subtitle', () => {
+		const result = brandHeader()
+		const clean = stripAnsi(result)
+		expect(clean).toContain('QUESTPIE Autopilot')
+	})
+
+	it('stripAnsi removes escape codes', () => {
+		expect(stripAnsi('\x1b[31mhello\x1b[0m')).toBe('hello')
 	})
 })

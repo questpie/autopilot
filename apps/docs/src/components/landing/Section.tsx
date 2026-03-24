@@ -13,11 +13,17 @@ export function Section({
 }
 
 export function SectionHeader({
+	num,
 	children,
 	sub,
-}: { children: React.ReactNode; sub?: string }) {
+}: { num?: string; children: React.ReactNode; sub?: string }) {
 	return (
 		<div className="mb-12">
+			{num && (
+				<div className="text-lp-purple mb-4 font-mono text-sm tracking-[3px]">
+					{num}
+				</div>
+			)}
 			<h2 className="font-mono text-2xl sm:text-4xl font-bold text-white m-0 tracking-[-0.03em]">
 				{children}
 			</h2>

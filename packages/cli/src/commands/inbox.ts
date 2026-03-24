@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import { listTasks } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, badge, dim, table, error } from '../utils/format'
+import { section, badge, dim, table, error, separator } from '../utils/format'
 
 program.addCommand(
 	new Command('inbox')
@@ -16,7 +16,7 @@ program.addCommand(
 
 				const inbox = [...reviewTasks, ...blockedTasks]
 
-				console.log(header('Inbox'))
+				console.log(section('Inbox'))
 				console.log(dim('Tasks requiring your attention\n'))
 
 				if (inbox.length === 0) {
@@ -38,6 +38,7 @@ program.addCommand(
 					),
 				)
 				console.log('')
+				console.log(separator())
 				console.log(dim(`${inbox.length} item(s) need attention`))
 				console.log(dim('Use "autopilot tasks approve <id>" or "autopilot tasks reject <id>" to respond.'))
 			} catch (err) {

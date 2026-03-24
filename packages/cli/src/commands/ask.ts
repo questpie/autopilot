@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import { createTask } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, success, dim, error } from '../utils/format'
+import { brandHeader, success, dim, error, createSpinner } from '../utils/format'
 
 program.addCommand(
 	new Command('ask')
@@ -12,8 +12,9 @@ program.addCommand(
 			try {
 				const root = await findCompanyRoot()
 
-				console.log(header('QUESTPIE Autopilot'))
-				console.log(dim('Submitting intent...\n'))
+				console.log(brandHeader())
+				const spin = createSpinner('Submitting intent...')
+				spin.start()
 
 				const now = new Date().toISOString()
 
@@ -29,6 +30,7 @@ program.addCommand(
 					updated_at: now,
 				})
 
+				spin.stop()
 				console.log(success('Intent submitted!'))
 				console.log('')
 				console.log(`  ${dim('Task ID:')}   ${task.id}`)

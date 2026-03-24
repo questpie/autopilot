@@ -9,7 +9,7 @@ import {
 } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, dim, error, badge } from '../utils/format'
+import { brandHeader, dim, error, badge, separator } from '../utils/format'
 
 /**
  * A stream manager that auto-subscribes a listener to every new stream.
@@ -53,19 +53,18 @@ program.addCommand(
 				}
 
 				console.log('')
-				console.log(header('QUESTPIE Autopilot'))
-				console.log(dim(`Chatting with ${badge(agent.id, 'cyan')} (${agent.name})`))
+				console.log(brandHeader(`Chatting with ${agent.name} (${agent.id})`))
 				console.log('')
 
 				// Show recent channel history for context
 				const channelMessages = await readChannelMessages(root, opts.channel, 10)
 				if (channelMessages.length > 0) {
-					console.log(dim(`--- recent #${opts.channel} ---`))
+					console.log(separator())
 					for (const msg of channelMessages) {
 						const time = new Date(msg.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 						console.log(dim(`  ${time} ${msg.from}: ${msg.content}`))
 					}
-					console.log(dim('---'))
+					console.log(separator())
 					console.log('')
 				}
 
@@ -101,7 +100,8 @@ program.addCommand(
 					process.exit(1)
 				}
 
-				console.log(dim(`--- ${result.toolCalls} tool calls | session ${result.sessionId} ---`))
+				console.log(separator())
+				console.log(dim(`${result.toolCalls} tool calls | session ${result.sessionId}`))
 				console.log('')
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))

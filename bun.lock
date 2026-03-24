@@ -19,6 +19,7 @@
         "@base-ui/react": "^1.3.0",
         "@fontsource-variable/geist": "^5.2.8",
         "@phosphor-icons/react": "^2.1.7",
+        "@questpie/avatar": "workspace:*",
         "@tanstack/react-query": "^5.80.7",
         "@tanstack/react-router": "^1.136.18",
         "@tanstack/react-start": "^1.136.18",
@@ -47,6 +48,8 @@
       "dependencies": {
         "@fontsource-variable/geist": "^5.2.8",
         "@fontsource-variable/jetbrains-mono": "^5.2.8",
+        "@phosphor-icons/react": "^2.1.10",
+        "@questpie/avatar": "workspace:*",
         "@tanstack/react-router": "1.136.18",
         "@tanstack/react-router-devtools": "1.136.18",
         "@tanstack/react-start": "1.136.18",
@@ -86,6 +89,20 @@
         "@types/bun": "^1.3.11",
         "typescript": "^5.9.3",
       },
+    },
+    "packages/avatar": {
+      "name": "@questpie/avatar",
+      "version": "1.0.0-beta.1",
+      "devDependencies": {
+        "@types/react": "^19.2.7",
+        "typescript": "^5.9.3",
+      },
+      "peerDependencies": {
+        "react": ">=18.0.0",
+      },
+      "optionalPeers": [
+        "react",
+      ],
     },
     "packages/cli": {
       "name": "@questpie/autopilot",
@@ -610,6 +627,8 @@
     "@questpie/autopilot-orchestrator": ["@questpie/autopilot-orchestrator@workspace:packages/orchestrator"],
 
     "@questpie/autopilot-spec": ["@questpie/autopilot-spec@workspace:packages/spec"],
+
+    "@questpie/avatar": ["@questpie/avatar@workspace:packages/avatar"],
 
     "@radix-ui/number": ["@radix-ui/number@1.1.1", "", {}, "sha512-MkKCwxlXTgz6CFoJx3pCwn07GKp36+aZyu/u2Ln2VrA5DcdyCZkASEDBTd8x5whTQQL5CiYf4prXKLcgQdv29g=="],
 

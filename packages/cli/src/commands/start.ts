@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import { Orchestrator, loadCompany, loadAgents } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, success, dim, error, warning } from '../utils/format'
+import { brandHeader, success, dim, error, warning, separator, dot } from '../utils/format'
 
 program.addCommand(
 	new Command('start')
@@ -25,20 +25,18 @@ program.addCommand(
 				const apiPort = port + 1
 
 				console.log('')
-				console.log(header('QUESTPIE Autopilot'))
-				console.log(dim(`Company:  ${company.name}`))
-				console.log(dim(`Agents:   ${agents.length}`))
-				console.log(dim(`Root:     ${root}`))
+				console.log(brandHeader(`${company.name}  │  ${agents.length} agents  │  ${root}`))
 				console.log('')
-				console.log(dim('Endpoints:'))
-				console.log(dim(`  Webhooks   http://localhost:${port}`))
-				console.log(dim(`  API        http://localhost:${apiPort}/api/status`))
-				console.log(dim(`  Files      http://localhost:${apiPort}/fs/`))
-				console.log(dim(`  Tasks      http://localhost:${apiPort}/api/tasks`))
-				console.log(dim(`  Agents     http://localhost:${apiPort}/api/agents`))
-				console.log(dim(`  Activity   http://localhost:${apiPort}/api/activity`))
+				console.log(dim('  Endpoints:'))
+				console.log(dim(`    Webhooks   http://localhost:${port}`))
+				console.log(dim(`    API        http://localhost:${apiPort}/api/status`))
+				console.log(dim(`    Files      http://localhost:${apiPort}/fs/`))
+				console.log(dim(`    Tasks      http://localhost:${apiPort}/api/tasks`))
+				console.log(dim(`    Agents     http://localhost:${apiPort}/api/agents`))
+				console.log(dim(`    Activity   http://localhost:${apiPort}/api/activity`))
 				console.log('')
-				console.log(success('Orchestrator is running.'))
+				console.log(separator())
+				console.log(`${dot('green')} ${success('Orchestrator is running.')}`)
 				console.log(dim('Press Ctrl+C to stop'))
 				console.log('')
 

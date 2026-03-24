@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { parse } from 'yaml'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, badge, dim, table, success, error, warning } from '../utils/format'
+import { section, badge, dim, table, success, error, warning, separator } from '../utils/format'
 
 const DASHBOARD_PORT = 3001
 
@@ -44,7 +44,7 @@ dashboardCmd.addCommand(
 					process.exit(1)
 				}
 
-				console.log(header('Dashboard Dev Mode'))
+				console.log(section('Dashboard Dev Mode'))
 				console.log(dim('Starting Vite dev server with HMR...\n'))
 
 				const proc = Bun.spawn(
@@ -85,7 +85,7 @@ dashboardCmd.addCommand(
 					process.exit(1)
 				}
 
-				console.log(header('Dashboard Build'))
+				console.log(section('Dashboard Build'))
 				console.log(dim('Building dashboard for production...\n'))
 
 				const proc = Bun.spawn(['bunx', 'vite', 'build'], {
@@ -120,7 +120,7 @@ dashboardCmd.addCommand(
 
 				const dirsToRemove = ['overrides', 'widgets', 'pages']
 
-				console.log(header('Dashboard Reset'))
+				console.log(section('Dashboard Reset'))
 				console.log(dim('Removing customizations...\n'))
 
 				for (const dir of dirsToRemove) {
@@ -152,7 +152,7 @@ dashboardCmd.addCommand(
 				const root = await findCompanyRoot()
 				const widgetsDir = join(root, 'dashboard', 'widgets')
 
-				console.log(header('Dashboard Widgets'))
+				console.log(section('Dashboard Widgets'))
 
 				let entries: string[]
 				try {
@@ -193,6 +193,7 @@ dashboardCmd.addCommand(
 
 				console.log(table(rows))
 				console.log('')
+				console.log(separator())
 				console.log(dim(`${entries.length} widget(s)`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
@@ -209,7 +210,7 @@ dashboardCmd.addCommand(
 				const root = await findCompanyRoot()
 				const registryPath = join(root, 'dashboard', 'pages', 'registry.yaml')
 
-				console.log(header('Dashboard Pages'))
+				console.log(section('Dashboard Pages'))
 
 				let content: string
 				try {
@@ -240,6 +241,7 @@ dashboardCmd.addCommand(
 
 				console.log(table(rows))
 				console.log('')
+				console.log(separator())
 				console.log(dim(`${pages.length} page(s)`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))

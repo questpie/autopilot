@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import simpleGit from 'simple-git'
 import { resolve } from 'node:path'
 import { program } from '../program'
-import { header, dim, error } from '../utils/format'
+import { section, dim, error } from '../utils/format'
 
 function getCompanyRoot(): string {
 	return resolve(process.cwd())
@@ -18,7 +18,7 @@ gitCmd
 		try {
 			const git = simpleGit(getCompanyRoot())
 			const log = await git.log({ maxCount: 20, format: { hash: '%h', message: '%s', date: '%cr', author: '%an' } })
-			console.log(header('Git Log'))
+			console.log(section('Git Log'))
 			for (const entry of log.all) {
 				console.log(`  ${dim(entry.hash)}  ${entry.message}  ${dim(`(${entry.date} by ${entry.author})`)}`)
 			}
@@ -34,7 +34,7 @@ gitCmd
 		try {
 			const git = simpleGit(getCompanyRoot())
 			const status = await git.status()
-			console.log(header('Git Status'))
+			console.log(section('Git Status'))
 			console.log(`  ${dim('Branch:')} ${status.current}`)
 			if (status.modified.length > 0) {
 				console.log(`  ${dim('Modified:')}`)

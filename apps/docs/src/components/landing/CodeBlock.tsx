@@ -5,87 +5,92 @@ function highlightCode(code: string, lang?: string): string {
 		.replace(/</g, '&lt;')
 		.replace(/>/g, '&gt;')
 
-	// Tokenize: protect strings first, then highlight the rest
-	const tokens: Array<{ type: 'string' | 'raw'; value: string }> = []
+	// Tokenize: extract strings and comments first so later passes can't corrupt them
+	type Token = { type: 'string' | 'comment' | 'raw'; value: string }
+	const tokens: Token[] = []
 	let remaining = escaped
 
-	// Extract all double-quoted and single-quoted strings
-	const stringRegex = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g
+	// Pass 1: extract strings and comments in source order
+	const combined =
+		/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(^|\s)(\/\/[^\n]*)|(^\s*#[^\n]*)/gm
 	let lastIndex = 0
-	let match: RegExpExecArray | null = stringRegex.exec(remaining)
+	let match: RegExpExecArray | null = combined.exec(remaining)
 
 	while (match !== null) {
 		if (match.index > lastIndex) {
 			tokens.push({ type: 'raw', value: remaining.slice(lastIndex, match.index) })
 		}
-		tokens.push({ type: 'string', value: match[0] })
+		if (match[1]) {
+			// String literal
+			tokens.push({ type: 'string', value: match[1] })
+		} else if (match[3] !== undefined) {
+			// // comment (with optional leading whitespace captured in match[2])
+			if (match[2]) tokens.push({ type: 'raw', value: match[2] })
+			tokens.push({ type: 'comment', value: match[3] })
+		} else if (match[4] !== undefined) {
+			// # comment
+			tokens.push({ type: 'comment', value: match[4] })
+		}
 		lastIndex = match.index + match[0].length
-		match = stringRegex.exec(remaining)
+		match = combined.exec(remaining)
 	}
 	if (lastIndex < remaining.length) {
 		tokens.push({ type: 'raw', value: remaining.slice(lastIndex) })
 	}
 
-	// Process each token
-	return tokens.map(token => {
-		if (token.type === 'string') {
-			return `<span style="color: var(--syntax-string)">${token.value}</span>`
-		}
+	// Pass 2: highlight only raw tokens (strings and comments are already safe)
+	return tokens
+		.map((token) => {
+			if (token.type === 'string') {
+				return `<span style="color: var(--syntax-string)">${token.value}</span>`
+			}
+			if (token.type === 'comment') {
+				return `<span style="color: var(--syntax-comment)">${token.value}</span>`
+			}
 
-		let html = token.value
+			let html = token.value
 
-		// Comments: # at start of line only
-		html = html.replace(
-			/^(\s*#[^\n]*)/gm,
-			'<span style="color: var(--syntax-comment)">$1</span>',
-		)
+			// YAML keys
+			if (lang === 'yaml' || lang === 'shell' || !lang) {
+				html = html.replace(
+					/^(\s*[\w_-]+):/gm,
+					'<span style="color: var(--syntax-keyword)">$1</span>:',
+				)
+			}
 
-		// Comments: // only when preceded by whitespace or start of line (not in URLs)
-		html = html.replace(
-			/(^|\s)(\/\/[^\n]*)/gm,
-			'$1<span style="color: var(--syntax-comment)">$2</span>',
-		)
+			// JS/TS keywords
+			if (lang === 'js' || lang === 'ts' || lang === 'tsx') {
+				html = html.replace(
+					/\b(const|let|var|function|export|default|import|from|return|if|else|new|typeof|async|await)\b/g,
+					'<span style="color: var(--syntax-keyword)">$1</span>',
+				)
+				html = html.replace(
+					/\b(true|false|null|undefined)\b/g,
+					'<span style="color: var(--syntax-number)">$1</span>',
+				)
+			}
 
-		// YAML keys
-		if (lang === 'yaml' || lang === 'shell' || !lang) {
+			// Shell prompt
 			html = html.replace(
-				/^(\s*[\w_-]+):/gm,
-				'<span style="color: var(--syntax-keyword)">$1</span>:',
-			)
-		}
-
-		// JS/TS keywords
-		if (lang === 'js' || lang === 'ts' || lang === 'tsx') {
-			html = html.replace(
-				/\b(const|let|var|function|export|default|import|from|return|if|else|new|typeof|async|await)\b/g,
+				/^(\$\s)/gm,
 				'<span style="color: var(--syntax-keyword)">$1</span>',
 			)
+
+			// Numbers (not inside words)
 			html = html.replace(
-				/\b(true|false|null|undefined)\b/g,
+				/(?<![a-zA-Z_-])(\d+)(?![a-zA-Z_])/g,
 				'<span style="color: var(--syntax-number)">$1</span>',
 			)
-		}
 
-		// Shell prompt
-		html = html.replace(
-			/^(\$\s)/gm,
-			'<span style="color: var(--syntax-keyword)">$1</span>',
-		)
+			// Arrows
+			html = html.replace(
+				/(-&gt;|\u2192)/g,
+				'<span style="color: var(--syntax-punctuation)">$1</span>',
+			)
 
-		// Numbers (not inside words)
-		html = html.replace(
-			/(?<![a-zA-Z_-])(\d+)(?![a-zA-Z_])/g,
-			'<span style="color: var(--syntax-number)">$1</span>',
-		)
-
-		// Arrows
-		html = html.replace(
-			/(-&gt;|\u2192)/g,
-			'<span style="color: var(--syntax-punctuation)">$1</span>',
-		)
-
-		return html
-	}).join('')
+			return html
+		})
+		.join('')
 }
 
 function detectLang(title?: string): string | undefined {
@@ -109,7 +114,7 @@ export function CodeBlock({
 	const highlighted = raw ? highlightCode(raw, lang) : ''
 
 	return (
-		<div className="bg-lp-bg overflow-hidden flex flex-col h-full">
+		<div className="bg-lp-bg border border-lp-border overflow-hidden flex flex-col h-full">
 			{title && (
 				<div className="px-4 py-2 border-b border-lp-border flex items-center gap-2">
 					<div className="flex gap-1">

@@ -5,7 +5,7 @@ import { readChannelMessages, sendChannelMessage } from '@questpie/autopilot-orc
 import { PATHS } from '@questpie/autopilot-spec'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, badge, dim, table, success, error, warning } from '../utils/format'
+import { section, badge, dim, table, success, error, warning, separator } from '../utils/format'
 
 const POLL_INTERVAL = 2000
 
@@ -34,7 +34,7 @@ const channelsCmd = new Command('channels')
 				entries = []
 			}
 
-			console.log(header('Channels'))
+			console.log(section('Channels'))
 			if (entries.length === 0) {
 				console.log(dim('  No channels found'))
 				return
@@ -49,6 +49,7 @@ const channelsCmd = new Command('channels')
 				)
 			}
 			console.log('')
+			console.log(separator())
 			console.log(dim(`${entries.length} channel(s)`))
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))
@@ -68,7 +69,7 @@ channelsCmd.addCommand(
 				const root = await findCompanyRoot()
 				const limit = parseInt(opts.limit ?? '20', 10)
 
-				console.log(header(`#${channel}`))
+				console.log(section(`#${channel}`))
 				console.log('')
 
 				const printMessages = (messages: Array<{ from: string; at: string; content: string }>) => {

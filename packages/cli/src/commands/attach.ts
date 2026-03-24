@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, badge, dim, error, success, warning } from '../utils/format'
+import { section, badge, dim, error, success, warning, separator } from '../utils/format'
 
 const API_BASE = 'http://localhost:7778'
 const POLL_INTERVAL = 2000
@@ -102,9 +102,6 @@ async function fetchActivity(agentId: string, limit: number): Promise<ActivityEn
 	return (await res.json()) as ActivityEntry[]
 }
 
-function printSeparator(): void {
-	console.log('\u2500'.repeat(45))
-}
 
 function shouldShow(entry: ActivityEntry, toolsOnly: boolean): boolean {
 	if (!toolsOnly) return true
@@ -137,10 +134,10 @@ program.addCommand(
 			const toolsOnly = opts.toolsOnly ?? false
 
 			console.log('')
-			console.log(`${header(`Attached to ${agentId}`)} ${dim('(polling every 2s)')}`)
-			console.log(dim('   Press Ctrl+C to detach'))
+			console.log(section(`Attached to ${agentId}`))
+			console.log(dim('   Polling every 2s — press Ctrl+C to detach'))
 			console.log('')
-			printSeparator()
+			console.log(separator())
 
 			let lastSeen: string | null = null
 			let stopped = false
@@ -149,7 +146,7 @@ program.addCommand(
 				if (stopped) return
 				stopped = true
 				console.log('')
-				printSeparator()
+				console.log(separator())
 				console.log(success('Detached.'))
 				process.exit(0)
 			}
@@ -239,9 +236,10 @@ program.addCommand(
 			const toolsOnly = opts.toolsOnly ?? false
 
 			console.log('')
-			console.log(`${header(`Replay for ${agentId}`)} ${dim(`(last ${limit} entries)`)}`)
+			console.log(section(`Replay: ${agentId}`))
+			console.log(dim(`  Last ${limit} entries`))
 			console.log('')
-			printSeparator()
+			console.log(separator())
 
 			try {
 				const entries = await fetchActivity(agentId, limit)
@@ -256,7 +254,7 @@ program.addCommand(
 					}
 				}
 
-				printSeparator()
+				console.log(separator())
 				console.log(dim(`${entries.length} entries`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))

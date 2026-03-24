@@ -1,39 +1,70 @@
+import { WarningCircle, GitMerge, CheckCircle, Circle } from '@phosphor-icons/react'
 import { QSymbol } from './QSymbol'
 
-const items = [
-	{
-		icon: '\u{1F534}',
-		title: 'Create GitHub repo',
-		from: 'max',
-		time: '2h ago',
-		actions: ['Resolve'],
-	},
-	{
-		icon: '\u{1F7E1}',
-		title: 'Merge landing page PR #47',
-		from: 'riley approved',
-		time: '45m',
-		actions: ['Merge', 'Reject'],
-	},
-	{
-		icon: '\u{1F7E2}',
-		title: 'Approve marketing copy',
-		from: 'morgan',
-		time: '20m',
-		actions: ['Approve', 'Reject'],
-	},
-]
-
-const agents = [
-	{ n: 'max', s: '\u{1F7E2}', d: 'task-040 \u00B7 12m' },
-	{ n: 'ops', s: '\u{1F7E2}', d: 'health check' },
-	{ n: 'sam', s: '\u26AA', d: 'idle 2h' },
-	{ n: 'riley', s: '\u26AA', d: 'idle' },
-]
-
 export function DashboardMock() {
+	const items = [
+		{
+			icon: (
+				<WarningCircle weight="fill" className="text-lp-accent-red" size={16} />
+			),
+			title: 'Create GitHub repo',
+			from: 'max',
+			time: '2h ago',
+			actions: ['Resolve'],
+		},
+		{
+			icon: (
+				<GitMerge weight="bold" className="text-lp-accent-orange" size={16} />
+			),
+			title: 'Merge landing page PR #47',
+			from: 'riley approved',
+			time: '45m',
+			actions: ['Merge', 'Reject'],
+		},
+		{
+			icon: (
+				<CheckCircle
+					weight="fill"
+					className="text-lp-accent-green"
+					size={16}
+				/>
+			),
+			title: 'Approve marketing copy',
+			from: 'morgan',
+			time: '20m',
+			actions: ['Approve', 'Reject'],
+		},
+	]
+
+	const agents = [
+		{
+			n: 'max',
+			s: (
+				<Circle weight="fill" className="text-lp-accent-green" size={10} />
+			),
+			d: 'task-040 · 12m',
+		},
+		{
+			n: 'ops',
+			s: (
+				<Circle weight="fill" className="text-lp-accent-green" size={10} />
+			),
+			d: 'health check',
+		},
+		{
+			n: 'sam',
+			s: <Circle weight="fill" className="text-lp-dim" size={10} />,
+			d: 'idle 2h',
+		},
+		{
+			n: 'riley',
+			s: <Circle weight="fill" className="text-lp-dim" size={10} />,
+			d: 'idle',
+		},
+	]
+
 	return (
-		<div className="bg-lp-card overflow-hidden">
+		<div className="bg-lp-card border border-lp-border overflow-hidden">
 			<div className="px-4 py-2.5 border-b border-lp-border flex items-center gap-2.5 bg-lp-surface">
 				<QSymbol size={16} />
 				<span className="font-mono text-[11px] text-lp-ghost truncate">
@@ -49,7 +80,7 @@ export function DashboardMock() {
 						key={item.title}
 						className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 px-3 py-2.5 bg-lp-surface border border-lp-border"
 					>
-						<span className="text-sm">{item.icon}</span>
+						{item.icon}
 						<div className="flex-1 min-w-0">
 							<div className="font-mono text-[13px] text-white font-semibold truncate">
 								{item.title}
@@ -83,10 +114,12 @@ export function DashboardMock() {
 							key={a.n}
 							className="px-2.5 py-2 bg-lp-surface border border-lp-border"
 						>
-							<div className="text-lp-fg">
+							<div className="text-lp-fg flex items-center gap-1.5">
 								{a.s} {a.n}
 							</div>
-							<div className="text-lp-dim text-[10px] mt-0.5 truncate">{a.d}</div>
+							<div className="text-lp-dim text-[10px] mt-0.5 truncate">
+								{a.d}
+							</div>
 						</div>
 					))}
 				</div>

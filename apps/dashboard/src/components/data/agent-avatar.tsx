@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { GenerativeAvatar } from '@/lib/generate-avatar'
+import { GenerativeAvatar } from '@questpie/avatar'
 
 interface AgentAvatarProps {
 	/** Seed for deterministic face generation — typically agent name or ID */

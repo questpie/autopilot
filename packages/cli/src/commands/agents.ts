@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import { loadAgents } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, badge, dim, table, error } from '../utils/format'
+import { section, badge, dim, table, error, separator } from '../utils/format'
 
 const agentsCmd = new Command('agents')
 	.description('List all configured agents')
@@ -11,7 +11,7 @@ const agentsCmd = new Command('agents')
 			const root = await findCompanyRoot()
 			const agents = await loadAgents(root)
 
-			console.log(header('Agents'))
+			console.log(section('Agents'))
 			console.log('')
 			console.log(
 				table(
@@ -24,6 +24,7 @@ const agentsCmd = new Command('agents')
 				),
 			)
 			console.log('')
+			console.log(separator())
 			console.log(dim(`${agents.length} agent(s)`))
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))
@@ -48,7 +49,7 @@ agentsCmd.addCommand(
 					process.exit(1)
 				}
 
-				console.log(header(agent.name))
+				console.log(section(agent.name))
 				console.log('')
 				console.log(`  ${dim('ID:')}          ${agent.id}`)
 				console.log(`  ${dim('Role:')}        ${badge(agent.role, 'cyan')}`)

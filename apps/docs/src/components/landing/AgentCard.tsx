@@ -1,4 +1,4 @@
-import { GenerativeAvatar } from '@/lib/generate-avatar'
+import { GenerativeAvatar } from '@questpie/avatar'
 
 const statusMap: Record<string, string> = {
 	run: 'bg-lp-purple',
@@ -20,7 +20,7 @@ export function AgentCard({
 }) {
 	const s = statusMap[status] ?? statusMap.idle
 	return (
-		<div className="bg-lp-card p-6">
+		<div className="bg-lp-card border border-lp-border p-6">
 			<div className="flex items-center gap-3 mb-1.5">
 				<div className="shrink-0 w-8 h-8 overflow-hidden bg-lp-surface">
 					<GenerativeAvatar seed={name} size={32} />

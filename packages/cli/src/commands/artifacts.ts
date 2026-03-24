@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { ArtifactRouter } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, badge, dim, table, success, error, warning } from '../utils/format'
+import { section, badge, dim, table, success, error, warning, separator } from '../utils/format'
 
 async function listArtifactConfigs(root: string): Promise<Array<{ id: string; name: string; serve: string }>> {
 	const dir = join(root, 'artifacts')
@@ -38,7 +38,7 @@ const artifactsCmd = new Command('artifacts')
 			const root = await findCompanyRoot()
 			const artifacts = await listArtifactConfigs(root)
 
-			console.log(header('Artifacts'))
+			console.log(section('Artifacts'))
 			if (artifacts.length === 0) {
 				console.log(dim('  No artifacts found'))
 				console.log(dim('  Create artifacts/ directories with .artifact.yaml configs.'))
@@ -55,6 +55,7 @@ const artifactsCmd = new Command('artifacts')
 				),
 			)
 			console.log('')
+			console.log(separator())
 			console.log(dim(`${artifacts.length} artifact(s)`))
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))

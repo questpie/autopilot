@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { readYamlUnsafe, writeYaml } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, dim, table, success, error, badge } from '../utils/format'
+import { section, dim, table, success, error, badge, separator } from '../utils/format'
 
 const secretsCmd = new Command('secrets')
 	.description('Manage secrets (API keys, tokens, credentials)')
@@ -21,7 +21,7 @@ const secretsCmd = new Command('secrets')
 
 			const secrets = files.filter((f) => f.endsWith('.yaml')).map((f) => f.replace(/\.yaml$/, ''))
 
-			console.log(header('Secrets'))
+			console.log(section('Secrets'))
 			if (secrets.length === 0) {
 				console.log(dim('  No secrets found'))
 				return
@@ -36,6 +36,7 @@ const secretsCmd = new Command('secrets')
 				),
 			)
 			console.log('')
+			console.log(separator())
 			console.log(dim(`${secrets.length} secret(s)`))
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))
@@ -69,7 +70,7 @@ secretsCmd.addCommand(
 					}
 				}
 
-				console.log(header('Secrets'))
+				console.log(section('Secrets'))
 				if (secrets.length === 0) {
 					console.log(dim('  No secrets found'))
 					return
@@ -87,6 +88,7 @@ secretsCmd.addCommand(
 					),
 				)
 				console.log('')
+				console.log(separator())
 				console.log(dim(`${secrets.length} secret(s)`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))

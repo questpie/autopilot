@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import { listTasks, readTask, moveTask } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { header, badge, dim, table, success, error, warning } from '../utils/format'
+import { section, badge, dim, table, success, error, warning, separator } from '../utils/format'
 
 const tasksCmd = new Command('tasks')
 	.description('List and manage tasks in the backlog')
@@ -16,7 +16,7 @@ const tasksCmd = new Command('tasks')
 				agent: opts.agent,
 			})
 
-			console.log(header('Tasks'))
+			console.log(section('Tasks'))
 			if (tasks.length === 0) {
 				console.log(dim('  No tasks found'))
 				if (opts.status || opts.agent) {
@@ -36,6 +36,7 @@ const tasksCmd = new Command('tasks')
 				),
 			)
 			console.log('')
+			console.log(separator())
 			console.log(dim(`${tasks.length} task(s)`))
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))
@@ -59,7 +60,7 @@ tasksCmd.addCommand(
 					process.exit(1)
 				}
 
-				console.log(header(task.title))
+				console.log(section(task.title))
 				console.log('')
 				console.log(`  ${dim('ID:')}          ${task.id}`)
 				console.log(`  ${dim('Status:')}      ${badge(task.status)}`)
