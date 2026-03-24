@@ -856,6 +856,65 @@ $ autopilot artifacts stop pricing-preview
   Artifact "pricing-preview" stopped.`}
 			</CodeBlock>
 
+			{/* ── Dashboard & Git ────────────────────────── */}
+
+			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
+				Dashboard & Git
+			</h2>
+
+			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
+				autopilot dashboard
+			</h3>
+			<p className="text-ghost leading-relaxed mb-4">
+				Open the Living Dashboard in your browser. The dashboard runs
+				on port 3001 and shows agent activity, task status, board pins,
+				and approval gates in realtime via SSE.
+			</p>
+			<CodeBlock title="syntax">
+				{`autopilot dashboard`}
+			</CodeBlock>
+			<CodeBlock title="example">
+				{`$ autopilot dashboard
+  Opening dashboard at http://localhost:3001...
+  Dashboard opened in browser: http://localhost:3001`}
+			</CodeBlock>
+
+			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
+				autopilot auth
+			</h3>
+			<p className="text-ghost leading-relaxed mb-4">
+				Manage authentication credentials for the dashboard and API.
+				Stores credentials in{' '}
+				<code className="font-mono text-xs text-purple">
+					~/.autopilot/credentials.json
+				</code>.
+			</p>
+			<CodeBlock title="syntax">
+				{`autopilot auth login              Save API credentials
+autopilot auth logout             Clear stored credentials
+autopilot auth status             Show current auth status`}
+			</CodeBlock>
+
+			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
+				autopilot git
+			</h3>
+			<p className="text-ghost leading-relaxed mb-4">
+				Git operations for the company repository. View commit history,
+				check status, and manage branches.
+			</p>
+			<CodeBlock title="syntax">
+				{`autopilot git log                 Show recent commits
+autopilot git status              Show working tree status
+autopilot git diff                Show uncommitted changes`}
+			</CodeBlock>
+			<CodeBlock title="example">
+				{`$ autopilot git log
+  Git Log
+  a1b2c3d  feat: add pricing page  (2 hours ago by max)
+  d4e5f6g  docs: update README     (5 hours ago by morgan)
+  h7i8j9k  fix: auth redirect      (1 day ago by max)`}
+			</CodeBlock>
+
 			{/* ── Quick Reference ─────────────────────────── */}
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
@@ -1007,10 +1066,30 @@ $ autopilot artifacts stop pricing-preview
 							<td className="py-2 pr-4 text-xs">Config</td>
 							<td className="py-2 text-xs">Add a secret</td>
 						</tr>
-						<tr>
+						<tr className="border-b border-border/50">
 							<td className="py-2 pr-4 font-mono text-xs text-purple">secrets remove &lt;name&gt;</td>
 							<td className="py-2 pr-4 text-xs">Config</td>
 							<td className="py-2 text-xs">Remove a secret</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 font-mono text-xs text-purple">dashboard</td>
+							<td className="py-2 pr-4 text-xs">Dashboard</td>
+							<td className="py-2 text-xs">Open the Living Dashboard in browser</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 font-mono text-xs text-purple">auth login</td>
+							<td className="py-2 pr-4 text-xs">Auth</td>
+							<td className="py-2 text-xs">Save API credentials</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 font-mono text-xs text-purple">git log</td>
+							<td className="py-2 pr-4 text-xs">Git</td>
+							<td className="py-2 text-xs">Show recent commits</td>
+						</tr>
+						<tr>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">git status</td>
+							<td className="py-2 pr-4 text-xs">Git</td>
+							<td className="py-2 text-xs">Show working tree status</td>
 						</tr>
 					</tbody>
 				</table>

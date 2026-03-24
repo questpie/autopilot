@@ -28,6 +28,14 @@ function LandingPage() {
 			<div className="max-w-[860px] mx-auto px-4 sm:px-6">
 				{/* HERO */}
 				<section className="pt-12 pb-12 sm:pt-20 sm:pb-20 border-b border-border">
+					<div className="flex items-center gap-3 mb-2">
+						<span className="font-mono text-[10px] text-bg bg-purple px-2.5 py-1 tracking-[2px] font-bold">
+							BETA
+						</span>
+						<span className="font-mono text-[10px] text-purple tracking-[2px]">
+							AVAILABLE NOW
+						</span>
+					</div>
 					<h1 className="font-sans text-[40px] sm:text-[64px] font-black text-white m-0 leading-none tracking-tight">
 						Autopilot
 					</h1>
@@ -61,18 +69,33 @@ function LandingPage() {
 					</div>
 				</section>
 
-				{/* QUICK START */}
+				{/* QUICK START — BETA INSTALL */}
 				<Section id="quickstart">
 					<SectionHeader sub="Install globally, scaffold a company, and start giving intents in under a minute.">
 						Get Started in 60 Seconds
 					</SectionHeader>
-					<CodeBlock title="terminal">
-						{`$ bun add -g @questpie/autopilot
-$ autopilot init my-company
-$ cd my-company
-$ autopilot start
-$ autopilot ask "Build a pricing page with Stripe"
-$ autopilot attach sam`}
+					<CodeBlock title="install">
+						{`# Install
+bun add -g @questpie/autopilot
+
+# Create your AI company
+autopilot init my-company
+cd my-company
+
+# Configure your API key
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Start the orchestrator + dashboard
+autopilot start
+
+# Open dashboard
+open http://localhost:3001
+
+# Send your first task
+autopilot ask "Build me a landing page"
+
+# Watch agents work
+autopilot attach max`}
 					</CodeBlock>
 				</Section>
 
@@ -197,8 +220,8 @@ You'll be notified when approvals are needed.`}
 
 				{/* FS = DATABASE */}
 				<Section id="fs">
-					<SectionHeader sub="No SQL. No vector store. No proprietary format. YAML, Markdown, JSON. Git for versioning. Your company is a folder.">
-						Filesystem is the Database
+					<SectionHeader sub="YAML, Markdown, JSON on disk. SQLite + Drizzle for indexes and search. FTS5 + vector embeddings for unified search. Git auto-commit for versioning.">
+						Hybrid Storage
 					</SectionHeader>
 					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 						<CodeBlock title="/company/">
@@ -622,7 +645,7 @@ Max: FeatureGrid and Testimonials done.
 
 				{/* ARCHITECTURE */}
 				<Section id="arch">
-					<SectionHeader sub="Single Bun process (~1500 LOC). Docker container per company. Claude Agent SDK. Minimal dependencies.">
+					<SectionHeader sub="Single Bun process. SQLite + Drizzle hybrid storage. Claude Agent SDK + Codex SDK providers. SSE realtime.">
 						Architecture
 					</SectionHeader>
 					<div className="flex flex-col gap-1.5">
@@ -635,19 +658,19 @@ Max: FeatureGrid and Testimonials done.
 							},
 							{
 								label: 'ORCHESTRATOR',
-								desc: 'Watcher \u00B7 Workflows \u00B7 Spawner \u00B7 Context \u00B7 Memory \u00B7 Cron \u00B7 Webhooks \u00B7 Stream',
+								desc: 'Watcher \u00B7 Workflows \u00B7 Spawner \u00B7 Context \u00B7 Memory \u00B7 Cron \u00B7 Webhooks \u00B7 SSE Stream',
 								color: 'border-l-purple',
 								textColor: 'text-purple',
 							},
 							{
 								label: 'AGENTS',
-								desc: 'Claude Agent SDK \u00B7 Role templates \u00B7 Tools \u00B7 MCPs \u00B7 Sandboxed FS \u00B7 Per-agent memory',
+								desc: 'Claude Agent SDK \u00B7 Codex SDK \u00B7 Role templates \u00B7 Tools \u00B7 MCPs \u00B7 Sandboxed FS \u00B7 Memory',
 								color: 'border-l-accent-cyan',
 								textColor: 'text-accent-cyan',
 							},
 							{
-								label: 'CONTAINER',
-								desc: 'Docker \u00B7 Filesystem \u00B7 YAML/Markdown/JSON \u00B7 Git \u00B7 Secrets \u00B7 Indexes',
+								label: 'STORAGE',
+								desc: 'SQLite + Drizzle \u00B7 YAML/Markdown/JSON \u00B7 FTS5 + vector search \u00B7 Git auto-commit \u00B7 Better Auth',
 								color: 'border-l-accent-orange',
 								textColor: 'text-accent-orange',
 							},
@@ -672,15 +695,16 @@ Max: FeatureGrid and Testimonials done.
 						))}
 					</div>
 					<div className="mt-6">
-						<CodeBlock title="package.json — that's it">
+						<CodeBlock title="core dependencies">
 							{`{
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
+    "drizzle-orm": "latest",
+    "better-auth": "latest",
     "chokidar": "^4.0.0",
     "yaml": "^2.0.0",
     "zod": "^3.0.0",
     "commander": "^12.0.0",
-    "node-cron": "^3.0.0",
     "simple-git": "^3.0.0"
   }
 }`}

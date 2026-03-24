@@ -31,7 +31,7 @@ function GettingStarted() {
 						>
 							Bun
 						</a>{' '}
-						v1.0+
+						v1.3+
 					</strong>{' '}
 					-- runtime, package manager, and test runner
 					<CodeBlock title="terminal">
@@ -61,15 +61,27 @@ function GettingStarted() {
 			</ul>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
-				Installation
+				Quick Start
 			</h2>
 			<CodeBlock title="terminal">
-				{`# Scaffold a new company from the default template
-bunx @questpie/autopilot init my-company
+				{`bun add -g @questpie/autopilot
+autopilot init my-company
+cd my-company
 
-# Or install globally first
-bun add -g @questpie/autopilot
-autopilot init my-company`}
+# Configure your API key
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Start the orchestrator + dashboard
+autopilot start
+
+# Open dashboard
+open http://localhost:3001
+
+# Send your first task
+autopilot ask "Build me a landing page"
+
+# Watch agents work
+autopilot attach max`}
 			</CodeBlock>
 
 			<h2 className="font-sans text-xl font-bold text-white mt-10 mb-4">
@@ -199,13 +211,27 @@ integrations: {}`}
 			</h3>
 			<CodeBlock title="terminal">
 				{`cd my-company
-export ANTHROPIC_API_KEY=sk-ant-xxx
+export ANTHROPIC_API_KEY=sk-ant-...
 
 autopilot start`}
 			</CodeBlock>
 			<p className="text-ghost leading-relaxed mb-4 mt-2 text-sm">
-				This starts the filesystem watcher, scheduler, and webhook server. It
-				runs until you stop it.
+				This starts the filesystem watcher, scheduler, webhook server, SSE
+				stream, and the dashboard on port 3001. It runs until you stop it.
+			</p>
+
+			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">
+				Open the dashboard
+			</h3>
+			<CodeBlock title="terminal">
+				{`autopilot dashboard
+
+# Or open directly
+open http://localhost:3001`}
+			</CodeBlock>
+			<p className="text-ghost leading-relaxed mb-4 mt-2 text-sm">
+				The Living Dashboard shows agent activity, task status, board pins,
+				and approval gates. It updates in realtime via SSE.
 			</p>
 
 			<h3 className="font-sans text-base font-bold text-white mt-6 mb-3">

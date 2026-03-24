@@ -4,6 +4,7 @@ import { Header } from './Header'
 const navItems = [
 	{ to: '/docs', label: 'Overview' },
 	{ to: '/docs/getting-started', label: 'Getting Started' },
+	{ to: '/docs/features', label: 'Features' },
 	{ to: '/docs/architecture', label: 'Architecture' },
 	{ to: '/docs/agents', label: 'Agents' },
 	{ to: '/docs/primitives', label: 'Primitives' },

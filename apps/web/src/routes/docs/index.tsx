@@ -233,6 +233,17 @@ autopilot attach max`}
 					</div>
 				</Link>
 				<Link
+					to="/docs/features"
+					className="border border-border p-4 hover:border-purple transition-colors no-underline group"
+				>
+					<div className="font-sans text-sm font-bold text-white group-hover:text-purple mb-1">
+						Features
+					</div>
+					<div className="text-ghost text-xs">
+						Unified search, embeddings, multiple providers, transport plugins
+					</div>
+				</Link>
+				<Link
 					to="/docs/architecture"
 					className="border border-border p-4 hover:border-purple transition-colors no-underline group"
 				>
@@ -240,7 +251,7 @@ autopilot attach max`}
 						Architecture
 					</div>
 					<div className="text-ghost text-xs">
-						Four-layer stack, orchestrator internals, filesystem convention
+						Four-layer stack, orchestrator internals, hybrid storage
 					</div>
 				</Link>
 				<Link

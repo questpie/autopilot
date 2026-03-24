@@ -14,7 +14,7 @@ function Architecture() {
 				Architecture
 			</h1>
 			<p className="text-muted text-lg mb-8">
-				Four layers. Single process. Filesystem-native. SDK-first.
+				Four layers. Single process. SQLite + filesystem hybrid storage. SDK-first.
 			</p>
 
 			{/* ── 4-Layer Stack ───────────────────────────── */}
@@ -40,7 +40,7 @@ function Architecture() {
 │  Spawner → creates Claude Agent SDK sessions              │
 │  Scheduler → cron-based recurring agent jobs              │
 │  Webhook → HTTP event receiver (port 7777)                │
-│  Session → WebSocket streaming (port 7778)                │
+│  Session → SSE realtime streaming (port 7778)             │
 │  Notifier → transport dispatcher (email, Slack, etc.)     │
 │  Artifact → lazy cold-start preview server                │
 │  Skills → reusable knowledge packages                     │
@@ -58,9 +58,10 @@ function Architecture() {
                            ▼
 ┌───────────────────────────────────────────────────────────┐
 │  LAYER 4 — STORAGE                                        │
-│  Local filesystem: YAML + Markdown + JSON                 │
+│  Hybrid: YAML/Markdown/JSON files + SQLite (Drizzle ORM) │
+│  FTS5 full-text search + sqlite-vec embeddings            │
+│  Better Auth for security · Git auto-commit audit trail   │
 │  Write queue (file-level async mutex)                     │
-│  Git versioning for audit trail                           │
 └───────────────────────────────────────────────────────────┘`}
 			</CodeBlock>
 
@@ -111,10 +112,14 @@ import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestra
 				Provider Abstraction
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				The agent spawner uses a provider abstraction. The primary
-				provider is the Claude Agent SDK. This gives agents built-in
-				infrastructure — file I/O, shell access, sub-agents, MCP
-				support, and lifecycle hooks — without building any of it.
+				The agent spawner uses a provider abstraction. Two providers
+				are available: <strong className="text-fg">Claude Agent SDK</strong> (primary)
+				and <strong className="text-fg">Codex SDK</strong>. The Claude
+				provider gives agents built-in infrastructure -- file I/O, shell
+				access, sub-agents, MCP support, and lifecycle hooks. The Codex
+				provider offers an alternative runtime. Configure per-agent or
+				company-wide in{' '}
+				<code className="font-mono text-xs text-purple">company.yaml</code>.
 			</p>
 			<div className="overflow-x-auto mb-4">
 				<table className="w-full text-sm border-collapse">
@@ -287,7 +292,7 @@ import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestra
 								SessionManager
 							</td>
 							<td className="py-2 text-xs">
-								WebSocket server on port 7778. Powers{' '}
+								SSE server on port 7778. Powers{' '}
 								<code className="font-mono text-purple">autopilot attach</code>{' '}
 								for real-time observation.
 							</td>
@@ -424,7 +429,7 @@ Human: autopilot tasks approve TASK-003
 				<li>
 					<strong className="text-fg">Session streams</strong> —
 					output written to JSONL activity log + broadcast to
-					WebSocket subscribers
+					SSE subscribers
 				</li>
 				<li>
 					<strong className="text-fg">Primitives called</strong> —
@@ -505,9 +510,10 @@ async function spawnAgent(agent: Agent, task: Task, context: AssembledContext) {
 				Filesystem Convention
 			</h2>
 			<p className="text-ghost leading-relaxed mb-4">
-				Every company is a directory tree. No database required. The
-				filesystem IS the database. Git provides versioning and audit
-				trail.
+				Every company is a directory tree with a SQLite sidecar for
+				indexes, search, and auth. YAML/Markdown files are the source
+				of truth -- SQLite indexes are derived and rebuilt from files.
+				Git auto-commit provides versioning and audit trail.
 			</p>
 			<CodeBlock title="/company/ tree structure">
 				{`company.yaml               Company config (name, slug, timezone, model defaults)
@@ -704,11 +710,34 @@ timeout: 5m`}
 						<tr className="border-b border-border/50">
 							<td className="py-2 pr-4 text-xs text-fg">AI</td>
 							<td className="py-2 pr-4 font-mono text-xs text-purple">
-								Claude Agent SDK
+								Claude Agent SDK + Codex SDK
 							</td>
 							<td className="py-2 text-xs">
-								File tools, sandboxing, MCP, hooks, sessions
+								Multiple providers, file tools, sandboxing, MCP, hooks
 							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">Database</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								SQLite + Drizzle ORM
+							</td>
+							<td className="py-2 text-xs">
+								Hybrid storage, FTS5 search, sqlite-vec embeddings
+							</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">Auth</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								Better Auth
+							</td>
+							<td className="py-2 text-xs">Dashboard and API security</td>
+						</tr>
+						<tr className="border-b border-border/50">
+							<td className="py-2 pr-4 text-xs text-fg">Realtime</td>
+							<td className="py-2 pr-4 font-mono text-xs text-purple">
+								SSE (Server-Sent Events)
+							</td>
+							<td className="py-2 text-xs">Session streaming, dashboard updates</td>
 						</tr>
 						<tr className="border-b border-border/50">
 							<td className="py-2 pr-4 text-xs text-fg">Schemas</td>
@@ -813,15 +842,14 @@ timeout: 5m`}
 				<div className="border border-border p-4">
 					<h3 className="font-sans text-base font-bold text-white mb-2 mt-0">
 						<span className="text-purple font-mono mr-2">Phase 4</span>
-						Optional SQLite Backend
+						Full SQLite Backend
 					</h3>
 					<p className="text-ghost leading-relaxed mb-0 text-sm">
-						For companies with 100K+ tasks where FS listing is slow.
-						Same Zod schemas, same API, different storage backend.
-						Configurable in company.yaml:{' '}
-						<code className="font-mono text-xs text-purple">
-							storage_backend: sqlite
-						</code>
+						SQLite hybrid storage is already available. Files remain
+						the source of truth, with SQLite providing FTS5 full-text
+						search, sqlite-vec embeddings, and fast indexed queries.
+						The indexer keeps SQLite in sync with the filesystem
+						automatically.
 					</p>
 				</div>
 			</div>
