@@ -26,8 +26,7 @@ export const Route = createFileRoute('/api/avatar')({
 				const themeParam = url.searchParams.get('theme')
 				const theme: 'dark' | 'light' = themeParam === 'light' ? 'light' : 'dark'
 
-				const resolution = size <= 48 ? 16 : size <= 96 ? 32 : 64
-				const png = renderPng({ seed, resolution, style, theme })
+				const png = renderPng({ seed, style, theme })
 
 				return new Response(png, {
 					headers: {

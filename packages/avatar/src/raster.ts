@@ -16,8 +16,8 @@ import { extractDna, resolveContext, CELL, BRAND, type ResolveOptions } from './
 
 export interface RasterOptions {
 	seed: string
-	/** Raster resolution. Default 32. */
-	resolution?: 16 | 32 | 64
+	/** Raster resolution. Always 64 for full detail — browser scales down with pixelated. */
+	resolution?: 64
 	theme?: 'dark' | 'light'
 	style?: 'solid' | 'wireframe'
 }
@@ -104,18 +104,16 @@ function strokeRect(
 // ── Renderer ────────────────────────────────────────────────────────────
 
 export function renderPixels(options: RasterOptions): RasterResult {
-	const resolution = options.resolution ?? 32
-	const scale = resolution / 16 // 16×16 grid → pixel size
+	const resolution = 64 // always full detail — browser scales with pixelated
+	const scale = resolution / 16 // 16×16 grid → 4px per cell
 	const ctx = resolveContext({
 		seed: options.seed,
-		size: resolution === 16 ? 32 : resolution === 32 ? 80 : 200, // map to LOD trigger sizes
+		size: 200, // always trigger full LOD in core
 		style: options.style,
 		theme: options.theme,
 	})
 
 	const { dna, head: h, style } = ctx
-	const isDetailed = resolution >= 64
-	const isMedium = resolution >= 32
 
 	const bgColor = parseHex(ctx.bg)
 	const fgColor = parseHex(ctx.fg)
@@ -131,9 +129,8 @@ export function renderPixels(options: RasterOptions): RasterResult {
 	// 1. Background fill
 	fillRect(buf, resolution, scale, 0, 0, 16, 16, bgColor)
 
-	// 2. Background grid pattern (64px only, solid only)
-	if (isDetailed && style === 'solid' && dna.bg === 3) {
-		// Dot pattern
+	// 2. Background grid pattern (solid only)
+	if (style === 'solid' && dna.bg === 3) {
 		for (let gy = 0; gy < 16; gy += 2) {
 			for (let gx = 0; gx < 16; gx += 2) {
 				setPixel(buf, resolution, Math.round(gx * scale), Math.round(gy * scale), midColor)
@@ -141,8 +138,8 @@ export function renderPixels(options: RasterOptions): RasterResult {
 		}
 	}
 
-	// 3. Top decor (32px+)
-	if (isMedium) {
+	// 3. Top decor
+	{
 		if (dna.top === 0) {
 			// Antenna
 			fillRect(buf, resolution, scale, h.x + Math.floor(h.w / 2), h.y - 2, 1, 2, fgColor)
@@ -169,8 +166,8 @@ export function renderPixels(options: RasterOptions): RasterResult {
 		}
 	}
 
-	// 4. Side decor (32px+)
-	if (isMedium) {
+	// 4. Side decor
+	{
 		if (dna.side === 0) {
 			strokeRect(buf, resolution, scale, h.x - 2, h.y + 2, 2, 3, fgColor, 4)
 		} else if (dna.side === 1) {
@@ -199,8 +196,8 @@ export function renderPixels(options: RasterOptions): RasterResult {
 		strokeRect(buf, resolution, scale, h.x, h.y, h.w, h.h, fgColor, 4)
 	}
 
-	// 6. Internal pattern (64px only, solid only)
-	if (isDetailed && style === 'solid') {
+	// 6. Internal pattern (solid only)
+	if (style === 'solid') {
 		if (dna.pattern === 1) {
 			// Horizontal stripes
 			fillRect(buf, resolution, scale, h.x + 1, h.y + 1, h.w - 3, 1, midColor)
@@ -248,8 +245,8 @@ export function renderPixels(options: RasterOptions): RasterResult {
 		fillRect(buf, resolution, scale, h.x + 2, h.y + 2, 2, 1, fgColor)
 	}
 
-	// 8. Jaw (32px+)
-	if (isMedium) {
+	// 8. Jaw
+	{
 		if (dna.jaw === 0) {
 			fillRect(buf, resolution, scale, h.x + 1, jY - 2, 2, 1, eyeColor)
 		} else if (dna.jaw === 1) {
@@ -277,15 +274,11 @@ export function renderPixels(options: RasterOptions): RasterResult {
 	// 10. Brand accent — purple corner
 	fillRect(buf, resolution, scale, h.x + h.w - 2, h.y + h.h - 2, 2, 2, brandColor)
 
-	// 11. Frame border (32px+)
-	if (isMedium) {
-		// Top + bottom border
-		fillRect(buf, resolution, scale, 0, 0, 16, 0.5, midColor)
-		fillRect(buf, resolution, scale, 0, 15.5, 16, 0.5, midColor)
-		// Left + right border
-		fillRect(buf, resolution, scale, 0, 0, 0.5, 16, midColor)
-		fillRect(buf, resolution, scale, 15.5, 0, 0.5, 16, midColor)
-	}
+	// 11. Frame border (always)
+	fillRect(buf, resolution, scale, 0, 0, 16, 0.5, midColor)
+	fillRect(buf, resolution, scale, 0, 15.5, 16, 0.5, midColor)
+	fillRect(buf, resolution, scale, 0, 0, 0.5, 16, midColor)
+	fillRect(buf, resolution, scale, 15.5, 0, 0.5, 16, midColor)
 
 	return { pixels: buf, size: resolution }
 }

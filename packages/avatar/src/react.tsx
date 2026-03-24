@@ -1,6 +1,7 @@
 /**
  * React component for the construct avatar.
- * Renders as a crisp pixel-art PNG with nearest-neighbor scaling.
+ * Always renders at 64×64 full detail, displayed at any size with
+ * nearest-neighbor scaling for crisp pixel art.
  */
 import { renderDataUrl } from './raster'
 
@@ -19,8 +20,7 @@ export function GenerativeAvatar({
 	theme = 'dark',
 	className,
 }: GenerativeAvatarProps) {
-	const resolution = size <= 48 ? 16 : size <= 96 ? 32 : 64
-	const dataUrl = renderDataUrl({ seed, resolution, style, theme })
+	const dataUrl = renderDataUrl({ seed, style, theme })
 
 	return (
 		<img
