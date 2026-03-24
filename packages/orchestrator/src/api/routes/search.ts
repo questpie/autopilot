@@ -6,9 +6,7 @@ import { searchFts, searchHybrid } from '../../db/search-index'
 import type { EntityType, SearchResult } from '../../db/search-index'
 import type { AppEnv } from '../app'
 
-const search = new Hono<AppEnv>()
-
-search.get(
+const search = new Hono<AppEnv>().get(
 	'/',
 	describeRoute({
 		tags: ['search'],

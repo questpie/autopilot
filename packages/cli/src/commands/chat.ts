@@ -5,11 +5,25 @@ import {
 	loadAgents,
 	spawnAgent,
 	SessionStreamManager,
-	readChannelMessages,
 } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { brandHeader, dim, error, badge, separator } from '../utils/format'
+import { getAuthHeaders } from './auth'
+import { getBaseUrl } from '../utils/client'
+
+async function fetchChannelMessages(channel: string, limit?: number): Promise<Array<{ from: string; at: string; content: string }>> {
+	const baseUrl = getBaseUrl()
+	const url = new URL(`${baseUrl}/api/channels/${encodeURIComponent(channel)}/messages`)
+	if (limit) url.searchParams.set('limit', String(limit))
+	try {
+		const res = await fetch(url.toString(), { headers: getAuthHeaders() })
+		if (!res.ok) return []
+		return (await res.json()) as Array<{ from: string; at: string; content: string }>
+	} catch {
+		return []
+	}
+}
 
 /**
  * A stream manager that auto-subscribes a listener to every new stream.
@@ -57,7 +71,7 @@ program.addCommand(
 				console.log('')
 
 				// Show recent channel history for context
-				const channelMessages = await readChannelMessages(root, opts.channel, 10)
+				const channelMessages = await fetchChannelMessages(opts.channel, 10)
 				if (channelMessages.length > 0) {
 					console.log(separator())
 					for (const msg of channelMessages) {

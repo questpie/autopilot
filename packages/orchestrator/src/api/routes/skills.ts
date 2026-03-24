@@ -5,8 +5,6 @@ import { z } from 'zod'
 import { loadSkillCatalog } from '../../skills'
 import type { AppEnv } from '../app'
 
-const skills = new Hono<AppEnv>()
-
 const SkillMetadataSchema = z.object({
 	id: z.string(),
 	name: z.string(),
@@ -21,7 +19,7 @@ const SkillCatalogResponseSchema = z.object({
 	skills: z.array(SkillMetadataSchema),
 })
 
-skills.get(
+const skills = new Hono<AppEnv>().get(
 	'/',
 	describeRoute({
 		tags: ['skills'],

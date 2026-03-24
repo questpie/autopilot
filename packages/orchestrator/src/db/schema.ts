@@ -125,3 +125,16 @@ export const searchIndex = sqliteTable('search_index', {
 	index('idx_search_entity_id').on(table.entityId),
 	uniqueIndex('uq_search_entity').on(table.entityType, table.entityId),
 ])
+
+// ─── Rate Limiting ──────────────────────────────────────────────────────────
+
+export const rateLimitEntries = sqliteTable('rate_limit_entries', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	key: text('key').notNull(),
+	window_start: integer('window_start').notNull(),
+	count: integer('count').notNull().default(1),
+	expires_at: integer('expires_at').notNull(),
+}, (table) => [
+	index('idx_rate_limit_key_window').on(table.key, table.window_start),
+	index('idx_rate_limit_expires').on(table.expires_at),
+])

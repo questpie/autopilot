@@ -116,3 +116,5 @@ docker run -d \
 - Set `ANTHROPIC_API_KEY` as env var, not in company files
 - Review audit logs periodically (`logs/audit/`)
 - Configure `secret_ref` on all authenticated webhooks
+- Configure IP allowlist in `settings.auth.ip_allowlist` for production
+- Enable 2FA for all human users with `autopilot auth 2fa enable`

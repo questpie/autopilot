@@ -1,0 +1,70 @@
+---
+title: IP Allowlist
+description: Restrict API access to specific IP addresses or CIDR ranges in QUESTPIE Autopilot.
+---
+
+The IP allowlist restricts API access to specific IP addresses or CIDR ranges. When configured, requests from non-allowed IPs receive a `403 Forbidden` response.
+
+## Configuration
+
+Add IP ranges to `company.yaml`:
+
+```yaml title="company.yaml"
+settings:
+  auth:
+    enabled: true
+    ip_allowlist:
+      - "100.64.0.0/10"       # Tailscale CGNAT range
+      - "192.168.1.0/24"      # Office network
+      - "203.0.113.50"        # CI server (single IP = auto /32)
+```
+
+## Behavior
+
+| Condition | Result |
+|-----------|--------|
+| Empty allowlist (default) | All IPs allowed |
+| IP matches any CIDR range | Request proceeds |
+| IP does not match | `403 { "error": "IP not allowed" }` |
+
+## CIDR Notation
+
+The allowlist supports standard IPv4 CIDR notation:
+
+| Example | Description |
+|---------|-------------|
+| `192.168.1.0/24` | 256 addresses (192.168.1.0 – 192.168.1.255) |
+| `10.0.0.0/8` | Class A (10.x.x.x) |
+| `100.64.0.0/10` | Tailscale CGNAT range |
+| `203.0.113.50` | Single IP (auto /32) |
+| `0.0.0.0/0` | All IPv4 addresses (match all) |
+
+## Tailscale Integration
+
+If your team uses [Tailscale](https://tailscale.com), add the CGNAT range to allow all Tailscale devices:
+
+```yaml title="company.yaml"
+settings:
+  auth:
+    ip_allowlist:
+      - "100.64.0.0/10"
+```
+
+This covers all Tailscale IP addresses (100.64.0.0 – 100.127.255.255).
+
+## Exempt Paths
+
+The following paths are exempt from the IP allowlist — they are always accessible regardless of client IP:
+
+- `/hooks/*` — Webhook endpoints need to receive events from external services
+- `/api/status` — Health check endpoint for monitoring
+
+## Client IP Detection
+
+The middleware determines client IP using this priority:
+
+1. `X-Forwarded-For` header (first entry = original client)
+2. `X-Real-IP` header
+3. Fallback: `127.0.0.1`
+
+When behind a reverse proxy, ensure it sets `X-Forwarded-For` correctly.

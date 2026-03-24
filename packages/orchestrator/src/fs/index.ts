@@ -18,3 +18,4 @@ export type { PinOutput } from './pins'
 // Storage backend (SQLite)
 export type { StorageBackend, Task, Message, TaskFilter, MessageFilter, ActivityFilter, ActivityEntry } from './storage'
 export { SqliteBackend } from './sqlite-backend'
+

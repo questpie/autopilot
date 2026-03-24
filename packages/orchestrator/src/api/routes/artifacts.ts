@@ -7,8 +7,6 @@ import { join } from 'node:path'
 import { ArtifactRouter } from '../../artifact'
 import type { AppEnv } from '../app'
 
-const artifacts = new Hono<AppEnv>()
-
 /** Lazily-created ArtifactRouter instances keyed by companyRoot. */
 const routers = new Map<string, ArtifactRouter>()
 
@@ -34,7 +32,21 @@ const ArtifactListResponseSchema = z.object({
 	artifacts: z.array(ArtifactConfigSchema),
 })
 
-artifacts.get(
+const ArtifactIdParamSchema = z.object({
+	id: z.string(),
+})
+
+const ArtifactStartResponseSchema = z.object({
+	id: z.string(),
+	port: z.number(),
+	url: z.string(),
+})
+
+const ArtifactStopResponseSchema = z.object({
+	ok: z.literal(true),
+})
+
+const artifacts = new Hono<AppEnv>().get(
 	'/',
 	describeRoute({
 		tags: ['artifacts'],
@@ -73,19 +85,7 @@ artifacts.get(
 			artifacts: configs.filter((c): c is NonNullable<typeof c> => c !== null),
 		})
 	},
-)
-
-const ArtifactIdParamSchema = z.object({
-	id: z.string(),
-})
-
-const ArtifactStartResponseSchema = z.object({
-	id: z.string(),
-	port: z.number(),
-	url: z.string(),
-})
-
-artifacts.post(
+).post(
 	'/:id/start',
 	describeRoute({
 		tags: ['artifacts'],
@@ -106,13 +106,7 @@ artifacts.post(
 		const result = await router.route(id)
 		return c.json({ id, port: result.port, url: result.url })
 	},
-)
-
-const ArtifactStopResponseSchema = z.object({
-	ok: z.literal(true),
-})
-
-artifacts.post(
+).post(
 	'/:id/stop',
 	describeRoute({
 		tags: ['artifacts'],

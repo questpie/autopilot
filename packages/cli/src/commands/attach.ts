@@ -2,8 +2,8 @@ import { Command } from 'commander'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { section, badge, dim, error, success, warning, separator } from '../utils/format'
+import { getClient } from '../utils/client'
 
-const API_BASE = 'http://localhost:7778'
 const POLL_INTERVAL = 2000
 
 interface ActivityEntry {
@@ -87,7 +87,8 @@ function formatEntry(entry: ActivityEntry, compact: boolean): string {
 
 async function checkOrchestrator(): Promise<boolean> {
 	try {
-		const res = await fetch(`${API_BASE}/api/status`)
+		const client = getClient()
+		const res = await client.api.status.$get()
 		return res.ok
 	} catch {
 		return false
@@ -95,7 +96,8 @@ async function checkOrchestrator(): Promise<boolean> {
 }
 
 async function fetchActivity(agentId: string, limit: number): Promise<ActivityEntry[]> {
-	const res = await fetch(`${API_BASE}/api/activity?agent=${encodeURIComponent(agentId)}&limit=${limit}`)
+	const client = getClient()
+	const res = await client.api.activity.$get({ query: { agent: agentId, limit: String(limit) } })
 	if (!res.ok) {
 		throw new Error(`API returned ${res.status}`)
 	}

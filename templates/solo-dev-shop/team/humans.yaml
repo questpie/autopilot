@@ -2,7 +2,7 @@ humans:
   - id: owner
     name: "Owner"
     role: "owner"
-    email: ""
+    # email: "you@example.com"  # Set your email for notifications
     description: "Company owner and sole human operator"
     notification_routing:
       urgent:

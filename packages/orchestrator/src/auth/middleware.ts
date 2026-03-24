@@ -70,7 +70,7 @@ export async function resolveActor(
 			const authApi = config.auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
 			const getSessionFn = authApi.getSession
 			if (!getSessionFn) return null
-			const session = await getSessionFn({ headers: request.headers }) as { user: { id: string; email: string; name?: string } } | null
+			const session = await getSessionFn({ headers: request.headers }) as { user: { id: string; email: string; name?: string; twoFactorEnabled?: boolean }; twoFactorVerified?: boolean } | null
 			if (session) {
 				return resolveHumanActor(session, request, config)
 			}
@@ -140,10 +140,15 @@ async function resolveApiKeyActor(
 }
 
 async function resolveHumanActor(
-	session: { user: { id: string; email: string; name?: string } },
+	session: { user: { id: string; email: string; name?: string; twoFactorEnabled?: boolean }; twoFactorVerified?: boolean },
 	request: Request,
 	config: ResolveActorConfig,
-): Promise<Actor> {
+): Promise<Actor | null> {
+	// 2FA enforcement: if user has 2FA enabled but session not verified, reject
+	if (session.user.twoFactorEnabled && !session.twoFactorVerified) {
+		return null
+	}
+
 	// Role comes from humans.yaml, NOT from Better Auth DB
 	const { readYamlUnsafe } = await import('../fs/yaml')
 	const { join } = await import('node:path')
@@ -227,6 +232,11 @@ export function getRequiredPermission(
 
 	// Audit
 	if (path.startsWith('/api/audit')) return { resource: 'audit', action: 'read' }
+
+	// Sessions
+	if (path.startsWith('/api/sessions')) {
+		return { resource: 'sessions', action: method === 'GET' ? 'read' : 'revoke' }
+	}
 
 	// Dashboard read endpoints
 	if (

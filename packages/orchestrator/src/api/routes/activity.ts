@@ -13,9 +13,7 @@ const ActivityEntrySchema = z.object({
 	details: z.record(z.string(), z.unknown()).optional(),
 })
 
-const activity = new Hono<AppEnv>()
-
-activity.get(
+const activity = new Hono<AppEnv>().get(
 	'/',
 	describeRoute({
 		tags: ['activity'],

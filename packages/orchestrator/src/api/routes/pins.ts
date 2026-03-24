@@ -6,9 +6,7 @@ import { PinSchema } from '@questpie/autopilot-spec'
 import { listPins } from '../../fs/pins'
 import type { AppEnv } from '../app'
 
-const pins = new Hono<AppEnv>()
-
-pins.get(
+const pins = new Hono<AppEnv>().get(
 	'/',
 	describeRoute({
 		tags: ['pins'],

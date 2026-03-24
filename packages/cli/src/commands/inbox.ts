@@ -1,20 +1,29 @@
 import { Command } from 'commander'
-import { listTasks } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { section, badge, dim, table, error, separator } from '../utils/format'
+import { getClient } from '../utils/client'
 
 program.addCommand(
 	new Command('inbox')
 		.description('Show tasks requiring human attention (review + blocked)')
 		.action(async () => {
 			try {
-				const root = await findCompanyRoot()
+				await findCompanyRoot()
+				const client = getClient()
 
-				const reviewTasks = await listTasks(root, { status: 'review' })
-				const blockedTasks = await listTasks(root, { status: 'blocked' })
+				const res = await client.api.inbox.$get()
+				if (!res.ok) {
+					console.error(error('Failed to fetch inbox'))
+					process.exit(1)
+				}
 
-				const inbox = [...reviewTasks, ...blockedTasks]
+				const data = (await res.json()) as {
+					tasks: Array<{ id: string; status: string; title: string; assigned_to?: string }>
+					pins: unknown[]
+				}
+
+				const inbox = data.tasks
 
 				console.log(section('Inbox'))
 				console.log(dim('Tasks requiring your attention\n'))

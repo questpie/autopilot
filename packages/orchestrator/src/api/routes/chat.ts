@@ -17,9 +17,7 @@ const ChatErrorResponseSchema = z.object({
 	reason: z.string(),
 })
 
-const chat = new Hono<AppEnv>()
-
-chat.post(
+const chat = new Hono<AppEnv>().post(
 	'/',
 	describeRoute({
 		tags: ['chat'],

@@ -5,9 +5,7 @@ import { StatusResponseSchema } from '@questpie/autopilot-spec'
 import { loadCompany, loadAgents } from '../../fs/company'
 import type { AppEnv } from '../app'
 
-const status = new Hono<AppEnv>()
-
-status.get(
+const status = new Hono<AppEnv>().get(
 	'/',
 	describeRoute({
 		tags: ['status'],

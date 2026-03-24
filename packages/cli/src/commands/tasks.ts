@@ -1,8 +1,8 @@
 import { Command } from 'commander'
-import { listTasks, readTask, moveTask } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { section, badge, dim, table, success, error, warning, separator } from '../utils/format'
+import { getClient } from '../utils/client'
 
 const tasksCmd = new Command('tasks')
 	.description('List and manage tasks in the backlog')
@@ -10,11 +10,25 @@ const tasksCmd = new Command('tasks')
 	.option('-a, --agent <agent>', 'Filter by assigned agent ID')
 	.action(async (opts: { status?: string; agent?: string }) => {
 		try {
-			const root = await findCompanyRoot()
-			const tasks = await listTasks(root, {
-				status: opts.status,
-				agent: opts.agent,
-			})
+			await findCompanyRoot()
+			const client = getClient()
+
+			const query: Record<string, string> = {}
+			if (opts.status) query.status = opts.status
+			if (opts.agent) query.agent = opts.agent
+
+			const res = await client.api.tasks.$get({ query })
+			if (!res.ok) {
+				console.error(error('Failed to fetch tasks'))
+				process.exit(1)
+			}
+
+			const tasks = (await res.json()) as Array<{
+				id: string
+				status: string
+				title: string
+				assigned_to?: string
+			}>
 
 			console.log(section('Tasks'))
 			if (tasks.length === 0) {
@@ -51,13 +65,29 @@ tasksCmd.addCommand(
 		.argument('<id>', 'Task ID to inspect')
 		.action(async (id: string) => {
 			try {
-				const root = await findCompanyRoot()
-				const task = await readTask(root, id)
+				await findCompanyRoot()
+				const client = getClient()
 
-				if (!task) {
+				const res = await client.api.tasks[':id'].$get({ param: { id } })
+
+				if (!res.ok) {
 					console.error(error(`Task not found: ${id}`))
 					console.error(dim('Use "autopilot tasks" to list all tasks.'))
 					process.exit(1)
+				}
+
+				const task = (await res.json()) as {
+					id: string
+					title: string
+					status: string
+					type: string
+					priority: string
+					assigned_to?: string
+					created_by: string
+					created_at: string
+					updated_at: string
+					description?: string
+					history: Array<{ at: string; by: string; action: string; note?: string }>
 				}
 
 				console.log(section(task.title))
@@ -98,16 +128,17 @@ tasksCmd.addCommand(
 		.argument('<id>', 'Task ID to approve')
 		.action(async (id: string) => {
 			try {
-				const root = await findCompanyRoot()
-				const task = await readTask(root, id)
+				await findCompanyRoot()
+				const client = getClient()
 
-				if (!task) {
+				const res = await client.api.tasks[':id'].approve.$post({ param: { id } })
+
+				if (!res.ok) {
 					console.error(error(`Task not found: ${id}`))
 					console.error(dim('Use "autopilot tasks" to list all tasks.'))
 					process.exit(1)
 				}
 
-				await moveTask(root, id, 'done', 'human:owner')
 				console.log(success(`Task ${id} approved and moved to done.`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
@@ -124,16 +155,20 @@ tasksCmd.addCommand(
 		.argument('[reason]', 'Reason for rejection')
 		.action(async (id: string, reason?: string) => {
 			try {
-				const root = await findCompanyRoot()
-				const task = await readTask(root, id)
+				await findCompanyRoot()
+				const client = getClient()
 
-				if (!task) {
+				const res = await client.api.tasks[':id'].reject.$post({
+					param: { id },
+					json: { reason: reason ?? 'Rejected by human' },
+				})
+
+				if (!res.ok) {
 					console.error(error(`Task not found: ${id}`))
 					console.error(dim('Use "autopilot tasks" to list all tasks.'))
 					process.exit(1)
 				}
 
-				await moveTask(root, id, 'blocked', 'human:owner')
 				console.log(warning(`Task ${id} rejected and moved to blocked.`))
 				if (reason) {
 					console.log(dim(`  Reason: ${reason}`))

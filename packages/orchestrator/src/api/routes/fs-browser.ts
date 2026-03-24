@@ -7,8 +7,6 @@ import { resolve, join, extname } from 'node:path'
 import { FsEntrySchema } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
 
-const fsBrowser = new Hono<AppEnv>()
-
 const CONTENT_TYPE_MAP: Record<string, string> = {
 	'.md': 'text/markdown; charset=utf-8',
 	'.yaml': 'text/yaml; charset=utf-8',
@@ -40,7 +38,7 @@ function safePath(root: string, subPath: string): string {
 	return target
 }
 
-fsBrowser.get(
+const fsBrowser = new Hono<AppEnv>().get(
 	'/*',
 	describeRoute({
 		tags: ['fs-browser'],

@@ -5,9 +5,7 @@ import { InboxResponseSchema } from '@questpie/autopilot-spec'
 import { listPins } from '../../fs/pins'
 import type { AppEnv } from '../app'
 
-const inbox = new Hono<AppEnv>()
-
-inbox.get(
+const inbox = new Hono<AppEnv>().get(
 	'/',
 	describeRoute({
 		tags: ['inbox'],

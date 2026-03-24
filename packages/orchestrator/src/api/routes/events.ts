@@ -4,9 +4,7 @@ import { eventBus } from '../../events'
 import type { AutopilotEvent } from '../../events'
 import type { AppEnv } from '../app'
 
-const events = new Hono<AppEnv>()
-
-events.get(
+const events = new Hono<AppEnv>().get(
 	'/',
 	describeRoute({
 		tags: ['events'],

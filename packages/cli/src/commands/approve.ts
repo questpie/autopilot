@@ -1,8 +1,8 @@
 import { Command } from 'commander'
-import { readTask, moveTask } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { success, dim, error } from '../utils/format'
+import { getClient } from '../utils/client'
 
 program.addCommand(
 	new Command('approve')
@@ -10,16 +10,17 @@ program.addCommand(
 		.argument('<id>', 'Task ID to approve')
 		.action(async (id: string) => {
 			try {
-				const root = await findCompanyRoot()
-				const task = await readTask(root, id)
+				await findCompanyRoot()
+				const client = getClient()
 
-				if (!task) {
+				const res = await client.api.tasks[':id'].approve.$post({ param: { id } })
+
+				if (!res.ok) {
 					console.error(error(`Task not found: ${id}`))
 					console.error(dim('Use "autopilot tasks" to list all tasks.'))
 					process.exit(1)
 				}
 
-				await moveTask(root, id, 'done', 'human:owner')
 				console.log(success(`Task ${id} approved and moved to done.`))
 				console.log(dim('Workflow advancement triggered.'))
 			} catch (err) {

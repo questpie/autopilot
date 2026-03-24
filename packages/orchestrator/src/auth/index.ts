@@ -5,7 +5,7 @@
  * Drizzle ORM) so that all data lives in a single SQLite file.
  */
 import { betterAuth } from 'better-auth'
-import { bearer, admin, openAPI } from 'better-auth/plugins'
+import { bearer, admin, openAPI, twoFactor } from 'better-auth/plugins'
 import { apiKey } from '@better-auth/api-key'
 import type { Database } from 'bun:sqlite'
 
@@ -37,6 +37,7 @@ export async function createAuth(rawDb: Database) {
 		},
 
 		rateLimit: {
+			storage: 'database',
 			window: 60,
 			max: 30,
 			customRules: {
@@ -50,6 +51,11 @@ export async function createAuth(rawDb: Database) {
 			apiKey(),
 			admin(),
 			openAPI(),
+			twoFactor({
+				issuer: 'QuestPie Autopilot',
+				backupCodeOptions: { amount: 10 },
+				trustDeviceMaxAge: 60 * 60 * 24 * 30, // 30 days
+			}),
 		],
 	})
 }

@@ -1,8 +1,8 @@
 import { Command } from 'commander'
-import { readTask, moveTask } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { warning, dim, error } from '../utils/format'
+import { getClient } from '../utils/client'
 
 program.addCommand(
 	new Command('reject')
@@ -11,16 +11,20 @@ program.addCommand(
 		.argument('[reason]', 'Reason for rejection')
 		.action(async (id: string, reason?: string) => {
 			try {
-				const root = await findCompanyRoot()
-				const task = await readTask(root, id)
+				await findCompanyRoot()
+				const client = getClient()
 
-				if (!task) {
+				const res = await client.api.tasks[':id'].reject.$post({
+					param: { id },
+					json: { reason: reason ?? 'Rejected by human' },
+				})
+
+				if (!res.ok) {
 					console.error(error(`Task not found: ${id}`))
 					console.error(dim('Use "autopilot tasks" to list all tasks.'))
 					process.exit(1)
 				}
 
-				await moveTask(root, id, 'blocked', 'human:owner')
 				console.log(warning(`Task ${id} rejected and moved to blocked.`))
 				if (reason) {
 					console.log(dim(`  Reason: ${reason}`))

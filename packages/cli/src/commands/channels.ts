@@ -1,11 +1,12 @@
 import { Command } from 'commander'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { readChannelMessages, sendChannelMessage } from '@questpie/autopilot-orchestrator'
 import { PATHS } from '@questpie/autopilot-spec'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
-import { section, badge, dim, table, success, error, warning, separator } from '../utils/format'
+import { section, badge, dim, success, error, warning, separator } from '../utils/format'
+import { getAuthHeaders } from './auth'
+import { getBaseUrl } from '../utils/client'
 
 const POLL_INTERVAL = 2000
 
@@ -16,6 +17,34 @@ function formatTime(iso: string): string {
 		minute: '2-digit',
 		second: '2-digit',
 	})
+}
+
+async function fetchChannelMessages(channel: string, limit?: number): Promise<Array<{ id: string; from: string; at: string; content: string }>> {
+	const baseUrl = getBaseUrl()
+	const url = new URL(`${baseUrl}/api/channels/${encodeURIComponent(channel)}/messages`)
+	if (limit) url.searchParams.set('limit', String(limit))
+	try {
+		const res = await fetch(url.toString(), { headers: getAuthHeaders() })
+		if (!res.ok) return []
+		return (await res.json()) as Array<{ id: string; from: string; at: string; content: string }>
+	} catch {
+		return []
+	}
+}
+
+async function postChannelMessage(channel: string, content: string): Promise<{ id: string } | null> {
+	try {
+		const baseUrl = getBaseUrl()
+		const res = await fetch(`${baseUrl}/api/channels/${encodeURIComponent(channel)}/messages`, {
+			method: 'POST',
+			headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+			body: JSON.stringify({ from: 'human:owner', content }),
+		})
+		if (!res.ok) return null
+		return (await res.json()) as { id: string }
+	} catch {
+		return null
+	}
 }
 
 const channelsCmd = new Command('channels')
@@ -41,7 +70,7 @@ const channelsCmd = new Command('channels')
 			}
 
 			for (const name of entries.sort()) {
-				const messages = await readChannelMessages(root, name)
+				const messages = await fetchChannelMessages(name)
 				const count = messages.length
 				const last = count > 0 ? messages[count - 1]! : null
 				console.log(
@@ -66,7 +95,7 @@ channelsCmd.addCommand(
 		.option('-f, --follow', 'Live follow (poll every 2s)')
 		.action(async (channel: string, opts: { limit?: string; follow?: boolean }) => {
 			try {
-				const root = await findCompanyRoot()
+				await findCompanyRoot()
 				const limit = parseInt(opts.limit ?? '20', 10)
 
 				console.log(section(`#${channel}`))
@@ -79,7 +108,7 @@ channelsCmd.addCommand(
 					}
 				}
 
-				const messages = await readChannelMessages(root, channel, limit)
+				const messages = await fetchChannelMessages(channel, limit)
 				if (messages.length === 0) {
 					console.log(dim('  No messages yet'))
 				} else {
@@ -112,7 +141,7 @@ channelsCmd.addCommand(
 				const poll = async () => {
 					if (stopped) return
 					try {
-						const all = await readChannelMessages(root, channel, 50)
+						const all = await fetchChannelMessages(channel, 50)
 						const fresh = lastSeen ? all.filter((m) => m.at > lastSeen!) : all
 						if (fresh.length > 0) {
 							printMessages(fresh)
@@ -148,12 +177,14 @@ channelsCmd.addCommand(
 		.argument('<message>', 'Message content')
 		.action(async (channel: string, message: string) => {
 			try {
-				const root = await findCompanyRoot()
+				await findCompanyRoot()
 
-				const msg = await sendChannelMessage(root, channel, {
-					from: 'human:owner',
-					content: message,
-				})
+				const msg = await postChannelMessage(channel, message)
+
+				if (!msg) {
+					console.error(error(`Failed to send message to #${channel}`))
+					process.exit(1)
+				}
 
 				console.log(success(`Message sent to #${channel}`))
 				console.log(dim(`  ID: ${msg.id}`))

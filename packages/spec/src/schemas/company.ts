@@ -31,6 +31,7 @@ export const CompanySettingsSchema = z.object({
 		.object({
 			enabled: z.boolean().default(false),
 			cors_origin: z.string().optional(),
+			ip_allowlist: z.array(z.string()).default([]),
 		})
 		.default({}),
 	embeddings: z

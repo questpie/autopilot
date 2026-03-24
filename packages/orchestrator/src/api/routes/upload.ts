@@ -7,9 +7,7 @@ import { resolver } from 'hono-openapi'
 import { OkResponseSchema } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
 
-const upload = new Hono<AppEnv>()
-
-upload.post(
+const upload = new Hono<AppEnv>().post(
 	'/',
 	describeRoute({
 		tags: ['files'],

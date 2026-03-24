@@ -16,6 +16,8 @@ import type { StorageBackend } from '../fs/storage'
 import { storageFactory } from '../fs/sqlite-backend'
 import { container, companyRootFactory } from '../container'
 import { authMiddleware } from './middleware/auth'
+import { ipAllowlist } from './middleware/ip-allowlist'
+import { ipRateLimit, actorRateLimit } from './middleware/rate-limit'
 import { docs } from './docs'
 import {
 	status,
@@ -33,6 +35,7 @@ import {
 	upload,
 	fsBrowser,
 	events,
+	sessions,
 } from './routes'
 
 export interface AppEnv {
@@ -57,8 +60,11 @@ export interface AppConfig {
  * 1. CORS
  * 2. Global error handler
  * 3. Context injection (companyRoot, storage, db, auth)
+ * 3.5. IP Allowlist
+ * 3.6. IP Rate Limit (20 req/min by IP)
  * 4. Better Auth passthrough on `/api/auth/*`
  * 5. Auth middleware on `/api/*`
+ * 5.5. Actor Rate Limit (per-actor limits)
  * 6. All API routes
  * 7. Documentation (Scalar UI + OpenAPI spec)
  * 8. Filesystem browser
@@ -96,6 +102,12 @@ export function createApp(config: AppConfig) {
 		await next()
 	})
 
+	// ── 3.5. IP Allowlist ────────────────────────────────────────────────
+	app.use('*', ipAllowlist())
+
+	// ── 3.6. IP Rate Limit ──────────────────────────────────────────────
+	app.use('*', ipRateLimit())
+
 	// ── 4. Better Auth passthrough ───────────────────────────────────────
 	app.all('/api/auth/*', async (c) => {
 		const { auth } = await container.resolveAsync([authFactory])
@@ -105,29 +117,28 @@ export function createApp(config: AppConfig) {
 	// ── 5. Auth middleware on /api/* ──────────────────────────────────────
 	app.use('/api/*', authMiddleware({ authEnabled: config.authEnabled }))
 
-	// ── 6. API routes ────────────────────────────────────────────────────
-	app.route('/api/status', status)
-	app.route('/api/tasks', tasks)
-	app.route('/api/agents', agents)
-	app.route('/api/pins', pins)
-	app.route('/api/activity', activity)
-	app.route('/api/inbox', inbox)
-	app.route('/api/chat', chat)
-	app.route('/api/search', search)
-	app.route('/api/artifacts', artifacts)
-	app.route('/api/skills', skills)
-	app.route('/api/dashboard', dashboard)
-	app.route('/api', files)
-	app.route('/api', upload)
-	app.route('/api/events', events)
+	// ── 5.5. Actor Rate Limit ───────────────────────────────────────────
+	app.use('/api/*', actorRateLimit())
 
-	// ── 7. Documentation ─────────────────────────────────────────────────
-	app.route('/', docs)
-
-	// ── 8. Filesystem browser ────────────────────────────────────────────
-	app.route('/fs', fsBrowser)
-
+	// ── 6. API routes (chained for RPC type inference) ───────────────────
 	return app
+		.route('/api/status', status)
+		.route('/api/tasks', tasks)
+		.route('/api/agents', agents)
+		.route('/api/pins', pins)
+		.route('/api/activity', activity)
+		.route('/api/inbox', inbox)
+		.route('/api/chat', chat)
+		.route('/api/search', search)
+		.route('/api/artifacts', artifacts)
+		.route('/api/skills', skills)
+		.route('/api/dashboard', dashboard)
+		.route('/api', files)
+		.route('/api', upload)
+		.route('/api/events', events)
+		.route('/api/sessions', sessions)
+		.route('/', docs)
+		.route('/fs', fsBrowser)
 }
 
 /** App type for SDK / hono client type inference. */

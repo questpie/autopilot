@@ -1,21 +1,9 @@
 import { Command } from 'commander'
-import { loadCompany, loadAgents, listTasks, readActivity } from '@questpie/autopilot-orchestrator'
+import { loadCompany, loadAgents } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { brandHeader, section, badge, dim, table, error, dot, separator } from '../utils/format'
-
-const API_BASE = 'http://localhost:7778'
-
-async function fetchSessions(): Promise<Array<{ sessionId: string; agentId: string }>> {
-	try {
-		const res = await fetch(`${API_BASE}/api/status`)
-		if (!res.ok) return []
-		const data = (await res.json()) as { sessions?: Array<{ sessionId: string; agentId: string }> }
-		return data.sessions ?? []
-	} catch {
-		return []
-	}
-}
+import { getClient } from '../utils/client'
 
 program.addCommand(
 	new Command('status')
@@ -26,7 +14,10 @@ program.addCommand(
 				const root = await findCompanyRoot()
 				const company = await loadCompany(root)
 				const agents = await loadAgents(root)
-				const tasks = await listTasks(root)
+				const client = getClient()
+
+				const tasksRes = await client.api.tasks.$get({ query: {} })
+				const tasks = tasksRes.ok ? ((await tasksRes.json()) as Array<{ id: string; status: string }>) : []
 
 				const statusCounts: Record<string, number> = {}
 				for (const task of tasks) {
@@ -37,7 +28,9 @@ program.addCommand(
 				console.log('')
 
 				// Running sessions
-				const sessions = await fetchSessions()
+				const statusRes = await client.api.status.$get()
+				const statusData = statusRes.ok ? ((await statusRes.json()) as { sessions?: Array<{ sessionId: string; agentId: string }> }) : null
+				const sessions = statusData?.sessions ?? []
 				if (sessions.length > 0) {
 					console.log(section('Running Sessions'))
 					console.log(
@@ -53,7 +46,8 @@ program.addCommand(
 
 				// Last activity
 				const activityLimit = Math.min(Math.max(parseInt(options.activity || '3', 10) || 3, 1), 20)
-				const activity = await readActivity(root, { limit: activityLimit })
+				const activityRes = await client.api.activity.$get({ query: { limit: String(activityLimit) } })
+				const activity = activityRes.ok ? ((await activityRes.json()) as Array<{ at: string; agent: string; summary: string }>) : []
 				if (activity.length > 0) {
 					const activityHeader = activityLimit > 3 ? `Recent Activity (${activityLimit})` : 'Recent Activity'
 					console.log(section(activityHeader))

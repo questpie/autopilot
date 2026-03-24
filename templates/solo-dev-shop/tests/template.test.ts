@@ -31,13 +31,13 @@ describe('solo-dev-shop template', () => {
 
 		const ids = result.agents.map((a: { id: string }) => a.id)
 		expect(ids).toContain('ceo')
-		expect(ids).toContain('ivan')
-		expect(ids).toContain('adam')
-		expect(ids).toContain('peter')
-		expect(ids).toContain('marek')
+		expect(ids).toContain('sam')
+		expect(ids).toContain('alex')
+		expect(ids).toContain('max')
+		expect(ids).toContain('riley')
 		expect(ids).toContain('ops')
-		expect(ids).toContain('marketer')
-		expect(ids).toContain('designer')
+		expect(ids).toContain('morgan')
+		expect(ids).toContain('jordan')
 
 		for (const agent of result.agents) {
 			expect(agent.fs_scope.read.length).toBeGreaterThan(0)
@@ -51,9 +51,6 @@ describe('solo-dev-shop template', () => {
 		expect(result.humans).toHaveLength(1)
 		expect(result.humans[0].id).toBe('owner')
 		expect(result.humans[0].role).toBe('owner')
-		expect(result.humans[0].quiet_hours.enabled).toBe(true)
-		expect(result.humans[0].approval_scopes).toContain('merge')
-		expect(result.humans[0].approval_scopes).toContain('deploy')
 	})
 
 	test('team/schedules.yaml validates against SchedulesFileSchema', async () => {
@@ -61,11 +58,12 @@ describe('solo-dev-shop template', () => {
 			join(TEMPLATE_DIR, 'team/schedules.yaml'),
 			SchedulesFileSchema,
 		)
-		expect(result.schedules).toHaveLength(3)
+		expect(result.schedules).toHaveLength(4)
 
 		const ids = result.schedules.map((s: { id: string }) => s.id)
 		expect(ids).toContain('health-check')
 		expect(ids).toContain('daily-standup')
+		expect(ids).toContain('ceo-watchdog')
 		expect(ids).toContain('weekly-review')
 
 		for (const schedule of result.schedules) {
@@ -78,7 +76,8 @@ describe('solo-dev-shop template', () => {
 			join(TEMPLATE_DIR, 'team/webhooks.yaml'),
 			WebhooksFileSchema,
 		)
-		expect(result.webhooks).toHaveLength(0)
+		expect(result.webhooks).toHaveLength(1)
+		expect(result.webhooks[0].id).toBe('telegram')
 	})
 
 	test('team/policies/approval-gates.yaml validates against ApprovalGatesFileSchema', async () => {

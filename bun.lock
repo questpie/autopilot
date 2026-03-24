@@ -157,18 +157,6 @@
         "typescript": "^5.9.3",
       },
     },
-    "packages/sdk": {
-      "name": "@questpie/autopilot-sdk",
-      "version": "1.0.0-beta.1",
-      "dependencies": {
-        "@questpie/autopilot-orchestrator": "1.0.0-beta.1",
-        "hono": "^4.12.0",
-      },
-      "devDependencies": {
-        "@types/bun": "^1.3.11",
-        "typescript": "^5.9.3",
-      },
-    },
     "packages/spec": {
       "name": "@questpie/autopilot-spec",
       "version": "1.0.0-beta.1",
@@ -647,8 +635,6 @@
     "@questpie/autopilot-docs": ["@questpie/autopilot-docs@workspace:apps/docs"],
 
     "@questpie/autopilot-orchestrator": ["@questpie/autopilot-orchestrator@workspace:packages/orchestrator"],
-
-    "@questpie/autopilot-sdk": ["@questpie/autopilot-sdk@workspace:packages/sdk"],
 
     "@questpie/autopilot-spec": ["@questpie/autopilot-spec@workspace:packages/spec"],
 

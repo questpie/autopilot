@@ -67,6 +67,13 @@ export async function createDb(companyRoot: string): Promise<DbResult> {
 		// sqlite-vec not available — vector search will be unavailable
 	}
 
+	// Cleanup expired rate limit entries on startup and every 5 minutes
+	try { sqlite.exec(`DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()`) } catch { /* table may not exist yet */ }
+	setInterval(() => {
+		try { sqlite.exec(`DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()`) }
+		catch { /* db closed */ }
+	}, 5 * 60 * 1000)
+
 	return { db, raw: sqlite }
 }
 

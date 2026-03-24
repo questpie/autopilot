@@ -143,6 +143,65 @@ Permission format is `resource.action`. Wildcard `*` grants all actions on a res
 | `integrations` | read, connect, disconnect |
 | `audit` | read |
 | `dashboard` | read |
+| `sessions` | read, revoke |
+
+## Two-Factor Authentication (2FA)
+
+QUESTPIE Autopilot supports TOTP-based two-factor authentication via the Better Auth `twoFactor` plugin.
+
+### Enabling 2FA
+
+```bash title="terminal"
+autopilot auth 2fa enable
+# Displays an otpauth:// URI — paste into your authenticator app
+# Shows 10 backup codes — save securely
+# Prompts for verification code to activate
+```
+
+### CLI Commands
+
+```bash title="terminal"
+# Enable 2FA
+autopilot auth 2fa enable
+
+# Verify a TOTP code (e.g., after login)
+autopilot auth 2fa verify
+
+# Disable 2FA
+autopilot auth 2fa disable
+```
+
+### Behavior
+
+- **Human users:** When 2FA is enabled, sessions must be verified with a TOTP code before accessing API endpoints. Unverified sessions receive `401 Unauthorized`.
+- **Agents:** API key authentication bypasses 2FA entirely — agents don't use sessions.
+- **Trusted devices:** Verified devices are remembered for 30 days.
+- **Backup codes:** 10 single-use backup codes are generated on enable. Use `POST /api/auth/two-factor/verify-backup-code` if you lose access to your authenticator.
+
+## Session Management
+
+Manage active sessions through the API or CLI.
+
+### CLI Commands
+
+```bash title="terminal"
+# List active sessions
+autopilot auth sessions
+
+# Revoke a specific session
+autopilot auth revoke <session-id>
+
+# Revoke all sessions
+autopilot auth revoke-all
+```
+
+### API Endpoints
+
+| Method | Path | Description | Permission |
+|--------|------|-------------|------------|
+| GET | `/api/sessions` | List active sessions | `sessions.read` |
+| DELETE | `/api/sessions/:id` | Revoke a session | `sessions.revoke` |
+| DELETE | `/api/sessions` | Revoke all sessions | `sessions.revoke` |
 
 ## Cookie & Rate Limit Security
 

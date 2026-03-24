@@ -6,9 +6,7 @@ import { AgentSchema } from '@questpie/autopilot-spec'
 import { loadAgents } from '../../fs/company'
 import type { AppEnv } from '../app'
 
-const agents = new Hono<AppEnv>()
-
-agents.get(
+const agents = new Hono<AppEnv>().get(
 	'/',
 	describeRoute({
 		tags: ['agents'],

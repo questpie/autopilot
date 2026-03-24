@@ -5,6 +5,11 @@
 	"type": "module",
 	"description": "QUESTPIE Autopilot orchestrator runtime",
 	"main": "src/index.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./api": "./src/api/index.ts",
+		"./client": "./src/client.ts"
+	},
 	"files": [
 		"src/"
 	],
