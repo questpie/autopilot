@@ -77,7 +77,8 @@ function detectLang(title?: string): string | undefined {
 		|| t.includes('install')
 		|| t.includes('filter')
 	) return 'shell'
-	return undefined
+	if (t.includes('/') || t.includes('company') || t.includes('memory')) return 'yaml'
+	return 'yaml'
 }
 
 export function CodeBlock({

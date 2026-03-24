@@ -19,7 +19,7 @@ function t(h: number, i: number): number {
 }
 
 function pick<T>(arr: readonly T[], v: number): T {
-	return arr[Math.floor(v * arr.length) % arr.length]
+	return arr[Math.floor(v * arr.length) % arr.length]!
 }
 
 function lerp(a: number, b: number, v: number): number {

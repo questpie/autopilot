@@ -175,7 +175,7 @@
 }
 
 .landing-page {
-	background: #0A0A0A;
+	background: #0A0A0A !important;
 	color: #E5E5E5;
 	font-family: var(--font-sans);
 }

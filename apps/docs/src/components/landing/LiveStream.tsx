@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { GenerativeAvatar } from '@/lib/generate-avatar'
 
 const lines = [
 	{
@@ -122,6 +123,9 @@ export function LiveStream() {
 					>
 						<span className="text-lp-dim min-w-[60px]">{l.t}</span>
 						<span>{l.icon}</span>
+						<span className="shrink-0 w-4 h-4 overflow-hidden">
+							<GenerativeAvatar seed={l.agent} size={16} />
+						</span>
 						<span className={`${l.color} min-w-[55px]`}>{l.agent}</span>
 						<span className={i >= visible - 1 ? 'text-lp-fg' : 'text-lp-ghost'}>{l.msg}</span>
 					</div>

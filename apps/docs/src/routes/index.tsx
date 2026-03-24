@@ -107,11 +107,30 @@ autopilot ask "Build me a landing page"
 # Watch agents work in real-time
 autopilot attach max`}
 					</CodeBlock>
-					<div className="mt-4 bg-lp-card border border-lp-border p-3">
+					<div className="mt-4 bg-lp-card p-6">
 						<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
 							<strong className="text-lp-fg">What you need:</strong>{' '}
-							Bun runtime + Anthropic API key. That's it.
+							Bun runtime + an API key or subscription. That's it.
 							No Docker. No Postgres. No Redis. No vector DB. No Kubernetes.
+						</div>
+					</div>
+					<div className="mt-4 bg-lp-card p-6">
+						<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-3">
+							WORKS WITH API KEY OR SUBSCRIPTION
+						</div>
+						<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-1.5">
+							<div>
+								<strong className="text-lp-fg">Claude:</strong>{' '}
+								Anthropic API key or Claude Max/Pro subscription
+							</div>
+							<div>
+								<strong className="text-lp-fg">GPT:</strong>{' '}
+								OpenAI API key or ChatGPT Plus subscription
+							</div>
+							<div>
+								<strong className="text-lp-fg">No API key?</strong>{' '}
+								Use local models via Ollama
+							</div>
 						</div>
 					</div>
 				</Section>
@@ -201,8 +220,8 @@ create_artifact({
 })`}
 					</CodeBlock>
 					<div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-						<div className="bg-lp-card border border-lp-border p-4">
-							<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
+						<div className="bg-lp-card p-6">
+							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
 								AUTOPILOT AGENTS
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
@@ -210,8 +229,8 @@ create_artifact({
 								Every call produces a visible, auditable effect in the filesystem.
 							</div>
 						</div>
-						<div className="bg-lp-card border border-lp-border p-4">
-							<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
+						<div className="bg-lp-card p-6">
+							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
 								CHATBOT AGENTS
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
@@ -254,8 +273,8 @@ create_artifact({
 }`}
 						</CodeBlock>
 						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-4">
-								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2.5">
+							<div className="bg-lp-card p-6">
+								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
 									ARCHITECTURE
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-2">
@@ -269,7 +288,7 @@ create_artifact({
 									</div>
 								</div>
 							</div>
-							<div className="bg-lp-card border border-lp-border p-3">
+							<div className="bg-lp-card p-6">
 								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
 									<strong className="text-lp-fg">"Add a revenue chart to the dashboard."</strong>{' '}
 									Agent writes <code className="font-mono text-[11px] text-lp-purple">widget.tsx</code>,
@@ -334,9 +353,9 @@ steps:
 							].map((item) => (
 								<div
 									key={item.label}
-									className="bg-lp-card border border-lp-border p-3"
+									className="bg-lp-card p-6"
 								>
-									<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-1">
+									<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-1">
 										{item.label}
 									</div>
 									<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
@@ -383,57 +402,152 @@ $ autopilot sessions search "PricingTable"`}
 					<SectionHeader sub="Same Autopilot kernel. Different skills. Different company. Three flagship use cases, validated in production.">
 						Use Cases
 					</SectionHeader>
-					<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-						{[
-							{
-								label: 'SOLO DEV SHOP',
-								input: '"Build a pricing page with Stripe"',
-								what: 'CEO decomposes, strategist scopes, planner plans, developer implements, reviewer reviews',
-								see: 'Task progress on dashboard, PR for merge, live preview via artifact router',
-								outcome: 'Feature shipped without micromanaging a single step',
-							},
-							{
-								label: 'SELF-BUILDING INTERNAL TOOLS',
-								input: '"Add a revenue chart to the dashboard"',
-								what: 'Developer agent writes widget.tsx, registers it in layout.yaml',
-								see: 'New widget appears on dashboard within seconds via HMR',
-								outcome: 'Internal tools built without Retool, without deployment, evolved by agents',
-							},
-							{
-								label: 'INFRASTRUCTURE MANAGEMENT',
-								input: '"Deploy the billing service to billing.company.com"',
-								what: 'DevOps agent reads infra skills, builds Docker image, creates k8s manifests, applies them, sets up DNS',
-								see: 'Service deployed and verified, URL pinned to dashboard',
-								outcome: 'Infrastructure managed by an agent who knows your stack via skills',
-							},
-						].map((uc) => (
-							<div
-								key={uc.label}
-								className="bg-lp-card border border-lp-border p-4 flex flex-col"
-							>
-								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
-									{uc.label}
+
+					{/* UC 1: Solo Dev Shop */}
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-lp-border mb-6">
+						<div className="p-6 md:p-8 flex flex-col justify-center">
+							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-4">
+								01 / SOLO DEV SHOP
+							</div>
+							<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-3">
+								<div>
+									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">INPUT</span>
+									<div className="text-lp-fg mt-1">"Build a pricing page with Stripe"</div>
 								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-1.5">
-									<div>
-										<strong className="text-lp-fg">Input:</strong> {uc.input}
-									</div>
-									<div>
-										<strong className="text-lp-fg">What happens:</strong> {uc.what}
-									</div>
-									<div>
-										<strong className="text-lp-fg">What you see:</strong> {uc.see}
-									</div>
-									<div>
-										<strong className="text-lp-fg">Outcome:</strong> {uc.outcome}
-									</div>
+								<div>
+									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT HAPPENS</span>
+									<div className="mt-1">CEO decomposes, strategist scopes, planner plans, developer implements, reviewer reviews</div>
+								</div>
+								<div>
+									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT YOU SEE</span>
+									<div className="mt-1">Task progress on dashboard, PR for merge, live preview via artifact router</div>
+								</div>
+								<div className="pt-2 border-t border-lp-border">
+									<strong className="text-lp-accent-green font-mono text-[11px]">OUTCOME:</strong>{' '}
+									<span className="text-lp-fg">Feature shipped without micromanaging a single step</span>
 								</div>
 							</div>
-						))}
+						</div>
+						<div className="border-t md:border-t-0 md:border-l border-lp-border">
+							<CodeBlock title="terminal -- solo dev flow">
+								{`$ autopilot ask "Build a pricing page with Stripe"
+
+CEO Agent decomposing...
+  task-050: Scope requirements    -> sam
+  task-051: Design UI             -> jordan
+  task-052: Implement + Stripe    -> max
+  task-053: Write copy            -> morgan
+
+$ autopilot attach max
+[max] Reading spec from task-050...
+[max] Creating branch: feat/pricing-page
+[max] Writing src/pages/pricing.tsx
+[max] Adding Stripe checkout...
+[max] Running tests... 14/14 passed
+[max] PR #47 created -> riley for review`}
+							</CodeBlock>
+						</div>
+					</div>
+
+					{/* UC 2: Self-Building Internal Tools */}
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-lp-border mb-6">
+						<div className="p-6 md:p-8 flex flex-col justify-center">
+							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-4">
+								02 / SELF-BUILDING INTERNAL TOOLS
+							</div>
+							<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-3">
+								<div>
+									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">INPUT</span>
+									<div className="text-lp-fg mt-1">"Add a revenue chart to the dashboard"</div>
+								</div>
+								<div>
+									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT HAPPENS</span>
+									<div className="mt-1">Developer agent writes widget.tsx, registers it in layout.yaml</div>
+								</div>
+								<div>
+									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT YOU SEE</span>
+									<div className="mt-1">New widget appears on dashboard within seconds via HMR</div>
+								</div>
+								<div className="pt-2 border-t border-lp-border">
+									<strong className="text-lp-accent-green font-mono text-[11px]">OUTCOME:</strong>{' '}
+									<span className="text-lp-fg">Internal tools built without Retool, without deployment, evolved by agents</span>
+								</div>
+							</div>
+						</div>
+						<div className="border-t md:border-t-0 md:border-l border-lp-border">
+							<CodeBlock title="dashboard/widgets/revenue/widget.tsx">
+								{`export default function RevenueChart() {
+  const { data } = useQuery({
+    queryKey: ['revenue'],
+    queryFn: () =>
+      fetch('/api/metrics/revenue')
+        .then(r => r.json()),
+    refetchInterval: 60000,
+  })
+
+  return (
+    <div className="p-4 border border-border">
+      <h3>Monthly Revenue</h3>
+      <BarChart data={data?.monthly ?? []} />
+      <div className="text-sm text-muted">
+        MRR: {data?.mrr ?? '...'}
+      </div>
+    </div>
+  )
+}`}
+							</CodeBlock>
+						</div>
+					</div>
+
+					{/* UC 3: Infrastructure Management */}
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-lp-border">
+						<div className="p-6 md:p-8 flex flex-col justify-center">
+							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-4">
+								03 / INFRASTRUCTURE MANAGEMENT
+							</div>
+							<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-3">
+								<div>
+									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">INPUT</span>
+									<div className="text-lp-fg mt-1">"Deploy the billing service to billing.company.com"</div>
+								</div>
+								<div>
+									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT HAPPENS</span>
+									<div className="mt-1">DevOps agent reads infra skills, builds Docker image, creates k8s manifests, applies them, sets up DNS</div>
+								</div>
+								<div>
+									<span className="font-mono text-[10px] text-lp-ghost tracking-[0.1em]">WHAT YOU SEE</span>
+									<div className="mt-1">Service deployed and verified, URL pinned to dashboard</div>
+								</div>
+								<div className="pt-2 border-t border-lp-border">
+									<strong className="text-lp-accent-green font-mono text-[11px]">OUTCOME:</strong>{' '}
+									<span className="text-lp-fg">Infrastructure managed by an agent who knows your stack via skills</span>
+								</div>
+							</div>
+						</div>
+						<div className="border-t md:border-t-0 md:border-l border-lp-border">
+							<CodeBlock title="terminal -- ops deploying">
+								{`$ autopilot attach ops
+[ops] Reading skill: deploy-k8s
+[ops] Building Docker image...
+[ops] Image: registry/billing:v2.1.0
+[ops] Generating k8s manifests...
+[ops] Applying to cluster...
+[ops] Waiting for rollout...
+[ops] 3/3 pods ready
+[ops] Setting DNS: billing.company.com
+[ops] Health check: 200 OK
+
+pin_to_board({
+  group: "overview",
+  title: "billing.company.com LIVE",
+  type: "success"
+})`}
+							</CodeBlock>
+						</div>
 					</div>
 				</Section>
 
-				{/* ========== 9. DEFINE YOUR TEAM ========== */}
+{/* ========== 9. DEFINE YOUR TEAM ========== */}
 				<Section id="team">
 					<SectionHeader sub="Define agents in YAML. Give them names, roles, tools, and filesystem scope. Start from a template or build your own team.">
 						Define Your Team
@@ -496,7 +610,7 @@ $ autopilot sessions search "PricingTable"`}
 							status="schd"
 						/>
 					</div>
-					<div className="bg-lp-card border border-lp-border p-3">
+					<div className="bg-lp-card p-6">
 						<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
 							<strong className="text-lp-fg">Example above:</strong>{' '}
 							The <strong className="text-lp-fg">Solo Dev Shop</strong> template.
@@ -532,7 +646,7 @@ $ autopilot sessions search "PricingTable"`}
 						].map((l, i) => (
 							<div key={l.label}>
 								<div
-									className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 bg-lp-card border border-lp-border"
+									className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 bg-lp-card"
 								>
 									<span
 										className="font-mono text-[11px] text-lp-fg tracking-[0.15em] sm:min-w-[120px]"
@@ -549,8 +663,8 @@ $ autopilot sessions search "PricingTable"`}
 							</div>
 						))}
 					</div>
-					<div className="mt-6 bg-lp-card border border-lp-border p-4">
-						<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
+					<div className="mt-6 bg-lp-card p-6">
+						<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
 							ZERO INFRASTRUCTURE
 						</div>
 						<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
@@ -597,8 +711,8 @@ $ autopilot sessions search "PricingTable"`}
 \u2514\u2500\u2500 .data/autopilot.db       # SQLite (FTS5 + vec)`}
 						</CodeBlock>
 						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-4">
-								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2.5">
+							<div className="bg-lp-card p-6">
+								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
 									HYBRID SEARCH
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
@@ -628,7 +742,7 @@ $ autopilot sessions search "PricingTable"`}
 									</div>
 								))}
 							</div>
-							<div className="bg-lp-card border border-lp-border p-4">
+							<div className="bg-lp-card border border-lp-border p-6">
 								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2">
 									GIT-VERSIONED COMPANY
 								</div>
@@ -678,7 +792,7 @@ patterns:
      reviews"`}
 						</CodeBlock>
 						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-4">
+							<div className="bg-lp-card border border-lp-border p-6">
 								<div className="font-mono text-[10px] text-lp-ghost tracking-[0.15em] mb-2.5">
 									CONTEXT ASSEMBLY
 								</div>
@@ -726,7 +840,7 @@ patterns:
 									</div>
 								))}
 							</div>
-							<div className="bg-lp-card border border-lp-border p-4">
+							<div className="bg-lp-card border border-lp-border p-6">
 								<div className="font-sans text-[13px] text-lp-fg leading-relaxed">
 									<strong className="text-white">Isolation rule:</strong> No
 									agent reads another agent's memory. Cross-agent info sharing
