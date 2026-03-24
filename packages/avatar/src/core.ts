@@ -39,11 +39,11 @@ export interface HeadDef {
 export const HEADS: HeadDef[] = [
 	{ x: 3, y: 3, w: 10, h: 10, name: 'The Block' },
 	{ x: 4, y: 2, w: 8, h: 12, name: 'The Server' },
-	{ x: 2, y: 4, w: 12, h: 8, name: 'The Terminal' },
+	{ x: 2, y: 3, w: 12, h: 9, name: 'The Terminal' },
 	{ x: 3, y: 2, w: 10, h: 11, name: 'The Dual' },
-	{ x: 5, y: 1, w: 6, h: 14, name: 'The Tower' },
-	{ x: 1, y: 5, w: 14, h: 7, name: 'The Mainframe' },
-	{ x: 4, y: 4, w: 8, h: 9, name: 'The Compact' },
+	{ x: 4, y: 2, w: 8, h: 12, name: 'The Tower' },
+	{ x: 2, y: 3, w: 12, h: 9, name: 'The Mainframe' },
+	{ x: 3, y: 3, w: 10, h: 9, name: 'The Compact' },
 	{ x: 2, y: 3, w: 11, h: 10, name: 'The Offset' },
 ]
 
