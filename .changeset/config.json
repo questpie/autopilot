@@ -14,5 +14,5 @@
 	"access": "public",
 	"baseBranch": "main",
 	"updateInternalDependencies": "patch",
-	"ignore": ["@questpie/autopilot-web", "@questpie/autopilot-dashboard"]
+	"ignore": ["@questpie/autopilot-dashboard", "@questpie/autopilot-docs", "@questpie/avatar"]
 }
