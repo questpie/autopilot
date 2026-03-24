@@ -1,0 +1,239 @@
+---
+title: Bare Metal Deployment
+description: Run QUESTPIE Autopilot directly with Bun, without Docker.
+---
+
+Run Autopilot directly on a Linux server or macOS machine. Best for development, small teams, or when you need full control over the runtime.
+
+## Install Bun
+
+```bash title="terminal"
+curl -fsSL https://bun.sh/install | bash
+source ~/.bashrc  # or ~/.zshrc
+
+bun --version  # Should be 1.3+
+```
+
+## Install Autopilot CLI
+
+```bash title="terminal"
+bun add -g @questpie/autopilot
+autopilot --version
+```
+
+## Initialize a Company
+
+```bash title="terminal"
+autopilot init my-company
+cd my-company
+```
+
+This scaffolds the full company filesystem from the `solo-dev-shop` template, initializes a git repository, and creates the first commit.
+
+## Configure
+
+```bash title="terminal"
+# Required: Anthropic API key
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Recommended: master key for secrets encryption
+export AUTOPILOT_MASTER_KEY=$(openssl rand -base64 32)
+
+# Recommended: production mode (secure cookies, HTTPS)
+export NODE_ENV=production
+```
+
+For persistent env vars, add them to your shell profile or use a process manager (see below).
+
+## Start the Orchestrator
+
+```bash title="terminal"
+cd my-company
+autopilot start
+```
+
+This starts:
+- Filesystem watcher (tasks, comms, dashboard, team config)
+- Cron scheduler
+- Webhook server on port 7777
+- REST API + SSE stream on port 7778
+- SQLite database initialization and indexing
+
+The process runs in the foreground until you press Ctrl+C.
+
+## Running as a systemd Service
+
+For production Linux servers, run Autopilot as a systemd service.
+
+### 1. Create a service user
+
+```bash title="terminal"
+sudo useradd -r -m -d /opt/autopilot -s /bin/bash autopilot
+```
+
+### 2. Set up the company directory
+
+```bash title="terminal"
+sudo -u autopilot bash -c '
+  cd /opt/autopilot
+  autopilot init my-company
+'
+```
+
+### 3. Create an environment file
+
+```bash title="/opt/autopilot/.env"
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+AUTOPILOT_MASTER_KEY=your-generated-key-here
+NODE_ENV=production
+```
+
+```bash title="terminal"
+sudo chown autopilot:autopilot /opt/autopilot/.env
+sudo chmod 600 /opt/autopilot/.env
+```
+
+### 4. Create the systemd unit
+
+```ini title="/etc/systemd/system/autopilot.service"
+[Unit]
+Description=QUESTPIE Autopilot Orchestrator
+After=network.target
+Documentation=https://autopilot.questpie.com/docs/self-hosting
+
+[Service]
+Type=simple
+User=autopilot
+Group=autopilot
+WorkingDirectory=/opt/autopilot/my-company
+EnvironmentFile=/opt/autopilot/.env
+ExecStart=/home/autopilot/.bun/bin/autopilot start
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/autopilot
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=1G
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=autopilot
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 5. Enable and start
+
+```bash title="terminal"
+sudo systemctl daemon-reload
+sudo systemctl enable autopilot
+sudo systemctl start autopilot
+
+# Check status
+sudo systemctl status autopilot
+
+# View logs
+sudo journalctl -u autopilot -f
+```
+
+### 6. Manage the service
+
+```bash title="terminal"
+# Stop
+sudo systemctl stop autopilot
+
+# Restart
+sudo systemctl restart autopilot
+
+# View recent logs
+sudo journalctl -u autopilot --since "10 minutes ago"
+```
+
+## Running with a Process Manager
+
+If you prefer a process manager over systemd (macOS, or preference):
+
+### Using pm2 (works with Bun)
+
+```bash title="terminal"
+bun add -g pm2
+
+# Start
+cd /path/to/my-company
+pm2 start "autopilot start" --name autopilot
+
+# Auto-start on reboot
+pm2 startup
+pm2 save
+
+# Logs
+pm2 logs autopilot
+
+# Restart
+pm2 restart autopilot
+```
+
+### Environment variables with pm2
+
+```javascript title="ecosystem.config.cjs"
+module.exports = {
+  apps: [{
+    name: 'autopilot',
+    script: 'autopilot',
+    args: 'start',
+    cwd: '/path/to/my-company',
+    env: {
+      ANTHROPIC_API_KEY: 'sk-ant-...',
+      AUTOPILOT_MASTER_KEY: 'your-key',
+      NODE_ENV: 'production',
+    },
+  }],
+}
+```
+
+```bash title="terminal"
+pm2 start ecosystem.config.cjs
+```
+
+## Updating
+
+```bash title="terminal"
+# Update the CLI
+bun add -g @questpie/autopilot@latest
+
+# Restart the service
+sudo systemctl restart autopilot
+# or: pm2 restart autopilot
+```
+
+The SQLite database is rebuilt automatically on startup. No manual migrations needed.
+
+## Verifying the Installation
+
+```bash title="terminal"
+# Health check
+curl http://localhost:7778/api/health
+
+# API status
+curl http://localhost:7778/api/status
+
+# List agents
+curl http://localhost:7778/api/agents
+```
+
+## Next Steps
+
+- [Configuration Reference](/docs/self-hosting/configuration) — full company.yaml schema and env vars
+- [Networking](/docs/self-hosting/networking) — TLS, reverse proxy, webhook tunneling
+- [Authentication](/docs/security/authentication) — enable auth and create team members

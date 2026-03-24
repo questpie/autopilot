@@ -1,0 +1,222 @@
+---
+title: Networking
+description: Ports, reverse proxy, TLS, Tailscale, and webhook tunneling for self-hosted QUESTPIE Autopilot.
+---
+
+How to expose Autopilot to your team and external services.
+
+## Ports
+
+The orchestrator listens on two ports:
+
+| Port | Purpose | Who needs access |
+|------|---------|-----------------|
+| 7778 | REST API + Dashboard + SSE | Your team (browsers, CLI, CI/CD) |
+| 7777 | Webhook server | External services (GitHub, Stripe, Slack, Linear) |
+
+Both ports are configurable via environment variables (`PORT`, `WEBHOOK_PORT`).
+
+## Tailscale (Recommended for Teams)
+
+[Tailscale](https://tailscale.com) creates a WireGuard mesh VPN. No port exposure, no TLS configuration, identity-based access.
+
+```bash title="server"
+# Install Tailscale and join your network
+tailscale up --hostname autopilot
+
+# API is now at http://autopilot:7778 from any Tailscale device
+# Encrypted in transit, no firewall rules needed
+```
+
+For webhooks (must be publicly reachable):
+
+```bash title="server"
+# Expose only the webhook port via Tailscale Funnel
+tailscale funnel --bg 7777
+```
+
+**Why Tailscale:**
+- Zero-config WireGuard encryption
+- Identity-based access (SSO integration)
+- No open ports on the firewall
+- MagicDNS (`autopilot.tailnet-name.ts.net`)
+- ACL policies for fine-grained access
+
+## Reverse Proxy + TLS
+
+For publicly accessible instances, put a reverse proxy with TLS in front of Autopilot.
+
+### Caddy (simplest)
+
+```text title="Caddyfile"
+autopilot.yourdomain.com {
+    reverse_proxy localhost:7778
+}
+
+webhooks.yourdomain.com {
+    reverse_proxy localhost:7777
+}
+```
+
+Caddy auto-provisions TLS via Let's Encrypt. No additional configuration needed.
+
+### Nginx
+
+```nginx title="/etc/nginx/sites-available/autopilot"
+# API + Dashboard
+server {
+    listen 443 ssl http2;
+    server_name autopilot.yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/autopilot.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/autopilot.yourdomain.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location / {
+        proxy_pass http://127.0.0.1:7778;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # SSE support (required for live agent streams)
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 86400s;
+    }
+}
+
+# Webhooks
+server {
+    listen 443 ssl http2;
+    server_name webhooks.yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/webhooks.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/webhooks.yourdomain.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location / {
+        proxy_pass http://127.0.0.1:7777;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    server_name autopilot.yourdomain.com webhooks.yourdomain.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+```bash title="terminal"
+# Get TLS certificates with certbot
+sudo certbot --nginx -d autopilot.yourdomain.com -d webhooks.yourdomain.com
+
+# Enable and reload
+sudo ln -s /etc/nginx/sites-available/autopilot /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**Important:** When behind a reverse proxy, set `NODE_ENV=production` to enable secure cookie attributes (`secure`, `sameSite: strict`, `httpOnly`).
+
+## Firewall Rules
+
+For servers with direct internet access, restrict ports:
+
+```bash title="terminal"
+# Allow SSH
+sudo ufw allow 22/tcp
+
+# Block direct API access (use reverse proxy or Tailscale instead)
+sudo ufw deny 7778
+
+# Allow webhooks from the internet
+sudo ufw allow 7777/tcp
+
+# Enable firewall
+sudo ufw enable
+```
+
+For the reverse proxy server:
+
+```bash title="terminal"
+sudo ufw allow 80/tcp    # HTTP (redirects to HTTPS)
+sudo ufw allow 443/tcp   # HTTPS
+```
+
+## SSH Tunnel (Solo Developer)
+
+If you only need access from your own machine:
+
+```bash title="your machine"
+ssh -L 7778:localhost:7778 user@server
+# Access at http://localhost:7778
+```
+
+## Webhook Tunneling for Development
+
+During development, external services (GitHub, Slack) need to reach your webhook server. Use `cloudflared` to create a tunnel without exposing ports.
+
+### Install cloudflared
+
+```bash title="terminal"
+# macOS
+brew install cloudflared
+
+# Linux (Debian/Ubuntu)
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt update && sudo apt install cloudflared
+```
+
+### Create a tunnel
+
+```bash title="terminal"
+# One command — gives you a public URL
+cloudflared tunnel --url http://localhost:7777
+```
+
+This prints a URL like `https://random-words.trycloudflare.com`. Use this URL as the webhook endpoint in GitHub, Slack, or any external service.
+
+The tunnel stays open as long as the command runs. No account or configuration needed for quick tunnels.
+
+### Persistent tunnel (optional)
+
+For a stable URL that survives restarts:
+
+```bash title="terminal"
+# Login (one-time)
+cloudflared tunnel login
+
+# Create a named tunnel
+cloudflared tunnel create autopilot-webhooks
+
+# Route DNS
+cloudflared tunnel route dns autopilot-webhooks webhooks.yourdomain.com
+
+# Run
+cloudflared tunnel run autopilot-webhooks
+```
+
+## Single Domain Setup
+
+If you want both API and webhooks on one domain, route by path:
+
+```text title="Caddyfile"
+autopilot.yourdomain.com {
+    handle /hooks/* {
+        reverse_proxy localhost:7777
+    }
+    handle {
+        reverse_proxy localhost:7778
+    }
+}
+```
+
+Update your webhook URLs to use `https://autopilot.yourdomain.com/hooks/...` in external services.
