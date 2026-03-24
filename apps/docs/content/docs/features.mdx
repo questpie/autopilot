@@ -1,11 +1,45 @@
 ---
 title: Features
-description: Complete feature list for QUESTPIE Autopilot — hybrid storage, unified search, multiple agent providers, transport plugins, and more.
+description: Complete feature list for QUESTPIE Autopilot. Structured primitives, living dashboard, zero-infra architecture, hybrid search, multiple providers, and trust model.
 ---
 
-Everything QUESTPIE Autopilot can do today, and what is coming next.
+Everything QUESTPIE Autopilot can do today. Organized by what matters most.
 
-## Unified Search (FTS5 + Vector)
+## Category-Defining Features
+
+### Primitives-First Agent Model
+
+Agents don't generate text. They call 13 structured primitives that produce visible, auditable effects in the filesystem. `create_task`, `send_message`, `pin_to_board`, `create_artifact`, `git_commit`, `search_knowledge`, `skill_request`, `http_request`, and more. Agent thinking is private. Only effects are visible. This is the core architectural differentiator. See [Primitives](/docs/primitives).
+
+### Living Dashboard
+
+A React app in the company filesystem that agents edit in real time. Custom widgets (`widget.tsx`), custom pages (`page.tsx`), theme overrides (`theme.css`), layout configs (`layout.yaml`). Changes appear instantly via HMR. Your agents build your internal tools -- no Retool, no deployment, no drag-and-drop. See [Living Dashboard](/docs/living-dashboard).
+
+### Zero-Infra Architecture
+
+One Bun process. One SQLite file. No Docker, no Postgres, no Redis, no vector DB, no Kubernetes. Install with `bun add -g @questpie/autopilot`, run with `autopilot start`. Run an AI company for ~$0.30/day in API costs. See [Architecture](/docs/architecture).
+
+## Trust & Safety
+
+### Human Gates
+
+Explicit approval points for merge, deploy, spend, and publish -- defined as `type: human_gate` steps in workflow YAML. Not bolted-on permissions. The workflow engine enforces them at the right moments in the process.
+
+### Deny Patterns
+
+Hardcoded filesystem deny patterns: `.auth/`, `.master-key`, `.data/`, `.git/` are always blocked for agents. Per-agent filesystem scoping on top via `fs_scope` in agent definitions. Agents cannot touch what they shouldn't touch.
+
+### Session Attach / Replay
+
+`autopilot attach max` streams the agent's live session -- like `kubectl logs -f` for AI agents. Watch tool calls, file reads, file writes, and primitive invocations in real time. Ctrl+C to detach; the agent keeps working. `autopilot replay <session>` for post-hoc review.
+
+### Git Audit Trail
+
+Every agent action that modifies the filesystem is automatically committed to Git with a 5-second batch window. The entire company history is a git log. `git diff` to see what changed. `git revert` to undo. Fork a company with `git clone`.
+
+## Search & Knowledge
+
+### Unified Search (FTS5 + Vector)
 
 Search across tasks, knowledge docs, channels, and agent memory with a single query. Two search engines run in parallel:
 
@@ -16,77 +50,68 @@ Search across tasks, knowledge docs, channels, and agent memory with a single qu
 
 Results from both engines are merged and ranked using Reciprocal Rank Fusion (RRF, k=60).
 
-## Embedding Service
+### Embedding Service
 
-Vector embeddings power semantic search and knowledge retrieval. Configure in `company.yaml` under `settings.embeddings`. Primary and fallback providers are supported:
+Vector embeddings power semantic search and knowledge retrieval. Primary and fallback providers:
 
-| Provider | Config Value | Model | Dimensions | Notes |
-|----------|-------------|-------|-----------|-------|
-| Gemini | `gemini` | `gemini-embedding-2-preview` | 768 (configurable, native 3072) | Multimodal: text, images, PDF, video, audio. Requires `GEMINI_API_KEY`. |
-| Multilingual E5 | `multilingual-e5` | `Xenova/multilingual-e5-small` | 384 | Local text embeddings. 100+ languages (SK/CS/DE). ~120 MB download on first use. |
-| Nomic Vision | `nomic` | `nomic-ai/nomic-embed-vision-v1.5` | 768 | Local image embeddings. ~62 MB download on first use. |
-| None | `none` | — | 0 | Default. Disables vector search — FTS5 only. Graceful degradation. |
+| Provider | Config Value | Model | Notes |
+|----------|-------------|-------|-------|
+| Gemini | `gemini` | `gemini-embedding-2-preview` | Multimodal. Requires `GEMINI_API_KEY`. |
+| Multilingual E5 | `multilingual-e5` | `Xenova/multilingual-e5-small` | Local. 100+ languages. |
+| Nomic Vision | `nomic` | `nomic-ai/nomic-embed-vision-v1.5` | Local image embeddings. |
+| None | `none` | -- | Default. FTS5 only. Graceful degradation. |
 
-## Multiple Agent Providers
+## Agent System
 
-The agent spawner supports multiple AI backends through a provider abstraction:
+### Multiple Agent Providers
 
 | Provider | Config Value | Features |
 |----------|-------------|----------|
 | Claude Agent SDK | `claude-agent-sdk` | Primary. File tools, MCP, sandboxing, hooks, sub-agents. Works with Claude Max. |
-| Anthropic SDK | `anthropic` | Raw `@anthropic-ai/sdk` with agentic tool-use loop. Requires `ANTHROPIC_API_KEY`. |
-| Codex SDK | `codex-sdk` | OpenAI Codex runtime for GPT models. Requires `OPENAI_API_KEY`. |
+| Anthropic SDK | `anthropic` | Raw SDK with agentic tool-use loop. |
+| Codex SDK | `codex-sdk` | OpenAI Codex runtime for GPT models. |
 
-## Transport Registry
+### Persistent Memory
 
-Notification transports are pluggable via a registry pattern:
+Per-agent memory: facts, decisions, mistakes, patterns. Extracted automatically after every session. Private -- no agent reads another agent's memory. Cross-agent sharing only through channels and `ask_agent`.
+
+### 4-Layer Context Assembly
+
+Before every session: identity (role, rules) + company state (role-scoped snapshot) + memory (facts, decisions) + task context (spec, plan, code, history). Role-scoped company snapshots ensure agents see only what they need.
+
+### Skills System
+
+Agents learn new capabilities via SKILL.md files in the filesystem. Same kernel, different skills, different company. Want the DevOps agent to know your k3s cluster? Write a skill. Want the marketer to know your brand voice? Write a skill. See [Skills](/docs/skills).
+
+## Communication & Transports
+
+### Transport Registry
+
+Pluggable notification transports with per-priority routing and quiet hours:
 
 | Transport | Status | Notes |
 |-----------|--------|-------|
 | Telegram | Available | Built-in adapter + webhook handler. Two-way messaging. |
-| Dashboard | Available | SSE-based realtime notifications in the Living Dashboard. |
-| Slack | Coming Soon | Planned. Knowledge-doc based integration pattern. |
-| Email | Coming Soon | Planned. SMTP or transactional email service. |
+| Dashboard | Available | SSE-based realtime notifications. |
+| Slack | Coming Soon | Planned. |
+| Email | Coming Soon | Planned. |
 
-## Language Configuration
+### SSE Realtime
 
-Configure the primary language and supported languages in `company.yaml`:
+All realtime communication uses Server-Sent Events (SSE). Session streaming, dashboard updates, and activity feed -- single HTTP connection per subscriber, no polling.
 
-```yaml title="company.yaml"
-language: "en"
-languages: ["en", "sk", "de"]
-```
+### Language Configuration
 
-## Hybrid Storage (SQLite + Filesystem)
+Multi-language support via `language` and `languages` fields in `company.yaml`. Agents respond in the configured language. Semantic search works across languages via embedding providers.
 
-YAML and Markdown files remain the source of truth -- human-readable, git-versioned, and portable. SQLite + Drizzle ORM provides:
+## Artifact System
 
-- **Fast indexed queries** -- task lists, agent lookups, status counts
-- **FTS5 full-text search** -- search across all content types
-- **sqlite-vec embeddings** -- vector similarity search
-- **Better Auth** -- dashboard and API authentication
-- **Automatic sync** -- the indexer watches filesystem changes
+Agents create live previews -- React apps, HTML pages, API docs. The artifact router spins up a Vite dev server with cold-start, port pool management, and idle timeout. Get a live URL to what your agent built before it ships. See [Artifacts](/docs/artifacts).
 
-If you delete the SQLite database, it is fully rebuilt from files.
+## Workflow Engine
 
-## SSE Realtime
+YAML-defined state machines with conditional transitions, review steps, and human gates. Three built-in workflows (development, marketing, incident). CEO agent owns workflow definitions; any agent can propose changes with evidence. See [Workflows](/docs/workflows).
 
-All realtime communication uses Server-Sent Events (SSE):
+## Integrations
 
-- **Session streaming** -- `autopilot attach` connects to SSE endpoint
-- **Dashboard updates** -- task status changes, board pins update instantly
-- **No polling overhead** -- single HTTP connection per subscriber
-
-## Git Auto-Commit
-
-Every agent action that modifies the filesystem is automatically committed to Git with a 5-second batch window. Multiple changes within the window are combined into a single commit, providing a clean audit trail without commit noise.
-
-## Core Features
-
-- **Multi-agent orchestration** -- 8 built-in role templates, custom agents, concurrent execution
-- **Workflow engine** -- YAML-defined state machines with human gates
-- **Persistent memory** -- per-agent facts, decisions, mistakes, patterns
-- **4-layer context assembly** -- identity, company state, memory, task context
-- **Skills system** -- markdown knowledge packages loaded into context
-- **Artifact serving** -- lazy cold-start preview server for agent outputs
-- **Living Dashboard** -- widget runtime, theme overrides, dev/prod mode
+Any external service follows the same 3-part pattern: add a secret, add a knowledge doc, agent calls the API. No integration modules, no plugins, no code changes. See [Integrations](/docs/integrations).

@@ -1,53 +1,63 @@
 ---
 title: Architecture
-description: Four-layer stack, orchestrator internals, filesystem conventions, and how QUESTPIE Autopilot manages agent sessions.
+description: Single Bun process. One SQLite file. Zero external infrastructure. Four-layer stack, orchestrator internals, and filesystem-native state.
 ---
 
-Four layers. Single process. SQLite + filesystem hybrid storage. SDK-first.
+Single process. Zero infrastructure. Filesystem-native state. SDK-first.
+
+## Zero Infrastructure
+
+What you need to run Autopilot:
+
+- **Bun runtime** -- the process
+- **Anthropic API key** -- the intelligence
+
+That's it. No Docker. No Postgres. No Redis. No Pinecone. No Kubernetes. No message queue. The entire company runs as one Bun process with one SQLite file for the database. Install and run in 60 seconds.
+
+What competitors require: Docker + Postgres + Redis + vector DB + message queue + monitoring stack + deployment pipeline. Autopilot's zero-infra story is a real adoption advantage.
 
 ## 4-Layer Stack
 
 ```text title="system overview"
-┌───────────────────────────────────────────────────────────┐
-│  LAYER 1 — HUMAN                                          │
-│  CLI · Dashboard · Telegram · External APIs                │
-│  Thin consumers. No business logic.                       │
-└──────────────────────────┬────────────────────────────────┘
-                           │ calls SDK functions
-                           ▼
-┌───────────────────────────────────────────────────────────┐
-│  LAYER 2 — ORCHESTRATOR                                   │
-│  Single Bun process per company                           │
-│                                                           │
-│  Watcher → detects FS changes (new tasks, status moves)   │
-│  Workflow → state machine routing (YAML-defined steps)    │
-│  Context → 4-layer prompt assembly (identity+state+mem)   │
-│  Spawner → creates Claude Agent SDK sessions              │
-│  Scheduler → cron-based recurring agent jobs              │
-│  Webhook → HTTP event receiver (port 7777)                │
-│  API → REST + SSE realtime streaming (port 7778)          │
-│  Notifier → transport dispatcher (Telegram built-in)      │
-│  Artifact → lazy cold-start preview server                │
-│  Skills → reusable knowledge packages                     │
-└──────────────────────────┬────────────────────────────────┘
-                           │ spawns
-                           ▼
-┌───────────────────────────────────────────────────────────┐
-│  LAYER 3 — AGENTS                                         │
-│  Claude Agent SDK sessions with tools + MCP servers       │
-│  Role-scoped FS access, sandboxed shell, custom MCP tools │
-│  8 default roles: CEO, strategist, planner, developer,    │
-│  reviewer, devops, designer, marketing                    │
-└──────────────────────────┬────────────────────────────────┘
-                           │ reads/writes
-                           ▼
-┌───────────────────────────────────────────────────────────┐
-│  LAYER 4 — STORAGE                                        │
-│  Hybrid: YAML/Markdown/JSON files + SQLite (Drizzle ORM) │
-│  FTS5 full-text search + sqlite-vec embeddings            │
-│  Better Auth for security · Git auto-commit audit trail   │
-│  Write queue (file-level async mutex)                     │
-└───────────────────────────────────────────────────────────┘
++-----------------------------------------------------------+
+|  LAYER 1 -- HUMAN                                          |
+|  CLI . Dashboard . Telegram . External APIs                |
+|  Thin consumers. No business logic.                        |
++-----------------------------------------------------------+
+                           | calls SDK functions
+                           v
++-----------------------------------------------------------+
+|  LAYER 2 -- ORCHESTRATOR                                   |
+|  Single Bun process per company                            |
+|                                                            |
+|  Watcher -> detects FS changes (new tasks, status moves)   |
+|  Workflow -> state machine routing (YAML-defined steps)    |
+|  Context -> 4-layer prompt assembly (identity+state+mem)   |
+|  Spawner -> creates Claude Agent SDK sessions              |
+|  Scheduler -> cron-based recurring agent jobs              |
+|  Webhook -> HTTP event receiver (port 7777)                |
+|  API -> REST + SSE realtime streaming (port 7778)          |
+|  Notifier -> transport dispatcher (Telegram built-in)      |
+|  Artifact -> lazy cold-start preview server                |
+|  Skills -> reusable knowledge packages                     |
++-----------------------------------------------------------+
+                           | spawns
+                           v
++-----------------------------------------------------------+
+|  LAYER 3 -- AGENTS                                         |
+|  Claude Agent SDK sessions with 13 primitives + MCP        |
+|  Role-scoped FS access, sandboxed shell, deny patterns     |
+|  Human gates at explicit workflow steps                     |
++-----------------------------------------------------------+
+                           | reads/writes
+                           v
++-----------------------------------------------------------+
+|  LAYER 4 -- STORAGE                                        |
+|  Hybrid: YAML/Markdown/JSON files + SQLite (Drizzle ORM)  |
+|  FTS5 full-text search + sqlite-vec embeddings             |
+|  Better Auth for security . Git auto-commit audit trail    |
+|  Write queue (file-level async mutex)                      |
++-----------------------------------------------------------+
 ```
 
 ## SDK-First Architecture
@@ -55,120 +65,102 @@ Four layers. Single process. SQLite + filesystem hybrid storage. SDK-first.
 All business logic lives in the orchestrator SDK. CLI, dashboard, and API are thin consumers that call the same functions. No logic is duplicated across consumers.
 
 ```ts title="consumer pattern"
-// CLI — thin shell over SDK
+// CLI -- thin shell over SDK
 import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
 
-// Dashboard — same SDK, different UI
+// Dashboard -- same SDK, different UI
 import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
 
-// External API — same SDK, HTTP wrapper
+// External API -- same SDK, HTTP wrapper
 import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
 ```
 
-```text title="package dependency graph"
-@questpie/autopilot-spec          (published)
-│  Zod schemas, types, path conventions
-│  Zero runtime deps except zod + yaml
-│
-├── @questpie/autopilot-agents    (internal)
-│   │  System prompt templates per role
-│   │  buildSystemPrompt() assembler
-│   │
-│   └── @questpie/autopilot-orchestrator  (internal)
-│       │  ALL business logic lives here
-│       │  FS ops, workflow, context, scheduler,
-│       │  watcher, webhooks, sessions, notifier
-│       │
-│       ├── @questpie/autopilot-cli   (published as @questpie/autopilot)
-│       │    Commander.js commands → calls orchestrator
-│       │
-│       └── @questpie/autopilot-dashboard  (apps/dashboard)
-│            React UI → calls orchestrator via REST API + SSE
-```
+## Hybrid Storage
+
+YAML and Markdown files remain the source of truth -- human-readable, git-versioned, and portable. SQLite provides speed:
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Config | YAML files | Agent definitions, workflows, schedules, webhooks, policies |
+| Knowledge | Markdown files | Company brain, brand guidelines, technical docs |
+| Tasks | YAML files | Task state, history, assignments, dependencies |
+| Indexes | SQLite + Drizzle ORM | Fast queries, status counts, agent lookups |
+| Search | FTS5 | Full-text keyword search across all content |
+| Embeddings | sqlite-vec | Vector similarity search, semantic queries |
+| Auth | Better Auth | Dashboard and API authentication |
+| Audit | Git auto-commit | 5-second batch, every agent action is a commit |
+
+Files for config and state (human-readable, git-versioned). SQLite for speed (queries, search, embeddings). If you delete the SQLite database, it is fully rebuilt from files.
 
 ## Provider Abstraction
 
-The agent spawner uses a provider abstraction. Three providers are available: **Claude Agent SDK** (primary), **Anthropic SDK** (raw API with agentic loop), and **Codex SDK** (OpenAI). The Claude Agent SDK provider gives agents built-in infrastructure -- file I/O, shell access, sub-agents, MCP support, and lifecycle hooks. The Anthropic provider uses the raw `@anthropic-ai/sdk` with tool use. The Codex provider offers an OpenAI GPT runtime. Configure per-agent or company-wide in `company.yaml`.
+Three agent providers are available. Configure per-agent or company-wide:
 
-| Capability | Agent SDK Provides | We Build On Top |
-|------------|-------------------|-----------------|
-| File I/O | `Read, Write, Edit, Glob, Grep` | FS scope enforcement per role |
-| Shell | `Bash tool` | Command sandboxing |
-| Sandboxing | `Permission modes` | Role-based scoping |
-| Sub-agents | `Agent tool` | Team delegation |
-| MCP | `Built-in MCP support` | Custom primitives as MCP tools |
-| Hooks | `PreToolUse, PostToolUse, SessionEnd` | Activity logging, memory extraction |
+| Provider | Config Value | Features |
+|----------|-------------|----------|
+| Claude Agent SDK | `claude-agent-sdk` | Primary. File tools, MCP, sandboxing, hooks, sub-agents. Works with Claude Max. |
+| Anthropic SDK | `anthropic` | Raw `@anthropic-ai/sdk` with agentic tool-use loop. Requires `ANTHROPIC_API_KEY`. |
+| Codex SDK | `codex-sdk` | OpenAI Codex runtime for GPT models. Requires `OPENAI_API_KEY`. |
 
-Works with an Anthropic API key or a Claude Max subscription. Set `ANTHROPIC_API_KEY` for Claude models. The Anthropic provider uses the raw SDK with an agentic tool-use loop. Codex SDK is available for GPT models (gpt-4o, gpt-4.1, o3, o4-mini) via `OPENAI_API_KEY`.
+The Claude Agent SDK provider gives agents built-in infrastructure -- file I/O, shell access, sub-agents, MCP support, and lifecycle hooks. Role-based filesystem scoping and deny patterns are enforced on top.
 
 ## Orchestrator Module Map
 
-The orchestrator is a single Bun process composed of focused modules. Each module is small and independent.
-
-| Module | Export | Responsibility |
-|--------|--------|----------------|
-| fs/ | `readYaml, writeYaml, createTask, listTasks, moveTask` | YAML CRUD with write queue. File-level async mutex prevents concurrent write corruption. |
-| workflow/ | `WorkflowEngine` | State machine engine. Reads YAML workflows, checks transitions, handles reviews and conditional routing. |
-| context/ | `ContextAssembler` | Builds role-scoped system prompts from 4 layers: identity, company state, memory, and task context. |
-| agent/ | `AgentSpawner` | Creates Claude Agent SDK sessions. Injects context, configures tools/MCP, streams output. |
-| scheduler/ | `Scheduler` | Cron-based recurring agent tasks from schedules.yaml. Standups, health checks, weekly metrics. |
-| watcher/ | `FSWatcher` | Monitors company filesystem via chokidar. Detects new tasks, status changes, messages, config updates. |
-| webhook/ | `WebhookServer` | HTTP event receiver on port 7777. Verifies HMAC-SHA256 signatures. GitHub, Stripe, etc. |
-| session/ | `SessionStreamManager` | In-memory session stream management. Powers `autopilot attach` for real-time observation. |
-| api/ | `ApiServer` | REST API + SSE event stream on port 7778. Dashboard and CLI consumer endpoint. |
-| artifact/ | `ArtifactRouter` | Lazy cold-start server for agent-created previews. React components, HTML pages, API docs. |
-| skills/ | `loadSkillCatalog` | Reusable knowledge packages. Loaded into context assembly Layer 2 (company state). |
-| notifier/ | `Notifier` | Logs notifications to stdout and activity feed. Telegram transport built-in, Slack/email planned. |
+| Module | Responsibility |
+|--------|----------------|
+| fs/ | YAML CRUD with write queue. File-level async mutex prevents concurrent write corruption. |
+| workflow/ | State machine engine. Reads YAML workflows, checks transitions, handles reviews and human gates. |
+| context/ | Builds role-scoped system prompts from 4 layers: identity, company state, memory, and task context. |
+| agent/ | Creates Claude Agent SDK sessions. Injects context, configures tools/MCP, streams output. |
+| scheduler/ | Cron-based recurring agent tasks from schedules.yaml. |
+| watcher/ | Monitors company filesystem via chokidar. Detects new tasks, status changes, messages. |
+| webhook/ | HTTP event receiver on port 7777. HMAC-SHA256 verification. |
+| session/ | In-memory session stream management. Powers `autopilot attach` for real-time observation. |
+| api/ | REST API + SSE event stream on port 7778. Dashboard and CLI consumer endpoint. |
+| artifact/ | Lazy cold-start server for agent-created previews. Port pool management, idle timeout. |
+| skills/ | Reusable knowledge packages. Loaded into context assembly Layer 2. |
+| notifier/ | Notification dispatch. Telegram transport built-in, Slack/email planned. |
 
 ## Data Flow: Intent to Completion
 
 ```text title="data flow"
 Human: "Build a pricing page"
-  │
-  ▼
+  |
+  v
 CLI: autopilot ask "Build a pricing page"
-  │ Creates task in /tasks/backlog/ (type: intent, assigned: ceo)
-  ▼
+  | Creates task in /tasks/backlog/ (type: intent, assigned: ceo)
+  v
 Watcher: detects new task file
-  │
-  ▼
+  |
+  v
 Orchestrator: routes to CEO agent
-  │ Context assembler builds 4-layer prompt:
-  │   Layer 1: Agent identity (role, personality, tools)
-  │   Layer 2: Company state (knowledge, team, projects)
-  │   Layer 3: Agent memory (facts, decisions, past sessions)
-  │   Layer 4: Task context (description, dependencies, history)
-  ▼
+  | Context assembler builds 4-layer prompt:
+  |   Layer 1: Agent identity (role, personality, tools)
+  |   Layer 2: Company state (knowledge, team, projects)
+  |   Layer 3: Agent memory (facts, decisions, past sessions)
+  |   Layer 4: Task context (description, dependencies, history)
+  v
 CEO Agent Session:
-  │ Reads company knowledge, evaluates scope
-  │ Calls: create_task("Scope requirements") → sam
-  │ Calls: create_task("Plan implementation") → alex
-  │ Calls: create_task("Implement + Stripe")  → max
-  │ Calls: create_task("Review PR")           → riley
-  │ Sets dependencies: implement → plan → scope
-  ▼
+  | Reads company knowledge, evaluates scope
+  | Calls: create_task("Scope requirements") -> sam
+  | Calls: create_task("Plan implementation") -> alex
+  | Calls: create_task("Implement + Stripe")  -> max
+  | Sets dependencies: implement -> plan -> scope
+  v
 Watcher: detects new tasks
-  │
-  ▼
-Sam (strategist): writes spec
-  │ Calls: update_task(status: done)
-  ▼
-Workflow Engine: scope → plan transition
-  │ Activates Alex's task
-  ▼
-Alex (planner): writes plan
-  │ Calls: update_task(status: done)
-  ▼
-Max (developer): implements
-  │ Creates branch, writes code, runs tests
-  │ Creates PR, marks task done
-  ▼
-Riley (reviewer): reviews PR
-  │ Approves or requests changes
-  ▼
-Workflow Engine: human gate
-  │ Task moves to review, appears in inbox
-  ▼
-Human: autopilot tasks approve TASK-003
-  │ Task moves to done, workflow continues
+  |
+  v
+Sam (strategist): writes spec -> update_task(status: done)
+  v
+Workflow Engine: scope -> plan transition -> activates Alex's task
+  v
+Alex (planner): writes plan -> update_task(status: done)
+  v
+Max (developer): implements, creates PR -> update_task(status: done)
+  v
+Riley (reviewer): reviews PR -> approves
+  v
+Workflow Engine: human_gate -> task moves to review, appears in inbox
+  v
+Human: autopilot approve TASK-003 -> workflow continues to deploy
 ```

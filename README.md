@@ -2,8 +2,9 @@
 
 # QUESTPIE Autopilot
 
-**AI-native company operating system.**
-**Your company is a container. Your employees are agents.**
+**Agents that act, not chat.**
+
+A filesystem-native operating system where AI agents run your company through structured primitives, human approval gates, and a self-evolving dashboard.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-B700FF?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-B700FF?style=flat-square)]()
@@ -18,34 +19,38 @@
 
 ## What is this?
 
-A single founder should be able to operate like a 20-person company. Instead of hiring, you define roles. Instead of managing, you give intent. Instead of micromanaging, you approve at gates.
+Autopilot agents don't generate text for you to read. They call **13 structured primitives** that create tasks, write code, deploy services, and build dashboards. You approve the results at explicit human gates.
 
-QUESTPIE Autopilot is a multi-agent AI system where your company is a filesystem backed by SQLite hybrid storage, your employees are AI agents, and work flows through YAML-defined workflows -- from intent to shipped feature.
+Your company is a filesystem. Your employees are agents defined in YAML. Work flows through YAML-defined workflows -- from intent to shipped feature. The entire state lives in files you can `ls`, `grep`, back up with `cp`, and fork with `git clone`. One Bun process. One SQLite file. Zero infrastructure.
 
 ```bash
 $ autopilot ask "Build a pricing page with Stripe integration"
 
 CEO Agent decomposing intent...
 
-  task-050: Scope requirements      → ivan (strategist)
-  task-051: Design UI               → designer
-  task-052: Implement with Stripe   → peter (developer)
-  task-053: Write copy & announce   → marketer
+  task-050: Scope requirements      -> sam (strategist)
+  task-051: Design UI               -> jordan (designer)
+  task-052: Implement with Stripe   -> max (developer)
+  task-053: Write copy & announce   -> morgan (marketing)
 
-Ivan is starting now. You'll be notified when approvals are needed.
+Sam is starting now. You'll be notified when approvals are needed.
 ```
 
 ---
 
-## How it works
+## Why Autopilot is different
 
-**You give intent.** "Build a pricing page with Stripe integration."
+**Primitives, not chat.** Agents call typed function calls with clear targets and effects -- not text responses for you to copy-paste. Agent thinking is private. Only primitive calls produce visible, auditable effects.
 
-**Agents decompose and execute.** The CEO agent breaks it into scoped tasks. Ivan writes the spec. Adam creates the implementation plan. Peter codes it. Marek reviews it. Ops deploys it. Marketer announces it.
+**Living dashboard.** A React app in the company filesystem that agents edit in real time. Custom widgets, custom pages, theme overrides. Changes appear in seconds via HMR. Your agents build your internal tools.
 
-**You approve at gates.** Merge code, deploy to production, publish content -- these require your sign-off. Everything else runs autonomously.
+**Zero infrastructure.** One Bun process. One SQLite file. No Docker, no Postgres, no Redis, no vector DB. Install and run in 60 seconds. Run an AI company for ~$0.30/day in API costs.
 
-**Everything is files + SQLite.** Tasks are YAML. Communication is Markdown. Knowledge is documents. SQLite provides FTS5 full-text search and sqlite-vec embeddings. The entire company state can be `ls`'d, `grep`'d, backed up, and forked. Git auto-commit tracks every change.
+**Human gates.** Explicit approval points for merge, deploy, spend, and publish -- defined in workflow YAML. Hardcoded deny patterns prevent agents from touching auth files. Every agent action is a git commit.
+
+**Session attach.** `autopilot attach max` streams the live session -- like `kubectl logs -f` for AI agents. Watch tool calls in real time. Ctrl+C to detach; the agent keeps working.
+
+**Filesystem-native.** Everything is files. YAML for config. Markdown for knowledge. SQLite for speed. Git auto-commit for versioning. Back up your company with `cp`. Fork it with `git clone`.
 
 ---
 
@@ -71,51 +76,11 @@ open http://localhost:3001
 # Send your first task
 autopilot ask "Build me a landing page"
 
-# Watch agents work
+# Watch agents work in real-time
 autopilot attach max
 ```
 
----
-
-## Features
-
-**Hybrid storage** -- YAML/Markdown/JSON files as source of truth, SQLite + Drizzle ORM for indexes, FTS5 full-text search, and sqlite-vec vector embeddings for unified search.
-
-**AI agents with roles** -- 8 built-in role templates (strategist, planner, developer, reviewer, devops, design, marketing, CEO). Define your own agents with custom names, tools, and filesystem scope.
-
-**Multiple agent providers** -- Claude Agent SDK (primary) and Codex SDK. Configure per-agent or company-wide. Provider abstraction makes it easy to add new backends.
-
-**Workflow engine** -- YAML-defined processes that move work from intent to deployment. Human gates for code merges, production deploys, and spending decisions.
-
-**Persistent memory** -- Agents remember facts, decisions, and mistakes across sessions. Memory is private per agent, extracted automatically after every session.
-
-**Unified search** -- FTS5 full-text search + sqlite-vec vector embeddings. Search across tasks, knowledge, channels, and memory with a single query.
-
-**Embedding service** -- Gemini embeddings with local fallback. Automatic indexing of knowledge docs, tasks, and agent memory for semantic search.
-
-**Session attach** -- `autopilot attach max` streams an agent's work in real-time via SSE. Watch your AI team members think and act. Ctrl+C to detach -- agent keeps working.
-
-**Living Dashboard** -- Real-time dashboard on port 3001. Agent activity, task status, board pins, approval gates. Widget runtime with theme overrides.
-
-**Skills as knowledge** -- Agents learn from markdown knowledge docs. Customizable skill templates for code review, testing, API design, deployment, security, and more. Add your own.
-
-**CLI-first** -- Full lifecycle from the terminal: init, start, ask, status, tasks, agents, inbox, attach, board, channels, knowledge, artifacts, dashboard, auth, git.
-
-**Better Auth** -- Dashboard and API security via Better Auth library.
-
-**SSE realtime** -- Server-Sent Events for session streaming and dashboard updates. No polling.
-
-**Git auto-commit** -- Every filesystem change is automatically committed. Full audit trail of every agent action.
-
-**Transport registry** -- Pluggable notification transports. Telegram adapter built-in. Slack, email, WhatsApp, and push adapters coming soon.
-
-**Language configuration** -- Multi-language support via `language` and `languages` fields in company.yaml. Agents respond in the configured language.
-
-**Provider abstraction** -- Works with Anthropic API key or Claude Max subscription via the Claude Agent SDK. Codex SDK available for GPT models.
-
-**Artifact serving** -- Agents create previews (React apps, HTML pages) that are served via a lazy cold-start router. Get a live link to what your agent built.
-
-**Integrations without code** -- Any external service (GitHub, Linear, Slack, Stripe) follows the same pattern: add a secret, add a knowledge doc, agent calls the API. No integration modules.
+**What you need:** Bun runtime + Anthropic API key. That's it.
 
 ---
 
@@ -123,15 +88,15 @@ autopilot attach max
 
 ```
 Human         CLI · Dashboard · Telegram · Slack (soon) · Email (soon)
-  ↓
+  |
 Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · Webhooks · SSE
-  ↓
-Agents        Claude Agent SDK · Codex SDK · Role Templates · Tools · Sandboxed FS · Memory
-  ↓
+  |
+Agents        Claude Agent SDK · Codex SDK · 13 Primitives · MCPs · Sandboxed FS · Memory
+  |
 Storage       SQLite + Drizzle · YAML/Markdown/JSON · FTS5 + sqlite-vec · Git · Better Auth
 ```
 
-Each company is an isolated folder with a SQLite sidecar. One Bun process watches the filesystem, matches workflows, spawns agents, and routes notifications.
+Each company is a directory with a SQLite sidecar. One Bun process watches the filesystem, matches workflows, spawns agents, and routes notifications.
 
 ---
 
@@ -146,7 +111,7 @@ Each company is an isolated folder with a SQLite sidecar. One Bun process watche
 | `autopilot tasks` | List, show, approve, or reject tasks |
 | `autopilot agents` | List agents and their roles |
 | `autopilot inbox` | Items waiting for your approval |
-| `autopilot attach <agent>` | Stream an agent's session live (SSE) |
+| `autopilot attach <agent>` | Stream an agent's session live |
 | `autopilot approve <id>` | Approve a task at a human gate |
 | `autopilot reject <id>` | Reject a task with feedback |
 | `autopilot board` | View dashboard pins from agents |
@@ -161,25 +126,31 @@ Each company is an isolated folder with a SQLite sidecar. One Bun process watche
 
 ---
 
-## Company structure after init
+## Company structure
 
 ```
 my-company/
 ├── company.yaml              Settings, budget, owner
 ├── team/
-│   ├── agents.yaml            Agent definitions (8 agents)
+│   ├── agents.yaml            Agent definitions
 │   ├── humans.yaml            Human team members
 │   ├── workflows/             development, marketing, incident
-│   ├── schedules.yaml         Cron jobs (health checks, standups)
-│   └── policies/              Approval gates
+│   ├── schedules.yaml         Cron jobs
+│   └── policies/              Approval gates, deny patterns
 ├── tasks/                     backlog/ active/ review/ blocked/ done/
 ├── comms/channels/            Agent communication
-├── knowledge/                 Brand, technical, business, skills
+├── knowledge/                 Brand, technical, business
+├── skills/                    Agent Skills (SKILL.md standard)
 ├── projects/                  Code, docs, design, marketing
 ├── context/memory/            Per-agent persistent memory
 ├── secrets/                   Encrypted API keys
-├── dashboard/pins/            Agent status board
-└── logs/                      Activity feed, sessions
+├── dashboard/
+│   ├── pins/                  Agent status board
+│   ├── widgets/               Custom dashboard widgets
+│   ├── pages/                 Custom dashboard pages
+│   └── overrides/             Theme, layout overrides
+├── logs/                      Activity feed, sessions
+└── .data/autopilot.db         SQLite (FTS5, embeddings, auth)
 ```
 
 ---
@@ -191,8 +162,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and conventions.
 ```bash
 git clone https://github.com/questpie/autopilot.git
 cd autopilot && bun install
-npx turbo build
-npx turbo test
+bunx turbo build
+bunx turbo test
 ```
 
 ---

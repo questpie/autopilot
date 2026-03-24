@@ -1,38 +1,45 @@
 ---
 title: Living Dashboard
-description: Dashboard as code in the company filesystem. Custom widgets, theme overrides, layout configuration, and custom pages.
+description: The most commercially exciting feature. A React app in the company filesystem that agents edit in real time. Custom widgets, theme overrides, layout config, custom pages. No deployment.
 ---
 
-Dashboard as code in the company filesystem. Agents edit it. Changes are instant. No deploys needed.
+Your agents build your internal tools. In real time. No deploy.
 
-## Concept
+The dashboard is not a static build. It is not a pin viewer. It is a React app living in the company filesystem where agents create custom widgets, custom pages, theme overrides, and layout configurations. Changes appear instantly via HMR. The company builds its own operating surface through agents.
 
-The dashboard is not a static build. It is a React app living in the company filesystem. The orchestrator serves it via the artifact router. Agents can edit components, layout, and theme. You see changes instantly via HMR.
-
-```text title="comparison"
-Traditional SaaS:   Build → Deploy → Users see changes (hours/days)
-Living Dashboard:   Agent edits file → Vite HMR → User sees change (seconds)
+```text title="the difference"
+Traditional SaaS:   Build -> Deploy -> Users see changes (hours/days)
+Retool:             Drag-and-drop -> Deploy -> Users see changes (minutes)
+Living Dashboard:   Agent edits file -> Vite HMR -> User sees change (seconds)
 ```
+
+## Why This Matters
+
+Internal tool building is a multi-billion dollar market (Retool, Appsmith, etc.). Autopilot does it through agents, not drag-and-drop. You say "I need a sprint burndown chart on the dashboard." An agent writes `widget.tsx`, registers it in `layout.yaml`, and it appears. You say "Build me a weekly report page." Agent creates `pages/reports/page.tsx`. Instantly live.
+
+Nobody else has this. CrewAI has no UI. Devin has no dashboard. n8n has a fixed UI.
 
 ## Immutable Core vs Customizable Layer
 
 ```text title="architecture"
-┌─────────────────────────────────────────────────┐
-│  IMMUTABLE CORE (npm package)                    │
-│  @questpie/autopilot-dashboard                   │
-│  Base components, hooks, API client, router      │
-│  Agent CANNOT edit — always resettable           │
-└──────────────────────┬──────────────────────────┘
-                       │ imports
-┌──────────────────────▼──────────────────────────┐
-│  COMPANY LAYER (in company FS)                   │
-│  company/dashboard/                              │
-│  ├── overrides/     Custom CSS, theme, branding  │
-│  ├── widgets/       Custom dashboard widgets     │
-│  ├── pages/         Custom pages                 │
-│  └── layouts/       Custom layout config         │
-└─────────────────────────────────────────────────┘
++---------------------------------------------------+
+|  IMMUTABLE CORE (npm package)                      |
+|  @questpie/autopilot-dashboard                     |
+|  Base components, hooks, API client, router        |
+|  Agent CANNOT edit -- always resettable            |
++---------------------------------------------------+
+                       | imports
++---------------------------------------------------+
+|  COMPANY LAYER (in company filesystem)             |
+|  company/dashboard/                                |
+|  +-- overrides/     Custom CSS, theme, branding    |
+|  +-- widgets/       Custom dashboard widgets       |
+|  +-- pages/         Custom pages                   |
+|  +-- layouts/       Custom layout config           |
++---------------------------------------------------+
 ```
+
+The core is an immutable npm package -- agents cannot break it. Overrides are always optional. Every widget has its own error boundary. If something goes wrong, `autopilot dashboard reset` restores defaults.
 
 ## Widgets
 
@@ -131,7 +138,7 @@ pages:
 | Server | Vite dev server with HMR | Static build via Bun.serve |
 | Changes | Instant via HMR | Auto-build on file change |
 | RAM | ~200MB (Vite) | ~20MB (static files) |
-| Use case | Agent editing dashboard | Default — always-on |
+| Use case | Agent editing dashboard | Default -- always-on |
 
 ## CLI Commands
 
@@ -145,10 +152,22 @@ autopilot dashboard widgets      # List custom widgets
 
 ## Safety & Reset
 
-The core is an immutable npm package -- agents cannot break it. Overrides are always optional. Every widget has its own error boundary.
+The core is immutable. Agents edit the company layer only. If anything breaks:
 
 ```bash title="terminal"
 $ autopilot dashboard reset
 Deleted: overrides/, widgets/, pages/
 Dashboard restored to default state.
 ```
+
+## Real-World Example
+
+You say: "I need a client management page on the dashboard."
+
+1. Agent creates `company/dashboard/pages/clients/page.tsx`
+2. Agent registers it in `company/dashboard/pages/registry.yaml`
+3. Page appears in dashboard navigation immediately
+4. Agent adds a widget for "recent clients" to the overview section
+5. Widget starts fetching data from your API via the knowledge-based integration pattern
+
+Total time: seconds. Total deployments: zero.

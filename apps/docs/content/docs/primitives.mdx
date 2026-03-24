@@ -1,17 +1,26 @@
 ---
-title: Primitives
-description: Structured tool calls agents use to interact with the system — tasks, messages, files, git, dashboard pins, and approval gates.
+title: Primitives, Not Chat
+description: The core differentiator. Agents call 13 structured primitives that produce visible, auditable effects. No text generation. No chat. Structured execution.
 ---
 
-Structured tool calls. Not chat. Every agent action is a typed function call with clear targets and effects.
+The single most important architectural idea in Autopilot. Agents don't generate text for you to read. They call structured primitives that produce visible effects in the company filesystem.
 
-## What are Primitives?
+## Why This Matters
 
-Agents don't generate text output. They call primitives -- structured tool calls that produce visible effects in the company filesystem. Agent thinking is private and messy. Only primitive calls produce observable results.
+Most AI agent frameworks are chatbot wrappers. The agent generates text, you read it, you copy-paste it somewhere. You are the middleware.
 
-## Communication
+Autopilot agents call typed function calls with clear targets and effects. Agent thinking is private and messy. Only primitive calls produce observable results. Every call writes to the filesystem. Every write is a git commit. Every commit is auditable.
 
-Inter-agent and agent-to-human communication. Messages are written to the `/company/comms/` directory.
+```text title="the difference"
+Chatbot agent:    "Here's the code for your pricing page..." → you copy-paste
+Autopilot agent:  create_artifact({ type: "react", source: "..." }) → live preview appears
+```
+
+## The 13 Primitives
+
+### Communication
+
+Inter-agent and agent-to-human communication. Messages are written to `/company/comms/`.
 
 ```ts title="primitives/communication.ts"
 send_message({
@@ -22,7 +31,7 @@ send_message({
 })
 
 ask_agent({
-  to: 'agent:peter',
+  to: 'agent:riley',
   question: 'What auth library did you use for the login flow?',
   reason: 'Need to document the API endpoints',
   urgency: 'normal',
@@ -30,7 +39,7 @@ ask_agent({
 })
 ```
 
-## Tasks
+### Tasks
 
 Task lifecycle management. Tasks are YAML files that move between status folders (`backlog/ -> active/ -> review/ -> done/`).
 
@@ -39,7 +48,7 @@ create_task({
   title: 'Implement Stripe checkout flow',
   type: 'feature',
   priority: 'high',
-  assigned_to: 'peter',
+  assigned_to: 'max',
   workflow: 'development',
 })
 
@@ -48,11 +57,23 @@ update_task({
   status: 'review',
   note: 'Implementation complete. PR #17 ready for review.'
 })
+
+add_blocker({
+  task_id: 'TASK-042',
+  reason: 'Need admin access to create org repo',
+  assigned_to: 'dominik',
+  blocking: ['TASK-040']
+})
+
+resolve_blocker({
+  task_id: 'TASK-042',
+  resolution: 'Access granted by admin'
+})
 ```
 
-## Dashboard
+### Dashboard
 
-Agents pin information to the dashboard for human visibility.
+Agents pin information to the dashboard for human visibility. Pins appear instantly in the Living Dashboard.
 
 ```ts title="primitives/dashboard.ts"
 pin_to_board({
@@ -65,11 +86,16 @@ pin_to_board({
     expires_at: '2026-03-23T00:00:00Z',
   }
 })
+
+unpin_from_board({
+  pin_id: 'pin-staging-v120',
+  reason: 'Superseded by v1.3.0 deploy'
+})
 ```
 
-## Knowledge
+### Knowledge
 
-Search and update the company knowledge base. Supports both keyword and semantic search.
+Search and update the company knowledge base. Supports both keyword (FTS5) and semantic (sqlite-vec) search.
 
 ```ts title="primitives/knowledge.ts"
 search_knowledge({
@@ -78,44 +104,46 @@ search_knowledge({
   max_results: 5
 })
 
-semantic_search({
-  query: 'how do we handle user sessions',
-  index: 'codebase',
-  max_results: 10,
-  threshold: 0.7
+update_knowledge({
+  path: 'knowledge/technical/auth-patterns.md',
+  content: '# Authentication Patterns\n...',
+  reason: 'Documenting the new OAuth flow'
 })
 ```
 
-## Files & Git
+### Artifacts
 
-Scoped filesystem access and git operations.
+Create live previews of agent-built apps. The artifact router spins up a Vite dev server and serves a live URL.
 
-```ts title="primitives/files-git.ts"
-read_file({ path: 'projects/web-app/code/src/auth.ts' })
-
-write_file({
-  path: 'projects/web-app/code/src/checkout.ts',
-  content: 'import Stripe from "stripe"\n...'
-})
-
-git_commit({
-  repo: 'projects/web-app/code',
-  message: 'feat: add Stripe checkout flow',
-  files: ['src/checkout.ts', 'src/lib/stripe.ts']
-})
-
-git_create_pr({
-  repo: 'projects/web-app/code',
-  title: 'feat: Stripe checkout integration',
-  branch: 'feat/stripe-checkout',
-  target: 'main',
-  reviewers: ['marek']
+```ts title="primitives/artifacts.ts"
+create_artifact({
+  type: 'react',
+  title: 'Pricing Page Preview',
+  source_path: '/projects/studio/code/src/pages/pricing',
+  pin_to_board: true
 })
 ```
 
-## External
+The agent writes code, the artifact router serves it, you click and see it running. Before it ships.
 
-Interact with external services and run system commands.
+### Skills
+
+Request execution of a learned skill. Skills are SKILL.md files in the filesystem.
+
+```ts title="primitives/skills.ts"
+skill_request({
+  skill: 'deployment',
+  parameters: {
+    service: 'billing-api',
+    target: 'production',
+    domain: 'billing.company.com'
+  }
+})
+```
+
+### External
+
+Interact with external services. Secret references are resolved at runtime from encrypted storage.
 
 ```ts title="primitives/external.ts"
 http_request({
@@ -125,19 +153,13 @@ http_request({
   body: 'name=Premium+Plan&active=true',
   secret_ref: 'secrets/stripe.yaml#api_key'
 })
-
-run_command({
-  command: 'bun test',
-  working_directory: 'projects/web-app/code',
-  timeout_seconds: 120
-})
 ```
 
 ## Approval Gates
 
 Some actions require human approval, others agents handle between themselves.
 
-**Requires human approval:**
+**Requires human approval (human gates):**
 - Merge to main branch
 - Deploy to production
 - Publish external content
@@ -153,13 +175,20 @@ Some actions require human approval, others agents handle between themselves.
 - Knowledge base updates
 - Health checks and monitoring
 
+These gates are defined in workflow YAML as `type: human_gate` steps -- not bolted-on permissions. The workflow engine enforces them.
+
 ## Primitive Summary
 
 | Category | Primitives | Used by |
 |----------|-----------|---------|
-| Communication | `send_message, ask_agent` | All agents |
-| Tasks | `create_task, update_task, add_blocker, resolve_blocker` | All agents |
-| Dashboard | `pin_to_board, unpin_from_board` | All agents |
-| Knowledge | `search_knowledge, semantic_search, update_knowledge` | Strategist, Planner, Developer |
-| Files & Git | `read_file, write_file, list_directory, git_*` | Scoped per agent role |
-| External | `http_request, run_command, install_tool` | Developer, DevOps |
+| Communication | `send_message`, `ask_agent` | All agents |
+| Tasks | `create_task`, `update_task`, `add_blocker`, `resolve_blocker` | All agents |
+| Dashboard | `pin_to_board`, `unpin_from_board` | All agents |
+| Knowledge | `search_knowledge`, `update_knowledge` | Strategist, Planner, Developer |
+| Artifacts | `create_artifact` | Developer, Designer |
+| Skills | `skill_request` | All agents |
+| External | `http_request` | Developer, DevOps |
+
+## The Key Insight
+
+The mechanism is the moat. Other frameworks also have "AI agents." What makes Autopilot different is not that agents exist, but **how they work**: through structured primitives (not chat), on a filesystem (not a database), with a dashboard they can edit (not a fixed UI), under human gates (not autonomous chaos), visible through session attach (not a black box).

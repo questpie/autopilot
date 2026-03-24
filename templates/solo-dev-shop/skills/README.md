@@ -2,7 +2,7 @@
 
 Agent skills follow the [Agent Skills open standard](https://agentskills.io).
 
-Each skill is a directory with a SKILL.md file:
+Each skill is a directory with a `SKILL.md` file that teaches an agent a new capability. Same Autopilot kernel, different skills, different company.
 
 ```
 skill-name/
@@ -24,6 +24,12 @@ skill-name/
    ```
 3. Write instructions in markdown below the frontmatter.
 4. Agents automatically discover it on next session.
+
+## Examples
+
+- Want the DevOps agent to know your k3s cluster? Write a skill.
+- Want the marketer to know your brand voice? Write a skill.
+- Want the developer to follow your testing patterns? Write a skill.
 
 ## Community skills
 

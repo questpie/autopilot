@@ -1,9 +1,9 @@
 ---
 title: Getting Started
-description: Install QUESTPIE Autopilot, create your first company, and run AI agents in minutes. Prerequisites, project structure, and first commands.
+description: Install QUESTPIE Autopilot, create your first company, and run AI agents in under 60 seconds. Zero infrastructure required.
 ---
 
-Install Autopilot, scaffold a company, and give your first intent.
+Install Autopilot, scaffold a company, and give your first intent. One Bun process. One SQLite file. Zero infrastructure.
 
 ## Prerequisites
 
@@ -13,7 +13,8 @@ Install Autopilot, scaffold a company, and give your first intent.
   ```
 - **Anthropic API key** -- agents run on Claude via the Agent SDK. Get a key from [console.anthropic.com](https://console.anthropic.com)
 - **Git** -- required for versioning company state and code operations
-- **Docker** (optional) -- for containerized production mode
+
+That's it. No Docker. No Postgres. No Redis. No vector DB.
 
 ## Quick Start
 
@@ -34,18 +35,25 @@ open http://localhost:3001
 # Send your first task
 autopilot ask "Build me a landing page"
 
-# Watch agents work
+# Watch agents work in real-time
 autopilot attach max
 ```
 
+## What Just Happened
+
+1. **`autopilot init`** scaffolded a complete company filesystem from the `solo-dev-shop` template -- agents, workflows, knowledge, skills, and a living dashboard.
+2. **`autopilot start`** launched the orchestrator: filesystem watcher, workflow engine, scheduler, webhook server, REST API, and SSE stream. One process.
+3. **`autopilot ask`** gave your intent to the CEO agent, who decomposed it into scoped tasks and assigned them to the right agents via workflow rules.
+4. **`autopilot attach`** connected you to Max's live session stream -- like `kubectl logs -f` for AI agents. Ctrl+C to detach; the agent keeps working.
+
 ## Project Structure
 
-After `autopilot init`, you get a complete company filesystem based on the `solo-dev-shop` template:
+After `autopilot init`, you get a complete company filesystem:
 
 ```text title="my-company/"
 company.yaml                  # Company identity and global settings
 team/
-  agents.yaml                 # 8 AI agents: ceo, sam, alex, max, riley, ops, morgan, jordan
+  agents.yaml                 # AI agents: ceo, sam, alex, max, riley, ops, morgan, jordan
   humans.yaml                 # Human team members and notification preferences
   workflows/
     development.yaml          # Intent -> Scope -> Plan -> Implement -> Review -> Deploy
@@ -61,40 +69,29 @@ tasks/
   review/                     # Awaiting human review or approval
   blocked/                    # Waiting on external dependency
   done/                       # Completed (auto-archived)
-comms/
-  channels/
-    general/                  # Company-wide channel
-    dev/                      # Development channel
-  direct/                     # Agent-to-agent direct messages
-knowledge/
-  brand/                      # Brand guidelines, tone of voice
-  technical/                  # Stack conventions, architecture decisions
-  business/                   # Strategy, pricing, market research
-  onboarding/                 # How-we-work docs for agent context
-projects/                     # Code repos, design assets, marketing materials
-context/
-  memory/                     # Per-agent persistent memory (YAML)
+comms/channels/               # Agent communication
+knowledge/                    # Company brain (brand, technical, business)
+context/memory/               # Per-agent persistent memory (YAML)
 skills/                       # Agent Skills (agentskills.io standard)
-  code-review/SKILL.md        # Each skill = directory + SKILL.md
-  deployment/SKILL.md
-  ...
+projects/                     # Code repos, design assets, marketing materials
 secrets/                      # Encrypted API keys and credentials
 dashboard/
   pins/                       # Board pins from agents
+  widgets/                    # Custom dashboard widgets
+  pages/                      # Custom dashboard pages
+  overrides/                  # Theme, layout overrides
 logs/
   activity/                   # Activity feed
   sessions/                   # Agent session streams
-  errors/                     # Error logs
-infra/                        # Infrastructure configuration
 .data/
-  autopilot.db                # SQLite database (FTS5 search, embeddings, auth, sessions)
+  autopilot.db                # SQLite database (FTS5, embeddings, auth, sessions)
 ```
 
 > The `.data/` directory is auto-created on first `autopilot start`. It contains the SQLite database used for fast indexed queries, full-text search, vector embeddings, and Better Auth sessions. If deleted, it is fully rebuilt from the YAML/Markdown files.
 
 ## Configuration
 
-The root `company.yaml` controls company identity, agent runtime settings, and budget limits. This is the default from the template:
+The root `company.yaml` controls company identity, agent runtime settings, and budget limits:
 
 ```yaml title="company.yaml"
 name: "My Company"
@@ -145,6 +142,8 @@ agents:
     tools: ["fs", "terminal", "task", "message", "git"]
 ```
 
+Start with 2-3 agents, add as you need. You choose the names, the roles, and the tools.
+
 ## First Commands
 
 ### Start the orchestrator
@@ -167,18 +166,7 @@ autopilot dashboard
 open http://localhost:3001
 ```
 
-The Living Dashboard shows agent activity, task status, board pins, and approval gates. It updates in realtime via SSE.
-
-### Check company status
-
-```bash title="terminal"
-autopilot status
-
-# QUESTPIE Autopilot — my-company
-# Agents: 8 defined, 0 active
-# Tasks:  0 backlog, 0 active, 0 review, 0 blocked
-# Uptime: 2m 14s
-```
+The Living Dashboard shows agent activity, task status, board pins, and approval gates. It updates in realtime via SSE. Agents can create custom widgets and pages that appear automatically.
 
 ### Give your first intent
 
@@ -200,7 +188,7 @@ autopilot ask "Set up a Next.js project with authentication"
 # List all agents and their current status
 autopilot agents
 
-# Live-stream an agent's session
+# Live-stream an agent's session (like kubectl logs -f)
 autopilot attach max
 
 # Compact mode -- one line per tool call
@@ -223,29 +211,11 @@ autopilot approve TASK-001
 autopilot reject TASK-001 --reason "Needs error handling for edge cases"
 ```
 
-## Docker Mode
-
-For production, run the company in an isolated Docker container. The container mounts the company filesystem and exposes webhook and API ports:
-
-```yaml title="docker-compose.yaml"
-services:
-  autopilot:
-    image: ghcr.io/questpie/autopilot:latest
-    volumes:
-      - ./my-company:/company
-    ports:
-      - "7777:7777"    # Webhook server
-      - "7778:7778"    # REST API + SSE event stream + dashboard
-    environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-    restart: unless-stopped
-```
-
 ## Next Steps
 
-- [Features](/docs/features) -- unified search, embeddings, multiple providers, transport plugins
-- [Architecture](/docs/architecture) -- understand the four-layer stack and orchestrator internals
-- [Agents](/docs/agents) -- role templates, filesystem scopes, and context assembly
-- [Primitives](/docs/primitives) -- the structured tool calls agents use
+- [Primitives](/docs/primitives) -- the 13 structured primitives agents use (the core differentiator)
+- [Living Dashboard](/docs/living-dashboard) -- custom widgets, theme overrides, agent-created pages
+- [Architecture](/docs/architecture) -- four-layer stack, zero-infra design, orchestrator internals
 - [Workflows](/docs/workflows) -- how tasks flow through development, marketing, and incident pipelines
+- [Skills](/docs/skills) -- teach agents new capabilities via SKILL.md files
 - [CLI Reference](/docs/cli) -- all available commands and options
