@@ -48,10 +48,6 @@ export async function createDb(companyRoot: string): Promise<DbResult> {
 	// Run drizzle migrations (regular tables)
 	migrate(db, { migrationsFolder: join(__dirname, '..', '..', 'drizzle') })
 
-	// Migrate: rename legacy tables if they exist
-	migrateSessionsTable(sqlite)
-	migrateLegacyAuthTables(sqlite)
-
 	// Create FTS5 virtual table + triggers for unified search index
 	// (must be raw SQL — drizzle migrator cannot handle trigger semicolons)
 	initSearchFts(sqlite)
@@ -76,72 +72,6 @@ export async function createDb(companyRoot: string): Promise<DbResult> {
 	}, 5 * 60 * 1000)
 
 	return { db, raw: sqlite }
-}
-
-/**
- * Rename the legacy "sessions" table to "agent_sessions" if it exists.
- * This is a one-time migration for databases created before the consolidation.
- */
-function migrateSessionsTable(sqlite: Database): void {
-	try {
-		const exists = sqlite.prepare(
-			"SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
-		).all() as Array<{ name: string }>
-		if (exists.length > 0) {
-			sqlite.exec('ALTER TABLE sessions RENAME TO agent_sessions')
-			// Recreate indexes with new names
-			sqlite.exec('DROP INDEX IF EXISTS idx_sessions_agent')
-			sqlite.exec('DROP INDEX IF EXISTS idx_sessions_task')
-			sqlite.exec('DROP INDEX IF EXISTS idx_sessions_status')
-			sqlite.exec('DROP INDEX IF EXISTS idx_sessions_started')
-			sqlite.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent ON agent_sessions(agent_id)')
-			sqlite.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_task ON agent_sessions(task_id)')
-			sqlite.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_status ON agent_sessions(status)')
-			sqlite.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_started ON agent_sessions(started_at)')
-		}
-	} catch {
-		// Table doesn't exist or already renamed — safe to ignore
-	}
-}
-
-/**
- * Rename legacy Better Auth tables (Kysely camelCase) to Drizzle snake_case.
- * Databases created before the Drizzle adapter migration have camelCase names.
- * This migrates data by renaming + dropping old tables after Drizzle creates new ones.
- */
-function migrateLegacyAuthTables(sqlite: Database): void {
-	const renames: Array<[string, string]> = [
-		['twoFactor', 'two_factor'],
-		['rateLimit', 'rate_limit'],
-	]
-
-	for (const [oldName, newName] of renames) {
-		try {
-			const exists = sqlite.prepare(
-				`SELECT name FROM sqlite_master WHERE type='table' AND name='${oldName}'`
-			).all() as Array<{ name: string }>
-			if (exists.length === 0) continue
-
-			// Check if new table already has data (from Drizzle migration)
-			const newExists = sqlite.prepare(
-				`SELECT name FROM sqlite_master WHERE type='table' AND name='${newName}'`
-			).all() as Array<{ name: string }>
-
-			if (newExists.length > 0) {
-				// Copy data from old to new (ignore duplicates)
-				try {
-					sqlite.exec(`INSERT OR IGNORE INTO "${newName}" SELECT * FROM "${oldName}"`)
-				} catch {
-					// Schema mismatch — columns may differ between Kysely and Drizzle versions
-				}
-			}
-
-			// Drop old camelCase table
-			sqlite.exec(`DROP TABLE IF EXISTS "${oldName}"`)
-		} catch {
-			// Safe to ignore
-		}
-	}
 }
 
 /**
