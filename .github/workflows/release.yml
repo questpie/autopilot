@@ -15,20 +15,27 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: npm
     steps:
       - uses: actions/checkout@v4
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
       - run: bun install
       - run: bunx turbo build --filter='./packages/*'
       - run: bunx turbo test --filter='./packages/*'
-      - name: Configure npm for provenance
-        run: echo "//registry.npmjs.org/:_authToken=" > .npmrc
+
       - name: Create Release PR or Publish
         uses: changesets/action@v1
         with:
-          publish: bun run publish:all
+          publish: npx changeset publish
           version: bunx changeset version
           commit: 'chore: version packages'
           title: 'chore: version packages'
