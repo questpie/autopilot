@@ -44,9 +44,11 @@ export class ClaudeAgentSDKProvider implements AgentProvider {
 			tools: mcpTools,
 		})
 
-		// Resolve per-agent allowed tools from agent.tools config
+		// Resolve per-agent tools from agent.tools config
+		// `tools` = base set available to the model
+		// `allowedTools` = auto-approved (no permission prompt)
 		const agentToolGroups: string[] = options.agentTools ?? ['fs', 'terminal']
-		const allowedTools = resolveAllowedTools(agentToolGroups)
+		const resolvedTools = resolveAllowedTools(agentToolGroups)
 
 		// Build agent actor for scope checking
 		const agentActor: Actor = {
@@ -68,7 +70,8 @@ export class ClaudeAgentSDKProvider implements AgentProvider {
 				options: {
 					systemPrompt,
 					cwd: toolContext.companyRoot,
-					allowedTools,
+					tools: resolvedTools,
+					allowedTools: resolvedTools,
 					mcpServers: { autopilot: autopilotMcp },
 					permissionMode: 'bypassPermissions',
 					allowDangerouslySkipPermissions: true,
@@ -78,8 +81,8 @@ export class ClaudeAgentSDKProvider implements AgentProvider {
 						PreToolUse: [{
 							matcher: 'Write|Edit',
 							hooks: [async (input: unknown) => {
-								const data = input as Record<string, unknown>
-								const filePath = (data.file_path ?? data.path) as string | undefined
+								const data = input as { tool_input?: Record<string, unknown> }
+								const filePath = (data.tool_input?.file_path ?? data.tool_input?.path) as string | undefined
 								if (filePath) {
 									const rel = relative(resolve(toolContext.companyRoot), resolve(filePath))
 									if (rel.startsWith('..')) return { decision: 'block', reason: 'Path outside company root' }
@@ -93,8 +96,8 @@ export class ClaudeAgentSDKProvider implements AgentProvider {
 						}, {
 							matcher: 'Read',
 							hooks: [async (input: unknown) => {
-								const data = input as Record<string, unknown>
-								const filePath = (data.file_path ?? data.path) as string | undefined
+								const data = input as { tool_input?: Record<string, unknown> }
+								const filePath = data.tool_input?.file_path as string | undefined
 								if (filePath) {
 									const rel = relative(resolve(toolContext.companyRoot), resolve(filePath))
 									if (!rel.startsWith('..') && isDeniedPath(rel)) {
