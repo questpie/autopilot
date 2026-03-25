@@ -5,7 +5,10 @@ import type { Artifact } from '@/lib/types'
 export function useArtifacts() {
 	return useQuery({
 		queryKey: queryKeys.artifacts,
-		queryFn: () => apiFetch<Artifact[]>('/api/artifacts'),
+		queryFn: async () => {
+			const res = await apiFetch<{ artifacts: Artifact[] } | Artifact[]>('/api/artifacts')
+			return Array.isArray(res) ? res : res.artifacts
+		},
 	})
 }
 

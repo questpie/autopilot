@@ -38,7 +38,7 @@ const files = new Hono<AppEnv>()
 		zValidator('json', FileWriteRequestSchema),
 		async (c) => {
 			const root = c.get('companyRoot')
-			const subPath = c.req.path.replace(/^\/files\//, '')
+			const subPath = c.req.path.replace(/^.*\/files\//, '')
 
 			let target: string
 			try {
@@ -76,7 +76,7 @@ const files = new Hono<AppEnv>()
 		zValidator('json', FileWriteRequestSchema),
 		async (c) => {
 			const root = c.get('companyRoot')
-			const subPath = c.req.path.replace(/^\/files\//, '')
+			const subPath = c.req.path.replace(/^.*\/files\//, '')
 
 			let target: string
 			try {
@@ -109,7 +109,7 @@ const files = new Hono<AppEnv>()
 		}),
 		async (c) => {
 			const root = c.get('companyRoot')
-			const subPath = c.req.path.replace(/^\/files\//, '')
+			const subPath = c.req.path.replace(/^.*\/files\//, '')
 
 			let target: string
 			try {

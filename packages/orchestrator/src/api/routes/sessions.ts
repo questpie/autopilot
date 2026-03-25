@@ -8,18 +8,18 @@ const sessions = new Hono<AppEnv>()
 	// GET /api/sessions — list active sessions for current user
 	.get('/', async (c) => {
 		const actor = c.get('actor')
-		if (!actor) return c.json({ error: 'Unauthorized' }, 401)
+		if (!actor) return c.json([])
 
 		const auth = c.get('auth')
 		try {
 			const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
 			const listFn = authApi.listSessions ?? authApi.listUserSessions
-			if (!listFn) return c.json({ error: 'Session listing not available' }, 501)
+			if (!listFn) return c.json([])
 
 			const result = await listFn({ headers: c.req.raw.headers }) as unknown[]
 			return c.json(result ?? [])
 		} catch {
-			return c.json({ error: 'Failed to list sessions' }, 500)
+			return c.json([])
 		}
 	})
 	// DELETE /api/sessions/:token — revoke a specific session by its token

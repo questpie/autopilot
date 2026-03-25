@@ -53,12 +53,20 @@ const tasks = new Hono<AppEnv>()
 		}),
 		zValidator(
 			'json',
-			TaskSchema.partial().required({ id: true, title: true, type: true, status: true, created_by: true }),
+			TaskSchema.partial().required({ title: true, type: true }),
 		),
 		async (c) => {
 			const storage = c.get('storage')
 			const body = c.req.valid('json')
-			const task = await storage.createTask(body as z.output<typeof TaskSchema>)
+			const now = new Date().toISOString()
+			const task = await storage.createTask({
+				id: body.id ?? `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+				status: body.status ?? 'backlog',
+				created_by: body.created_by ?? 'human',
+				created_at: body.created_at ?? now,
+				updated_at: body.updated_at ?? now,
+				...body,
+			} as z.output<typeof TaskSchema>)
 			return c.json(task, 201)
 		},
 	)

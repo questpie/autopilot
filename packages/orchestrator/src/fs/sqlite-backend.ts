@@ -289,6 +289,13 @@ export class SqliteBackend implements StorageBackend {
 			history: JSON.stringify(validated.history),
 		}).where(eq(schema.tasks.id, id))
 
+		await this.appendActivity({
+			agent: movedBy,
+			type: 'task_status_changed',
+			summary: `Task "${existing.title}" moved from ${existing.status} to ${newStatus}`,
+			details: { taskId: id, from: existing.status, to: newStatus, by: movedBy },
+		})
+
 		return validated
 	}
 

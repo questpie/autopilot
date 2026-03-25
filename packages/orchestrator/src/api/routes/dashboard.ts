@@ -15,7 +15,7 @@ const WidgetSummarySchema = z.object({
 const dashboard = new Hono<AppEnv>()
 	// ── GET /dashboard/layout ───────────────────────────────────────────
 	.get(
-		'/dashboard/layout',
+		'/layout',
 		describeRoute({
 			tags: ['dashboard'],
 			description: 'Read the dashboard layout override YAML',
@@ -38,7 +38,7 @@ const dashboard = new Hono<AppEnv>()
 	)
 	// ── GET /dashboard/widgets ──────────────────────────────────────────
 	.get(
-		'/dashboard/widgets',
+		'/widgets',
 		describeRoute({
 			tags: ['dashboard'],
 			description: 'List available dashboard widget definitions',
@@ -83,7 +83,7 @@ const dashboard = new Hono<AppEnv>()
 	)
 	// ── GET /dashboard/widgets/:name ────────────────────────────────────
 	.get(
-		'/dashboard/widgets/:name',
+		'/widgets/:name',
 		describeRoute({
 			tags: ['dashboard'],
 			description: 'Read a single widget definition by name',
@@ -108,7 +108,7 @@ const dashboard = new Hono<AppEnv>()
 	)
 	// ── GET /dashboard/pages ────────────────────────────────────────────
 	.get(
-		'/dashboard/pages',
+		'/pages',
 		describeRoute({
 			tags: ['dashboard'],
 			description: 'List registered dashboard pages',
