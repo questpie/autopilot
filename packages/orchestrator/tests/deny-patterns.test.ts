@@ -30,10 +30,20 @@ describe('isDeniedPath', () => {
 
 	test('allows normal paths', () => {
 		expect(isDeniedPath('tasks/backlog/task-1.yaml')).toBe(false)
-		expect(isDeniedPath('team/humans.yaml')).toBe(false)
 		expect(isDeniedPath('comms/channels/general/msg.yaml')).toBe(false)
-		expect(isDeniedPath('company.yaml')).toBe(false)
 		expect(isDeniedPath('secrets/github.yaml')).toBe(false)
+	})
+
+	test('denies team/humans.yaml', () => {
+		expect(isDeniedPath('team/humans.yaml')).toBe(true)
+	})
+
+	test('denies company.yaml', () => {
+		expect(isDeniedPath('company.yaml')).toBe(true)
+	})
+
+	test('allows team/agents.yaml (not denied)', () => {
+		expect(isDeniedPath('team/agents.yaml')).toBe(false)
 	})
 
 	test('handles leading slashes', () => {
@@ -78,7 +88,7 @@ describe('checkScope', () => {
 		}
 
 		expect(checkScope(agent, 'fs_read', 'tasks/backlog/task-1.yaml')).toBe(true)
-		expect(checkScope(agent, 'fs_read', 'team/humans.yaml')).toBe(true)
+		expect(checkScope(agent, 'fs_read', 'team/agents.yaml')).toBe(true)
 		expect(checkScope(agent, 'fs_write', 'tasks/active/task-1.yaml')).toBe(true)
 	})
 

@@ -10,6 +10,8 @@ export const HARDCODED_DENY_PATTERNS = [
 	'.data/**',
 	'.git/**',
 	'logs/audit/**',
+	'team/humans.yaml',
+	'company.yaml',
 ] as const
 
 const matchers = HARDCODED_DENY_PATTERNS.map((pattern) =>

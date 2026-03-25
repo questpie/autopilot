@@ -41,6 +41,7 @@ export const CompanySettingsSchema = z.object({
 			dimensions: z.number().int().min(1).default(768),
 		})
 		.optional(),
+	agent_http_allowlist: z.array(z.string()).optional(),
 })
 
 export const IntegrationConfigSchema = z.record(z.string(), z.record(z.string(), z.unknown()))

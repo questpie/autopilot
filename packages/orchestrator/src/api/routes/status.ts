@@ -15,6 +15,13 @@ const status = new Hono<AppEnv>().get(
 		},
 	}),
 	async (c) => {
+		const actor = c.get('actor')
+
+		// Unauthenticated requests receive minimal response
+		if (!actor) {
+			return c.json({ status: 'ok' })
+		}
+
 		const root = c.get('companyRoot')
 		const storage = c.get('storage')
 

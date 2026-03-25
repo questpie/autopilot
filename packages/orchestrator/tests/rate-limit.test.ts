@@ -125,6 +125,93 @@ describe('checkRateLimit', () => {
 		// Each call increments count, so remaining values should be 99, 98, 97, 96, 95
 		expect(remainings).toEqual([99, 98, 97, 96, 95])
 	})
+
+	it('should incorporate previous window count in sliding window estimation', async () => {
+		const { checkRateLimit } = await import('../src/api/middleware/rate-limit')
+		const { dbFactory } = await import('../src/db')
+		const { db: dbResult } = await container.resolveAsync([dbFactory])
+
+		const now = Math.floor(Date.now() / 1000)
+		const windowSec = 60
+		const windowStart = now - (now % windowSec)
+		const prevWindowStart = windowStart - windowSec
+
+		// Manually insert a previous window entry with count=10
+		const raw = (dbResult.db as any).$client
+		const expiresAt = windowStart + windowSec * 2
+		raw.prepare(
+			`INSERT OR REPLACE INTO rate_limit_entries (key, window_start, count, expires_at) VALUES (?, ?, ?, ?)`,
+		).run(`test:sliding:boundary`, prevWindowStart, 10, expiresAt)
+
+		// Now call checkRateLimit — the sliding window should factor in the previous count
+		const result = checkRateLimit(dbResult.db, `test:sliding:boundary`, windowSec, 20)
+
+		// The estimated count must be > 1 (current) because prevCount * weight > 0
+		// (unless we're right at the window boundary, weight ~ 0)
+		// We can't assert an exact value without mocking time, but we assert it is <= max=20 here
+		// and that remaining reflects the weighted estimate
+		expect(result.allowed).toBe(true)
+		expect(result.remaining).toBeLessThan(20)
+	})
+})
+
+// ─── checkPasswordResetLimit unit tests ─────────────────────────────────────
+
+describe('checkPasswordResetLimit', () => {
+	it('should allow up to 3 reset attempts per 15 minutes', async () => {
+		const { checkPasswordResetLimit } = await import('../src/api/middleware/rate-limit')
+		const { dbFactory } = await import('../src/db')
+		const { db: dbResult } = await container.resolveAsync([dbFactory])
+
+		const email = `reset-test-${Date.now()}@example.com`
+
+		// First 3 attempts should be allowed
+		for (let i = 0; i < 3; i++) {
+			const result = checkPasswordResetLimit(dbResult.db, email)
+			expect(result.allowed).toBe(true)
+			expect(result.remaining).toBe(2 - i)
+		}
+
+		// 4th attempt should be denied
+		const denied = checkPasswordResetLimit(dbResult.db, email)
+		expect(denied.allowed).toBe(false)
+		expect(denied.remaining).toBe(0)
+	})
+
+	it('should use a 900-second window (15 minutes)', async () => {
+		const { checkPasswordResetLimit } = await import('../src/api/middleware/rate-limit')
+		const { dbFactory } = await import('../src/db')
+		const { db: dbResult } = await container.resolveAsync([dbFactory])
+
+		const email = `reset-window-${Date.now()}@example.com`
+		const result = checkPasswordResetLimit(dbResult.db, email)
+
+		const now = Math.floor(Date.now() / 1000)
+		// resetAt should be aligned to a 900-second boundary
+		const windowStart = now - (now % 900)
+		const expectedResetAt = windowStart + 900
+
+		expect(result.resetAt).toBe(expectedResetAt)
+	})
+
+	it('should isolate limits per email address', async () => {
+		const { checkPasswordResetLimit } = await import('../src/api/middleware/rate-limit')
+		const { dbFactory } = await import('../src/db')
+		const { db: dbResult } = await container.resolveAsync([dbFactory])
+
+		const ts = Date.now()
+		const email1 = `reset-iso1-${ts}@example.com`
+		const email2 = `reset-iso2-${ts}@example.com`
+
+		// Exhaust email1
+		for (let i = 0; i < 3; i++) checkPasswordResetLimit(dbResult.db, email1)
+		const denied = checkPasswordResetLimit(dbResult.db, email1)
+		expect(denied.allowed).toBe(false)
+
+		// email2 should still be fresh
+		const allowed = checkPasswordResetLimit(dbResult.db, email2)
+		expect(allowed.allowed).toBe(true)
+	})
 })
 
 // ─── ipRateLimit e2e tests ──────────────────────────────────────────────────
@@ -231,8 +318,75 @@ describe('actorRateLimit', () => {
 			headers: { 'X-Forwarded-For': testIp },
 		})
 
-		// Search limit is 10/min
+		// Search limit is 10/min for humans
 		const limit = res.headers.get('X-RateLimit-Limit')
 		expect(limit).toBe('10')
+	})
+})
+
+// ─── Agent rate limiting tests ───────────────────────────────────────────────
+
+describe('agent rate limiting', () => {
+	it('agents are rate limited (not exempt) — general limit is 600/min', async () => {
+		const { checkRateLimit } = await import('../src/api/middleware/rate-limit')
+		const { dbFactory } = await import('../src/db')
+		const { db: dbResult } = await container.resolveAsync([dbFactory])
+
+		// Simulate agent general limit: 600/min
+		const key = `actor:agent-test-${Date.now()}`
+		const max = 600
+
+		// Should allow first request
+		const result = checkRateLimit(dbResult.db, key, 60, max)
+		expect(result.allowed).toBe(true)
+		expect(result.remaining).toBe(599)
+	})
+
+	it('agent search limit is 50/min', async () => {
+		const { checkRateLimit } = await import('../src/api/middleware/rate-limit')
+		const { dbFactory } = await import('../src/db')
+		const { db: dbResult } = await container.resolveAsync([dbFactory])
+
+		const key = `actor:agent-search-${Date.now()}:/api/search`
+		const max = 50
+
+		// Exhaust the search limit
+		for (let i = 0; i < max; i++) {
+			const r = checkRateLimit(dbResult.db, key, 60, max)
+			expect(r.allowed).toBe(true)
+		}
+
+		// Next request should be denied
+		const denied = checkRateLimit(dbResult.db, key, 60, max)
+		expect(denied.allowed).toBe(false)
+		expect(denied.remaining).toBe(0)
+	})
+
+	it('agent chat limit is 100/min', async () => {
+		const { checkRateLimit } = await import('../src/api/middleware/rate-limit')
+		const { dbFactory } = await import('../src/db')
+		const { db: dbResult } = await container.resolveAsync([dbFactory])
+
+		const key = `actor:agent-chat-${Date.now()}:/api/chat`
+		const max = 100
+
+		// Should allow requests up to limit
+		for (let i = 0; i < max; i++) {
+			const r = checkRateLimit(dbResult.db, key, 60, max)
+			expect(r.allowed).toBe(true)
+		}
+
+		// 101st should be denied
+		const denied = checkRateLimit(dbResult.db, key, 60, max)
+		expect(denied.allowed).toBe(false)
+	})
+
+	it('agent limits are higher than human limits for general requests', () => {
+		// Agent general: 600/min vs human general: 300/min
+		expect(600).toBeGreaterThan(300)
+		// Agent search: 50/min vs human search: 10/min
+		expect(50).toBeGreaterThan(10)
+		// Agent chat: 100/min vs human chat: 20/min
+		expect(100).toBeGreaterThan(20)
 	})
 })

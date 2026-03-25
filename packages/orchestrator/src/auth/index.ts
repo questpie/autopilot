@@ -10,9 +10,40 @@ import { apiKey } from '@better-auth/api-key'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import type { AutopilotDb } from '../db'
 import * as authSchema from '../db/auth-schema'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
+const PASSWORD_COMPLEXITY_RE = /^(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/
+
+function validatePasswordComplexity(password: string): void {
+	if (!PASSWORD_COMPLEXITY_RE.test(password)) {
+		throw new Error(
+			'Password must be at least 12 characters and include at least one digit and one special character.',
+		)
+	}
+}
+
+async function loadInviteEmails(companyRoot: string): Promise<string[] | null> {
+	try {
+		const raw = await readFile(join(companyRoot, '.auth', 'invites.yaml'), 'utf-8')
+		// Simple YAML parse: look for lines like "  - email@example.com"
+		const emails: string[] = []
+		for (const line of raw.split('\n')) {
+			const trimmed = line.trim()
+			if (trimmed.startsWith('- ')) {
+				const email = trimmed.slice(2).trim().replace(/^['"]|['"]$/g, '')
+				if (email) emails.push(email)
+			}
+		}
+		return emails
+	} catch {
+		// File doesn't exist — allow all signups (fresh install)
+		return null
+	}
+}
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export async function createAuth(db: AutopilotDb) {
+export async function createAuth(db: AutopilotDb, companyRoot: string) {
 	const auth = betterAuth({
 		database: drizzleAdapter(db, {
 			provider: 'sqlite',
@@ -20,7 +51,22 @@ export async function createAuth(db: AutopilotDb) {
 		}),
 		basePath: '/api/auth',
 
-		emailAndPassword: { enabled: true },
+		emailAndPassword: {
+			enabled: true,
+			minPasswordLength: 12,
+			password: {
+				hash: async (password: string) => {
+					validatePasswordComplexity(password)
+					// Delegate to Better Auth's default hashing
+					const { hash } = await import('better-auth/crypto')
+					return hash(password)
+				},
+				verify: async ({ hash, password }: { hash: string; password: string }) => {
+					const { verify } = await import('better-auth/crypto')
+					return verify({ hash, password })
+				},
+			},
+		},
 
 		session: {
 			expiresIn: 60 * 60 * 24 * 30,
@@ -51,6 +97,50 @@ export async function createAuth(db: AutopilotDb) {
 			},
 		},
 
+		databaseHooks: {
+			user: {
+				create: {
+					before: async (user: { email: string; [key: string]: unknown }) => {
+						// Invite-only: check .auth/invites.yaml
+						const allowedEmails = await loadInviteEmails(companyRoot)
+						if (allowedEmails !== null) {
+							const emailLower = user.email.toLowerCase()
+							const isInvited = allowedEmails.some((e) => e.toLowerCase() === emailLower)
+							if (!isInvited) {
+								throw new Error('Registration is invite-only. Your email is not on the invite list.')
+							}
+						}
+						return { data: user }
+					},
+				},
+			},
+			session: {
+				create: {
+					after: async (session: { userId: string; [key: string]: unknown }) => {
+						// Banned user logout: reject session creation for banned users
+						try {
+							const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
+							const listUsersFn = authApi.listUsers
+							if (listUsersFn) {
+								const result = await listUsersFn({ query: { limit: 9999 } }) as { users?: Array<{ id: string; banned?: boolean }> }
+								const user = result?.users?.find((u) => u.id === session.userId)
+								if (user?.banned === true) {
+									const deleteSessionFn = authApi.revokeSession
+									if (deleteSessionFn) {
+										await deleteSessionFn({ body: { token: (session as { token?: string }).token } }).catch(() => {})
+									}
+									throw new Error('Your account has been banned.')
+								}
+							}
+						} catch (err) {
+							// Re-throw ban errors, swallow lookup failures
+							if ((err as Error).message === 'Your account has been banned.') throw err
+						}
+					},
+				},
+			},
+		},
+
 		plugins: [
 			bearer(),
 			apiKey(),
@@ -71,10 +161,10 @@ export async function createAuth(db: AutopilotDb) {
 
 export type Auth = Awaited<ReturnType<typeof createAuth>>
 
-import { container } from '../container'
+import { container, companyRootFactory } from '../container'
 import { dbFactory } from '../db'
 
 export const authFactory = container.registerAsync('auth', async (c) => {
-	const { db: dbResult } = await c.resolveAsync([dbFactory])
-	return createAuth(dbResult.db)
+	const { db: dbResult, companyRoot } = await c.resolveAsync([dbFactory, companyRootFactory])
+	return createAuth(dbResult.db, companyRoot)
 })

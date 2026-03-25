@@ -107,7 +107,9 @@ function makeTaskPayload(overrides: Record<string, unknown> = {}) {
 // ─── GET /api/status ────────────────────────────────────────────────────────
 
 describe('GET /api/status', () => {
-	it('should return company status info', async () => {
+	it('should return full status when actor is set (authEnabled: false uses implicit owner)', async () => {
+		// authEnabled: false → resolveActor returns implicit owner (non-null actor)
+		// → full company payload is returned
 		const res = await app.request('/api/status')
 		expect(res.status).toBe(200)
 
@@ -117,6 +119,22 @@ describe('GET /api/status', () => {
 		expect(typeof data.activeTasks).toBe('number')
 		expect(typeof data.runningSessions).toBe('number')
 		expect(typeof data.pendingApprovals).toBe('number')
+	})
+
+	it('should return minimal {status: ok} when no actor is present (unauthenticated with auth enabled)', async () => {
+		// Create a separate app with auth ENABLED but no credentials supplied.
+		// resolveActor returns null for requests with no token → minimal response.
+		const { createApp } = await import('../src/api/app')
+		const authApp = createApp({ authEnabled: true, corsOrigin: '*' })
+
+		const res = await authApp.request('/api/status')
+		expect(res.status).toBe(200)
+
+		const data = (await res.json()) as Record<string, unknown>
+		expect(data.status).toBe('ok')
+		expect(data.company).toBeUndefined()
+		expect(data.agentCount).toBeUndefined()
+		expect(data.activeTasks).toBeUndefined()
 	})
 })
 

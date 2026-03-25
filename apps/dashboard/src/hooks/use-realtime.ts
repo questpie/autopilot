@@ -20,12 +20,9 @@ export function useRealtime() {
 
 		async function connect() {
 			try {
-				const token = localStorage.getItem('autopilot-token')
-				const url = new URL('/api/events', 'http://localhost:7778')
-				if (token) url.searchParams.set('token', token)
-
-				const response = await fetch(url.toString(), {
+				const response = await fetch('http://localhost:7778/api/events', {
 					signal: controller.signal,
+					credentials: 'include',
 					headers: { 'Accept': 'text/event-stream' },
 				})
 

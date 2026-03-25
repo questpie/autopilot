@@ -1,7 +1,17 @@
 import { join } from 'node:path'
+import { timingSafeEqual } from 'node:crypto'
 import type { Webhook } from '@questpie/autopilot-spec'
 import { WebhooksFileSchema } from '@questpie/autopilot-spec'
 import { readYaml } from '../fs/yaml'
+
+/**
+ * Timing-safe string comparison to prevent timing attacks on secrets.
+ * Returns false immediately if lengths differ (length is not secret information).
+ */
+function safeCompare(a: string, b: string): boolean {
+	if (a.length !== b.length) return false
+	return timingSafeEqual(Buffer.from(a), Buffer.from(b))
+}
 
 /** Configuration for the incoming-webhook HTTP server. */
 export interface WebhookServerOptions {
@@ -111,7 +121,7 @@ export class WebhookServer {
 				const { parse } = await import('yaml')
 				const secret = parse(secretFile)
 				const token = authHeader.slice(7)
-				return token === secret.value
+				return safeCompare(token, secret.value)
 			} catch {
 				return false
 			}
@@ -138,7 +148,7 @@ export class WebhookServer {
 				const hmac = new Bun.CryptoHasher('sha256', secret.value)
 				hmac.update(body)
 				const expected = `sha256=${hmac.digest('hex')}`
-				return signature === expected
+				return safeCompare(signature, expected)
 			} catch {
 				return false
 			}

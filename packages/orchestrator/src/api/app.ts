@@ -6,6 +6,7 @@
  */
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { bodyLimit } from 'hono/body-limit'
 import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import { authFactory } from '../auth'
@@ -18,6 +19,7 @@ import { container, companyRootFactory } from '../container'
 import { authMiddleware } from './middleware/auth'
 import { ipAllowlist } from './middleware/ip-allowlist'
 import { ipRateLimit, actorRateLimit } from './middleware/rate-limit'
+import { securityHeaders } from './middleware/security-headers'
 import { docs } from './docs'
 import {
 	status,
@@ -58,6 +60,8 @@ export interface AppConfig {
  *
  * Middleware order:
  * 1. CORS
+ * 1.5. Security headers
+ * 1.6. Body size limit (1 MB default; 10 MB for upload routes)
  * 2. Global error handler
  * 3. Context injection (companyRoot, storage, db, auth)
  * 3.5. IP Allowlist
@@ -76,11 +80,28 @@ export function createApp(config: AppConfig) {
 	app.use(
 		'*',
 		cors({
-			origin: config.corsOrigin ?? '*',
+			origin: config.corsOrigin ?? 'http://localhost:3001',
 			allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
 			allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+			credentials: true,
 		}),
 	)
+
+	// ── 1.5. Security headers ────────────────────────────────────────────
+	app.use('*', securityHeaders())
+
+	// ── 1.6. Body size limit (1 MB default; 10 MB for upload routes) ────
+	// Use a single middleware that applies different limits based on path.
+	app.use('*', async (c, next) => {
+		const path = new URL(c.req.url).pathname
+		// The upload endpoint is POST /api/ (mounted via .route('/api', upload))
+		const isUpload = path === '/api/' || path === '/api'
+		const limit = isUpload ? 10 * 1024 * 1024 : 1 * 1024 * 1024
+		return bodyLimit({
+			maxSize: limit,
+			onError: (c) => c.json({ error: 'request body too large' }, 413),
+		})(c, next)
+	})
 
 	// ── 2. Global error handler ──────────────────────────────────────────
 	app.onError((err, c) => {
@@ -133,6 +154,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/artifacts', artifacts)
 		.route('/api/skills', skills)
 		.route('/api/dashboard', dashboard)
+		.route('/api', dashboard)
 		.route('/api', files)
 		.route('/api', upload)
 		.route('/api/events', events)

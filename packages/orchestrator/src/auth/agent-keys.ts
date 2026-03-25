@@ -2,18 +2,20 @@
  * Agent key management — independent of Better Auth.
  *
  * Keys are generated with crypto.randomBytes, hashed with SHA-256,
- * and stored in .auth/agent-keys.yaml. Raw keys exist only in memory.
+ * and stored in .auth/agent-keys.yaml. Raw keys are encrypted with the
+ * master key so they survive restarts without being regenerated.
  */
-import { randomBytes, createHash } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import { chmod } from 'node:fs/promises'
 import { readYamlUnsafe, writeYaml, fileExists } from '../fs/yaml'
+import { ensureMasterKey, loadMasterKey, encryptToBase64, decryptFromBase64, hashApiKey } from './crypto'
 import type { AgentKeyEntry } from './types'
 
 /**
  * Generate API keys for all agents at startup.
- * Keys are ephemeral — regenerated each time.
- * Only hashes are persisted to .auth/agent-keys.yaml.
+ * Keys are persisted — if an agent already has an encryptedKey in the YAML file,
+ * it is decrypted and reused. Only agents without an entry get a new key generated.
  */
 export async function ensureAgentKeys(
 	companyRoot: string,
@@ -21,16 +23,57 @@ export async function ensureAgentKeys(
 ): Promise<Map<string, string>> {
 	const keysPath = join(companyRoot, '.auth', 'agent-keys.yaml')
 	const keyMap = new Map<string, string>()
+
+	// Ensure master key exists and load it for encryption/decryption
+	await ensureMasterKey(companyRoot)
+	const masterKey = await loadMasterKey(companyRoot)
+
+	// Load existing entries from disk (if any)
+	let existingEntries: AgentKeyEntry[] = []
+	if (await fileExists(keysPath)) {
+		try {
+			const data = (await readYamlUnsafe(keysPath)) as { keys: AgentKeyEntry[] }
+			if (data?.keys) {
+				existingEntries = data.keys
+			}
+		} catch {
+			// Corrupted file — start fresh
+		}
+	}
+
+	const existingByAgentId = new Map<string, AgentKeyEntry>(
+		existingEntries.map((e) => [e.agentId, e]),
+	)
+
 	const entries: AgentKeyEntry[] = []
 
 	for (const agent of agents) {
+		const existing = existingByAgentId.get(agent.id)
+
+		if (existing?.encryptedKey) {
+			// Decrypt and reuse the persisted key
+			try {
+				const rawKey = await decryptFromBase64(existing.encryptedKey, masterKey)
+				keyMap.set(agent.id, rawKey)
+				entries.push(existing)
+				console.log(`[auth] Loaded persisted API key for agent "${agent.id}"`)
+				continue
+			} catch {
+				// Decryption failed (e.g. master key rotated) — fall through to regenerate
+				console.warn(`[auth] Failed to decrypt existing key for agent "${agent.id}", regenerating`)
+			}
+		}
+
+		// Generate a new key
 		const rawKey = `ap_${agent.id}_${randomBytes(24).toString('base64url')}`
-		const keyHash = createHash('sha256').update(rawKey).digest('hex')
+		const keyHash = hashApiKey(rawKey)
+		const encryptedKey = await encryptToBase64(rawKey, masterKey)
 
 		keyMap.set(agent.id, rawKey)
 		entries.push({
 			agentId: agent.id,
 			keyHash,
+			encryptedKey,
 			createdAt: new Date().toISOString(),
 		})
 
@@ -64,7 +107,7 @@ export async function verifyAgentKey(
 
 	if (!data?.keys) return null
 
-	const keyHash = createHash('sha256').update(rawKey).digest('hex')
+	const keyHash = hashApiKey(rawKey)
 	const entry = data.keys.find((k) => k.keyHash === keyHash)
 	return entry ? { agentId: entry.agentId } : null
 }

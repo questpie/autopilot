@@ -8,4 +8,5 @@ export const SecretSchema = z.object({
 	value: z.string(),
 	allowed_agents: z.array(z.string()).default([]),
 	usage: z.string().default(''),
+	encrypted: z.boolean().default(false),
 })

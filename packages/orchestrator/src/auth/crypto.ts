@@ -82,3 +82,28 @@ export async function decrypt(encrypted: Buffer, key: CryptoKey): Promise<string
 	)
 	return new TextDecoder().decode(decrypted)
 }
+
+/** Encrypt plaintext and return base64-encoded result */
+export async function encryptToBase64(plaintext: string, masterKey: CryptoKey): Promise<string> {
+	const encrypted = await encrypt(plaintext, masterKey)
+	return encrypted.toString('base64')
+}
+
+/** Decrypt base64-encoded ciphertext */
+export async function decryptFromBase64(base64: string, masterKey: CryptoKey): Promise<string> {
+	const encrypted = Buffer.from(base64, 'base64')
+	return decrypt(encrypted, masterKey)
+}
+
+/** SHA-256 hash a string, return hex */
+export function hashApiKey(raw: string): string {
+	const hasher = new Bun.CryptoHasher('sha256')
+	hasher.update(raw)
+	return hasher.digest('hex')
+}
+
+/** Mask a secret for safe logging */
+export function maskSecret(value: string): string {
+	if (value.length < 10) return '****'
+	return value.slice(0, 4) + '****' + value.slice(-4)
+}

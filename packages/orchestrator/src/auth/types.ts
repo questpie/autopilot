@@ -35,4 +35,5 @@ export interface AgentKeyEntry {
 	agentId: string
 	keyHash: string
 	createdAt: string
+	encryptedKey?: string
 }

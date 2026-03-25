@@ -3,7 +3,8 @@
  *
  * Two layers:
  * - ipRateLimit(): 20 req/min by IP, BEFORE auth (protects unauthenticated endpoints)
- * - actorRateLimit(): per-actor limits AFTER auth (human 300/min, search 10/min, chat 20/min, agents exempt)
+ * - actorRateLimit(): per-actor limits AFTER auth (human 300/min, search 10/min, chat 20/min;
+ *   agents 600/min general, 50/min search, 100/min chat; webhook source exempt)
  */
 import { createMiddleware } from 'hono/factory'
 import type { Database } from 'bun:sqlite'
@@ -12,8 +13,12 @@ import type { AutopilotDb } from '../../db'
 import { getClientIp } from './ip-allowlist'
 
 /**
- * Check and increment rate limit counter using atomic SQLite transactions.
- * Uses SELECT + INSERT/UPDATE inside a transaction for atomicity.
+ * Check and increment rate limit counter using a weighted two-window sliding approximation.
+ *
+ * Estimation formula:
+ *   prevCount * ((windowStart + windowSec - now) / windowSec) + currentCount
+ *
+ * This avoids hard resets at window boundaries without requiring schema changes.
  */
 export function checkRateLimit(
 	db: AutopilotDb,
@@ -23,33 +28,47 @@ export function checkRateLimit(
 ): { allowed: boolean; remaining: number; resetAt: number } {
 	const now = Math.floor(Date.now() / 1000)
 	const windowStart = now - (now % windowSec) // Align to window boundary
+	const prevWindowStart = windowStart - windowSec
 	const expiresAt = windowStart + windowSec * 2 // Keep for 2 windows for cleanup
 
 	const raw = (db as unknown as { $client: Database }).$client
 
 	// Use a transaction for atomicity
-	const count = raw.transaction(() => {
+	const result = raw.transaction(() => {
+		// Get previous window count for sliding window estimation
+		const prevEntry = raw
+			.prepare(`SELECT count FROM rate_limit_entries WHERE key = ? AND window_start = ?`)
+			.get(key, prevWindowStart) as { count: number } | null
+		const prevCount = prevEntry?.count ?? 0
+
+		// Upsert current window count
 		const existing = raw
 			.prepare(`SELECT id, count FROM rate_limit_entries WHERE key = ? AND window_start = ?`)
 			.get(key, windowStart) as { id: number; count: number } | null
 
+		let currentCount: number
 		if (existing) {
-			const newCount = existing.count + 1
+			currentCount = existing.count + 1
 			raw.prepare(`UPDATE rate_limit_entries SET count = ? WHERE id = ?`).run(
-				newCount,
+				currentCount,
 				existing.id,
 			)
-			return newCount
+		} else {
+			currentCount = 1
+			raw.prepare(
+				`INSERT INTO rate_limit_entries (key, window_start, count, expires_at) VALUES (?, ?, 1, ?)`,
+			).run(key, windowStart, expiresAt)
 		}
 
-		raw.prepare(
-			`INSERT INTO rate_limit_entries (key, window_start, count, expires_at) VALUES (?, ?, 1, ?)`,
-		).run(key, windowStart, expiresAt)
-		return 1
+		// Weighted sliding window: weight previous window by its remaining overlap
+		const weight = (windowStart + windowSec - now) / windowSec
+		const estimatedCount = Math.floor(prevCount * weight) + currentCount
+
+		return { estimatedCount, currentCount }
 	})()
 
-	const allowed = count <= max
-	const remaining = Math.max(0, max - count)
+	const allowed = result.estimatedCount <= max
+	const remaining = Math.max(0, max - result.estimatedCount)
 	const resetAt = windowStart + windowSec
 
 	return { allowed, remaining, resetAt }
@@ -63,12 +82,13 @@ export function checkRateLimit(
 export function ipRateLimit() {
 	return createMiddleware<AppEnv>(async (c, next) => {
 		const path = new URL(c.req.url).pathname
+		const clientIp = getClientIp(c)
 
-		// Exempt webhooks and healthcheck
+		// Exempt webhooks, healthcheck, and localhost in dev
 		if (path.startsWith('/hooks/') || path === '/api/status') return next()
+		if (clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === '::ffff:127.0.0.1') return next()
 
 		const db = c.get('db')
-		const clientIp = getClientIp(c)
 		const key = `ip:${clientIp}`
 
 		const result = checkRateLimit(db, key, 60, 20)
@@ -88,8 +108,9 @@ export function ipRateLimit() {
 
 /**
  * Actor-based rate limiting — applied AFTER auth middleware.
- * Agents and webhooks are exempt.
+ * Only webhook source is exempt.
  * Human limits: 300/min general, 10/min search, 20/min chat.
+ * Agent limits: 600/min general, 50/min search, 100/min chat.
  */
 export function actorRateLimit() {
 	return createMiddleware<AppEnv>(async (c, next) => {
@@ -98,24 +119,25 @@ export function actorRateLimit() {
 		// No actor = unauthenticated (already rate-limited by ipRateLimit)
 		if (!actor) return next()
 
-		// Agents and webhooks are exempt
-		if (actor.type === 'agent' || actor.source === 'webhook') return next()
+		// Only webhooks are exempt (not agents)
+		if (actor.source === 'webhook') return next()
 
 		const path = new URL(c.req.url).pathname
 		const db = c.get('db')
+		const isAgent = actor.type === 'agent'
 
 		let key: string
 		let max: number
 
 		if (path.startsWith('/api/search')) {
 			key = `actor:${actor.id}:/api/search`
-			max = 10
+			max = isAgent ? 50 : 10
 		} else if (path.startsWith('/api/chat')) {
 			key = `actor:${actor.id}:/api/chat`
-			max = 20
+			max = isAgent ? 100 : 20
 		} else {
 			key = `actor:${actor.id}`
-			max = 300
+			max = isAgent ? 600 : 300
 		}
 
 		const result = checkRateLimit(db, key, 60, max)
@@ -130,4 +152,16 @@ export function actorRateLimit() {
 
 		await next()
 	})
+}
+
+/**
+ * Password reset rate limiter — 3 attempts per 15 minutes per email address.
+ * Call this before issuing a reset token or sending a reset email.
+ */
+export function checkPasswordResetLimit(
+	db: AutopilotDb,
+	email: string,
+): { allowed: boolean; remaining: number; resetAt: number } {
+	const key = `auth:reset:${email}`
+	return checkRateLimit(db, key, 900, 3)
 }

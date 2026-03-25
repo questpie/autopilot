@@ -64,19 +64,33 @@ export function isIpAllowed(
 	return false
 }
 
+const DEFAULT_TRUSTED_PROXIES = ['127.0.0.1', '::1', '::ffff:127.0.0.1']
+
 /**
  * Extract client IP from request headers.
- * Priority: X-Forwarded-For (first entry) -> x-real-ip -> fallback '127.0.0.1'
+ * X-Forwarded-For is only trusted when the connecting socket IP is in trustedProxies.
+ * Otherwise falls back to socket IP (x-real-ip header) or '127.0.0.1'.
+ *
+ * @param c - Hono context with request headers
+ * @param trustedProxies - List of IPs considered trusted proxies (default: loopback addresses)
  */
-export function getClientIp(c: { req: { header: (name: string) => string | undefined } }): string {
-	const xff = c.req.header('x-forwarded-for')
-	if (xff) {
-		const first = xff.split(',')[0]?.trim()
-		if (first) return first
+export function getClientIp(
+	c: { req: { header: (name: string) => string | undefined } },
+	trustedProxies: string[] = DEFAULT_TRUSTED_PROXIES,
+): string {
+	// Determine the socket/connecting IP from x-real-ip (set by the closest proxy/server)
+	const socketIp = c.req.header('x-real-ip') ?? '127.0.0.1'
+
+	// Only trust X-Forwarded-For when the connecting IP is a known trusted proxy
+	if (trustedProxies.includes(socketIp)) {
+		const xff = c.req.header('x-forwarded-for')
+		if (xff) {
+			const first = xff.split(',')[0]?.trim()
+			if (first) return first
+		}
 	}
-	const realIp = c.req.header('x-real-ip')
-	if (realIp) return realIp
-	return '127.0.0.1'
+
+	return socketIp
 }
 
 /**
@@ -88,11 +102,15 @@ export function ipAllowlist() {
 	return createMiddleware<AppEnv>(async (c, next) => {
 		const companyRoot = c.get('companyRoot')
 		let allowlist: string[] = []
+		let trustedProxies: string[] | undefined
 		try {
 			const { readYamlUnsafe } = await import('../../fs/yaml')
 			const { join } = await import('node:path')
-			const company = await readYamlUnsafe(join(companyRoot, 'company.yaml')) as { settings?: { auth?: { ip_allowlist?: string[] } } }
+			const company = await readYamlUnsafe(join(companyRoot, 'company.yaml')) as {
+				settings?: { auth?: { ip_allowlist?: string[]; trusted_proxies?: string[] } }
+			}
 			allowlist = company?.settings?.auth?.ip_allowlist ?? []
+			trustedProxies = company?.settings?.auth?.trusted_proxies
 		} catch {
 			// No company.yaml or no allowlist — allow all
 		}
@@ -103,7 +121,7 @@ export function ipAllowlist() {
 		// Exempt: webhooks and healthcheck
 		if (path.startsWith('/hooks/') || path === '/api/status') return next()
 
-		const clientIp = getClientIp(c)
+		const clientIp = getClientIp(c, trustedProxies)
 		const cidrs = allowlist.map(parseCidr).filter((x): x is NonNullable<typeof x> => x !== null)
 
 		if (!isIpAllowed(clientIp, cidrs)) {

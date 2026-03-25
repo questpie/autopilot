@@ -79,7 +79,7 @@ describe('2FA enforcement in resolveActor', () => {
 		}
 	})
 
-	test('returns actor normally when twoFactorEnabled=false', async () => {
+	test('blocks owner without 2FA on non-auth paths (mandatory 2FA)', async () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			await writeFile(
@@ -88,6 +88,34 @@ describe('2FA enforcement in resolveActor', () => {
 			)
 
 			const request = new Request('http://localhost:7778/api/tasks', {
+				headers: { Authorization: 'Bearer valid-token' },
+			})
+			const actor = await resolveActor(request, {
+				authEnabled: true,
+				companyRoot: root,
+				auth: {
+					api: {
+						getSession: async () => ({
+							user: { id: 'user-2', email: 'test@test.com', name: 'Test' },
+						}),
+					},
+				} as any,
+			})
+			expect(actor).toBeNull()
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test('allows owner without 2FA on auth paths (to set up 2FA)', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			await writeFile(
+				join(root, 'team', 'humans.yaml'),
+				stringify({ humans: [{ email: 'test@test.com', role: 'owner' }] }),
+			)
+
+			const request = new Request('http://localhost:7778/api/auth/two-factor/enable', {
 				headers: { Authorization: 'Bearer valid-token' },
 			})
 			const actor = await resolveActor(request, {

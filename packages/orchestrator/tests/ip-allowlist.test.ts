@@ -7,6 +7,14 @@ import { parseCidr, isIpAllowed, getClientIp } from '../src/api/middleware/ip-al
 import { container, configureContainer } from '../src/container'
 import type { StorageBackend } from '../src/fs/storage'
 
+function makeCtx(headers: Record<string, string>) {
+	return {
+		req: {
+			header: (name: string) => headers[name.toLowerCase()],
+		},
+	}
+}
+
 // ─── Unit tests for pure functions ──────────────────────────────────────────
 
 describe('parseCidr', () => {
@@ -95,6 +103,49 @@ describe('isIpAllowed', () => {
 		expect(isIpAllowed('192.168.1.50', cidrs)).toBe(true)
 		expect(isIpAllowed('10.1.2.3', cidrs)).toBe(true)
 		expect(isIpAllowed('172.16.0.1', cidrs)).toBe(false)
+	})
+})
+
+// ─── getClientIp trusted proxy tests ────────────────────────────────────────
+
+describe('getClientIp', () => {
+	test('uses X-Forwarded-For when socket IP is a trusted proxy (loopback default)', () => {
+		const ctx = makeCtx({ 'x-forwarded-for': '203.0.113.5', 'x-real-ip': '127.0.0.1' })
+		expect(getClientIp(ctx)).toBe('203.0.113.5')
+	})
+
+	test('uses X-Forwarded-For when socket IP is ::1 (IPv6 loopback)', () => {
+		const ctx = makeCtx({ 'x-forwarded-for': '203.0.113.5', 'x-real-ip': '::1' })
+		expect(getClientIp(ctx)).toBe('203.0.113.5')
+	})
+
+	test('ignores X-Forwarded-For when socket IP is NOT a trusted proxy', () => {
+		const ctx = makeCtx({ 'x-forwarded-for': '203.0.113.5', 'x-real-ip': '1.2.3.4' })
+		expect(getClientIp(ctx)).toBe('1.2.3.4')
+	})
+
+	test('uses socket IP when no X-Forwarded-For and socket is trusted', () => {
+		const ctx = makeCtx({ 'x-real-ip': '127.0.0.1' })
+		expect(getClientIp(ctx)).toBe('127.0.0.1')
+	})
+
+	test('falls back to 127.0.0.1 when no headers present', () => {
+		const ctx = makeCtx({})
+		expect(getClientIp(ctx)).toBe('127.0.0.1')
+	})
+
+	test('uses first entry of X-Forwarded-For when multiple IPs present', () => {
+		const ctx = makeCtx({ 'x-forwarded-for': '10.0.0.5, 10.0.0.1', 'x-real-ip': '127.0.0.1' })
+		expect(getClientIp(ctx)).toBe('10.0.0.5')
+	})
+
+	test('respects custom trusted proxies list', () => {
+		const trustedProxies = ['10.0.0.1']
+		const ctxAllowed = makeCtx({ 'x-forwarded-for': '203.0.113.99', 'x-real-ip': '10.0.0.1' })
+		expect(getClientIp(ctxAllowed, trustedProxies)).toBe('203.0.113.99')
+
+		const ctxBlocked = makeCtx({ 'x-forwarded-for': '203.0.113.99', 'x-real-ip': '127.0.0.1' })
+		expect(getClientIp(ctxBlocked, trustedProxies)).toBe('127.0.0.1')
 	})
 })
 
@@ -229,5 +280,37 @@ describe('IP allowlist middleware', () => {
 			headers: { 'X-Forwarded-For': '10.0.0.1' },
 		})
 		expect(res.status).not.toBe(403)
+	})
+
+	test('X-Forwarded-For is ignored when socket IP is not a trusted proxy', async () => {
+		// Restore allowlist first (in case previous test left it empty)
+		await writeFile(join(companyRoot, 'company.yaml'), stringifyYaml({
+			name: 'Test Company',
+			slug: 'test-company',
+			description: 'IP allowlist test',
+			timezone: 'UTC',
+			language: 'en',
+			languages: ['en'],
+			owner: { name: 'Test', email: 'test@test.com', notification_channels: [] },
+			settings: {
+				auth: {
+					ip_allowlist: ['192.168.1.0/24'],
+				},
+			},
+		}))
+
+		const { createApp } = await import('../src/api/app')
+		const app = createApp({ authEnabled: false, corsOrigin: '*' })
+
+		// Socket IP (x-real-ip) is 5.5.5.5 — not a trusted proxy.
+		// Even though XFF claims 192.168.1.50 (allowed), it should be ignored.
+		// The socket IP 5.5.5.5 is not in 192.168.1.0/24, so it should be blocked.
+		const res = await app.request('/api/tasks', {
+			headers: {
+				'X-Forwarded-For': '192.168.1.50',
+				'X-Real-Ip': '5.5.5.5',
+			},
+		})
+		expect(res.status).toBe(403)
 	})
 })

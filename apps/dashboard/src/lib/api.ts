@@ -8,6 +8,7 @@ const API_BASE = 'http://localhost:7778'
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 	const res = await fetch(`${API_BASE}${path}`, {
 		...init,
+		credentials: 'include',
 		headers: {
 			...init?.headers,
 		},
@@ -53,6 +54,7 @@ export async function apiUpload<T>(path: string, file: File, targetDir?: string)
 	if (targetDir) formData.append('path', targetDir)
 	const res = await fetch(`http://localhost:7778${path}`, {
 		method: 'POST',
+		credentials: 'include',
 		body: formData,
 	})
 	if (!res.ok) throw new Error(`Upload error: ${res.status}`)
@@ -60,7 +62,7 @@ export async function apiUpload<T>(path: string, file: File, targetDir?: string)
 }
 
 export async function apiFetchText(path: string): Promise<string> {
-	const res = await fetch(`${API_BASE}${path}`)
+	const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' })
 	if (!res.ok) {
 		throw new Error(`API error: ${res.status} ${res.statusText}`)
 	}

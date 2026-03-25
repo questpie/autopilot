@@ -1,6 +1,7 @@
 import { container } from './container'
 import { storageFactory } from './fs/sqlite-backend'
 import type { StorageBackend } from './fs/storage'
+import { maskSecret } from './auth/crypto'
 
 /** Configuration for the {@link Notifier}. */
 export interface NotificationOptions {
@@ -24,6 +25,24 @@ export interface Notification {
 	agentId?: string
 }
 
+const SECRET_PATTERNS = [
+	/sk-[a-zA-Z0-9_-]{20,}/g, // Anthropic keys
+	/sk-ant-[a-zA-Z0-9_-]{20,}/g, // Anthropic keys
+	/ghp_[a-zA-Z0-9]{36,}/g, // GitHub PATs
+	/gho_[a-zA-Z0-9]{36,}/g, // GitHub OAuth
+	/ap_[a-zA-Z0-9_-]{20,}/g, // Autopilot agent keys
+	/Bearer\s+[a-zA-Z0-9._-]{20,}/gi, // Bearer tokens
+	/xoxb-[a-zA-Z0-9-]+/g, // Slack tokens
+]
+
+export function sanitizeForLog(text: string): string {
+	let result = text
+	for (const pattern of SECRET_PATTERNS) {
+		result = result.replace(pattern, (match) => maskSecret(match))
+	}
+	return result
+}
+
 /**
  * Dispatches notifications by logging them to stdout and persisting them
  * in the activity feed.
@@ -36,8 +55,10 @@ export class Notifier {
 	/** Emit a notification: log to stdout and persist to the activity feed. */
 	async notify(notification: Notification): Promise<void> {
 		const prefix = notification.priority === 'urgent' ? '!!' : notification.priority === 'high' ? '!' : ''
+		const safeTitle = sanitizeForLog(notification.title)
+		const safeMessage = sanitizeForLog(notification.message)
 		console.log(
-			`[orchestrator] ${prefix}notification [${notification.type}] ${notification.title}: ${notification.message}`
+			`[orchestrator] ${prefix}notification [${notification.type}] ${safeTitle}: ${safeMessage}`
 		)
 
 		try {
@@ -45,9 +66,9 @@ export class Notifier {
 				at: new Date().toISOString(),
 				agent: notification.agentId ?? 'orchestrator',
 				type: `notification:${notification.type}`,
-				summary: notification.title,
+				summary: safeTitle,
 				details: {
-					message: notification.message,
+					message: safeMessage,
 					priority: notification.priority,
 					taskId: notification.taskId,
 					agentId: notification.agentId,

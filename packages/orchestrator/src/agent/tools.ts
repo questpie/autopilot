@@ -1,5 +1,6 @@
 import { mkdir, readdir } from 'node:fs/promises'
 import { join } from 'path'
+import dns from 'node:dns/promises'
 import { stringify } from 'yaml'
 import { z } from 'zod'
 import { PATHS } from '@questpie/autopilot-spec'
@@ -42,7 +43,62 @@ function defineTool<T extends z.ZodType>(
 	return { name, description, schema, execute }
 }
 
+// ─── SSRF protection helpers ───────────────────────────────────────────────
+
+const PRIVATE_IP_RANGES = [
+	// 127.0.0.0/8
+	/^127\./,
+	// 10.0.0.0/8
+	/^10\./,
+	// 172.16.0.0/12
+	/^172\.(1[6-9]|2\d|3[01])\./,
+	// 192.168.0.0/16
+	/^192\.168\./,
+	// 169.254.0.0/16 (link-local)
+	/^169\.254\./,
+	// IPv6 loopback
+	/^::1$/,
+	// IPv6 unique local (fd00::/8)
+	/^fd[0-9a-f]{2}:/i,
+]
+
+function isPrivateIp(ip: string): boolean {
+	return PRIVATE_IP_RANGES.some((re) => re.test(ip))
+}
+
+async function checkSsrf(url: string): Promise<string | null> {
+	let parsed: URL
+	try {
+		parsed = new URL(url)
+	} catch {
+		return 'Invalid URL'
+	}
+	const hostname = parsed.hostname
+
+	// Resolve hostname to IP
+	let addresses: string[]
+	try {
+		const results = await dns.lookup(hostname, { all: true })
+		addresses = results.map((r) => r.address)
+	} catch {
+		// DNS resolution failed — block to be safe
+		return 'Could not resolve hostname'
+	}
+
+	for (const addr of addresses) {
+		if (isPrivateIp(addr)) {
+			return 'Blocked: requests to private/internal IPs are not allowed'
+		}
+	}
+	return null
+}
+
 // ─── Autopilot tool definitions ────────────────────────────────────────────
+
+export interface AutopilotToolOptions {
+	/** If set and non-empty, only requests to these hostnames are allowed. */
+	httpAllowlist?: string[]
+}
 
 /**
  * Build the full set of autopilot tools available to agents.
@@ -52,7 +108,7 @@ function defineTool<T extends z.ZodType>(
  * `search_knowledge`, `update_knowledge`, `http_request`, `ask_agent`,
  * and `resolve_blocker`.
  */
-export function createAutopilotTools(companyRoot: string, storage: StorageBackend): ToolDefinition[] {
+export function createAutopilotTools(companyRoot: string, storage: StorageBackend, options?: AutopilotToolOptions): ToolDefinition[] {
 	// biome-ignore lint: generic variance is intentional
 	const tools: Array<ToolDefinition<any>> = [
 		// Communication
@@ -487,6 +543,34 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 				}
 
 				try {
+					// ── Allowlist check ──────────────────────────────────────────
+					if (options?.httpAllowlist && options.httpAllowlist.length > 0) {
+						let requestHostname: string
+						try {
+							requestHostname = new URL(args.url).hostname
+						} catch {
+							return {
+								content: [{ type: 'text' as const, text: 'Blocked: invalid URL' }],
+								isError: true,
+							}
+						}
+						if (!options.httpAllowlist.includes(requestHostname)) {
+							return {
+								content: [{ type: 'text' as const, text: `Blocked: hostname "${requestHostname}" is not in the allowed list` }],
+								isError: true,
+							}
+						}
+					}
+
+					// ── SSRF protection ──────────────────────────────────────────
+					const ssrfError = await checkSsrf(args.url)
+					if (ssrfError) {
+						return {
+							content: [{ type: 'text' as const, text: ssrfError }],
+							isError: true,
+						}
+					}
+
 					const fetchOptions: RequestInit = {
 						method: args.method,
 						headers,

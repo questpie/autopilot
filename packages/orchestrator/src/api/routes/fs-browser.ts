@@ -3,9 +3,10 @@ import { describeRoute } from 'hono-openapi'
 import { resolver } from 'hono-openapi'
 import { z } from 'zod'
 import { readdir, stat } from 'node:fs/promises'
-import { resolve, join, extname } from 'node:path'
+import { resolve, join, extname, relative } from 'node:path'
 import { FsEntrySchema } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
+import { isDeniedPath } from '../../auth/deny-patterns'
 
 const CONTENT_TYPE_MAP: Record<string, string> = {
 	'.md': 'text/markdown; charset=utf-8',
@@ -68,6 +69,28 @@ const fsBrowser = new Hono<AppEnv>().get(
 			return c.json({ error: 'path traversal blocked' }, 403)
 		}
 
+		// ── Compute relative path for policy checks ───────────────────────
+		const relativePath = relative(resolve(root), target)
+
+		// ── Actor-based access checks ─────────────────────────────────────
+		const actor = c.get('actor')
+
+		// Deny patterns apply to agents (not human users who may need config access)
+		if (actor?.type === 'agent' && isDeniedPath(relativePath)) {
+			return c.json({ error: 'access denied' }, 403)
+		}
+
+		// Role-based scope for viewers
+		if (actor?.role === 'viewer') {
+			const VIEWER_ALLOWED = ['knowledge/', 'dashboard/', 'team/']
+			const isAllowed = VIEWER_ALLOWED.some(
+				(prefix) => relativePath === prefix.slice(0, -1) || relativePath.startsWith(prefix),
+			)
+			if (!isAllowed) {
+				return c.json({ error: 'access denied' }, 403)
+			}
+		}
+
 		let info: Awaited<ReturnType<typeof stat>>
 		try {
 			info = await stat(target)
@@ -82,6 +105,11 @@ const fsBrowser = new Hono<AppEnv>().get(
 			const listing = await Promise.all(
 				entries
 					.filter((name) => !name.startsWith('.'))
+					.filter((name) => {
+						if (actor?.type !== 'agent') return true
+						const entryRelative = join(relativePath, name)
+						return !isDeniedPath(entryRelative)
+					})
 					.map(async (name) => {
 						const entryPath = join(target, name)
 						try {

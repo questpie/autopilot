@@ -166,6 +166,15 @@ async function resolveHumanActor(
 		// Fallback to viewer if humans.yaml not found
 	}
 
+	// Mandatory 2FA for owner/admin: if not enabled and path is not an auth route, block access.
+	// Exempt /api/auth/* so users can still configure 2FA.
+	if ((role === 'owner' || role === 'admin') && !session.user.twoFactorEnabled) {
+		const path = new URL(request.url).pathname
+		if (!path.startsWith('/api/auth/')) {
+			return null
+		}
+	}
+
 	return {
 		id: session.user.id,
 		type: 'human',

@@ -47,6 +47,123 @@ describe('resolveActor', () => {
 	})
 })
 
+describe('resolveActor 2FA enforcement for owner/admin', () => {
+	async function makeSessionAuth(
+		root: string,
+		role: string,
+		twoFactorEnabled: boolean,
+	) {
+		await writeYaml(join(root, 'team', 'humans.yaml'), {
+			humans: [{ email: 'user@example.com', role }],
+		})
+		return {
+			authEnabled: true,
+			companyRoot: root,
+			auth: {
+				api: {
+					getSession: async () => ({
+						user: {
+							id: 'user-1',
+							email: 'user@example.com',
+							name: 'Test User',
+							twoFactorEnabled,
+						},
+						twoFactorVerified: twoFactorEnabled, // only set when 2FA is enabled and done
+					}),
+				},
+			} as any,
+		}
+	}
+
+	test('owner WITHOUT 2FA enabled returns null for non-auth paths', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			const config = await makeSessionAuth(root, 'owner', false)
+			const request = new Request('http://localhost:7778/api/tasks', {
+				headers: { Authorization: 'Bearer some-token' },
+			})
+			const actor = await resolveActor(request, config)
+			expect(actor).toBeNull()
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test('admin WITHOUT 2FA enabled returns null for non-auth paths', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			const config = await makeSessionAuth(root, 'admin', false)
+			const request = new Request('http://localhost:7778/api/agents', {
+				headers: { Authorization: 'Bearer some-token' },
+			})
+			const actor = await resolveActor(request, config)
+			expect(actor).toBeNull()
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test('owner WITHOUT 2FA enabled is allowed through /api/auth/* paths', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			const config = await makeSessionAuth(root, 'owner', false)
+			const request = new Request('http://localhost:7778/api/auth/two-factor/enable', {
+				headers: { Authorization: 'Bearer some-token' },
+			})
+			const actor = await resolveActor(request, config)
+			expect(actor).not.toBeNull()
+			expect(actor!.role).toBe('owner')
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test('member WITHOUT 2FA enabled is allowed (no 2FA requirement for members)', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			const config = await makeSessionAuth(root, 'member', false)
+			const request = new Request('http://localhost:7778/api/tasks', {
+				headers: { Authorization: 'Bearer some-token' },
+			})
+			const actor = await resolveActor(request, config)
+			expect(actor).not.toBeNull()
+			expect(actor!.role).toBe('member')
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test('owner WITH 2FA enabled resolves normally', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			const config = await makeSessionAuth(root, 'owner', true)
+			const request = new Request('http://localhost:7778/api/tasks', {
+				headers: { Authorization: 'Bearer some-token' },
+			})
+			const actor = await resolveActor(request, config)
+			expect(actor).not.toBeNull()
+			expect(actor!.role).toBe('owner')
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test('admin WITH 2FA enabled resolves normally', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			const config = await makeSessionAuth(root, 'admin', true)
+			const request = new Request('http://localhost:7778/api/agents', {
+				headers: { Authorization: 'Bearer some-token' },
+			})
+			const actor = await resolveActor(request, config)
+			expect(actor).not.toBeNull()
+			expect(actor!.role).toBe('admin')
+		} finally {
+			await cleanup()
+		}
+	})
+})
+
 describe('getRequiredPermission', () => {
 	test('maps task endpoints correctly', () => {
 		expect(getRequiredPermission('/api/tasks', 'GET')).toEqual({ resource: 'tasks', action: 'read' })
