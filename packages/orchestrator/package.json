@@ -1,6 +1,6 @@
 {
 	"name": "@questpie/autopilot-orchestrator",
-	"version": "1.0.0-beta.1",
+	"version": "1.0.0",
 	"private": false,
 	"type": "module",
 	"description": "QUESTPIE Autopilot orchestrator runtime",
@@ -27,8 +27,8 @@
 		"@google/genai": "^1.46.0",
 		"@hono/standard-validator": "^0.2.2",
 		"@huggingface/transformers": "^3.8.1",
-		"@questpie/autopilot-agents": "1.0.0-beta.1",
-		"@questpie/autopilot-spec": "1.0.0-beta.1",
+		"@questpie/autopilot-agents": "1.0.0",
+		"@questpie/autopilot-spec": "1.0.0",
 		"@scalar/hono-api-reference": "^0.10.4",
 		"better-auth": "^1.5.6",
 		"chokidar": "^4.0.0",
@@ -50,7 +50,14 @@
 		"drizzle-kit": "^0.31.10",
 		"typescript": "^5.9.3"
 	},
-	"keywords": ["questpie", "autopilot", "orchestrator", "ai", "agents", "workflow"],
+	"keywords": [
+		"questpie",
+		"autopilot",
+		"orchestrator",
+		"ai",
+		"agents",
+		"workflow"
+	],
 	"homepage": "https://autopilot.questpie.com",
 	"repository": {
 		"type": "git",
