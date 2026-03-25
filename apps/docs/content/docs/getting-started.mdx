@@ -11,7 +11,7 @@ Install Autopilot, scaffold a company, and give your first intent. One Bun proce
   ```bash title="terminal"
   curl -fsSL https://bun.sh/install | bash
   ```
-- **Anthropic API key** -- agents run on Claude via the Agent SDK. Get a key from [console.anthropic.com](https://console.anthropic.com)
+- **Anthropic API key OR Claude Max/Pro subscription** -- agents run on Claude via the Agent SDK. Get an API key from [console.anthropic.com](https://console.anthropic.com), or use your existing Claude Max/Pro subscription instead
 - **Git** -- required for versioning company state and code operations
 
 That's it. No Docker. No Postgres. No Redis. No vector DB.
@@ -23,7 +23,7 @@ bun add -g @questpie/autopilot
 autopilot init my-company
 cd my-company
 
-# Configure your API key
+# Configure your API key (not needed with Claude Max/Pro subscription)
 export ANTHROPIC_API_KEY=sk-ant-...
 
 # Start the orchestrator + dashboard
@@ -150,6 +150,7 @@ Start with 2-3 agents, add as you need. You choose the names, the roles, and the
 
 ```bash title="terminal"
 cd my-company
+# If using an API key (not needed with Claude Max/Pro subscription):
 export ANTHROPIC_API_KEY=sk-ant-...
 
 autopilot start

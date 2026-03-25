@@ -51,6 +51,7 @@ A single Bun process that watches the filesystem for changes, matches events aga
 bun add -g @questpie/autopilot
 autopilot init my-company
 cd my-company
+# If using an API key (not needed with Claude Max/Pro subscription):
 export ANTHROPIC_API_KEY=sk-ant-xxx
 
 autopilot start
@@ -58,7 +59,7 @@ autopilot ask "Build a landing page for our product"
 autopilot attach max
 ```
 
-**What you need:** Bun runtime + Anthropic API key. That's it.
+**What you need:** Bun runtime + Anthropic API key or Claude Max/Pro subscription. That's it.
 
 ## Documentation
 

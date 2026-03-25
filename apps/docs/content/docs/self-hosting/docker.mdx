@@ -18,7 +18,7 @@ bun add -g @questpie/autopilot
 autopilot init my-company
 
 # Option B: Use Docker to scaffold (no Bun needed on host)
-docker run --rm -v $(pwd):/out questpie/autopilot-orchestrator:latest \
+docker run --rm -v $(pwd):/out questpie/autopilot:latest \
   autopilot init my-company --output /out/my-company
 ```
 
@@ -27,7 +27,7 @@ docker run --rm -v $(pwd):/out questpie/autopilot-orchestrator:latest \
 ```yaml title="docker-compose.yml"
 services:
   autopilot:
-    image: questpie/autopilot-orchestrator:latest
+    image: questpie/autopilot:latest
     container_name: autopilot
     restart: unless-stopped
     ports:
@@ -54,11 +54,12 @@ services:
 # Generate a master key for secrets encryption
 export AUTOPILOT_MASTER_KEY=$(openssl rand -base64 32)
 
-# Set your Anthropic API key
+# Set your Anthropic API key (not needed if using a Claude Max/Pro subscription)
 export ANTHROPIC_API_KEY=sk-ant-...
 
 # Save to .env for docker-compose
 cat > .env << 'EOF'
+# Not required if using a Claude Max/Pro subscription:
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 AUTOPILOT_MASTER_KEY=your-generated-key-here
 EOF
@@ -76,7 +77,7 @@ The orchestrator is now running at `http://localhost:7778`.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | Yes | — | Claude API key for agent sessions |
+| `ANTHROPIC_API_KEY` | No | — | Claude API key for agent sessions (not required if using a Claude Max/Pro subscription) |
 | `COMPANY_ROOT` | Yes | — | Path to company data inside the container |
 | `AUTOPILOT_MASTER_KEY` | Recommended | Auto-generated file | 256-bit base64 key for secrets encryption |
 | `NODE_ENV` | Recommended | `development` | Set `production` for secure cookies and HTTPS |

@@ -87,14 +87,15 @@ function LandingPage() {
 						Get Started in 60 Seconds
 					</SectionHeader>
 					<CodeBlock title="install">
-						{`# Install
-bun add -g @questpie/autopilot
+						{`# Docker (recommended for self-hosting)
+curl -fsSL https://raw.githubusercontent.com/questpie/autopilot/main/install.sh | bash
 
-# Create your AI company
+# Or with Bun
+bun add -g @questpie/autopilot
 autopilot init my-company
 cd my-company
 
-# Configure your API key
+# Configure your API key (not needed with Claude Max/Pro subscription)
 export ANTHROPIC_API_KEY=sk-ant-...
 
 # Start the orchestrator + dashboard

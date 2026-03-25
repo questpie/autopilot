@@ -20,6 +20,13 @@ export const Route = createRootRoute({
 				{ name: 'theme-color', content: '#0a0a0a' },
 				{ name: 'msapplication-TileColor', content: '#0a0a0a' },
 			],
+			scripts: [
+				{
+					src: 'https://umami.eu-infra.questpie.com/script.js',
+					'data-website-id': '89a4a4f9-1b3c-472a-baf6-dd305418fe16',
+					defer: true,
+				},
+			],
 			links: [
 				{ rel: 'stylesheet', href: appCss },
 				{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
