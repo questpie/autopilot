@@ -32,9 +32,6 @@ jobs:
       - run: bunx turbo build --filter='./packages/*'
       - run: bunx turbo test --filter='./packages/*'
 
-      - name: Write .npmrc
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
-
       - name: Create Release PR or Publish
         uses: changesets/action@v1
         with:
