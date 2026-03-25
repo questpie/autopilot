@@ -159,6 +159,10 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 				tools: autopilotTools,
 				toolContext,
 				maxTurns: 50,
+				agentTools: agent.tools,
+				agentScope: agent.fs_scope
+					? { fsRead: agent.fs_scope.read, fsWrite: agent.fs_scope.write }
+					: undefined,
 			},
 			onEvent,
 		)

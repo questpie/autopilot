@@ -22,6 +22,10 @@ export interface AgentSpawnOptions {
 	tools: ToolDefinition[]
 	toolContext: ToolContext
 	maxTurns?: number
+	/** Agent tool groups from agents.yaml (e.g. ['fs', 'terminal']) */
+	agentTools?: string[]
+	/** Agent filesystem scope for PreToolUse enforcement */
+	agentScope?: { fsRead?: string[]; fsWrite?: string[]; secrets?: string[] }
 }
 
 /**

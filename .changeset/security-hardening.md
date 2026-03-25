@@ -8,7 +8,7 @@ Security hardening: 22 fixes across auth, API, agents, secrets, and dashboard
 
 **API Security:** CORS locked to configured origin (not `*`), security headers (X-Frame-Options, X-Content-Type-Options, HSTS, Referrer-Policy), X-Forwarded-For trusted proxy validation, request body size limits, reduced status endpoint payload for unauthenticated requests.
 
-**Agent Sandbox:** SSRF protection blocks private IPs in `http_request` tool, optional domain allowlist via `agent_http_allowlist`, deny patterns protect `company.yaml` and `team/humans.yaml` from agent access, filesystem browser enforces role-based scope for viewers.
+**Agent Sandbox:** SSRF protection blocks private IPs in `http_request` tool, optional domain allowlist via `agent_http_allowlist`, per-agent `tools` config controls Claude SDK built-in tools (`fs` → read-only, `fs_write` → read/write, `terminal` → Bash), `PreToolUse` hooks enforce `fs_scope` write globs on Write/Edit and deny patterns on Read, filesystem browser enforces role-based scope for viewers.
 
 **Rate Limiting:** Agents now rate-limited (600/min general, 50/min search, 100/min chat), weighted sliding window algorithm, password reset rate limiter (3/15min), timing-safe HMAC and bearer token comparison.
 

@@ -34,15 +34,9 @@ describe('isDeniedPath', () => {
 		expect(isDeniedPath('secrets/github.yaml')).toBe(false)
 	})
 
-	test('denies team/humans.yaml', () => {
-		expect(isDeniedPath('team/humans.yaml')).toBe(true)
-	})
-
-	test('denies company.yaml', () => {
-		expect(isDeniedPath('company.yaml')).toBe(true)
-	})
-
-	test('allows team/agents.yaml (not denied)', () => {
+	test('allows config files (protected by per-agent fs_scope, not hardcoded deny)', () => {
+		expect(isDeniedPath('team/humans.yaml')).toBe(false)
+		expect(isDeniedPath('company.yaml')).toBe(false)
 		expect(isDeniedPath('team/agents.yaml')).toBe(false)
 	})
 

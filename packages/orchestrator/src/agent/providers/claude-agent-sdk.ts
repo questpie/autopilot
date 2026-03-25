@@ -1,7 +1,11 @@
 import { query, tool as sdkTool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
+import { relative, resolve } from 'node:path'
 import { z } from 'zod'
 import type { AgentProvider, AgentSpawnOptions, AgentSessionResult, AgentEvent } from '../provider'
 import type { ToolDefinition } from '../tools'
+import { isDeniedPath } from '../../auth/deny-patterns'
+import { checkScope } from '../../auth/permissions'
+import type { Actor } from '../../auth/types'
 
 /**
  * Claude Agent SDK provider — uses @anthropic-ai/claude-agent-sdk.
@@ -40,6 +44,20 @@ export class ClaudeAgentSDKProvider implements AgentProvider {
 			tools: mcpTools,
 		})
 
+		// Resolve per-agent allowed tools from agent.tools config
+		const agentToolGroups: string[] = options.agentTools ?? ['fs', 'terminal']
+		const allowedTools = resolveAllowedTools(agentToolGroups)
+
+		// Build agent actor for scope checking
+		const agentActor: Actor = {
+			id: toolContext.agentId,
+			type: 'agent',
+			name: toolContext.agentId,
+			role: 'agent',
+			permissions: {},
+			scope: options.agentScope,
+		}
+
 		let toolCalls = 0
 		let result: string | undefined
 		let error: string | undefined
@@ -50,13 +68,42 @@ export class ClaudeAgentSDKProvider implements AgentProvider {
 				options: {
 					systemPrompt,
 					cwd: toolContext.companyRoot,
-					allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
+					allowedTools,
 					mcpServers: { autopilot: autopilotMcp },
 					permissionMode: 'bypassPermissions',
 					allowDangerouslySkipPermissions: true,
 					maxTurns,
 					model,
 					hooks: {
+						PreToolUse: [{
+							matcher: 'Write|Edit',
+							hooks: [async (input: unknown) => {
+								const data = input as Record<string, unknown>
+								const filePath = (data.file_path ?? data.path) as string | undefined
+								if (filePath) {
+									const rel = relative(resolve(toolContext.companyRoot), resolve(filePath))
+									if (rel.startsWith('..')) return { decision: 'block', reason: 'Path outside company root' }
+									if (isDeniedPath(rel)) return { decision: 'block', reason: `Access denied: ${rel}` }
+									if (!checkScope(agentActor, 'fs_write', rel)) {
+										return { decision: 'block', reason: `Write not allowed by agent scope: ${rel}` }
+									}
+								}
+								return {}
+							}],
+						}, {
+							matcher: 'Read',
+							hooks: [async (input: unknown) => {
+								const data = input as Record<string, unknown>
+								const filePath = (data.file_path ?? data.path) as string | undefined
+								if (filePath) {
+									const rel = relative(resolve(toolContext.companyRoot), resolve(filePath))
+									if (!rel.startsWith('..') && isDeniedPath(rel)) {
+										return { decision: 'block', reason: `Access denied: ${rel}` }
+									}
+								}
+								return {}
+							}],
+						}],
 						PostToolUse: [{
 							matcher: '.*',
 							hooks: [async (input: unknown) => {
@@ -81,6 +128,43 @@ export class ClaudeAgentSDKProvider implements AgentProvider {
 
 		return { result, toolCalls, error }
 	}
+}
+
+/**
+ * Map agent tool groups from agents.yaml to Claude SDK allowed tools.
+ *
+ * Agent tool groups:
+ *   'fs'       → Read, Glob, Grep (read-only filesystem)
+ *   'fs_write' → Read, Write, Edit, Glob, Grep (read/write filesystem)
+ *   'terminal' → Bash
+ *
+ * Default: ['fs', 'terminal'] gives Read, Glob, Grep, Bash.
+ * Developer agent with ['fs_write', 'terminal'] gets full access.
+ */
+function resolveAllowedTools(agentToolGroups: string[]): string[] {
+	const tools = new Set<string>()
+
+	for (const group of agentToolGroups) {
+		switch (group) {
+			case 'fs':
+				tools.add('Read')
+				tools.add('Glob')
+				tools.add('Grep')
+				break
+			case 'fs_write':
+				tools.add('Read')
+				tools.add('Write')
+				tools.add('Edit')
+				tools.add('Glob')
+				tools.add('Grep')
+				break
+			case 'terminal':
+				tools.add('Bash')
+				break
+		}
+	}
+
+	return [...tools]
 }
 
 /**
