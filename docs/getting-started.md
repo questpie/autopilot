@@ -9,10 +9,10 @@
 
 ## Install & Run
 
-### Option A: npx (quickest)
+### Option A: bunx (quickest)
 
 ```bash
-npx @questpie/autopilot init my-company
+bunx @questpie/autopilot init my-company
 cd my-company
 
 # Authenticate (choose one)
@@ -20,7 +20,7 @@ autopilot provider login claude    # Use Claude subscription (recommended)
 # OR
 export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
 
-npx @questpie/autopilot start
+bunx @questpie/autopilot start
 ```
 
 ### Option B: Global install

@@ -33,9 +33,9 @@ docker compose up
 >   Works on VPS too — prints a link to open on any device (phone/laptop).
 > - **API key** (alternative): set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `.env`
 
-### npx (local dev)
+### bunx (local dev)
 ```bash
-npx @questpie/autopilot init my-company
+bunx @questpie/autopilot init my-company
 cd my-company
 
 # Authenticate (choose one)
@@ -43,7 +43,7 @@ autopilot provider login claude    # Use Claude subscription (recommended)
 # OR
 export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
 
-npx @questpie/autopilot start
+bunx @questpie/autopilot start
 ```
 
 ---
@@ -111,7 +111,7 @@ Autopilot is designed to run on YOUR infrastructure. No SaaS lock-in.
 
 | Setup | Command | Cost |
 |-------|---------|------|
-| Local (macOS/Linux) | `npx @questpie/autopilot start` | Free (+ API costs) |
+| Local (macOS/Linux) | `bunx @questpie/autopilot start` | Free (+ API costs) |
 | Docker | `docker compose up` | Free (+ API costs) |
 | Hetzner VPS | [One-click deploy →](docs/guides/vps-deployment.md) | €4.35/mo + API |
 | Any VPS | `curl ... install.sh \| bash` | Your VPS + API |
@@ -175,7 +175,7 @@ mkdir -p /opt/autopilot && cd /opt/autopilot
 curl -fsSL https://raw.githubusercontent.com/questpie/autopilot/main/install.sh | bash
 ```
 
-[Get €20 free credits →](https://hetzner.cloud/?ref=XXXXXX)
+[Get €20 free credits →](https://hetzner.cloud/?ref=Akyzglz8k22M)
 
 ---
 

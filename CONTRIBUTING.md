@@ -19,10 +19,10 @@ cd autopilot
 bun install
 
 # Build all packages
-npx turbo build
+bunx turbo build
 
 # Run all tests
-npx turbo test
+bunx turbo test
 ```
 
 ## Package Structure
@@ -60,7 +60,7 @@ packages/cli          — Interface: human commands that talk to the orchestrato
 
 ```bash
 # Run all tests across all packages
-npx turbo test
+bunx turbo test
 
 # Run tests for a specific package
 cd packages/spec && bun test
@@ -89,7 +89,7 @@ bun test --watch
 
 ```bash
 # Build all packages (respects dependency order via Turbo)
-npx turbo build
+bunx turbo build
 
 # Build a specific package
 cd packages/spec && bun run build
@@ -213,8 +213,8 @@ test(spec): add schema validation for nested task refs
 1. Create a feature branch from `main`
 2. Make your changes
 3. Run `bun run lint` to check formatting
-4. Run `npx turbo test` to verify all tests pass
-5. Run `npx turbo build` to verify the build succeeds
+4. Run `bunx turbo test` to verify all tests pass
+5. Run `bunx turbo build` to verify the build succeeds
 6. Commit with a conventional commit message
 7. Open a PR against `main`
 

@@ -3,7 +3,7 @@
 ## Deploy to Hetzner Cloud (Recommended)
 
 Hetzner offers the best price/performance for self-hosting.
-[Sign up and get €20 free credits →](https://hetzner.cloud/?ref=XXXXXX)
+[Sign up and get €20 free credits →](https://hetzner.cloud/?ref=Akyzglz8k22M)
 
 ### Recommended Servers
 
