@@ -1,15 +1,15 @@
 ---
 title: QUESTPIE Autopilot
-description: A filesystem-native operating system where AI agents run your company through structured primitives, human approval gates, and a self-evolving dashboard.
+description: An AI-native company operating system where AI agents run your company through structured primitives, human approval gates, and a self-evolving dashboard.
 ---
 
-QUESTPIE Autopilot is a filesystem-native operating system where AI agents run your company through structured primitives, human approval gates, and a self-evolving dashboard. You define agents in YAML, give high-level intents, and approve at explicit gates. The entire company state lives in files you can `ls`, `grep`, and version with Git. It runs as a single Bun process with zero infrastructure.
+QUESTPIE Autopilot is an AI-native company operating system where AI agents run your company through structured primitives, human approval gates, and a self-evolving dashboard. You define agents in YAML, give high-level intents, and approve at explicit gates. Company configuration lives in files you can `ls`, `grep`, and version with Git, while runtime data (tasks, messages, activity) is stored in SQLite for fast indexed queries. It runs as a single Bun process with zero infrastructure.
 
 ## What Makes Autopilot Different
 
 ### Primitives, Not Chat
 
-Agents don't generate text for you to read. They call 13 structured primitives -- `create_task()`, `send_message()`, `pin_to_board()`, `create_artifact()`, `git_commit()`. Agent thinking is private. Only primitive calls produce visible effects in the filesystem. This is not a chatbot wrapper. It's a structured execution engine.
+Agents don't generate text for you to read. They call 14 structured primitives -- `create_task()`, `send_message()`, `pin_to_board()`, `create_artifact()`, `skill_request()`, `search()`. Agent thinking is private. Only primitive calls produce visible effects. This is not a chatbot wrapper. It's a structured execution engine.
 
 ### Living Dashboard
 
@@ -17,7 +17,7 @@ The dashboard is a React app in the company filesystem that agents edit in real 
 
 ### Zero Infrastructure
 
-One Bun process. One SQLite file. No Docker, no Postgres, no Redis, no vector DB. Install and run. The entire company state is files on disk backed by SQLite hybrid storage for indexed queries, FTS5 full-text search, and sqlite-vec embeddings.
+One Bun process. One SQLite file. No Docker, no Postgres, no Redis, no vector DB. Install and run. Company config is YAML/Markdown on disk; runtime data (tasks, messages, activity) lives in SQLite with FTS5 full-text search and sqlite-vec embeddings.
 
 ### Human Gates
 
@@ -25,17 +25,17 @@ Explicit approval points for merge, deploy, spend, and publish -- defined in wor
 
 ## Core Concepts
 
-### 01 -- Filesystem as Database
+### 01 -- Hybrid Storage
 
-YAML for structured data, Markdown for knowledge, SQLite + Drizzle ORM for indexes and search. The company state lives in files you can read, grep, back up with `cp`, and fork with `git clone`. FTS5 full-text search and sqlite-vec embeddings provide unified search across all content.
+YAML for configuration, Markdown for knowledge, SQLite for runtime data. Company config (agents, workflows, skills, knowledge) lives in files you can read, grep, back up with `cp`, and fork with `git clone`. Tasks, messages, and activity are stored in SQLite (`.data/autopilot.db`) with FTS5 full-text search and sqlite-vec embeddings for fast indexed queries.
 
 ### 02 -- Agents as Employees
 
-Each agent is defined in YAML with an ID, role template, filesystem scope, and tool set. The default template ships 8 agents but you start with what you need and add more as your company grows. Each agent runs as a Claude session via the Claude Agent SDK with a 4-layer context assembly (identity + company state + memory + task).
+Each agent is defined in YAML with an ID, role template, filesystem scope, and tool set. The default template ships 8 agents (CEO, Sam, Alex, Max, Riley, Ops, Morgan, Jordan) across 8 roles (meta, strategist, planner, developer, reviewer, devops, marketing, design). Each agent runs as a Claude session via the Claude Agent SDK with a 6-layer context assembly (identity + company state + agent memory + task context + skills discovery + tool list).
 
 ### 03 -- Primitives as Actions
 
-Agents don't produce text output. They call structured primitives -- typed function calls with clear targets and effects. `create_task()`, `send_message()`, `git_commit()`, `pin_to_board()`, `create_artifact()`. Agent thinking is internal. Only primitive calls produce observable results.
+Agents don't produce text output. They call structured primitives -- typed function calls with clear targets and effects. `create_task()`, `send_message()`, `pin_to_board()`, `create_artifact()`, `skill_request()`, `search()`. Agent thinking is internal. Only primitive calls produce observable results.
 
 ### 04 -- Workflows as Files
 
@@ -64,7 +64,7 @@ autopilot attach max
 ## Documentation
 
 - [Getting Started](/docs/getting-started) -- Prerequisites, installation, first intent, first attach
-- [Primitives](/docs/primitives) -- The 13 structured primitives. Why not chat. Code examples
+- [Primitives](/docs/primitives) -- The 14 structured primitives. Why not chat. Code examples
 - [Architecture](/docs/architecture) -- Four-layer stack, zero-infra design, orchestrator internals
 - [Agents](/docs/agents) -- Agent definitions, role templates, memory isolation, context assembly
 - [Workflows](/docs/workflows) -- YAML workflows, human gates, CEO ownership

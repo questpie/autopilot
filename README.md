@@ -55,12 +55,12 @@ $ autopilot ask "Build a pricing page with Stripe"
 
 CEO Agent decomposing intent...
 
-  task-050: Scope requirements      → Ivan (strategist)
-  task-051: Design UI               → Luna (designer)
-  task-052: Implement with Stripe   → Peter (developer)
-  task-053: Write copy & announce   → Sofia (marketing)
+  task-050: Scope requirements      → Sam (strategist)
+  task-051: Design UI               → Jordan (design)
+  task-052: Implement with Stripe   → Max (developer)
+  task-053: Write copy & announce   → Morgan (marketing)
 
-Ivan is starting now. You'll be notified when approvals are needed.
+Sam is starting now. You'll be notified when approvals are needed.
 ```
 
 1. You give intent
@@ -71,18 +71,23 @@ Ivan is starting now. You'll be notified when approvals are needed.
 
 ---
 
-## Your AI Team
+## Your Team, Your Rules
 
-| Agent | Role | Does |
-|-------|------|------|
-| Sam (CEO) | Orchestrator | Decomposes intent, delegates, unblocks |
-| Ivan (Strategist) | Research | Market analysis, competitor research, specs |
-| Adam (Planner) | Planning | Task breakdown, architecture, implementation plans |
-| Peter (Developer) | Code | Implementation, tests, debugging |
-| Marek (Reviewer) | Quality | Code review, security audit |
-| Viktor (DevOps) | Infra | Deploy, CI/CD, monitoring |
-| Sofia (Marketing) | Growth | Content, SEO, campaigns |
-| Luna (Design) | Design | UI/UX, visual design, branding |
+Autopilot ships with 8 default agents across 8 roles — meta, strategist, planner, developer, reviewer, devops, marketing, design. Customize them or create your own in `team/agents.yaml`.
+
+```yaml
+# team/agents.yaml
+agents:
+  - name: CEO
+    role: meta
+    description: Decomposes intent, delegates, unblocks
+
+  - name: Max
+    role: developer
+    description: Implementation, tests, debugging
+
+  # Add your own roles, rename agents, change responsibilities
+```
 
 ---
 
@@ -93,14 +98,14 @@ Human         CLI · Dashboard · Telegram · Webhooks
   │
 Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · SSE
   │
-Agents        Claude Agent SDK · 13 Primitives · Sandboxed FS · Memory
+Agents        Claude Agent SDK · 14 Primitives · Sandboxed FS · Memory
   │
 Storage       SQLite + Drizzle · YAML/MD/JSON · FTS5 + sqlite-vec · Git
 ```
 
-- **Everything is files** — YAML, Markdown, JSON. `ls` your company.
+- **Config is files** — YAML, Markdown, JSON. `ls` your company config.
+- **Runtime is SQLite** — tasks, messages, sessions, search. Zero external deps.
 - **Git is the audit trail** — every agent action = commit.
-- **SQLite sidecar** — tasks, messages, sessions, search. Zero external deps.
 - **One Bun process** — orchestrator + API + dashboard. ~100MB RAM.
 
 ---
@@ -146,21 +151,29 @@ autopilot provider login <p> # Authenticate with subscription (claude/codex)
 
 ```
 my-company/
-├── company.yaml              Settings, budget, owner
+├── company.yaml              # Company configuration
 ├── team/
-│   ├── agents.yaml           Agent definitions
-│   ├── humans.yaml           Human team members
-│   ├── workflows/            development, marketing, incident
-│   └── schedules.yaml        Cron jobs
-├── tasks/                    backlog/ active/ review/ blocked/ done/
-├── comms/channels/           Agent communication
-├── knowledge/                Brand, technical, business docs
-├── projects/                 Code, docs, design, marketing
-├── context/memory/           Per-agent persistent memory
-├── secrets/                  Encrypted API keys
-├── dashboard/pins/           Agent status board
-└── .data/autopilot.db        SQLite (FTS5, embeddings, auth)
+│   ├── agents.yaml           # AI agent definitions (8 default agents)
+│   ├── humans.yaml           # Human team members
+│   ├── roles.yaml            # RBAC role definitions
+│   ├── schedules.yaml        # Cron-triggered agent jobs
+│   ├── webhooks.yaml         # External webhook integrations
+│   ├── workflows/            # development (12), marketing (7), incident (8)
+│   └── policies/             # Human approval requirements
+├── knowledge/                # Searchable knowledge base (markdown)
+├── skills/                   # Agent skills (agentskills.io, 20 built-in)
+├── dashboard/                # Living dashboard (pins, widgets, pages)
+├── tasks/                    # Task status directories (runtime)
+├── comms/                    # Communication channels (runtime)
+├── logs/                     # Activity & session logs (runtime)
+├── context/memory/           # Per-agent persistent memory (runtime)
+├── secrets/                  # Encrypted secrets (runtime)
+├── projects/                 # Project workspaces (runtime)
+├── artifacts/                # Generated apps & content (runtime)
+└── .data/autopilot.db        # SQLite (tasks, messages, FTS5, embeddings)
 ```
+
+> **Note:** Tasks, messages, and activity are stored in SQLite (`.data/autopilot.db`), not as YAML files. Runtime directories are created by `autopilot init`, not from the template.
 
 ---
 

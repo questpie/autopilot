@@ -104,7 +104,7 @@ describe('dashboard-customization skill', () => {
 			'..',
 			'..',
 			'templates',
-			'solo-dev-shop',
+			'solo-dev',
 			'skills',
 			'dashboard-customization',
 			'SKILL.md',

@@ -13,13 +13,13 @@ const CLI_ROOT = resolve(import.meta.dir, '..', '..')
  * In local dev (monorepo), they live at the repo root: ../../templates/.
  */
 async function resolveTemplateDir(): Promise<string> {
-	const npmPath = resolve(CLI_ROOT, 'templates', 'solo-dev-shop')
+	const npmPath = resolve(CLI_ROOT, 'templates', 'solo-dev')
 	try {
 		await access(npmPath)
 		return npmPath
 	} catch {}
 	// Fallback: monorepo layout
-	return resolve(CLI_ROOT, '..', '..', 'templates', 'solo-dev-shop')
+	return resolve(CLI_ROOT, '..', '..', 'templates', 'solo-dev')
 }
 
 
@@ -85,6 +85,33 @@ program.addCommand(
 
 				await cp(templateDir, targetDir, { recursive: true })
 
+				// Create runtime directories (not in template — orchestrator creates content at runtime)
+				const runtimeDirs = [
+					'tasks/backlog',
+					'tasks/active',
+					'tasks/review',
+					'tasks/blocked',
+					'tasks/done',
+					'comms/channels/general',
+					'comms/channels/dev',
+					'comms/direct',
+					'logs/activity',
+					'logs/sessions',
+					'logs/errors',
+					'context/memory',
+					'secrets',
+					'projects',
+					'infra',
+				]
+				await Promise.all(runtimeDirs.map((d) => mkdir(join(targetDir, d), { recursive: true })))
+
+				// Add .gitkeep to empty runtime dirs so git tracks them
+				await Promise.all(
+					runtimeDirs.map((d) =>
+						writeFile(join(targetDir, d, '.gitkeep'), '', 'utf-8')
+					)
+				)
+
 				const companyYamlPath = join(targetDir, 'company.yaml')
 				let content = await readFile(companyYamlPath, 'utf-8')
 				content = content.replace(/name:\s*"My Company"/, `name: "${name}"`)
@@ -92,50 +119,50 @@ program.addCommand(
 				await writeFile(companyYamlPath, content, 'utf-8')
 
 				// Create .claude/skills symlink → ../skills (Agent Skills standard)
-			const claudeDir = join(targetDir, '.claude')
-			await mkdir(claudeDir, { recursive: true })
-			try {
-				await symlink('../skills', join(claudeDir, 'skills'))
-			} catch {
-				// Symlink may already exist from template copy
-			}
+				const claudeDir = join(targetDir, '.claude')
+				await mkdir(claudeDir, { recursive: true })
+				try {
+					await symlink('../skills', join(claudeDir, 'skills'))
+				} catch {
+					// Symlink may already exist from template copy
+				}
 
-			// Initialize git repository
-			const gitignoreContent = [
-				'# SQLite operational databases',
-				'.data/',
-				'',
-				'# Secrets (encryption key MUST NOT be in git)',
-				'secrets/.master-key',
-				'',
-				'# Dependencies',
-				'node_modules/',
-				'',
-				'# Build artifacts',
-				'.turbo/',
-				'dashboard/dist/',
-				'',
-				'# Session streams (too large, append-only)',
-				'logs/sessions/*.jsonl',
-				'',
-				'# OS files',
-				'.DS_Store',
-				'Thumbs.db',
-			].join('\n')
-			await writeFile(join(targetDir, '.gitignore'), gitignoreContent, 'utf-8')
+				// Initialize git repository
+				const gitignoreContent = [
+					'# SQLite operational databases',
+					'.data/',
+					'',
+					'# Secrets (encryption key MUST NOT be in git)',
+					'secrets/.master-key',
+					'',
+					'# Dependencies',
+					'node_modules/',
+					'',
+					'# Build artifacts',
+					'.turbo/',
+					'dashboard/dist/',
+					'',
+					'# Session streams (too large, append-only)',
+					'logs/sessions/*.jsonl',
+					'',
+					'# OS files',
+					'.DS_Store',
+					'Thumbs.db',
+				].join('\n')
+				await writeFile(join(targetDir, '.gitignore'), gitignoreContent, 'utf-8')
 
-			try {
-				const git = simpleGit(targetDir)
-				await git.init()
-				await git.add('-A')
-				await git.commit('chore: initial company setup via autopilot init')
-				console.log(success('Git repository initialized'))
-				console.log(dim('All changes will be auto-committed by the orchestrator'))
-			} catch (err) {
-				console.log(warning('Git init skipped — git may not be installed'))
-			}
+				try {
+					const git = simpleGit(targetDir)
+					await git.init()
+					await git.add('-A')
+					await git.commit('chore: initial company setup via autopilot init')
+					console.log(success('Git repository initialized'))
+					console.log(dim('All changes will be auto-committed by the orchestrator'))
+				} catch (err) {
+					console.log(warning('Git init skipped — git may not be installed'))
+				}
 
-			console.log(success('Company initialized successfully!'))
+				console.log(success('Company initialized successfully!'))
 				console.log(dim('Dashboard template installed'))
 				console.log(separator())
 				console.log(`  ${dim('Directory:')}  ${targetDir}`)

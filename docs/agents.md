@@ -4,20 +4,20 @@
 
 | Agent | ID | Role | Primary Tools |
 |-------|-----|------|--------------|
-| **Sam** | `ceo` | CEO / Orchestrator | `create_task`, `send_message`, `ask_agent` |
-| **Ivan** | `ivan` | Strategist | `search_knowledge`, `create_task`, `send_message` |
-| **Adam** | `adam` | Planner | `create_task`, `write_file`, `search_knowledge` |
-| **Peter** | `peter` | Developer | `write_file`, `git_commit`, `run_command`, `git_create_pr` |
-| **Marek** | `marek` | Reviewer | `read_file`, `send_message`, `update_task` |
-| **Viktor** | `ops` | DevOps | `run_command`, `write_file`, `http_request`, `git_commit` |
-| **Sofia** | `marketer` | Marketing | `write_file`, `search_knowledge`, `send_message` |
-| **Luna** | `designer` | Design | `write_file`, `search_knowledge`, `send_message` |
+| **CEO** | `ceo` | Meta / Orchestrator | `create_task`, `send_message`, `ask_agent` |
+| **Sam** | `sam` | Strategist | `search_knowledge`, `create_task`, `send_message` |
+| **Alex** | `alex` | Planner | `create_task`, `search_knowledge`, `skill_request` |
+| **Max** | `max` | Developer | `create_artifact`, `skill_request`, `search`, `http_request` |
+| **Riley** | `riley` | Reviewer | `search_knowledge`, `send_message`, `update_task` |
+| **Ops** | `ops` | DevOps | `http_request`, `create_artifact`, `skill_request` |
+| **Morgan** | `morgan` | Marketing | `create_artifact`, `search_knowledge`, `send_message` |
+| **Jordan** | `jordan` | Design | `create_artifact`, `search_knowledge`, `send_message` |
 
 ## How Agents Work
 
 Each agent is a Claude session with:
 - **System prompt** — role definition, responsibilities, conventions
-- **Tools** — subset of the 13 primitives, scoped to their role
+- **Tools** — subset of the 14 primitives, scoped to their role
 - **FS scope** — sandboxed access to relevant directories
 - **Memory** — persistent facts, decisions, patterns from past sessions
 - **Context** — role-scoped snapshot of current company state
@@ -28,21 +28,21 @@ Edit `team/agents.yaml` in your company directory:
 
 ```yaml
 agents:
-  peter:
-    name: Peter
+  max:
+    name: Max
     role: developer
     description: "Full-stack developer specializing in React and Node.js"
     model: claude-opus-4  # or claude-sonnet-4
     tools:
-      - write_file
-      - read_file
-      - git_commit
-      - git_create_branch
-      - git_create_pr
-      - run_command
-      - install_tool
-      - search_knowledge
+      - create_task
+      - update_task
       - send_message
+      - search_knowledge
+      - create_artifact
+      - skill_request
+      - search
+      - http_request
+      - pin_to_board
     fs_scope:
       - "projects/**"
       - "knowledge/technical/**"
@@ -63,10 +63,10 @@ agents:
     description: "Data analyst — builds dashboards, runs queries, generates reports"
     model: claude-sonnet-4
     tools:
-      - read_file
-      - write_file
-      - run_command
       - search_knowledge
+      - create_artifact
+      - skill_request
+      - search
       - pin_to_board
       - send_message
     fs_scope:
@@ -79,25 +79,17 @@ The orchestrator picks up changes automatically (filesystem watcher).
 
 ## Agent Memory
 
-Each agent has persistent memory stored in `context/memory/{agent-id}/`:
-
-```
-context/memory/peter/
-├── facts.yaml       # Things the agent has learned
-├── decisions.yaml   # Past decisions and reasoning
-├── patterns.yaml    # Recurring patterns observed
-└── mistakes.yaml    # Past mistakes to avoid
-```
-
-Memory is extracted automatically after each session using Claude Haiku. The agent's next session includes relevant memories in context.
+Each agent has persistent memory stored in `context/memory/{agent-id}/memory.yaml`. Memory is extracted automatically after each session using Claude Haiku. The agent's next session includes relevant memories in context.
 
 ## Context Layers
 
-Each agent session receives 4 layers of context:
+Each agent session receives 6 layers of context:
 
 1. **Identity** (~2K tokens) — role, tools, team, conventions
 2. **Company State** (~3-5K tokens) — current projects, tasks, team status
-3. **Memory** (~15-20K tokens) — persistent learnings
+3. **Agent Memory** (~15-20K tokens) — persistent learnings from past sessions
 4. **Task Context** (~8-15K tokens) — task details, specs, code context
+5. **Skills Discovery** — available skills from `skills/` (20 built-in, agentskills.io format)
+6. **Tool List** — available primitives scoped to the agent's role
 
 Total budget: ~100K tokens (half of the 200K context window).

@@ -37,7 +37,7 @@ services:
 
 | Mount | Purpose |
 |-------|---------|
-| `./company:/data/company` | Company filesystem — all YAML, tasks, knowledge |
+| `./company:/data/company` | Company filesystem — config, knowledge, skills, dashboard. SQLite DB at `.data/autopilot.db` inside this directory. |
 
 The SQLite database lives inside the company directory at `.data/autopilot.db`. Since the company directory is mounted as a volume, the database persists across container restarts.
 

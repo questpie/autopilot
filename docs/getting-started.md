@@ -92,10 +92,10 @@ When you ran `autopilot start`, the orchestrator:
 6. Initialized the SQLite database with FTS5 + vector search
 
 When you ran `autopilot ask`, it:
-1. Created a task in `tasks/backlog/`
+1. Created a task in SQLite (`.data/autopilot.db`)
 2. The CEO agent picked it up and decomposed it
 3. Sub-tasks were created and assigned to agents
 4. Each agent worked in sequence following the workflow
 5. Every file change was auto-committed to git
 
-Your entire company state lives in the `my-company/` directory. Back it up with `cp -r`, fork it with `git clone`.
+Your company config lives in the `my-company/` directory, and runtime data (tasks, messages, activity) lives in SQLite. Back it up with `cp -r`, fork it with `git clone`.

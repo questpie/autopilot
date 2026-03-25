@@ -27,7 +27,7 @@
 │  AGENT LAYER                                            │
 │                                                         │
 │  8 roles with system prompts + scoped tools             │
-│  13 structured primitives (not chat)                    │
+│  14 structured primitives (not chat)                    │
 │  Sandboxed filesystem access                            │
 │  Per-agent persistent memory                            │
 └──────────────────────┬──────────────────────────────────┘
@@ -61,18 +61,19 @@
 
 ## How Agent Spawning Works
 
-1. A task lands in `tasks/backlog/` (from CLI, webhook, or another agent)
-2. The filesystem watcher detects the change
-3. The workflow engine matches the task to a workflow step
-4. The context builder assembles a prompt:
+1. A task is created in SQLite (from CLI, webhook, or another agent)
+2. The workflow engine matches the task to a workflow step
+3. The context builder assembles a prompt with 6 layers:
    - **Identity** (~2K tokens) — role, tools, team info
    - **Company state** (~3-5K tokens) — role-scoped snapshot
-   - **Memory** (~15-20K tokens) — persistent facts, decisions, patterns
-   - **Task context** (~8-15K tokens) — task YAML, specs, history
-5. The agent spawner creates a Claude session via Agent SDK
-6. The agent executes tool calls (primitives)
-7. Post-session: memory extractor persists learnings
-8. Task moves to next workflow step
+   - **Agent memory** (~15-20K tokens) — persistent facts, decisions, patterns
+   - **Task context** (~8-15K tokens) — task details, specs, history
+   - **Skills discovery** — available skills from `skills/` directory
+   - **Tool list** — available primitives scoped to the agent's role
+4. The agent spawner creates a Claude session via Agent SDK
+5. The agent executes tool calls (primitives)
+6. Post-session: memory extractor (Claude Haiku) persists learnings to `context/memory/{agentId}/memory.yaml`
+7. Task moves to next workflow step
 
 ## Primitives (Agent Tools)
 
@@ -83,9 +84,9 @@ Agents don't generate text. They call structured primitives:
 | Communication | `send_message`, `ask_agent` |
 | Tasks | `create_task`, `update_task`, `add_blocker`, `resolve_blocker` |
 | Dashboard | `pin_to_board`, `unpin_from_board` |
-| Knowledge | `search_knowledge`, `semantic_search`, `update_knowledge` |
-| Files & Git | `read_file`, `write_file`, `list_directory`, `git_commit`, `git_create_branch`, `git_create_pr` |
-| External | `http_request`, `run_command`, `install_tool` |
+| Knowledge | `search_knowledge`, `update_knowledge` |
+| Content | `create_artifact`, `skill_request` |
+| External | `search`, `http_request` |
 
 ## Git Auto-Commit
 

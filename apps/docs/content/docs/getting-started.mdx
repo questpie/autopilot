@@ -45,7 +45,7 @@ autopilot attach max
 
 ## What Just Happened
 
-1. **`autopilot init`** scaffolded a complete company filesystem from the `solo-dev-shop` template -- agents, workflows, knowledge, skills, and a living dashboard.
+1. **`autopilot init`** scaffolded a complete company filesystem from the `solo-dev` template -- agents, workflows, knowledge, skills, and a living dashboard.
 2. **`autopilot start`** launched the orchestrator: filesystem watcher, workflow engine, scheduler, webhook server, REST API, and SSE stream. One process.
 3. **`autopilot ask`** gave your intent to the CEO agent, who decomposed it into scoped tasks and assigned them to the right agents via workflow rules.
 4. **`autopilot attach`** connected you to Max's live session stream -- like `kubectl logs -f` for AI agents. Ctrl+C to detach; the agent keeps working.
@@ -55,43 +55,49 @@ autopilot attach max
 After `autopilot init`, you get a complete company filesystem:
 
 ```text title="my-company/"
-company.yaml                  # Company identity and global settings
+company.yaml                  # Company configuration
 team/
-  agents.yaml                 # AI agents: ceo, sam, alex, max, riley, ops, morgan, jordan
-  humans.yaml                 # Human team members and notification preferences
+  agents.yaml                 # AI agent definitions (8 default agents)
+  humans.yaml                 # Human team members
+  roles.yaml                  # RBAC role definitions
+  schedules.yaml              # Cron-triggered agent jobs
+  webhooks.yaml               # External webhook integrations
   workflows/
-    development.yaml          # Intent -> Scope -> Plan -> Implement -> Review -> Deploy
-    marketing.yaml            # Brief -> Content -> Design -> Review -> Publish
-    incident.yaml             # Triage -> Fix -> Review -> Deploy -> Verify
-  schedules.yaml              # Cron jobs (daily standup, weekly metrics)
-  webhooks.yaml               # Inbound webhook definitions (GitHub, Stripe)
+    development.yaml          # 12-step dev workflow
+    marketing.yaml            # 7-step marketing workflow
+    incident.yaml             # 8-step incident response
   policies/
-    approval-gates.yaml       # What requires human approval
-tasks/
-  backlog/                    # Unassigned tasks
-  active/                     # Tasks being worked on
-  review/                     # Awaiting human review or approval
-  blocked/                    # Waiting on external dependency
-  done/                       # Completed (auto-archived)
-comms/channels/               # Agent communication
-knowledge/                    # Company brain (brand, technical, business)
-context/memory/               # Per-agent persistent memory (YAML)
-skills/                       # Agent Skills (agentskills.io standard)
-projects/                     # Code repos, design assets, marketing materials
-secrets/                      # Encrypted API keys and credentials
-dashboard/
-  pins/                       # Board pins from agents
-  widgets/                    # Custom dashboard widgets
+    approval-gates.yaml       # Human approval requirements
+knowledge/                    # Searchable knowledge base (markdown)
+  brand/                      # Brand guidelines
+  business/                   # Business context
+  technical/                  # Architecture & conventions
+  onboarding/                 # Agent onboarding docs
+  integrations/               # Integration guides
+skills/                       # Agent skills (agentskills.io format, 20 built-in)
+dashboard/                    # Living dashboard configuration
+  groups.yaml                 # Pin groups
+  pins/                       # Agent-created dashboard pins
+  widgets/                    # Custom React widgets
   pages/                      # Custom dashboard pages
-  overrides/                  # Theme, layout overrides
-logs/
-  activity/                   # Activity feed
-  sessions/                   # Agent session streams
-.data/
-  autopilot.db                # SQLite database (FTS5, embeddings, auth, sessions)
 ```
 
-> The `.data/` directory is auto-created on first `autopilot start`. It contains the SQLite database used for fast indexed queries, full-text search, vector embeddings, and Better Auth sessions. If deleted, it is fully rebuilt from the YAML/Markdown files.
+The above directories are created by the template. The following runtime directories are created automatically by `autopilot init` and `autopilot start`:
+
+```text title="Runtime directories"
+tasks/                        # Task status directories (runtime)
+comms/                        # Communication channels (runtime)
+logs/                         # Activity & session logs (runtime)
+context/                      # Agent memory & indexes (runtime)
+  memory/{agent}/             # Per-agent persistent memory
+secrets/                      # Encrypted secrets (runtime)
+projects/                     # Project workspaces (runtime)
+artifacts/                    # Generated apps & content (runtime)
+.data/
+  autopilot.db                # SQLite database (FTS5, embeddings, auth)
+```
+
+> Tasks, messages, and activity are stored in SQLite (`.data/autopilot.db`), not as YAML files. The `.data/` directory is auto-created on first `autopilot start`. If deleted, it is rebuilt from the configuration files.
 
 ## Configuration
 
@@ -134,7 +140,7 @@ agents:
     fs_scope:
       read: ["/**"]
       write: ["/tasks/**", "/team/**", "/comms/**", "/dashboard/**"]
-    tools: ["fs", "terminal", "task", "message", "board"]
+    tools: ["create_task", "update_task", "send_message", "ask_agent", "pin_to_board"]
 
   - id: max
     name: "Max"
@@ -143,7 +149,7 @@ agents:
     fs_scope:
       read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
       write: ["/projects/*/code/**", "/tasks/**", "/comms/**"]
-    tools: ["fs", "terminal", "task", "message", "git"]
+    tools: ["create_task", "update_task", "send_message", "create_artifact", "skill_request", "search"]
 ```
 
 Start with 2-3 agents, add as you need. You choose the names, the roles, and the tools.
@@ -221,7 +227,7 @@ autopilot reject TASK-001 --reason "Needs error handling for edge cases"
 
 ## Next Steps
 
-- [Primitives](/docs/primitives) -- the 13 structured primitives agents use (the core differentiator)
+- [Primitives](/docs/primitives) -- the 14 structured primitives agents use (the core differentiator)
 - [Living Dashboard](/docs/living-dashboard) -- custom widgets, theme overrides, agent-created pages
 - [Architecture](/docs/architecture) -- four-layer stack, zero-infra design, orchestrator internals
 - [Workflows](/docs/workflows) -- how tasks flow through development, marketing, and incident pipelines
