@@ -24,14 +24,25 @@ curl -fsSL https://raw.githubusercontent.com/questpie/autopilot/main/install.sh 
 ```bash
 git clone https://github.com/questpie/autopilot
 cd autopilot
-cp .env.example .env  # Add your ANTHROPIC_API_KEY
+cp .env.example .env
 docker compose up
 ```
+
+> **Authentication** (choose one per provider):
+> - **Subscription login** (recommended): `autopilot provider login claude` / `autopilot provider login codex`
+>   Works on VPS too — prints a link to open on any device (phone/laptop).
+> - **API key** (alternative): set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `.env`
 
 ### npx (local dev)
 ```bash
 npx @questpie/autopilot init my-company
 cd my-company
+
+# Authenticate (choose one)
+autopilot provider login claude    # Use Claude subscription (recommended)
+# OR
+export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
+
 npx @questpie/autopilot start
 ```
 
@@ -126,6 +137,7 @@ autopilot chat <agent>       # Direct chat with agent
 autopilot dashboard          # Open web dashboard
 autopilot secrets            # Manage API keys
 autopilot auth               # Manage authentication
+autopilot provider login <p> # Authenticate with subscription (claude/codex)
 ```
 
 ---

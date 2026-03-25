@@ -33,8 +33,10 @@ This scaffolds the full company filesystem from the `solo-dev-shop` template, in
 ## Configure
 
 ```bash title="terminal"
-# Anthropic API key (not required if using a Claude Max/Pro subscription)
-export ANTHROPIC_API_KEY=sk-ant-...
+# Authenticate (choose one)
+autopilot provider login claude    # Use Claude subscription (recommended)
+# OR
+export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
 
 # Recommended: master key for secrets encryption
 export AUTOPILOT_MASTER_KEY=$(openssl rand -base64 32)
@@ -83,10 +85,10 @@ sudo -u autopilot bash -c '
 ### 3. Create an environment file
 
 ```bash title="/opt/autopilot/.env"
-# Not required if using a Claude Max/Pro subscription:
-ANTHROPIC_API_KEY=sk-ant-your-key-here
 AUTOPILOT_MASTER_KEY=your-generated-key-here
 NODE_ENV=production
+# Uncomment if using API key instead of subscription login (autopilot provider login claude):
+# ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
 
 ```bash title="terminal"

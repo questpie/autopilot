@@ -93,7 +93,7 @@ For complete auth setup (creating users, managing roles, 2FA), see [Authenticati
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | No | — | Claude API key for agent sessions (not required if using a Claude Max/Pro subscription) |
+| `ANTHROPIC_API_KEY` | No | — | Claude API key (alternative to `autopilot provider login claude`) |
 | `COMPANY_ROOT` | Docker only | `cwd` | Path to company data directory |
 | `AUTOPILOT_MASTER_KEY` | Recommended | Auto-generated file | 256-bit base64 key for secrets encryption |
 | `NODE_ENV` | Recommended | `development` | Set `production` for secure cookies |
@@ -103,9 +103,14 @@ For complete auth setup (creating users, managing roles, 2FA), see [Authenticati
 
 ### ANTHROPIC_API_KEY
 
-Optional if using a Claude Max/Pro subscription. Otherwise, all agent sessions use this key to call the Claude API. Get one at [console.anthropic.com](https://console.anthropic.com).
+Alternative to subscription login. If you prefer API keys over `autopilot provider login claude`, set this variable. Get one at [console.anthropic.com](https://console.anthropic.com).
 
 ```bash title="terminal"
+# Option A: Subscription login (recommended)
+autopilot provider login claude
+# Works on headless VPS — prints a URL to open on any device.
+
+# Option B: API key
 export ANTHROPIC_API_KEY=sk-ant-api03-...
 ```
 

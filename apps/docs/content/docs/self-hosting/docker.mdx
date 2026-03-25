@@ -54,14 +54,17 @@ services:
 # Generate a master key for secrets encryption
 export AUTOPILOT_MASTER_KEY=$(openssl rand -base64 32)
 
-# Set your Anthropic API key (not needed if using a Claude Max/Pro subscription)
-export ANTHROPIC_API_KEY=sk-ant-...
+# Authenticate (choose one):
+#   Option A (recommended): autopilot provider login claude
+#     Works on headless VPS — prints a URL to open on any device.
+#   Option B: Set API key in .env
+#     ANTHROPIC_API_KEY=sk-ant-...
 
 # Save to .env for docker-compose
 cat > .env << 'EOF'
-# Not required if using a Claude Max/Pro subscription:
-ANTHROPIC_API_KEY=sk-ant-your-key-here
 AUTOPILOT_MASTER_KEY=your-generated-key-here
+# Uncomment if using API key instead of subscription login:
+# ANTHROPIC_API_KEY=sk-ant-your-key-here
 EOF
 ```
 
@@ -77,7 +80,7 @@ The orchestrator is now running at `http://localhost:7778`.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | No | — | Claude API key for agent sessions (not required if using a Claude Max/Pro subscription) |
+| `ANTHROPIC_API_KEY` | No | — | Claude API key (alternative to `autopilot provider login claude`) |
 | `COMPANY_ROOT` | Yes | — | Path to company data inside the container |
 | `AUTOPILOT_MASTER_KEY` | Recommended | Auto-generated file | 256-bit base64 key for secrets encryption |
 | `NODE_ENV` | Recommended | `development` | Set `production` for secure cookies and HTTPS |
@@ -203,7 +206,7 @@ docker logs autopilot
 # Common issues:
 # - "failed to load company.yaml" → COMPANY_ROOT path is wrong or volume not mounted
 # - "EADDRINUSE" → port conflict, change PORT/WEBHOOK_PORT
-# - "missing ANTHROPIC_API_KEY" → env var not set
+# - "missing authentication" → run: autopilot provider login claude, or set ANTHROPIC_API_KEY
 ```
 
 ### Port conflicts

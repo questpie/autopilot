@@ -95,8 +95,10 @@ bun add -g @questpie/autopilot
 autopilot init my-company
 cd my-company
 
-# Configure your API key (not needed with Claude Max/Pro subscription)
-export ANTHROPIC_API_KEY=sk-ant-...
+# Authenticate (choose one)
+autopilot provider login claude    # Use Claude subscription (recommended)
+# OR
+export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
 
 # Start the orchestrator + dashboard
 autopilot start
@@ -113,22 +115,23 @@ autopilot attach max`}
 					<div className="mt-4 bg-lp-card border border-lp-border p-6">
 						<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
 							<strong className="text-lp-fg">What you need:</strong>{' '}
-							Bun runtime + an API key or subscription. That's it.
+							Bun runtime + <code className="font-mono text-[11px] text-lp-purple">autopilot provider login claude</code> (subscription) or an API key. That's it.
 							No Docker. No Postgres. No Redis. No vector DB. No Kubernetes.
+							Subscription login works on headless VPS — prints a URL to open on any device.
 						</div>
 					</div>
 					<div className="mt-4 bg-lp-card border border-lp-border p-6">
 						<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-3">
-							WORKS WITH API KEY OR SUBSCRIPTION
+							SUBSCRIPTION LOGIN OR API KEY
 						</div>
 						<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-1.5">
 							<div>
 								<strong className="text-lp-fg">Claude:</strong>{' '}
-								Anthropic API key or Claude Max/Pro subscription
+								<code className="font-mono text-[11px] text-lp-purple">autopilot provider login claude</code> (subscription) or <code className="font-mono text-[11px] text-lp-purple">ANTHROPIC_API_KEY</code>
 							</div>
 							<div>
 								<strong className="text-lp-fg">GPT:</strong>{' '}
-								OpenAI API key or ChatGPT Plus subscription
+								<code className="font-mono text-[11px] text-lp-purple">autopilot provider login codex</code> (subscription) or <code className="font-mono text-[11px] text-lp-purple">OPENAI_API_KEY</code>
 							</div>
 							<div>
 								<strong className="text-lp-fg">Embeddings:</strong>{' '}
@@ -574,7 +577,7 @@ pin_to_board({
 							ZERO INFRASTRUCTURE
 						</div>
 						<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-							No Docker, no Postgres, no Redis, no vector DB. Just Bun + an API key or subscription.
+							No Docker, no Postgres, no Redis, no vector DB. Just Bun + <code className="font-mono text-[11px] text-lp-purple">autopilot provider login claude</code> or an API key.
 						</div>
 					</div>
 				</Section>
