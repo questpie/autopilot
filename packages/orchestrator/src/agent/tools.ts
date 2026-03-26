@@ -1,5 +1,5 @@
 import { mkdir, readdir } from 'node:fs/promises'
-import { join } from 'path'
+import { join, relative, resolve } from 'path'
 import dns from 'node:dns/promises'
 import { stringify } from 'yaml'
 import { z } from 'zod'
@@ -8,6 +8,7 @@ import type { StorageBackend } from '../fs/storage'
 import { createPin, removePin } from '../fs/pins'
 import { readYamlUnsafe, writeYaml } from '../fs/yaml'
 import { loadSkillContent } from '../skills'
+import { isDeniedPath } from '../auth/deny-patterns'
 
 // ─── Tool definition types ─────────────────────────────────────────────────
 
@@ -269,11 +270,23 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 				files: z.record(z.string()).describe('File paths (relative) mapped to their content'),
 			}),
 			async (args, ctx) => {
+				if (args.name.includes('..') || args.name.includes('/')) {
+					return { content: [{ type: 'text' as const, text: 'Error: artifact name must not contain ".." or "/"' }], isError: true }
+				}
 				const artifactDir = join(companyRoot, 'artifacts', args.name)
 				await Bun.write(join(artifactDir, '.gitkeep'), '')
 
 				for (const [filePath, content] of Object.entries(args.files)) {
-					await Bun.write(join(artifactDir, filePath), content)
+					const resolved = resolve(artifactDir, filePath)
+					const rel = relative(artifactDir, resolved)
+					if (rel.startsWith('..')) {
+						return { content: [{ type: 'text' as const, text: `Error: file path "${filePath}" escapes artifact directory` }], isError: true }
+					}
+					const relToCompany = relative(companyRoot, resolved)
+					if (isDeniedPath(relToCompany)) {
+						return { content: [{ type: 'text' as const, text: `Error: access denied to path "${filePath}"` }], isError: true }
+					}
+					await Bun.write(resolved, content)
 				}
 
 				let artifactConfig: Record<string, string>
@@ -482,7 +495,15 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 			}),
 			async (args, ctx) => {
 				const knowledgeDir = join(companyRoot, PATHS.KNOWLEDGE_DIR.replace(/^\/company/, ''))
-				const filePath = join(knowledgeDir, args.path)
+				const filePath = resolve(knowledgeDir, args.path)
+				const rel = relative(knowledgeDir, filePath)
+				if (rel.startsWith('..')) {
+					return { content: [{ type: 'text' as const, text: `Error: path "${args.path}" escapes knowledge directory` }], isError: true }
+				}
+				const relToCompany = relative(companyRoot, filePath)
+				if (isDeniedPath(relToCompany)) {
+					return { content: [{ type: 'text' as const, text: `Error: access denied to path "${args.path}"` }], isError: true }
+				}
 				const dirPath = join(filePath, '..')
 				await mkdir(dirPath, { recursive: true })
 				await Bun.write(filePath, args.content)
