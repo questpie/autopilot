@@ -112,6 +112,12 @@ const artifacts = new Hono<AppEnv>().get(
 		const { id } = c.req.valid('param')
 		const router = getRouter(root)
 
+		try {
+			await router.readConfig(id)
+		} catch {
+			return c.json({ error: `Artifact "${id}" not found` }, 404)
+		}
+
 		const result = await router.route(id)
 		return c.json({ id, port: result.port, url: result.url })
 	},
