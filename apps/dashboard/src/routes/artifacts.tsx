@@ -1,13 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
-import { TopBar } from '@/components/layout/top-bar'
 import { EmptyState } from '@/components/feedback/empty-state'
 import { ErrorBoundary } from '@/components/feedback/error-boundary'
-import { Skeleton } from '@/components/ui/skeleton'
+import { TopBar } from '@/components/layout/top-bar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { useArtifacts, useStartArtifact, useStopArtifact } from '@/hooks/use-artifacts'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useArtifacts, useStopArtifact } from '@/hooks/use-artifacts'
 import type { Artifact } from '@/lib/types'
+import { createFileRoute } from '@tanstack/react-router'
+import { useState } from 'react'
 
 export const Route = createFileRoute('/artifacts')({
 	component: ArtifactsPage,
@@ -50,7 +50,6 @@ function ArtifactsPage() {
 }
 
 function ArtifactCard({ artifact }: { artifact: Artifact }) {
-	const startArtifact = useStartArtifact()
 	const stopArtifact = useStopArtifact()
 	const [showPreview, setShowPreview] = useState(false)
 
@@ -78,55 +77,34 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
 			</div>
 
 			{artifact.type && (
-				<div className="font-mono text-[10px] text-muted-foreground">
-					type: {artifact.type}
-				</div>
+				<div className="font-mono text-[10px] text-muted-foreground">type: {artifact.type}</div>
 			)}
 			{artifact.serve && (
 				<div className="font-mono text-[10px] text-muted-foreground truncate">
 					serve: {artifact.serve}
 				</div>
 			)}
-			{artifact.port && (
-				<div className="font-mono text-[10px] text-info">
-					port: {artifact.port}
-				</div>
-			)}
 
 			<div className="flex gap-2 pt-2 border-t border-border">
-				{(artifact.status ?? 'stopped') === 'running' ? (
-					<>
-						<Button
-							size="sm"
-							variant="outline"
-							onClick={() => setShowPreview(!showPreview)}
-						>
-							{showPreview ? 'Hide Preview' : 'Preview'}
-						</Button>
-						<Button
-							size="sm"
-							variant="destructive"
-							onClick={() => stopArtifact.mutate(artifact.id)}
-							disabled={stopArtifact.isPending}
-						>
-							Stop
-						</Button>
-					</>
-				) : (
+				<Button size="sm" variant="outline" onClick={() => setShowPreview(!showPreview)}>
+					{showPreview ? 'Hide Preview' : 'Preview'}
+				</Button>
+				{(artifact.status ?? 'stopped') === 'running' && (
 					<Button
 						size="sm"
-						onClick={() => startArtifact.mutate(artifact.id)}
-						disabled={startArtifact.isPending}
+						variant="destructive"
+						onClick={() => stopArtifact.mutate(artifact.id)}
+						disabled={stopArtifact.isPending}
 					>
-						{startArtifact.isPending ? 'Starting...' : 'Start'}
+						Stop
 					</Button>
 				)}
 			</div>
 
-			{showPreview && artifact.status === 'running' && artifact.port && (
+			{showPreview && (
 				<div className="border border-border mt-2">
 					<iframe
-						src={`http://localhost:${artifact.port}`}
+						src={`/artifacts/${artifact.id}`}
 						className="w-full h-[300px] bg-white"
 						title={artifact.name}
 					/>

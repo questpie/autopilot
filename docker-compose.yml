@@ -16,6 +16,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - AUTOPILOT_MASTER_KEY=${AUTOPILOT_MASTER_KEY:-}
       - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
+      - CORS_ORIGIN=${CORS_ORIGIN:-}
       - NODE_ENV=production
     restart: unless-stopped
     healthcheck:

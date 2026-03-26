@@ -9,6 +9,7 @@ import { createPin, removePin } from '../fs/pins'
 import { readYamlUnsafe, writeYaml } from '../fs/yaml'
 import { loadSkillContent } from '../skills'
 import { isDeniedPath } from '../auth/deny-patterns'
+import { eventBus } from '../events/event-bus'
 
 // ─── Tool definition types ─────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ export interface AutopilotToolOptions {
  *
  * Includes: `send_message`, `create_task`, `update_task`, `add_blocker`,
  * `pin_to_board`, `unpin_from_board`, `create_artifact`, `skill_request`,
- * `search_knowledge`, `update_knowledge`, `http_request`, `ask_agent`,
+ * `search_knowledge`, `update_knowledge`, `http_request`, `message_agent`,
  * and `resolve_blocker`.
  */
 export function createAutopilotTools(companyRoot: string, storage: StorageBackend, options?: AutopilotToolOptions): ToolDefinition[] {
@@ -115,18 +116,22 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 		// Communication
 		defineTool(
 			'send_message',
-			'Send a message to a channel or another agent',
+			'Send a message to a channel',
 			z.object({
-				to: z.string().describe('Target: "channel:dev", "agent:marek", "human:dominik"'),
+				channel: z.string().describe('Channel ID to send to (e.g. "general", "dev", or a direct channel ID)'),
 				content: z.string().describe('Message content'),
-				priority: z.enum(['urgent', 'high', 'normal', 'low']).optional().describe('Message priority'),
 				references: z.array(z.string()).optional().describe('Referenced file paths or task IDs'),
 			}),
 			async (args, ctx) => {
-				const [type, target] = args.to.split(':')
-				const msgData = {
+				const isMember = await storage.isChannelMember(args.channel, ctx.agentId)
+				if (!isMember) {
+					return { content: [{ type: 'text' as const, text: `Access denied: not a member of channel #${args.channel}` }] }
+				}
+
+				await storage.sendMessage({
 					id: `msg-${Date.now().toString(36)}`,
 					from: ctx.agentId,
+					channel: args.channel,
 					at: new Date().toISOString(),
 					content: args.content,
 					mentions: [],
@@ -134,13 +139,11 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 					reactions: [],
 					thread: null,
 					external: false,
-				}
-				if (type === 'channel') {
-					await storage.sendMessage({ ...msgData, channel: target! } as any)
-				} else {
-					await storage.sendMessage({ ...msgData, to: target!, from_id: ctx.agentId } as any)
-				}
-				return { content: [{ type: 'text' as const, text: `Message sent to ${args.to}` }] }
+				} as any)
+
+				eventBus.emit({ type: 'message', channel: args.channel, from: ctx.agentId, content: args.content })
+
+				return { content: [{ type: 'text' as const, text: `Message sent to #${args.channel}` }] }
 			},
 		),
 
@@ -287,6 +290,23 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 						return { content: [{ type: 'text' as const, text: `Error: access denied to path "${filePath}"` }], isError: true }
 					}
 					await Bun.write(resolved, content)
+				}
+
+				// Ensure React artifacts have a vite config that respects ARTIFACT_BASE
+				if (args.type === 'react' && !args.files['vite.config.ts'] && !args.files['vite.config.js']) {
+					await Bun.write(
+						join(artifactDir, 'vite.config.ts'),
+						[
+							"import { defineConfig } from 'vite'",
+							"import react from '@vitejs/plugin-react'",
+							'',
+							'export default defineConfig({',
+							"  base: process.env.ARTIFACT_BASE || '/',",
+							'  plugins: [react()],',
+							'})',
+							'',
+						].join('\n'),
+					)
 				}
 
 				let artifactConfig: Record<string, string>
@@ -617,41 +637,41 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 
 		// Agent communication
 		defineTool(
-			'ask_agent',
-			'Ask another agent a question (they decide whether to answer)',
+			'message_agent',
+			'Send a direct message to another agent via a direct channel',
 			z.object({
-				to: z.string().describe('Agent ID to ask'),
-				question: z.string(),
-				reason: z.string().describe('Why you need this information'),
-				urgency: z.enum(['low', 'normal', 'high']).optional(),
+				to: z.string().describe('Agent ID to message'),
+				content: z.string().describe('Message content'),
+				reason: z.string().describe('Why you need to reach this agent'),
 			}),
 			async (args, ctx) => {
-				const msgId = `msg-${Date.now().toString(36)}`
-				const content = `**Question from ${ctx.agentId}:**\n${args.question}\n\n**Reason:** ${args.reason}`
+				const channel = await storage.getOrCreateDirectChannel(ctx.agentId, args.to)
+
 				await storage.sendMessage({
-					id: msgId,
+					id: `msg-${Date.now().toString(36)}`,
 					from: ctx.agentId,
+					channel: channel.id,
 					at: new Date().toISOString(),
-					content,
-					to: args.to,
-					from_id: ctx.agentId,
+					content: args.content,
+					mentions: [args.to],
 					references: [],
+					reactions: [],
+					thread: null,
+					external: false,
 				} as any)
 
+				eventBus.emit({ type: 'message', channel: channel.id, from: ctx.agentId, content: args.content })
+
 				await createPin(companyRoot, {
-					id: `pin-${Date.now().toString(36)}`,
-					group: 'agents',
-					title: `Agent Request: ${ctx.agentId} → ${args.to}`,
-					content: args.question,
 					type: 'info',
+					title: `Message from ${ctx.agentId}`,
+					content: args.content,
+					group: 'agents',
 					created_by: ctx.agentId,
-					created_at: new Date().toISOString(),
-					metadata: {},
+					metadata: { agent_id: args.to, task_id: undefined },
 				})
 
-				return {
-					content: [{ type: 'text' as const, text: `Question sent to ${args.to}. They will respond when available.` }],
-				}
+				return { content: [{ type: 'text' as const, text: `Direct message sent to ${args.to} in channel ${channel.id}` }] }
 			},
 		),
 

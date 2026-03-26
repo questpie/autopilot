@@ -4,20 +4,8 @@ import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { ArtifactRouter } from '../../artifact'
+import { getRouter } from '../../artifact'
 import type { AppEnv } from '../app'
-
-/** Lazily-created ArtifactRouter instances keyed by companyRoot. */
-const routers = new Map<string, ArtifactRouter>()
-
-function getRouter(companyRoot: string): ArtifactRouter {
-	let router = routers.get(companyRoot)
-	if (!router) {
-		router = new ArtifactRouter(companyRoot)
-		routers.set(companyRoot, router)
-	}
-	return router
-}
 
 const ArtifactConfigSchema = z.object({
 	id: z.string(),

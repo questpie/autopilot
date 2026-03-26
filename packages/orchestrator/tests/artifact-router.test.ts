@@ -41,17 +41,17 @@ describe('ArtifactRouter', () => {
 		expect(config.timeout).toBe('10m')
 	})
 
-	test('allocatePort increments from 4100', () => {
-		expect(router.allocatePort()).toBe(4100)
-		expect(router.allocatePort()).toBe(4101)
-		expect(router.allocatePort()).toBe(4102)
+	test('allocatePort increments from 4100', async () => {
+		expect(await router.allocatePort()).toBe(4100)
+		expect(await router.allocatePort()).toBe(4101)
+		expect(await router.allocatePort()).toBe(4102)
 	})
 
-	test('allocatePort wraps around after 4199', () => {
+	test('allocatePort wraps around after 4199', async () => {
 		for (let i = 0; i < 100; i++) {
-			router.allocatePort()
+			await router.allocatePort()
 		}
-		expect(router.allocatePort()).toBe(4100)
+		expect(await router.allocatePort()).toBe(4100)
 	})
 
 	test('list returns empty initially', () => {

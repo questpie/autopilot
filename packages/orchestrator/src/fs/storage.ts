@@ -1,8 +1,10 @@
 import type { z } from 'zod'
-import type { TaskSchema, MessageSchema } from '@questpie/autopilot-spec'
+import type { TaskSchema, MessageSchema, ChannelSchema, ChannelMemberSchema } from '@questpie/autopilot-spec'
 
 export type Task = z.output<typeof TaskSchema>
 export type Message = z.output<typeof MessageSchema>
+export type Channel = z.output<typeof ChannelSchema>
+export type ChannelMember = z.output<typeof ChannelMemberSchema>
 
 export interface TaskFilter {
 	status?: string
@@ -43,6 +45,11 @@ export interface ActivityFilter {
 	limit?: number
 }
 
+export interface ChannelFilter {
+	type?: string
+	actor_id?: string
+}
+
 export interface StorageBackend {
 	// Lifecycle
 	initialize(): Promise<void>
@@ -65,4 +72,17 @@ export interface StorageBackend {
 	// Activity
 	appendActivity(entry: ActivityEntry): Promise<void>
 	readActivity(filter?: ActivityFilter): Promise<ActivityEntry[]>
+
+	// Channels
+	createChannel(channel: Channel): Promise<Channel>
+	readChannel(id: string): Promise<(Channel & { members: ChannelMember[] }) | null>
+	listChannels(filter?: ChannelFilter): Promise<Channel[]>
+	deleteChannel(id: string): Promise<void>
+
+	// Channel Members
+	addChannelMember(channelId: string, actorId: string, actorType: string, role?: string): Promise<void>
+	removeChannelMember(channelId: string, actorId: string): Promise<void>
+	getChannelMembers(channelId: string): Promise<ChannelMember[]>
+	isChannelMember(channelId: string, actorId: string): Promise<boolean>
+	getOrCreateDirectChannel(actorA: string, actorB: string): Promise<Channel>
 }

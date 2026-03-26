@@ -69,6 +69,7 @@ integrations: {}
 | `enabled` | boolean | `false` | Enable authentication. **Must be `true` for any exposed instance.** |
 | `cors_origin` | string | `"*"` | Allowed CORS origin. Set to your dashboard domain in production. |
 | `ip_allowlist` | string[] | `[]` | CIDR ranges for IP-based access control. Empty = allow all. |
+| `trusted_proxies` | string[] | `["127.0.0.1", "::1", "::ffff:127.0.0.1"]` | IPs trusted to set `X-Forwarded-For`. Add your reverse proxy IP when not on localhost. |
 
 For complete auth setup (creating users, managing roles, 2FA), see [Authentication](/docs/security/authentication).
 
@@ -100,6 +101,7 @@ For complete auth setup (creating users, managing roles, 2FA), see [Authenticati
 | `PORT` | No | `7778` | API server port |
 | `WEBHOOK_PORT` | No | `7777` | Webhook server port |
 | `MAX_CONCURRENT_AGENTS` | No | `5` | Max simultaneous agent sessions |
+| `CORS_ORIGIN` | No | — | Allowed CORS origin for the API. Set to your domain URL when behind a reverse proxy (e.g., `https://autopilot.yourdomain.com`). Falls back to `company.yaml` `auth.cors_origin`, then `http://localhost:3001`. |
 
 ### ANTHROPIC_API_KEY
 

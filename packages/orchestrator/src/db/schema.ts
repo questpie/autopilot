@@ -132,6 +132,37 @@ export const searchIndex = sqliteTable('search_index', {
 	uniqueIndex('uq_search_entity').on(table.entityType, table.entityId),
 ])
 
+// ─── Channels ──────────────────────────────────────────────────────────────
+
+export const channels = sqliteTable('channels', {
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	type: text('type').notNull(),
+	description: text('description'),
+	created_by: text('created_by').notNull(),
+	created_at: text('created_at').notNull(),
+	updated_at: text('updated_at').notNull(),
+	metadata: text('metadata').default('{}'),
+}, (table) => [
+	index('idx_channels_type').on(table.type),
+	index('idx_channels_created').on(table.created_at),
+])
+
+// ─── Channel Members ───────────────────────────────────────────────────────
+
+export const channelMembers = sqliteTable('channel_members', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	channel_id: text('channel_id').notNull(),
+	actor_id: text('actor_id').notNull(),
+	actor_type: text('actor_type').notNull(),
+	role: text('role').default('member'),
+	joined_at: text('joined_at').notNull(),
+}, (table) => [
+	index('idx_members_channel').on(table.channel_id),
+	index('idx_members_actor').on(table.actor_id),
+	uniqueIndex('uq_channel_member').on(table.channel_id, table.actor_id),
+])
+
 // ─── Rate Limiting ──────────────────────────────────────────────────────────
 
 export const rateLimitEntries = sqliteTable('rate_limit_entries', {

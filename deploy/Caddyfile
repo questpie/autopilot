@@ -1,0 +1,53 @@
+# =============================================================================
+# QUESTPIE Autopilot — Caddy Reverse Proxy
+# =============================================================================
+#
+# Replace {$DOMAIN} with your actual domain, or set DOMAIN env var.
+# Caddy auto-provisions TLS via Let's Encrypt. No manual cert management.
+#
+# Routes:
+#   /api/*         → orchestrator API (port 7778)
+#   /artifacts/*   → artifact proxy   (port 7778)
+#   /fs/*          → filesystem browser (port 7778)
+#   /api/auth/*    → Better Auth      (port 7778)
+#   /*             → dashboard         (port 3001)
+#
+# Webhooks are on a separate subdomain for external services.
+# =============================================================================
+
+# ── Main app (dashboard + API on one domain) ────────────────────────────────
+{$DOMAIN} {
+	# API routes → orchestrator
+	handle /api/* {
+		reverse_proxy autopilot:7778
+	}
+
+	# Artifact proxy → orchestrator
+	handle /artifacts/* {
+		reverse_proxy autopilot:7778
+	}
+
+	# Filesystem browser → orchestrator
+	handle /fs/* {
+		reverse_proxy autopilot:7778
+	}
+
+	# OpenAPI docs → orchestrator
+	handle /reference {
+		reverse_proxy autopilot:7778
+	}
+	handle /openapi.json {
+		reverse_proxy autopilot:7778
+	}
+
+	# Dashboard (catch-all) → dashboard server
+	handle {
+		reverse_proxy autopilot:3001
+	}
+}
+
+# ── Webhooks (separate subdomain) ───────────────────────────────────────────
+# Uncomment if you need external webhooks (GitHub, Slack, etc.)
+# webhooks.{$DOMAIN} {
+# 	reverse_proxy autopilot:7777
+# }

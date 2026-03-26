@@ -8,6 +8,7 @@ export interface ArtifactConfig {
 	build?: string
 	health?: string
 	timeout?: string
+	public?: boolean
 }
 
 /** Public view of a running artifact process. */
@@ -29,7 +30,7 @@ interface RunningProcess {
 function parseTimeout(timeout: string): number {
 	const match = timeout.match(/^(\d+)(ms|s|m|h)$/)
 	if (!match) return 300_000
-	const value = parseInt(match[1]!, 10)
+	const value = Number.parseInt(match[1]!, 10)
 	switch (match[2]) {
 		case 'ms':
 			return value
@@ -52,6 +53,19 @@ function parseTimeout(timeout: string): number {
  * (4100-4199), runs the `build` + `serve` commands, waits for health, and
  * tears the process down after an idle timeout.
  */
+/** Lazily-created ArtifactRouter instances keyed by companyRoot. */
+const routers = new Map<string, ArtifactRouter>()
+
+/** Get or create a shared ArtifactRouter for the given companyRoot. */
+export function getRouter(companyRoot: string): ArtifactRouter {
+	let router = routers.get(companyRoot)
+	if (!router) {
+		router = new ArtifactRouter(companyRoot)
+		routers.set(companyRoot, router)
+	}
+	return router
+}
+
 export class ArtifactRouter {
 	private processes: Map<string, RunningProcess> = new Map()
 	private idleTimers: Map<string, Timer> = new Map()
@@ -112,8 +126,9 @@ export class ArtifactRouter {
 
 	private async coldStart(artifactId: string): Promise<ArtifactProcess> {
 		const config = await this.readConfig(artifactId)
-		const port = this.allocatePort()
+		const port = await this.allocatePort()
 		const artifactDir = join(this.companyRoot, 'artifacts', artifactId)
+		const artifactBase = `/artifacts/${artifactId}/`
 
 		if (config.build) {
 			const buildParts = config.build.split(' ')
@@ -121,6 +136,7 @@ export class ArtifactRouter {
 				cwd: artifactDir,
 				stdout: 'ignore',
 				stderr: 'ignore',
+				env: { ...process.env, ARTIFACT_BASE: artifactBase },
 			})
 			await buildProc.exited
 		}
@@ -131,6 +147,7 @@ export class ArtifactRouter {
 			cwd: artifactDir,
 			stdout: 'ignore',
 			stderr: 'ignore',
+			env: { ...process.env, ARTIFACT_BASE: artifactBase },
 		})
 
 		const healthPath = config.health ?? '/'
@@ -175,13 +192,19 @@ export class ArtifactRouter {
 		return parse(content) as ArtifactConfig
 	}
 
-	allocatePort(): number {
-		const port = this.nextPort
-		this.nextPort++
-		if (this.nextPort > 4199) {
-			this.nextPort = 4100
+	async allocatePort(): Promise<number> {
+		const usedPorts = new Set([...this.processes.values()].map((p) => p.port))
+		for (let i = 0; i < 100; i++) {
+			const port = this.nextPort
+			this.nextPort = this.nextPort >= 4199 ? 4100 : this.nextPort + 1
+			if (usedPorts.has(port)) continue
+			// Check if something else is listening on this port
+			const inUse = await fetch(`http://localhost:${port}`, { signal: AbortSignal.timeout(200) })
+				.then(() => true)
+				.catch(() => false)
+			if (!inUse) return port
 		}
-		return port
+		throw new Error('No available ports in range 4100-4199')
 	}
 
 	private async waitForHealth(url: string, maxRetries = 30, intervalMs = 100): Promise<void> {

@@ -20,7 +20,7 @@ export function useRealtime() {
 
 		async function connect() {
 			try {
-				const response = await fetch('http://localhost:7778/api/events', {
+				const response = await fetch('/api/events', {
 					signal: controller.signal,
 					credentials: 'include',
 					headers: { 'Accept': 'text/event-stream' },

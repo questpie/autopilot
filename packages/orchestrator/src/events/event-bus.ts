@@ -5,6 +5,9 @@ export type AutopilotEvent =
 	| { type: 'pin_changed'; pinId: string; action: 'created' | 'removed' }
 	| { type: 'agent_session'; agentId: string; status: 'started' | 'ended'; sessionId: string }
 	| { type: 'workflow_advanced'; taskId: string; from: string; to: string }
+	| { type: 'channel_created'; channelId: string; name: string }
+	| { type: 'channel_deleted'; channelId: string }
+	| { type: 'channel_member_changed'; channelId: string; actorId: string; action: 'added' | 'removed' }
 
 export class EventBus {
 	private listeners = new Set<(event: AutopilotEvent) => void>()

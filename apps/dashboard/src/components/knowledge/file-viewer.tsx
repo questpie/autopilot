@@ -71,7 +71,7 @@ export function FileViewer({ path }: FileViewerProps) {
 		return (
 			<div className="p-8">
 				<img
-					src={`http://localhost:7778/fs/${path}`}
+					src={`/fs/${path}`}
 					alt={path}
 					className="max-w-full max-h-[600px] object-contain"
 				/>

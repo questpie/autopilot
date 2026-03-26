@@ -1,0 +1,74 @@
+# =============================================================================
+# QUESTPIE Autopilot — Production Stack
+# =============================================================================
+#
+# Complete self-hosted deployment with automatic TLS via Caddy.
+#
+# Usage:
+#   1. Copy this directory to your server
+#   2. Edit .env (see .env.example)
+#   3. Edit Caddyfile — replace autopilot.yourdomain.com with your domain
+#   4. Initialize company: docker compose run --rm autopilot autopilot init /data/company
+#   5. Start: docker compose up -d
+#   6. Create owner: docker compose exec autopilot autopilot auth setup
+#
+# Your instance is live at https://autopilot.yourdomain.com
+# =============================================================================
+
+services:
+  # ── Reverse Proxy (TLS + routing) ─────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      autopilot:
+        condition: service_healthy
+
+  # ── Autopilot (orchestrator + dashboard) ──────────────────────────────────
+  autopilot:
+    image: questpie/autopilot:latest
+    restart: unless-stopped
+    # No ports exposed — Caddy handles all external traffic
+    expose:
+      - "7778"
+      - "3001"
+      - "7777"
+    volumes:
+      - ${COMPANY_ROOT:-./company}:/data/company
+    environment:
+      COMPANY_ROOT: /data/company
+      NODE_ENV: production
+      CORS_ORIGIN: https://${DOMAIN:?Set DOMAIN in .env}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AUTOPILOT_MASTER_KEY: ${AUTOPILOT_MASTER_KEY:-}
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:7778/api/status').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  # ── Auto-update (optional) ────────────────────────────────────────────────
+  watchtower:
+    image: containrrr/watchtower
+    profiles: ["auto-update"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: "300"
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

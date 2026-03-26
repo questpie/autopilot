@@ -4,7 +4,7 @@ import { Database } from 'bun:sqlite'
 import { TaskSchema, MessageSchema } from '@questpie/autopilot-spec'
 import { createDb, initFts, type AutopilotDb } from '../db'
 import { schema } from '../db'
-import type { StorageBackend, Task, Message, TaskFilter, MessageFilter, ActivityEntry, ActivityFilter } from './storage'
+import type { StorageBackend, Task, Message, Channel, ChannelMember, TaskFilter, MessageFilter, ActivityEntry, ActivityFilter, ChannelFilter } from './storage'
 
 /**
  * Convert all `null` values in an object to `undefined`.
@@ -453,6 +453,157 @@ export class SqliteBackend implements StorageBackend {
 		}))
 	}
 
+	// ─── Channels ──────────────────────────────────────────────────────
+
+	async createChannel(channel: Channel): Promise<Channel> {
+		await this.db.insert(schema.channels).values({
+			id: channel.id,
+			name: channel.name,
+			type: channel.type,
+			description: channel.description ?? null,
+			created_by: channel.created_by,
+			created_at: channel.created_at,
+			updated_at: channel.updated_at,
+			metadata: JSON.stringify(channel.metadata ?? {}),
+		})
+		return channel
+	}
+
+	async readChannel(id: string): Promise<(Channel & { members: ChannelMember[] }) | null> {
+		const rows = await this.db
+			.select()
+			.from(schema.channels)
+			.where(eq(schema.channels.id, id))
+			.limit(1)
+
+		if (rows.length === 0) return null
+
+		const row = rows[0]!
+		const members = await this.getChannelMembers(id)
+
+		return {
+			id: row.id,
+			name: row.name,
+			type: row.type as Channel['type'],
+			description: row.description ?? undefined,
+			created_by: row.created_by,
+			created_at: row.created_at,
+			updated_at: row.updated_at,
+			metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {}),
+			members,
+		}
+	}
+
+	async listChannels(filter?: ChannelFilter): Promise<Channel[]> {
+		if (filter?.actor_id) {
+			// Join with channel_members to filter by membership
+			const rows = await this.db
+				.select({
+					id: schema.channels.id,
+					name: schema.channels.name,
+					type: schema.channels.type,
+					description: schema.channels.description,
+					created_by: schema.channels.created_by,
+					created_at: schema.channels.created_at,
+					updated_at: schema.channels.updated_at,
+					metadata: schema.channels.metadata,
+				})
+				.from(schema.channels)
+				.innerJoin(schema.channelMembers, eq(schema.channels.id, schema.channelMembers.channel_id))
+				.where(eq(schema.channelMembers.actor_id, filter.actor_id))
+				.orderBy(asc(schema.channels.name))
+
+			return rows.map((row) => this.rowToChannel(row))
+		}
+
+		const conditions: ReturnType<typeof eq>[] = []
+		if (filter?.type) conditions.push(eq(schema.channels.type, filter.type))
+
+		const rows = await this.db
+			.select()
+			.from(schema.channels)
+			.where(conditions.length > 0 ? and(...conditions) : undefined)
+			.orderBy(asc(schema.channels.name))
+
+		return rows.map((row) => this.rowToChannel(row))
+	}
+
+	async deleteChannel(id: string): Promise<void> {
+		await this.db.delete(schema.channelMembers).where(eq(schema.channelMembers.channel_id, id))
+		await this.db.delete(schema.channels).where(eq(schema.channels.id, id))
+	}
+
+	async addChannelMember(channelId: string, actorId: string, actorType: string, role?: string): Promise<void> {
+		const raw = this.getRawDb()
+		raw.prepare(
+			'INSERT OR IGNORE INTO channel_members (channel_id, actor_id, actor_type, role, joined_at) VALUES (?, ?, ?, ?, ?)',
+		).run(channelId, actorId, actorType, role ?? 'member', new Date().toISOString())
+	}
+
+	async removeChannelMember(channelId: string, actorId: string): Promise<void> {
+		await this.db.delete(schema.channelMembers).where(
+			and(
+				eq(schema.channelMembers.channel_id, channelId),
+				eq(schema.channelMembers.actor_id, actorId),
+			),
+		)
+	}
+
+	async getChannelMembers(channelId: string): Promise<ChannelMember[]> {
+		const rows = await this.db
+			.select()
+			.from(schema.channelMembers)
+			.where(eq(schema.channelMembers.channel_id, channelId))
+
+		return rows.map((row) => ({
+			channel_id: row.channel_id,
+			actor_id: row.actor_id,
+			actor_type: row.actor_type as ChannelMember['actor_type'],
+			role: (row.role ?? 'member') as ChannelMember['role'],
+			joined_at: row.joined_at,
+		}))
+	}
+
+	async isChannelMember(channelId: string, actorId: string): Promise<boolean> {
+		const result = await this.db
+			.select({ count: sql<number>`COUNT(*)` })
+			.from(schema.channelMembers)
+			.where(
+				and(
+					eq(schema.channelMembers.channel_id, channelId),
+					eq(schema.channelMembers.actor_id, actorId),
+				),
+			)
+		return (result[0]?.count ?? 0) > 0
+	}
+
+	async getOrCreateDirectChannel(actorA: string, actorB: string): Promise<Channel> {
+		// Find existing direct channel where both actors are members
+		const [idA, idB] = [actorA, actorB].sort()
+		const candidateId = `dm-${idA}--${idB}`
+
+		const existing = await this.readChannel(candidateId)
+		if (existing) return existing
+
+		// Create new direct channel
+		const now = new Date().toISOString()
+		const channel: Channel = {
+			id: candidateId,
+			name: `${idA} & ${idB}`,
+			type: 'direct',
+			created_by: actorA,
+			created_at: now,
+			updated_at: now,
+			metadata: {},
+		}
+
+		await this.createChannel(channel)
+		await this.addChannelMember(candidateId, actorA, 'agent', 'member')
+		await this.addChannelMember(candidateId, actorB, 'agent', 'member')
+
+		return channel
+	}
+
 	// ─── Helpers ─────────────────────────────────────────────────────────
 
 	private rowToTask(row: Record<string, unknown>): Task {
@@ -467,6 +618,19 @@ export class SqliteBackend implements StorageBackend {
 			history: typeof row.history === 'string' ? JSON.parse(row.history) : row.history,
 			metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {}),
 		})
+	}
+
+	private rowToChannel(row: Record<string, unknown>): Channel {
+		return {
+			id: row.id as string,
+			name: row.name as string,
+			type: row.type as Channel['type'],
+			description: (row.description as string) ?? undefined,
+			created_by: row.created_by as string,
+			created_at: row.created_at as string,
+			updated_at: row.updated_at as string,
+			metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {}),
+		}
 	}
 
 	private rowToMessage(row: Record<string, unknown>): Message {

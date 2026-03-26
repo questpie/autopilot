@@ -5,39 +5,42 @@
  * all API routes, documentation, and filesystem browser.
  */
 import { Hono } from 'hono'
-import { cors } from 'hono/cors'
 import { bodyLimit } from 'hono/body-limit'
+import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import { authFactory } from '../auth'
 import type { Actor } from '../auth/types'
+import { companyRootFactory, container } from '../container'
 import type { AutopilotDb } from '../db'
 import { dbFactory } from '../db'
-import type { StorageBackend } from '../fs/storage'
 import { storageFactory } from '../fs/sqlite-backend'
-import { container, companyRootFactory } from '../container'
+import type { StorageBackend } from '../fs/storage'
+import { docs } from './docs'
+import { artifactProxyAuth } from './middleware/artifact-auth'
 import { authMiddleware } from './middleware/auth'
 import { ipAllowlist } from './middleware/ip-allowlist'
-import { ipRateLimit, actorRateLimit } from './middleware/rate-limit'
+import { actorRateLimit, ipRateLimit } from './middleware/rate-limit'
 import { securityHeaders } from './middleware/security-headers'
-import { docs } from './docs'
 import {
-	status,
-	tasks,
-	agents,
-	pins,
+	events,
 	activity,
-	inbox,
-	chat,
-	search,
+	agents,
+	artifactProxy,
 	artifacts,
-	skills,
+	channels,
+	chat,
 	dashboard,
 	files,
-	upload,
 	fsBrowser,
-	events,
+	inbox,
+	pins,
+	search,
 	sessions,
+	skills,
+	status,
+	tasks,
+	upload,
 } from './routes'
 
 export interface AppEnv {
@@ -80,7 +83,7 @@ export function createApp(config: AppConfig) {
 	app.use(
 		'*',
 		cors({
-			origin: config.corsOrigin ?? 'http://localhost:3001',
+			origin: config.corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:3001',
 			allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
 			allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
 			credentials: true,
@@ -90,10 +93,12 @@ export function createApp(config: AppConfig) {
 	// ── 1.5. Security headers ────────────────────────────────────────────
 	app.use('*', securityHeaders())
 
-	// ── 1.6. Body size limit (1 MB default; 10 MB for upload routes) ────
+	// ── 1.6. Body size limit (1 MB default; 10 MB for uploads; none for artifact proxy) ─
 	// Use a single middleware that applies different limits based on path.
 	app.use('*', async (c, next) => {
 		const path = new URL(c.req.url).pathname
+		// Artifact proxy responses can be large — skip body limit
+		if (path.startsWith('/artifacts/')) return next()
 		// The upload endpoint is POST /api/ (mounted via .route('/api', upload))
 		const isUpload = path === '/api/' || path === '/api'
 		const limit = isUpload ? 10 * 1024 * 1024 : 1 * 1024 * 1024
@@ -115,7 +120,11 @@ export function createApp(config: AppConfig) {
 	// ── 3. Context injection (resolved from DI container) ───────────────
 	app.use('*', async (c, next) => {
 		const { companyRoot } = container.resolve([companyRootFactory])
-		const { storage, db: dbResult, auth } = await container.resolveAsync([storageFactory, dbFactory, authFactory])
+		const {
+			storage,
+			db: dbResult,
+			auth,
+		} = await container.resolveAsync([storageFactory, dbFactory, authFactory])
 		c.set('companyRoot', companyRoot)
 		c.set('storage', storage)
 		c.set('db', dbResult.db)
@@ -128,6 +137,10 @@ export function createApp(config: AppConfig) {
 
 	// ── 3.6. IP Rate Limit ──────────────────────────────────────────────
 	app.use('*', ipRateLimit())
+
+	// ── 3.7. Artifact proxy (auth + reverse proxy) ──────────────────────
+	app.use('/artifacts/*', artifactProxyAuth({ authEnabled: config.authEnabled }))
+	app.route('/artifacts', artifactProxy)
 
 	// ── 4. Better Auth passthrough ───────────────────────────────────────
 	app.all('/api/auth/*', async (c) => {
@@ -150,6 +163,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/activity', activity)
 		.route('/api/inbox', inbox)
 		.route('/api/chat', chat)
+		.route('/api/channels', channels)
 		.route('/api/search', search)
 		.route('/api/artifacts', artifacts)
 		.route('/api/skills', skills)

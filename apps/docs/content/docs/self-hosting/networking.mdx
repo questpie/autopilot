@@ -204,19 +204,177 @@ cloudflared tunnel route dns autopilot-webhooks webhooks.yourdomain.com
 cloudflared tunnel run autopilot-webhooks
 ```
 
-## Single Domain Setup
+## Custom Domain Setup
 
-If you want both API and webhooks on one domain, route by path:
+Deploy Autopilot on your own domain (e.g., `autopilot.yourdomain.com`). One domain, no subdomains needed.
+
+### Architecture
+
+All traffic flows through a single domain via reverse proxy:
+
+```text
+autopilot.yourdomain.com
+  ├── /api/*         → orchestrator API (:7778)
+  ├── /artifacts/*   → artifact proxy (:7778)
+  ├── /fs/*          → filesystem browser (:7778)
+  └── /*             → dashboard (:3001)
+```
+
+### 1. Configure CORS
+
+Set the CORS origin to match your domain. Choose one method:
+
+**Option A: Environment variable**
+
+```bash title="terminal"
+export CORS_ORIGIN=https://autopilot.yourdomain.com
+```
+
+**Option B: company.yaml**
+
+```yaml title="company.yaml"
+settings:
+  auth:
+    enabled: true
+    cors_origin: "https://autopilot.yourdomain.com"
+```
+
+### 2. Configure trusted proxies
+
+If your reverse proxy is on a different host, add its IP to trusted proxies so `X-Forwarded-For` headers are respected:
+
+```yaml title="company.yaml"
+settings:
+  auth:
+    trusted_proxies:
+      - "127.0.0.1"
+      - "::1"
+      - "10.0.0.0/8"     # Private network range
+```
+
+### 3. Reverse proxy configuration
+
+#### Caddy (simplest)
 
 ```text title="Caddyfile"
 autopilot.yourdomain.com {
-    handle /hooks/* {
-        reverse_proxy localhost:7777
-    }
-    handle {
+    # API, artifacts, filesystem browser → orchestrator
+    handle /api/* {
         reverse_proxy localhost:7778
     }
+    handle /artifacts/* {
+        reverse_proxy localhost:7778
+    }
+    handle /fs/* {
+        reverse_proxy localhost:7778
+    }
+
+    # Everything else → dashboard
+    handle {
+        reverse_proxy localhost:3001
+    }
+}
+
+# Webhooks (separate subdomain or path-based)
+webhooks.yourdomain.com {
+    reverse_proxy localhost:7777
 }
 ```
 
-Update your webhook URLs to use `https://autopilot.yourdomain.com/hooks/...` in external services.
+#### Nginx
+
+```nginx title="/etc/nginx/sites-available/autopilot"
+server {
+    listen 443 ssl http2;
+    server_name autopilot.yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/autopilot.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/autopilot.yourdomain.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # API, artifacts, filesystem browser → orchestrator
+    location /api/ {
+        proxy_pass http://127.0.0.1:7778;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # SSE support (required for live agent streams)
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 86400s;
+    }
+
+    location /artifacts/ {
+        proxy_pass http://127.0.0.1:7778;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /fs/ {
+        proxy_pass http://127.0.0.1:7778;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Dashboard (catch-all)
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# Webhooks
+server {
+    listen 443 ssl http2;
+    server_name webhooks.yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/webhooks.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/webhooks.yourdomain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:7777;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    server_name autopilot.yourdomain.com webhooks.yourdomain.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+### 4. Set production environment
+
+```bash title="terminal"
+export NODE_ENV=production
+```
+
+This enables:
+- Secure cookie attributes (`Secure`, `SameSite=Strict`, `HttpOnly`)
+- HSTS header (`Strict-Transport-Security`)
+- Strict CSP without localhost exceptions
+
+### Domain Setup Checklist
+
+- [ ] `NODE_ENV=production`
+- [ ] `CORS_ORIGIN` set to your full domain URL (including `https://`)
+- [ ] Authentication enabled in `company.yaml`
+- [ ] Reverse proxy configured with TLS
+- [ ] `trusted_proxies` includes your proxy IP (if not localhost)
+- [ ] Webhook URL updated in external services (GitHub, Slack, etc.)
+- [ ] DNS records pointing to your server
+- [ ] Test: open `https://autopilot.yourdomain.com` in browser

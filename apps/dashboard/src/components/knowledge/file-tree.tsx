@@ -17,6 +17,10 @@ interface FileTreeProps {
 	onSelect: (path: string) => void
 }
 
+function joinPath(base: string, name: string) {
+	return base ? `${base}/${name}` : name
+}
+
 export function FileTree({ basePath, selectedPath, onSelect }: FileTreeProps) {
 	return (
 		<div className="py-2">
@@ -69,7 +73,7 @@ function TreeDirectory({
 		return (
 			<div>
 				{entries?.map((entry) => {
-					const entryPath = `${path}/${entry.name}`
+					const entryPath = joinPath(path, entry.name)
 					return entry.type === 'directory' ? (
 						<TreeDirectory
 							key={entryPath}
@@ -122,7 +126,7 @@ function TreeDirectory({
 						</div>
 					) : (
 						entries?.map((entry) => {
-							const entryPath = `${path}/${entry.name}`
+							const entryPath = joinPath(path, entry.name)
 							return entry.type === 'directory' ? (
 								<TreeDirectory
 									key={entryPath}

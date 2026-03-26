@@ -40,6 +40,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       AUTOPILOT_MASTER_KEY: ${AUTOPILOT_MASTER_KEY}
       NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:7778/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
       interval: 30s
@@ -87,6 +88,7 @@ The orchestrator is now running at `http://localhost:7778`.
 | `PORT` | No | `7778` | API server port |
 | `WEBHOOK_PORT` | No | `7777` | Webhook server port |
 | `MAX_CONCURRENT_AGENTS` | No | `5` | Max simultaneous agent sessions |
+| `CORS_ORIGIN` | No | — | Allowed CORS origin. Set to your domain when using a reverse proxy. |
 
 ## Volume Mounting
 
@@ -224,10 +226,37 @@ ports:
 docker exec -it autopilot sh
 ```
 
+## Production Stack with TLS
+
+For a complete production deployment with automatic TLS, use the ready-made stack in the `deploy/` directory:
+
+```bash title="terminal"
+# On your server
+git clone https://github.com/questpie/autopilot.git
+cd autopilot/deploy
+
+# Configure
+cp .env.example .env
+nano .env  # Set DOMAIN and ANTHROPIC_API_KEY
+
+# Initialize and start
+docker compose run --rm autopilot autopilot init /data/company
+docker compose up -d
+docker compose exec autopilot autopilot auth setup
+```
+
+This stack includes:
+- **Caddy** reverse proxy with automatic Let's Encrypt TLS
+- **Autopilot** orchestrator + dashboard (no ports exposed directly)
+- Single domain routing (`/api/*`, `/artifacts/*`, `/fs/*` to API; `/*` to dashboard)
+
+See `deploy/README.md` for the full guide, including webhooks, auto-updates, and troubleshooting.
+
 ## Production Checklist
 
 - [ ] `AUTOPILOT_MASTER_KEY` set as env var (not auto-generated file)
 - [ ] `NODE_ENV=production`
+- [ ] `CORS_ORIGIN` set to your domain URL (e.g., `https://autopilot.yourdomain.com`)
 - [ ] Authentication enabled in `company.yaml`
 - [ ] Owner account created via `autopilot auth setup`
 - [ ] `.env` file has restrictive permissions (`chmod 600 .env`)

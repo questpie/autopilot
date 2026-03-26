@@ -1,5 +1,19 @@
 {
 	"$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+	"files": {
+		"ignore": [
+			"node_modules",
+			"dist",
+			".turbo",
+			".output",
+			".data",
+			".next",
+			"*.generated.*",
+			"drizzle",
+			"test-company",
+			"tmp"
+		]
+	},
 	"organizeImports": { "enabled": true },
 	"formatter": {
 		"indentStyle": "tab",

@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:7778'
+const API_BASE = ''
 
 /**
  * Smart fetch — tries JSON first, falls back to text.
@@ -52,7 +52,7 @@ export async function apiUpload<T>(path: string, file: File, targetDir?: string)
 	const formData = new FormData()
 	formData.append('file', file)
 	if (targetDir) formData.append('path', targetDir)
-	const res = await fetch(`http://localhost:7778${path}`, {
+	const res = await fetch(`${API_BASE}${path}`, {
 		method: 'POST',
 		credentials: 'include',
 		body: formData,

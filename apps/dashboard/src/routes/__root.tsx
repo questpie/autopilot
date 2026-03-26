@@ -37,7 +37,7 @@ function useThemeOverride() {
 	return useQuery({
 		queryKey: ['theme-override'],
 		queryFn: async () => {
-			const res = await fetch('http://localhost:7778/fs/dashboard/overrides/theme.css')
+			const res = await fetch('/fs/dashboard/overrides/theme.css')
 			if (!res.ok) return null
 			return res.text()
 		},
@@ -63,7 +63,7 @@ function useAuthGuard() {
 	const { data: status } = useQuery({
 		queryKey: ['auth-status'],
 		queryFn: async () => {
-			const res = await fetch('http://localhost:7778/api/status')
+			const res = await fetch('/api/status')
 			if (res.status === 401) return { authRequired: true }
 			if (res.ok) return { authRequired: false }
 			return { authRequired: false }
