@@ -35,8 +35,6 @@ export const CreateChannelRequestSchema = z.object({
 
 export const ChannelMessagesQuerySchema = z.object({
 	limit: z.coerce.number().optional().default(50),
-	before: z.string().optional(),
-	after: z.string().optional(),
 })
 
 export const SendChannelMessageRequestSchema = z.object({

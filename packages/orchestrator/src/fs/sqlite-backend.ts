@@ -34,117 +34,14 @@ export class SqliteBackend implements StorageBackend {
 		const { db } = await createDb(this.companyRoot)
 		this.db = db
 
-		// Push schema — create tables if they do not exist
-		// Using raw SQL for table creation since we need IF NOT EXISTS
-		const raw = this.getRawDb()
-		this.ensureTables(raw)
-
-		// Init FTS5 for messages
+		// Drizzle migrations handle all table creation (see drizzle/ folder).
+		// FTS5 virtual tables + triggers are initialized separately since
+		// Drizzle ORM does not support virtual tables.
 		initFts(this.db)
 	}
 
 	private getRawDb(): Database {
 		return (this.db as unknown as { $client: Database }).$client
-	}
-
-	private ensureTables(raw: Database): void {
-		raw.exec(`
-			CREATE TABLE IF NOT EXISTS tasks (
-				id TEXT PRIMARY KEY,
-				title TEXT NOT NULL,
-				description TEXT DEFAULT '',
-				type TEXT NOT NULL,
-				status TEXT NOT NULL,
-				priority TEXT DEFAULT 'medium',
-				created_by TEXT NOT NULL,
-				assigned_to TEXT,
-				reviewers TEXT DEFAULT '[]',
-				approver TEXT,
-				project TEXT,
-				parent TEXT,
-				depends_on TEXT DEFAULT '[]',
-				blocks TEXT DEFAULT '[]',
-				related TEXT DEFAULT '[]',
-				workflow TEXT,
-				workflow_step TEXT,
-				context TEXT DEFAULT '{}',
-				blockers TEXT DEFAULT '[]',
-				resources TEXT DEFAULT '[]',
-				labels TEXT DEFAULT '[]',
-				milestone TEXT,
-				created_at TEXT NOT NULL,
-				updated_at TEXT NOT NULL,
-				started_at TEXT,
-				completed_at TEXT,
-				deadline TEXT,
-				history TEXT DEFAULT '[]',
-				metadata TEXT DEFAULT '{}'
-			)
-		`)
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_tasks_workflow ON tasks(workflow, workflow_step)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority, status)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_tasks_milestone ON tasks(milestone)')
-
-		raw.exec(`
-			CREATE TABLE IF NOT EXISTS messages (
-				id TEXT PRIMARY KEY,
-				channel TEXT,
-				from_id TEXT NOT NULL,
-				to_id TEXT,
-				content TEXT NOT NULL,
-				created_at TEXT NOT NULL,
-				mentions TEXT DEFAULT '[]',
-				references_ids TEXT DEFAULT '[]',
-				reactions TEXT DEFAULT '[]',
-				thread TEXT,
-				transport TEXT,
-				external INTEGER DEFAULT 0
-			)
-		`)
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_id)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_id)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)')
-
-		raw.exec(`
-			CREATE TABLE IF NOT EXISTS activity (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				agent TEXT NOT NULL,
-				type TEXT NOT NULL,
-				summary TEXT NOT NULL,
-				details TEXT,
-				created_at TEXT NOT NULL
-			)
-		`)
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_activity_agent_time ON activity(agent, created_at)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_activity_type ON activity(type)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_activity_time ON activity(created_at)')
-
-		raw.exec(`
-			CREATE TABLE IF NOT EXISTS agent_sessions (
-				id TEXT PRIMARY KEY,
-				agent_id TEXT NOT NULL,
-				task_id TEXT,
-				trigger_type TEXT NOT NULL,
-				status TEXT NOT NULL DEFAULT 'running',
-				started_at TEXT NOT NULL,
-				ended_at TEXT,
-				tool_calls INTEGER DEFAULT 0,
-				tokens_used INTEGER DEFAULT 0,
-				error TEXT,
-				log_path TEXT
-			)
-		`)
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent ON agent_sessions(agent_id)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_task ON agent_sessions(task_id)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_status ON agent_sessions(status)')
-		raw.exec('CREATE INDEX IF NOT EXISTS idx_agent_sessions_started ON agent_sessions(started_at)')
 	}
 
 	async close(): Promise<void> {
@@ -534,10 +431,13 @@ export class SqliteBackend implements StorageBackend {
 	}
 
 	async addChannelMember(channelId: string, actorId: string, actorType: string, role?: string): Promise<void> {
-		const raw = this.getRawDb()
-		raw.prepare(
-			'INSERT OR IGNORE INTO channel_members (channel_id, actor_id, actor_type, role, joined_at) VALUES (?, ?, ?, ?, ?)',
-		).run(channelId, actorId, actorType, role ?? 'member', new Date().toISOString())
+		await this.db.insert(schema.channelMembers).values({
+			channel_id: channelId,
+			actor_id: actorId,
+			actor_type: actorType,
+			role: role ?? 'member',
+			joined_at: new Date().toISOString(),
+		}).onConflictDoNothing()
 	}
 
 	async removeChannelMember(channelId: string, actorId: string): Promise<void> {
@@ -578,14 +478,12 @@ export class SqliteBackend implements StorageBackend {
 	}
 
 	async getOrCreateDirectChannel(actorA: string, actorB: string): Promise<Channel> {
-		// Find existing direct channel where both actors are members
 		const [idA, idB] = [actorA, actorB].sort()
 		const candidateId = `dm-${idA}--${idB}`
 
 		const existing = await this.readChannel(candidateId)
 		if (existing) return existing
 
-		// Create new direct channel
 		const now = new Date().toISOString()
 		const channel: Channel = {
 			id: candidateId,
@@ -597,7 +495,18 @@ export class SqliteBackend implements StorageBackend {
 			metadata: {},
 		}
 
-		await this.createChannel(channel)
+		// Use INSERT OR IGNORE to handle concurrent creation race condition
+		await this.db.insert(schema.channels).values({
+			id: channel.id,
+			name: channel.name,
+			type: channel.type,
+			description: null,
+			created_by: channel.created_by,
+			created_at: channel.created_at,
+			updated_at: channel.updated_at,
+			metadata: JSON.stringify(channel.metadata ?? {}),
+		}).onConflictDoNothing()
+
 		await this.addChannelMember(candidateId, actorA, 'agent', 'member')
 		await this.addChannelMember(candidateId, actorB, 'agent', 'member')
 

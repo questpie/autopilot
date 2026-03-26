@@ -256,8 +256,8 @@ const membersCmd = new Command('members')
 			}
 
 			for (const m of members) {
-				const prefix = m.actor_type === 'agent' ? '🤖' : '👤'
-				console.log(`  ${prefix} ${badge(m.actor_id, 'cyan')}  ${dim(m.role)}  ${dim(`joined ${formatTime(m.joined_at)}`)}`)
+				const prefix = m.actor_type === 'agent' ? '[agent]' : '[human]'
+				console.log(`  ${dim(prefix)} ${badge(m.actor_id, 'cyan')}  ${dim(m.role)}  ${dim(`joined ${formatTime(m.joined_at)}`)}`)
 			}
 			console.log('')
 			console.log(dim(`${members.length} member(s)`))

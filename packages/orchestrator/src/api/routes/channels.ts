@@ -66,7 +66,7 @@ const channels = new Hono<AppEnv>()
 			const actor = c.get('actor')
 			const body = c.req.valid('json')
 
-			const id = body.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+			const id = body.name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
 			const now = new Date().toISOString()
 
 			const channel = await storage.createChannel({
@@ -169,7 +169,7 @@ const channels = new Hono<AppEnv>()
 		async (c) => {
 			const storage = c.get('storage')
 			const { id } = c.req.valid('param')
-			const { limit, before, after } = c.req.valid('query')
+			const { limit } = c.req.valid('query')
 
 			const messages = await storage.readMessages({
 				channel: id,
@@ -243,9 +243,9 @@ const channels = new Hono<AppEnv>()
 
 			try {
 				const recentMessages = await storage.readMessages({ channel: channelId, limit: 10 })
-				const agentsList = await loadAgents(root)
+				const allAgents = await loadAgents(root)
 				const members = await storage.getChannelMembers(channelId)
-				const agentMembers = agentsList.filter((a) =>
+				const agentMembers = allAgents.filter((a) =>
 					members.some((m) => m.actor_id === a.id),
 				)
 
@@ -259,7 +259,6 @@ const channels = new Hono<AppEnv>()
 					routeReason = result.reason
 
 					const company = await loadCompany(root)
-					const allAgents = await loadAgents(root)
 
 					// Spawn in background, don't await
 					spawnAgent({
@@ -310,12 +309,14 @@ const channels = new Hono<AppEnv>()
 			if (body.add?.length) {
 				for (const member of body.add) {
 					await storage.addChannelMember(id, member.actor_id, member.actor_type, member.role ?? 'member')
+					eventBus.emit({ type: 'channel_member_changed', channelId: id, actorId: member.actor_id, action: 'added' })
 				}
 			}
 
 			if (body.remove?.length) {
 				for (const actorId of body.remove) {
 					await storage.removeChannelMember(id, actorId)
+					eventBus.emit({ type: 'channel_member_changed', channelId: id, actorId, action: 'removed' })
 				}
 			}
 
