@@ -1,6 +1,6 @@
 {
 	"name": "@questpie/autopilot",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"private": false,
 	"type": "module",
 	"description": "AI-native company operating system. Your company is a container. Your employees are agents.",
@@ -42,8 +42,8 @@
 		"prepublishOnly": "rm -rf ./templates && cp -r ../../templates ./templates"
 	},
 	"dependencies": {
-		"@questpie/autopilot-orchestrator": "1.0.0",
-		"@questpie/autopilot-spec": "1.0.0",
+		"@questpie/autopilot-orchestrator": "1.1.0",
+		"@questpie/autopilot-spec": "1.1.0",
 		"commander": "^13.0.0",
 		"simple-git": "^3.27.0",
 		"yaml": "^2.7.0"
