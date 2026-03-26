@@ -70,11 +70,20 @@ const artifacts = new Hono<AppEnv>().get(
 			return c.json({ artifacts: [] })
 		}
 
+		const running = router.list()
+		const runningMap = new Map(running.map((p) => [p.id, p]))
+
 		const configs = await Promise.all(
 			entries.map(async (id) => {
 				try {
 					const config = await router.readConfig(id)
-					return { id, ...config }
+					const proc = runningMap.get(id)
+					return {
+						id,
+						...config,
+						status: proc ? 'running' as const : 'stopped' as const,
+						port: proc?.port ?? null,
+					}
 				} catch {
 					return null
 				}

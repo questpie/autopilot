@@ -71,8 +71,8 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
 					variant={artifact.status === 'running' ? 'default' : 'outline'}
 					className="font-mono text-[9px]"
 				>
-					<span className={statusColors[artifact.status] ?? ''}>
-						{artifact.status.toUpperCase()}
+					<span className={statusColors[artifact.status ?? 'stopped'] ?? ''}>
+						{(artifact.status ?? 'stopped').toUpperCase()}
 					</span>
 				</Badge>
 			</div>
@@ -94,7 +94,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
 			)}
 
 			<div className="flex gap-2 pt-2 border-t border-border">
-				{artifact.status === 'running' ? (
+				{(artifact.status ?? 'stopped') === 'running' ? (
 					<>
 						<Button
 							size="sm"
