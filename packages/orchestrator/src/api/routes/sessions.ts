@@ -9,6 +9,7 @@ const sessions = new Hono<AppEnv>()
 	.get('/', async (c) => {
 		const actor = c.get('actor')
 		if (!actor) return c.json([])
+		if (actor.id === 'implicit-owner') return c.json([])
 
 		const auth = c.get('auth')
 		try {

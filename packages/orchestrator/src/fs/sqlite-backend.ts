@@ -182,8 +182,8 @@ export class SqliteBackend implements StorageBackend {
 			resources: JSON.stringify((task as Record<string, unknown>).resources ?? []),
 			labels: JSON.stringify((task as Record<string, unknown>).labels ?? []),
 			milestone: (task as Record<string, unknown>).milestone as string ?? null,
-			created_at: task.created_at,
-			updated_at: task.updated_at,
+			created_at: task.created_at ?? new Date().toISOString(),
+			updated_at: task.updated_at ?? new Date().toISOString(),
 			started_at: task.started_at ?? null,
 			completed_at: task.completed_at ?? null,
 			deadline: task.deadline ?? null,
@@ -257,7 +257,7 @@ export class SqliteBackend implements StorageBackend {
 		return validated
 	}
 
-	async moveTask(id: string, newStatus: string, movedBy: string): Promise<Task> {
+	async moveTask(id: string, newStatus: string, movedBy: string, blocker?: { reason: string; assigned_to?: string }): Promise<Task> {
 		const existing = await this.readTask(id)
 		if (!existing) throw new Error(`Task not found: ${id}`)
 
@@ -270,6 +270,10 @@ export class SqliteBackend implements StorageBackend {
 			to: newStatus,
 		}
 
+		const newBlockers = blocker && newStatus === 'blocked'
+			? [...existing.blockers, { type: 'human_required', reason: blocker.reason, assigned_to: blocker.assigned_to ?? movedBy, resolved: false }]
+			: existing.blockers
+
 		const validated = TaskSchema.parse({
 			...existing,
 			status: newStatus,
@@ -279,6 +283,7 @@ export class SqliteBackend implements StorageBackend {
 				: existing.started_at,
 			completed_at: newStatus === 'done' ? timestamp : existing.completed_at,
 			history: [...existing.history, historyEntry],
+			blockers: newBlockers,
 		})
 
 		await this.db.update(schema.tasks).set({
@@ -287,6 +292,7 @@ export class SqliteBackend implements StorageBackend {
 			started_at: validated.started_at ?? null,
 			completed_at: validated.completed_at ?? null,
 			history: JSON.stringify(validated.history),
+			blockers: JSON.stringify(validated.blockers),
 		}).where(eq(schema.tasks.id, id))
 
 		await this.appendActivity({

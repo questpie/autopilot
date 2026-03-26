@@ -52,7 +52,7 @@ export interface StorageBackend {
 	createTask(task: Task): Promise<Task>
 	readTask(id: string): Promise<Task | null>
 	updateTask(id: string, updates: Partial<Task>, updatedBy: string): Promise<Task>
-	moveTask(id: string, newStatus: string, movedBy: string): Promise<Task>
+	moveTask(id: string, newStatus: string, movedBy: string, blocker?: { reason: string; assigned_to?: string }): Promise<Task>
 	listTasks(filter?: TaskFilter): Promise<Task[]>
 	countTasks(filter?: TaskFilter): Promise<number>
 	deleteTask(id: string): Promise<void>

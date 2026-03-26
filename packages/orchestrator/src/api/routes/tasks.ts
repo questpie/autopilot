@@ -156,7 +156,7 @@ const tasks = new Hono<AppEnv>()
 			if (!task) return c.json({ error: 'task not found' }, 404)
 
 			const rejectReason = reason ?? 'Rejected by human'
-			await storage.moveTask(id, 'blocked', 'human')
+			await storage.moveTask(id, 'blocked', 'human', { reason: rejectReason })
 			return c.json({ ok: true as const, taskId: id, status: 'blocked' as const, reason: rejectReason })
 		},
 	)
