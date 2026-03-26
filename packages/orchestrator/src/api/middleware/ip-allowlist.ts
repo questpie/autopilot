@@ -2,8 +2,105 @@
  * IP allowlist middleware — restricts API access to configured CIDR ranges.
  * Empty allowlist = allow all. Exempt: /hooks/* and /api/status.
  */
+import { isIPv6 } from 'node:net'
 import { createMiddleware } from 'hono/factory'
 import type { AppEnv } from '../app'
+
+// ---------------------------------------------------------------------------
+// IPv6 helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Expand a compressed IPv6 address string into a full 16-byte Uint8Array.
+ * Returns null if the string is not a valid IPv6 address.
+ */
+function expandIPv6(ip: string): Uint8Array | null {
+	if (!isIPv6(ip)) return null
+
+	// Strip brackets if present (e.g. "[::1]")
+	ip = ip.replace(/^\[|\]$/g, '')
+
+	// Handle IPv4-mapped addresses like ::ffff:192.168.1.1
+	const ipv4MappedMatch = ip.match(/^(.+):(\d+\.\d+\.\d+\.\d+)$/)
+	if (ipv4MappedMatch) {
+		const v6prefix = ipv4MappedMatch[1]!
+		const v4part = ipv4MappedMatch[2]!
+		const v4octets = v4part.split('.').map((o) => parseInt(o, 10))
+		if (v4octets.some((n) => isNaN(n) || n < 0 || n > 255)) return null
+		// Reconstruct as pure hex groups
+		const hi = ((v4octets[0]! << 8) | v4octets[1]!).toString(16).padStart(4, '0')
+		const lo = ((v4octets[2]! << 8) | v4octets[3]!).toString(16).padStart(4, '0')
+		ip = `${v6prefix}:${hi}:${lo}`
+	}
+
+	// Expand "::" double-colon shorthand
+	const halves = ip.split('::')
+	let groups: string[]
+	if (halves.length === 2) {
+		const left = halves[0] ? halves[0].split(':') : []
+		const right = halves[1] ? halves[1].split(':') : []
+		const missing = 8 - left.length - right.length
+		groups = [...left, ...Array(missing).fill('0'), ...right]
+	} else {
+		groups = ip.split(':')
+	}
+
+	if (groups.length !== 8) return null
+
+	const bytes = new Uint8Array(16)
+	for (let i = 0; i < 8; i++) {
+		const val = parseInt(groups[i]!, 16)
+		if (isNaN(val) || val < 0 || val > 0xffff) return null
+		bytes[i * 2] = (val >> 8) & 0xff
+		bytes[i * 2 + 1] = val & 0xff
+	}
+	return bytes
+}
+
+/**
+ * Parse an IPv6 CIDR string (e.g. "fd00::/8", "::1/128", "::1") into a
+ * network byte array and prefix length. Auto-applies /128 for single IPs.
+ * Returns null for invalid input.
+ */
+export function parseCidrV6(cidr: string): { network: Uint8Array; prefix: number } | null {
+	const parts = cidr.split('/')
+	const ipStr = parts[0]
+	if (!ipStr) return null
+
+	const prefix = parts.length === 2 ? parseInt(parts[1]!, 10) : 128
+	if (isNaN(prefix) || prefix < 0 || prefix > 128) return null
+
+	const network = expandIPv6(ipStr)
+	if (!network) return null
+
+	// Mask off host bits so network represents the true network address
+	for (let i = 0; i < 16; i++) {
+		const bits = Math.max(0, Math.min(8, prefix - i * 8))
+		const maskByte = bits === 0 ? 0 : (~0 << (8 - bits)) & 0xff
+		network[i] = network[i]! & maskByte
+	}
+
+	return { network, prefix }
+}
+
+/**
+ * Check if an IPv6 address falls within a parsed IPv6 CIDR range.
+ */
+function isIPv6InCidr(ip: string, cidr: { network: Uint8Array; prefix: number }): boolean {
+	const addr = expandIPv6(ip)
+	if (!addr) return false
+
+	for (let i = 0; i < 16; i++) {
+		const bits = Math.max(0, Math.min(8, cidr.prefix - i * 8))
+		const maskByte = bits === 0 ? 0 : (~0 << (8 - bits)) & 0xff
+		if ((addr[i]! & maskByte) !== cidr.network[i]) return false
+	}
+	return true
+}
+
+// ---------------------------------------------------------------------------
+// IPv4 helpers (unchanged)
+// ---------------------------------------------------------------------------
 
 /**
  * Parse a CIDR notation string into network and mask.
@@ -38,12 +135,18 @@ export function parseCidr(cidr: string): { network: number; mask: number } | nul
 }
 
 /**
- * Check if an IP address falls within any of the given CIDR ranges.
+ * Check if an IP address (IPv4 or IPv6) falls within any of the given CIDR ranges.
  */
 export function isIpAllowed(
 	ip: string,
 	cidrs: Array<{ network: number; mask: number }>,
+	cidrsV6?: Array<{ network: Uint8Array; prefix: number }>,
 ): boolean {
+	if (isIPv6(ip)) {
+		if (!cidrsV6 || cidrsV6.length === 0) return false
+		return cidrsV6.some((cidr) => isIPv6InCidr(ip, cidr))
+	}
+
 	const octets = ip.split('.')
 	if (octets.length !== 4) return false
 
@@ -122,9 +225,16 @@ export function ipAllowlist() {
 		if (path.startsWith('/hooks/') || path === '/api/status') return next()
 
 		const clientIp = getClientIp(c, trustedProxies)
-		const cidrs = allowlist.map(parseCidr).filter((x): x is NonNullable<typeof x> => x !== null)
+		const cidrs = allowlist
+			.filter((e) => !isIPv6(e.split('/')[0]!))
+			.map(parseCidr)
+			.filter((x): x is NonNullable<typeof x> => x !== null)
+		const cidrsV6 = allowlist
+			.filter((e) => isIPv6(e.split('/')[0]!))
+			.map(parseCidrV6)
+			.filter((x): x is NonNullable<typeof x> => x !== null)
 
-		if (!isIpAllowed(clientIp, cidrs)) {
+		if (!isIpAllowed(clientIp, cidrs, cidrsV6)) {
 			return c.json({ error: 'IP not allowed' }, 403)
 		}
 		return next()

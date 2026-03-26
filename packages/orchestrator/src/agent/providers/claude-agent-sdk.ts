@@ -58,6 +58,7 @@ export class ClaudeAgentSDKProvider implements AgentProvider {
 			role: 'agent',
 			permissions: {},
 			scope: options.agentScope,
+			source: 'internal',
 		}
 
 		let toolCalls = 0

@@ -1,6 +1,60 @@
+import { relative, resolve } from 'node:path'
 import type { AgentProvider, AgentSpawnOptions, AgentSessionResult, AgentEvent } from '../provider'
 import type { ToolDefinition } from '../tools'
 import { executeTool } from '../tools'
+import { isDeniedPath } from '../../auth/deny-patterns'
+import { checkScope } from '../../auth/permissions'
+import type { Actor } from '../../auth/types'
+
+/**
+ * Codex built-in tool names that perform file writes / edits.
+ * These require fs_scope write enforcement.
+ */
+const CODEX_WRITE_TOOLS = new Set([
+	'write_file',
+	'apply_patch',
+	'create_file',
+	'delete_file',
+	'rename_file',
+])
+
+/**
+ * Codex built-in tool names that perform file reads.
+ * These require deny-pattern enforcement only (no scope needed for reads by default).
+ */
+const CODEX_READ_TOOLS = new Set([
+	'read_file',
+	'list_files',
+	'glob',
+	'grep',
+])
+
+/**
+ * Validate a Codex built-in tool call against security policies.
+ * Returns a block reason string if the call should be denied, or null if allowed.
+ */
+function validateCodexToolCall(
+	toolName: string,
+	args: Record<string, unknown>,
+	companyRoot: string,
+	agentActor: Actor,
+): string | null {
+	// Extract file path from common Codex argument shapes
+	const filePath = (args.path ?? args.file_path ?? args.filename ?? args.file) as string | undefined
+	if (!filePath) return null
+
+	const rel = relative(resolve(companyRoot), resolve(filePath))
+
+	if (CODEX_WRITE_TOOLS.has(toolName)) {
+		if (rel.startsWith('..')) return 'Path outside company root'
+		if (isDeniedPath(rel)) return `Access denied: ${rel}`
+		if (!checkScope(agentActor, 'fs_write', rel)) return `Write not allowed by agent scope: ${rel}`
+	} else if (CODEX_READ_TOOLS.has(toolName)) {
+		if (!rel.startsWith('..') && isDeniedPath(rel)) return `Access denied: ${rel}`
+	}
+
+	return null
+}
 
 /**
  * OpenAI Codex SDK provider — uses @openai/codex-sdk.
@@ -20,6 +74,17 @@ export class CodexSDKProvider implements AgentProvider {
 		onEvent: (event: AgentEvent) => void,
 	): Promise<AgentSessionResult> {
 		const { systemPrompt, prompt, model, tools, toolContext, maxTurns = 50 } = options
+
+		// Build agent actor for scope checking (mirrors claude-agent-sdk.ts)
+		const agentActor: Actor = {
+			id: toolContext.agentId,
+			type: 'agent',
+			name: toolContext.agentId,
+			role: 'agent',
+			permissions: {},
+			scope: options.agentScope,
+			source: 'internal',
+		}
 
 		let toolCalls = 0
 		let result: string | undefined
@@ -79,13 +144,30 @@ export class CodexSDKProvider implements AgentProvider {
 								params: item.arguments as Record<string, unknown> | undefined,
 							})
 
+							// Security: validate built-in Codex file tool calls before execution
+							const args = typeof item.arguments === 'string'
+								? JSON.parse(item.arguments as string)
+								: (item.arguments as Record<string, unknown> | undefined) ?? {}
+							const blockReason = validateCodexToolCall(
+								toolName,
+								args,
+								toolContext.companyRoot,
+								agentActor,
+							)
+							if (blockReason) {
+								onEvent({
+									type: 'tool_result',
+									tool: toolName,
+									toolCallId: item.id as string | undefined,
+									content: `BLOCKED: ${blockReason}`,
+								})
+								break
+							}
+
 							// Execute our custom tools if the call matches
 							const matchedTool = tools.find((t) => t.name === toolName)
 							if (matchedTool) {
 								try {
-									const args = typeof item.arguments === 'string'
-										? JSON.parse(item.arguments as string)
-										: item.arguments
 									const toolResult = await executeTool(tools, toolName, args, toolContext)
 									onEvent({
 										type: 'tool_result',
