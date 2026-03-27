@@ -12,12 +12,19 @@ import {
   GearIcon,
   BookOpenIcon,
   CaretDownIcon,
+  SidebarIcon,
 } from "@phosphor-icons/react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
 import { EASING, DURATION, useMotionPreference } from "@/lib/motion"
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { SquareBuildLogo } from "@/components/brand"
 import type { Icon } from "@phosphor-icons/react"
 
 interface NavItem {
@@ -45,17 +52,24 @@ const secondaryItems: NavItem[] = [
 
 const bottomItems: NavItem[] = [
   { icon: GearIcon, labelKey: "nav.settings", to: "/settings" },
-  { icon: BookOpenIcon, labelKey: "Docs", to: "https://docs.questpie.com", external: true },
+  {
+    icon: BookOpenIcon,
+    labelKey: "Docs",
+    to: "https://autopilot.questpie.com/docs",
+    external: true,
+  },
 ]
 
 function NavItemButton({
   item,
   isActive,
   collapsed,
+  onNavigate,
 }: {
   item: NavItem
   isActive: boolean
   collapsed: boolean
+  onNavigate?: () => void
 }) {
   const { t } = useTranslation()
   const Icon = item.icon
@@ -77,6 +91,7 @@ function NavItemButton({
         rel="noopener noreferrer"
         className={className}
         title={collapsed ? label : undefined}
+        onClick={onNavigate}
       >
         <Icon size={20} weight={isActive ? "fill" : "regular"} />
         <AnimatePresence>
@@ -97,7 +112,12 @@ function NavItemButton({
   }
 
   return (
-    <Link to={item.to} className={className} title={collapsed ? label : undefined}>
+    <Link
+      to={item.to}
+      className={className}
+      title={collapsed ? label : undefined}
+      onClick={onNavigate}
+    >
       <Icon size={20} weight={isActive ? "fill" : "regular"} />
       <AnimatePresence>
         {!collapsed && (
@@ -121,18 +141,19 @@ function NavItemButton({
   )
 }
 
-export function SideNav() {
+/** Shared nav content used by both desktop sidebar and mobile overlay */
+function NavContent({
+  collapsed,
+  currentPath,
+  onNavigate,
+}: {
+  collapsed: boolean
+  currentPath: string
+  onNavigate?: () => void
+}) {
   const { t } = useTranslation()
-  const sidebarOpen = useAppStore((s) => s.sidebarOpen)
-  const matches = useMatches()
   const [secondaryOpen, setSecondaryOpen] = useState(true)
   const { d } = useMotionPreference()
-
-  const currentPath = matches[matches.length - 1]?.pathname ?? "/"
-
-  // Auto-collapse to icon rail when on routes with secondary sidebars
-  const hasSecondarySidebar = currentPath.startsWith("/files") || currentPath.startsWith("/settings")
-  const collapsed = !sidebarOpen || hasSecondarySidebar
 
   function isActive(to: string): boolean {
     if (to === "/") return currentPath === "/"
@@ -140,15 +161,7 @@ export function SideNav() {
   }
 
   return (
-    <motion.nav
-      animate={{ width: collapsed ? 56 : 220 }}
-      transition={{
-        duration: d(DURATION.normal),
-        ease: EASING.move,
-      }}
-      className="hidden shrink-0 flex-col border-r border-border bg-sidebar font-heading lg:flex"
-      aria-label={t("a11y.main_navigation")}
-    >
+    <>
       {/* Primary items */}
       <div className="flex flex-1 flex-col gap-0.5 py-2">
         {primaryItems.map((item) => (
@@ -157,6 +170,7 @@ export function SideNav() {
             item={item}
             isActive={isActive(item.to)}
             collapsed={collapsed}
+            onNavigate={onNavigate}
           />
         ))}
 
@@ -187,6 +201,7 @@ export function SideNav() {
               item={item}
               isActive={isActive(item.to)}
               collapsed={collapsed}
+              onNavigate={onNavigate}
             />
           ))}
       </div>
@@ -199,9 +214,146 @@ export function SideNav() {
             item={item}
             isActive={isActive(item.to)}
             collapsed={collapsed}
+            onNavigate={onNavigate}
           />
         ))}
       </div>
+    </>
+  )
+}
+
+/**
+ * Desktop sidebar (>=1024px): always visible, collapsible to 56px icon rail.
+ * Tablet (768-1023px): auto-collapsed to icon rail.
+ * Mobile (<768px): hidden — uses MobileSideNav sheet overlay instead.
+ */
+function DesktopSideNav() {
+  const { t } = useTranslation()
+  const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
+  const toggleSidebarCollapsed = useAppStore((s) => s.toggleSidebarCollapsed)
+  const matches = useMatches()
+  const { d } = useMotionPreference()
+
+  const currentPath = matches[matches.length - 1]?.pathname ?? "/"
+
+  // Auto-collapse to icon rail when on routes with secondary sidebars
+  const hasSecondarySidebar =
+    currentPath.startsWith("/files") || currentPath.startsWith("/settings")
+  const collapsed = sidebarCollapsed || hasSecondarySidebar
+
+  // Keyboard shortcut: Cmd+B to toggle sidebar
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+        e.preventDefault()
+        toggleSidebarCollapsed()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [toggleSidebarCollapsed])
+
+  return (
+    <motion.nav
+      animate={{ width: collapsed ? 56 : 220 }}
+      transition={{
+        duration: d(DURATION.normal),
+        ease: EASING.move,
+      }}
+      className="hidden shrink-0 flex-col border-r border-border bg-sidebar font-heading md:flex"
+      aria-label={t("a11y.main_navigation")}
+    >
+      {/* Collapse toggle button */}
+      <div className="flex h-10 items-center border-b border-border px-2">
+        <AnimatePresence>
+          {!collapsed && (
+            <motion.div
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              exit={{ opacity: 0, width: 0 }}
+              transition={{ duration: d(DURATION.normal), ease: EASING.enter }}
+              className="flex flex-1 items-center overflow-hidden px-1"
+            >
+              <SquareBuildLogo size={16} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <motion.button
+          type="button"
+          onClick={toggleSidebarCollapsed}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          className="flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          aria-label={
+            collapsed
+              ? t("nav.expand_sidebar")
+              : t("nav.collapse_sidebar")
+          }
+          title={`${collapsed ? t("nav.expand_sidebar") : t("nav.collapse_sidebar")} (${navigator.platform?.includes("Mac") ? "\u2318" : "Ctrl+"}B)`}
+        >
+          <motion.div
+            animate={{ rotate: collapsed ? 180 : 0 }}
+            transition={{ duration: d(DURATION.normal), ease: EASING.move }}
+          >
+            <SidebarIcon size={16} weight="bold" aria-hidden="true" />
+          </motion.div>
+        </motion.button>
+      </div>
+
+      <NavContent collapsed={collapsed} currentPath={currentPath} />
     </motion.nav>
+  )
+}
+
+/**
+ * Mobile sidebar overlay (<768px): opens as a sheet from the left.
+ * Triggered by hamburger button in TopBar.
+ */
+function MobileSideNav() {
+  const { t } = useTranslation()
+  const sidebarOpen = useAppStore((s) => s.sidebarOpen)
+  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen)
+  const matches = useMatches()
+  const currentPath = matches[matches.length - 1]?.pathname ?? "/"
+
+  return (
+    <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+      <SheetContent
+        side="left"
+        className="w-[260px] p-0 font-heading sm:max-w-[260px]"
+        showCloseButton={false}
+      >
+        <SheetTitle className="sr-only">{t("nav.toggle_sidebar")}</SheetTitle>
+        {/* Header */}
+        <div className="flex h-12 items-center gap-2 border-b border-border px-3">
+          <SquareBuildLogo size={18} />
+        </div>
+
+        <nav
+          className="flex flex-1 flex-col overflow-y-auto"
+          aria-label={t("a11y.main_navigation")}
+        >
+          <NavContent
+            collapsed={false}
+            currentPath={currentPath}
+            onNavigate={() => setSidebarOpen(false)}
+          />
+        </nav>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+/**
+ * SideNav composite: renders both desktop sidebar and mobile sheet overlay.
+ * Only one is visible at a time based on viewport.
+ */
+export function SideNav() {
+  return (
+    <>
+      <DesktopSideNav />
+      <MobileSideNav />
+    </>
   )
 }
