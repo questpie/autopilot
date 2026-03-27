@@ -8,28 +8,42 @@ import { SkipLink } from "@/components/skip-link"
 
 /**
  * App shell wrapping all authenticated routes.
- * Desktop: TopBar + SideNav + Main + RightSidebar + StatusBar
- * Tablet: TopBar + collapsed SideNav rail + Main + overlay RightSidebar
- * Mobile: TopBar + Main + BottomNav
+ * SideNav is full-height (left edge). TopBar + Main sit beside it.
+ *
+ * Desktop:
+ * ┌──────┬─── TopBar ───────────────────┐
+ * │ Side │                              │
+ * │ Nav  ├──────────────────┬───────────┤
+ * │      │     Main         │ RightBar  │
+ * │      │                  │           │
+ * │      ├──────────────────┴───────────┤
+ * │      │ StatusBar                    │
+ * └──────┴──────────────────────────────┘
+ *
+ * Mobile: TopBar + Main + BottomNav (SideNav hidden, opens as sheet)
  */
 export function AppShell() {
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]">
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]">
       <SkipLink />
-      <TopBar />
-      <div className="flex min-h-0 flex-1">
-        <SideNav />
-        <main
-          id="main-content"
-          className="flex min-w-0 flex-1 flex-col overflow-auto"
-          tabIndex={-1}
-        >
-          <Outlet />
-        </main>
-        <RightSidebar />
+      {/* SideNav — full height, left edge (hidden on mobile, sheet overlay) */}
+      <SideNav />
+      {/* Right column: TopBar + Main + StatusBar + BottomNav */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar />
+        <div className="flex min-h-0 flex-1">
+          <main
+            id="main-content"
+            className="flex min-w-0 flex-1 flex-col overflow-auto"
+            tabIndex={-1}
+          >
+            <Outlet />
+          </main>
+          <RightSidebar />
+        </div>
+        <StatusBar />
+        <BottomNav />
       </div>
-      <StatusBar />
-      <BottomNav />
     </div>
   )
 }

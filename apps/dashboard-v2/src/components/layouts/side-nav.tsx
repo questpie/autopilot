@@ -15,10 +15,12 @@ import {
   SidebarIcon,
 } from "@phosphor-icons/react"
 import { useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
 import { EASING, DURATION, useMotionPreference } from "@/lib/motion"
+import { statusQuery } from "@/features/dashboard/dashboard.queries"
 import {
   Sheet,
   SheetContent,
@@ -233,6 +235,8 @@ function DesktopSideNav() {
   const toggleSidebarCollapsed = useAppStore((s) => s.toggleSidebarCollapsed)
   const matches = useMatches()
   const { d } = useMotionPreference()
+  const { data: status } = useQuery(statusQuery)
+  const companyName = (status as { company?: string })?.company
 
   const currentPath = matches[matches.length - 1]?.pathname ?? "/"
 
@@ -263,8 +267,8 @@ function DesktopSideNav() {
       className="hidden shrink-0 flex-col border-r border-border bg-sidebar font-heading md:flex"
       aria-label={t("a11y.main_navigation")}
     >
-      {/* Collapse toggle button */}
-      <div className="flex h-10 items-center border-b border-border px-2">
+      {/* Header: logo + company name + collapse toggle */}
+      <div className="flex h-12 items-center border-b border-border px-2">
         <AnimatePresence>
           {!collapsed && (
             <motion.div
@@ -272,9 +276,21 @@ function DesktopSideNav() {
               animate={{ opacity: 1, width: "auto" }}
               exit={{ opacity: 0, width: 0 }}
               transition={{ duration: d(DURATION.normal), ease: EASING.enter }}
-              className="flex flex-1 items-center overflow-hidden px-1"
+              className="flex flex-1 items-center gap-2 overflow-hidden px-1"
             >
-              <SquareBuildLogo size={16} />
+              <SquareBuildLogo size={18} />
+              <span className="truncate text-xs font-semibold text-foreground">
+                {companyName ?? t("app.name")}
+              </span>
+            </motion.div>
+          )}
+          {collapsed && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-1 items-center justify-center"
+            >
+              <SquareBuildLogo size={18} />
             </motion.div>
           )}
         </AnimatePresence>
