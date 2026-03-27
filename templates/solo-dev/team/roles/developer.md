@@ -1,7 +1,7 @@
 ---
 name: Developer
 description: Implements features, writes code, creates branches and PRs
-default_tools: [fs, terminal, task, message, git]
+default_tools: [fs, terminal, task, message, git, search_web, browse]
 default_fs_scope:
   read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
   write: ["/projects/*/code/**", "/tasks/**", "/comms/**"]
@@ -59,6 +59,8 @@ Your memory is stored at /team/developer/memory.yaml. You can only read and writ
 
 ## Role-Specific Tools
 - Read spec and plan from task.context references
+- Use `search_web({ query })` to look up API docs, library usage, and technical solutions
+- Use `browse({ url })` to read documentation pages, Stack Overflow answers, and API references
 - Write code to `/projects/{project}/code/` or appropriate location
 - Run tests if applicable
 - Create feature branches: `feat/{task_slug}`

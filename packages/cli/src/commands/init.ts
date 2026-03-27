@@ -85,23 +85,10 @@ program.addCommand(
 
 				await cp(templateDir, targetDir, { recursive: true })
 
-				// Create runtime directories (not in template — orchestrator creates content at runtime)
+				// Create runtime directories (orchestrator populates at runtime, DB is primary storage)
 				const runtimeDirs = [
-					'tasks/backlog',
-					'tasks/active',
-					'tasks/review',
-					'tasks/blocked',
-					'tasks/done',
-					'comms/channels/general',
-					'comms/channels/dev',
-					'comms/direct',
-					'logs/activity',
-					'logs/sessions',
-					'logs/errors',
 					'context/memory',
 					'secrets',
-					'projects',
-					'infra',
 				]
 				await Promise.all(runtimeDirs.map((d) => mkdir(join(targetDir, d), { recursive: true })))
 
@@ -118,15 +105,6 @@ program.addCommand(
 				content = content.replace(/slug:\s*"my-company"/, `slug: "${slug}"`)
 				await writeFile(companyYamlPath, content, 'utf-8')
 
-				// Create .claude/skills symlink → ../skills (Agent Skills standard)
-				const claudeDir = join(targetDir, '.claude')
-				await mkdir(claudeDir, { recursive: true })
-				try {
-					await symlink('../skills', join(claudeDir, 'skills'))
-				} catch {
-					// Symlink may already exist from template copy
-				}
-
 				// Initialize git repository
 				const gitignoreContent = [
 					'# SQLite operational databases',
@@ -134,16 +112,6 @@ program.addCommand(
 					'',
 					'# Secrets (encryption key MUST NOT be in git)',
 					'secrets/.master-key',
-					'',
-					'# Dependencies',
-					'node_modules/',
-					'',
-					'# Build artifacts',
-					'.turbo/',
-					'dashboard/dist/',
-					'',
-					'# Session streams (too large, append-only)',
-					'logs/sessions/*.jsonl',
 					'',
 					'# OS files',
 					'.DS_Store',

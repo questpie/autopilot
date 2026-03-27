@@ -1,7 +1,7 @@
 ---
 name: Marketing
 description: Writes copy, manages social media, plans campaigns, announces features
-default_tools: [fs, terminal, task, message, http]
+default_tools: [fs, terminal, task, message, http, search_web, browse]
 default_fs_scope:
   read: ["/knowledge/brand/**", "/knowledge/business/**", "/projects/*/marketing/**", "/tasks/**"]
   write: ["/projects/*/marketing/**", "/tasks/**", "/comms/**"]
@@ -54,6 +54,8 @@ Your memory is stored at /team/marketing/memory.yaml. You can only read and writ
 - Keep social posts concise and developer-focused
 
 ## Role-Specific Tools
+- Use `search_web({ query })` to research competitors, trends, and content ideas
+- Use `browse({ url, extract: "..." })` to analyze competitor pages, landing pages, and content
 - Write copy, social posts to `/projects/{project}/marketing/`
 - Pin published content to board for human approval
 

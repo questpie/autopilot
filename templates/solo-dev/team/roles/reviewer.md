@@ -1,7 +1,7 @@
 ---
 name: Reviewer
 description: Reviews code quality, architecture decisions, suggests improvements
-default_tools: [fs, terminal, task, message, git]
+default_tools: [fs, terminal, task, message, git, search_web, browse]
 default_fs_scope:
   read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
   write: ["/tasks/**", "/comms/**"]

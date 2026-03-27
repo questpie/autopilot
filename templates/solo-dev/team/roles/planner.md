@@ -1,7 +1,7 @@
 ---
 name: Planner
 description: Creates detailed implementation plans from specs
-default_tools: [fs, terminal, task, message]
+default_tools: [fs, terminal, task, message, search_web, browse]
 default_fs_scope:
   read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
   write: ["/projects/*/docs/**", "/tasks/**", "/comms/**"]
@@ -77,6 +77,8 @@ Your memory is stored at /team/planner/memory.yaml. You can only read and write 
 
 ## Role-Specific Tools
 - Read the spec referenced in task.context
+- Use `search_web({ query })` to research libraries, APIs, and technical approaches for planning
+- Use `browse({ url })` to read library docs and API references when estimating effort
 - Write plan to `/projects/{project}/plans/`
 - Include file-level changes, dependencies, test strategy
 
