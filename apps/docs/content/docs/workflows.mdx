@@ -17,7 +17,7 @@ Workflows are not code. They are data. Agents read them, the orchestrator's work
 - **CEO agent owns them** -- only the CEO agent can modify workflow files
 - **Any agent can propose changes** -- if a developer notices a bottleneck, they send a proposal to the CEO with evidence
 - **Human approves structural changes** -- adding or removing approval gates, changing permissions
-- **Agents don't need to understand the engine** -- they do their step and call `update_task`. The orchestrator handles routing
+- **Agents don't need to understand the engine** -- they do their step and call `task({ action: "update", ... })`. The orchestrator handles routing
 
 ## Workflow YAML Format
 

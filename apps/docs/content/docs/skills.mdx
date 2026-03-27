@@ -51,7 +51,7 @@ When reviewing pull requests or providing code feedback...
 Skills are loaded lazily to minimize context window usage:
 
 1. **Metadata** -- on startup, the loader scans all skill directories and reads only the frontmatter
-2. **Body** -- when an agent requests a skill via `skill_request`, the full markdown body is loaded
+2. **Body** -- when an agent reads `skills/{id}/SKILL.md`, the full markdown body is loaded
 3. **Resources** -- if the skill has a `references/` directory, those files are listed and available on demand
 
 ## Skill Templates
@@ -101,11 +101,11 @@ $ autopilot skills show code-review
 
 ## How Agents Use Skills
 
-When an agent starts a session, it sees the list of available skills (filtered by role) in its context. When it needs domain knowledge, it calls `skill_request` and the full skill content is loaded.
+When an agent starts a session, it sees the list of available skills (filtered by role) in its context. When it needs domain knowledge, it reads the corresponding `SKILL.md` file and applies it.
 
 ```ts title="agent-skill-usage.ts"
 // Agent calls:
-skill_request({ skill_id: "code-review" })
+read_file("skills/code-review/SKILL.md")
 
 // → Full SKILL.md body injected into agent context
 // → Agent follows the checklist and conventions

@@ -9,14 +9,9 @@ import { createMiddleware } from 'hono/factory'
 import { resolveActor } from '../../auth/middleware'
 import type { AppEnv } from '../app'
 
-interface ArtifactAuthOptions {
-	authEnabled: boolean
-}
-
-export function artifactProxyAuth(options: ArtifactAuthOptions) {
+export function artifactProxyAuth() {
 	return createMiddleware<AppEnv>(async (c, next) => {
 		const actor = await resolveActor(c.req.raw, {
-			authEnabled: options.authEnabled,
 			companyRoot: c.get('companyRoot'),
 			auth: c.get('auth'),
 		})
@@ -27,8 +22,6 @@ export function artifactProxyAuth(options: ArtifactAuthOptions) {
 
 		// Future: check ?token= query param for public sharing
 		// Future: check .artifact.yaml public: true flag
-
-		if (!options.authEnabled) return next()
 
 		return c.json({ error: 'Unauthorized' }, 401)
 	})

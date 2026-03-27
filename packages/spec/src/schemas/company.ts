@@ -29,7 +29,6 @@ export const CompanySettingsSchema = z.object({
 		.default({}),
 	auth: z
 		.object({
-			enabled: z.boolean().default(false),
 			cors_origin: z.string().optional(),
 			ip_allowlist: z.array(z.string()).default([]),
 			trusted_proxies: z.array(z.string()).default(['127.0.0.1', '::1', '::ffff:127.0.0.1']),

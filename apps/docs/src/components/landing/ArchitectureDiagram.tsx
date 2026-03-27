@@ -67,7 +67,7 @@ export function ArchitectureDiagram() {
 			<ArchLayer
 				label="03"
 				name="AGENTS"
-				items={['Claude Agent SDK', 'Codex SDK', 'Role Templates', '13 Primitives', 'MCP', 'Sandboxed FS']}
+				items={['Claude Agent SDK', 'Codex SDK', 'Role Templates', '7 Tools', 'MCP', 'Sandboxed FS']}
 			/>
 			<Connector />
 			<ArchLayer

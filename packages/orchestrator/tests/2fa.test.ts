@@ -1,9 +1,10 @@
-import { describe, test, expect } from 'bun:test'
-import { resolveActor } from '../src/auth/middleware'
-import { createTestCompany } from './helpers'
-import { writeFile } from 'node:fs/promises'
+import { describe, expect, test } from 'bun:test'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { stringify } from 'yaml'
+import { hashApiKey } from '../src/auth/crypto'
+import { resolveActor } from '../src/auth/middleware'
+import { createTestCompany } from './helpers'
 
 describe('2FA enforcement in resolveActor', () => {
 	test('returns null when twoFactorEnabled=true but twoFactorVerified=false', async () => {
@@ -13,7 +14,6 @@ describe('2FA enforcement in resolveActor', () => {
 				headers: { Authorization: 'Bearer valid-token' },
 			})
 			const actor = await resolveActor(request, {
-				authEnabled: true,
 				companyRoot: root,
 				auth: {
 					api: {
@@ -42,7 +42,6 @@ describe('2FA enforcement in resolveActor', () => {
 				headers: { Authorization: 'Bearer valid-token' },
 			})
 			const actor = await resolveActor(request, {
-				authEnabled: true,
 				companyRoot: root,
 				auth: {
 					api: {
@@ -60,20 +59,51 @@ describe('2FA enforcement in resolveActor', () => {
 		}
 	})
 
-	test('agent (API key) skips 2FA — returns actor always', async () => {
+	test('agent API key auth bypasses 2FA session checks', async () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
-			// Agent auth goes through X-API-Key path, not session path
-			// 2FA is only enforced in resolveHumanActor
-			// With auth disabled, implicit owner is returned (agents use API keys, not sessions)
-			const request = new Request('http://localhost:7778/api/tasks')
+			const rawKey = 'ap_test-agent_example-test-key'
+
+			await mkdir(join(root, '.auth'), { recursive: true })
+			await writeFile(
+				join(root, '.auth', 'agent-keys.yaml'),
+				stringify({
+					keys: [
+						{
+							agentId: 'test-agent',
+							keyHash: hashApiKey(rawKey),
+							createdAt: new Date().toISOString(),
+						},
+					],
+				}),
+			)
+
+			await writeFile(
+				join(root, 'team', 'agents.yaml'),
+				stringify({
+					agents: [
+						{
+							id: 'test-agent',
+							name: 'Test Agent',
+							role: 'developer',
+							description: 'Test agent',
+							fs_scope: { read: ['/**'], write: ['/tasks/**'] },
+							tools: ['fs', 'terminal'],
+						},
+					],
+				}),
+			)
+
+			const request = new Request('http://localhost:7778/api/tasks', {
+				headers: { 'X-API-Key': rawKey },
+			})
 			const actor = await resolveActor(request, {
-				authEnabled: false,
 				companyRoot: root,
-				auth: {} as any,
+				auth: { api: { getSession: async () => null } } as any,
 			})
 			expect(actor).not.toBeNull()
-			expect(actor!.type).toBe('human') // implicit owner
+			expect(actor!.type).toBe('agent')
+			expect(actor!.id).toBe('test-agent')
 		} finally {
 			await cleanup()
 		}
@@ -91,7 +121,6 @@ describe('2FA enforcement in resolveActor', () => {
 				headers: { Authorization: 'Bearer valid-token' },
 			})
 			const actor = await resolveActor(request, {
-				authEnabled: true,
 				companyRoot: root,
 				auth: {
 					api: {
@@ -119,7 +148,6 @@ describe('2FA enforcement in resolveActor', () => {
 				headers: { Authorization: 'Bearer valid-token' },
 			})
 			const actor = await resolveActor(request, {
-				authEnabled: true,
 				companyRoot: root,
 				auth: {
 					api: {
@@ -148,7 +176,6 @@ describe('2FA enforcement in resolveActor', () => {
 				headers: { Authorization: 'Bearer valid-token' },
 			})
 			const actor = await resolveActor(request, {
-				authEnabled: true,
 				companyRoot: root,
 				auth: {
 					api: {

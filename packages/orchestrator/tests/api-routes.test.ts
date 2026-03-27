@@ -1,16 +1,18 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { stringify as stringifyYaml } from 'yaml'
-import { container, configureContainer } from '../src/container'
-import type { StorageBackend } from '../src/fs/storage'
+import { join } from 'node:path'
 import type { Hono } from 'hono'
+import { stringify as stringifyYaml } from 'yaml'
 import type { AppEnv } from '../src/api/app'
+import { configureContainer, container } from '../src/container'
+import type { StorageBackend } from '../src/fs/storage'
+import { setupTestApiKey, withApiKey } from './auth-helpers'
 
 let app: ReturnType<typeof import('../src/api/app').createApp>
 let companyRoot: string
 let storage: StorageBackend
+let apiKey: string
 
 beforeAll(async () => {
 	companyRoot = await mkdtemp(join(tmpdir(), 'api-routes-test-'))
@@ -73,10 +75,11 @@ beforeAll(async () => {
 	const { storageFactory } = await import('../src/fs/sqlite-backend')
 	const resolved = await container.resolveAsync([storageFactory])
 	storage = resolved.storage
+	apiKey = await setupTestApiKey(companyRoot)
 
-	// Create the Hono app with auth disabled
+	// Create the Hono app
 	const { createApp } = await import('../src/api/app')
-	app = createApp({ authEnabled: false, corsOrigin: '*' })
+	app = createApp({ corsOrigin: '*' })
 })
 
 afterAll(async () => {
@@ -104,37 +107,40 @@ function makeTaskPayload(overrides: Record<string, unknown> = {}) {
 	}
 }
 
+function request(path: string, init?: RequestInit) {
+	return app.request(path, withApiKey(init, apiKey))
+}
+
 // ─── GET /api/status ────────────────────────────────────────────────────────
 
 describe('GET /api/status', () => {
-	it('should return full status when actor is set (authEnabled: false uses implicit owner)', async () => {
-		// authEnabled: false → resolveActor returns implicit owner (non-null actor)
-		// → full company payload is returned
-		const res = await app.request('/api/status')
+	it('should return full status for authenticated requests', async () => {
+		const res = await request('/api/status')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as Record<string, unknown>
 		expect(data.company).toBe('Test Company')
+		expect(typeof data.userCount).toBe('number')
 		expect(data.agentCount).toBe(0)
 		expect(typeof data.activeTasks).toBe('number')
 		expect(typeof data.runningSessions).toBe('number')
 		expect(typeof data.pendingApprovals).toBe('number')
 	})
 
-	it('should return minimal {status: ok} when no actor is present (unauthenticated with auth enabled)', async () => {
-		// Create a separate app with auth ENABLED but no credentials supplied.
-		// resolveActor returns null for requests with no token → minimal response.
+	it('should return status payload even when unauthenticated (auth enabled)', async () => {
+		// Create a separate app with auth enabled and no credentials supplied.
+		// /api/status remains public for health checks and setup bootstrap.
 		const { createApp } = await import('../src/api/app')
-		const authApp = createApp({ authEnabled: true, corsOrigin: '*' })
+		const authApp = createApp({ corsOrigin: '*' })
 
 		const res = await authApp.request('/api/status')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as Record<string, unknown>
-		expect(data.status).toBe('ok')
-		expect(data.company).toBeUndefined()
-		expect(data.agentCount).toBeUndefined()
-		expect(data.activeTasks).toBeUndefined()
+		expect(data.company).toBe('Test Company')
+		expect(typeof data.userCount).toBe('number')
+		expect(typeof data.agentCount).toBe('number')
+		expect(typeof data.activeTasks).toBe('number')
 	})
 })
 
@@ -142,7 +148,7 @@ describe('GET /api/status', () => {
 
 describe('GET /api/tasks', () => {
 	it('should return an empty task list initially', async () => {
-		const res = await app.request('/api/tasks')
+		const res = await request('/api/tasks')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as unknown[]
@@ -153,7 +159,7 @@ describe('GET /api/tasks', () => {
 		await storage.createTask(makeTaskPayload({ id: 'list-t1', status: 'backlog' }) as any)
 		await storage.createTask(makeTaskPayload({ id: 'list-t2', status: 'backlog' }) as any)
 
-		const res = await app.request('/api/tasks')
+		const res = await request('/api/tasks')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as Array<{ id: string }>
@@ -167,7 +173,7 @@ describe('GET /api/tasks', () => {
 		await storage.createTask(makeTaskPayload({ id: 'filter-active', status: 'in_progress' }) as any)
 		await storage.createTask(makeTaskPayload({ id: 'filter-backlog', status: 'backlog' }) as any)
 
-		const res = await app.request('/api/tasks?status=in_progress')
+		const res = await request('/api/tasks?status=in_progress')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as Array<{ id: string; status: string }>
@@ -182,7 +188,7 @@ describe('POST /api/tasks', () => {
 	it('should create a new task and return 201', async () => {
 		const payload = makeTaskPayload({ id: 'create-t1', title: 'Created via API' })
 
-		const res = await app.request('/api/tasks', {
+		const res = await request('/api/tasks', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(payload),
@@ -200,7 +206,7 @@ describe('POST /api/tasks', () => {
 	})
 
 	it('should return 400 for invalid task body (missing required fields)', async () => {
-		const res = await app.request('/api/tasks', {
+		const res = await request('/api/tasks', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ title: 'No id or type' }),
@@ -215,7 +221,7 @@ describe('GET /api/tasks/:id', () => {
 	it('should return a single task by id', async () => {
 		await storage.createTask(makeTaskPayload({ id: 'get-t1', title: 'Single fetch' }) as any)
 
-		const res = await app.request('/api/tasks/get-t1')
+		const res = await request('/api/tasks/get-t1')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as { id: string; title: string }
@@ -224,7 +230,7 @@ describe('GET /api/tasks/:id', () => {
 	})
 
 	it('should return 404 for non-existent task', async () => {
-		const res = await app.request('/api/tasks/does-not-exist')
+		const res = await request('/api/tasks/does-not-exist')
 		expect(res.status).toBe(404)
 
 		const data = (await res.json()) as { error: string }
@@ -238,7 +244,7 @@ describe('POST /api/tasks/:id/approve', () => {
 	it('should move a task to done status', async () => {
 		await storage.createTask(makeTaskPayload({ id: 'approve-t1', status: 'review' }) as any)
 
-		const res = await app.request('/api/tasks/approve-t1/approve', { method: 'POST' })
+		const res = await request('/api/tasks/approve-t1/approve', { method: 'POST' })
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as { ok: boolean; taskId: string; status: string }
@@ -252,7 +258,7 @@ describe('POST /api/tasks/:id/approve', () => {
 	})
 
 	it('should return 404 when approving non-existent task', async () => {
-		const res = await app.request('/api/tasks/ghost-task/approve', { method: 'POST' })
+		const res = await request('/api/tasks/ghost-task/approve', { method: 'POST' })
 		expect(res.status).toBe(404)
 	})
 })
@@ -263,14 +269,19 @@ describe('POST /api/tasks/:id/reject', () => {
 	it('should move a task to blocked status with custom reason', async () => {
 		await storage.createTask(makeTaskPayload({ id: 'reject-t1', status: 'review' }) as any)
 
-		const res = await app.request('/api/tasks/reject-t1/reject', {
+		const res = await request('/api/tasks/reject-t1/reject', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ reason: 'Needs rework' }),
 		})
 		expect(res.status).toBe(200)
 
-		const data = (await res.json()) as { ok: boolean; taskId: string; status: string; reason: string }
+		const data = (await res.json()) as {
+			ok: boolean
+			taskId: string
+			status: string
+			reason: string
+		}
 		expect(data.ok).toBe(true)
 		expect(data.taskId).toBe('reject-t1')
 		expect(data.status).toBe('blocked')
@@ -284,7 +295,7 @@ describe('POST /api/tasks/:id/reject', () => {
 	it('should use default reason when none provided', async () => {
 		await storage.createTask(makeTaskPayload({ id: 'reject-t2', status: 'review' }) as any)
 
-		const res = await app.request('/api/tasks/reject-t2/reject', {
+		const res = await request('/api/tasks/reject-t2/reject', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({}),
@@ -296,7 +307,7 @@ describe('POST /api/tasks/:id/reject', () => {
 	})
 
 	it('should return 404 when rejecting non-existent task', async () => {
-		const res = await app.request('/api/tasks/ghost-task/reject', {
+		const res = await request('/api/tasks/ghost-task/reject', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({}),
@@ -309,7 +320,7 @@ describe('POST /api/tasks/:id/reject', () => {
 
 describe('GET /api/activity', () => {
 	it('should return an empty activity feed initially', async () => {
-		const res = await app.request('/api/activity')
+		const res = await request('/api/activity')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as unknown[]
@@ -331,7 +342,7 @@ describe('GET /api/activity', () => {
 			summary: 'Reviewed PR #42',
 		})
 
-		const res = await app.request('/api/activity')
+		const res = await request('/api/activity')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as Array<{ agent: string; summary: string }>
@@ -339,7 +350,7 @@ describe('GET /api/activity', () => {
 	})
 
 	it('should filter activity by agent query param', async () => {
-		const res = await app.request('/api/activity?agent=developer')
+		const res = await request('/api/activity?agent=developer')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as Array<{ agent: string }>
@@ -347,7 +358,7 @@ describe('GET /api/activity', () => {
 	})
 
 	it('should respect limit query param', async () => {
-		const res = await app.request('/api/activity?limit=1')
+		const res = await request('/api/activity?limit=1')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as unknown[]
@@ -359,15 +370,20 @@ describe('GET /api/activity', () => {
 
 describe('GET /api/search', () => {
 	it('should return 400 when q parameter is missing', async () => {
-		const res = await app.request('/api/search')
+		const res = await request('/api/search')
 		expect(res.status).toBe(400)
 	})
 
 	it('should return search results structure for a query', async () => {
-		const res = await app.request('/api/search?q=test')
+		const res = await request('/api/search?q=test')
 		expect(res.status).toBe(200)
 
-		const data = (await res.json()) as { results: unknown[]; query: string; mode: string; total: number }
+		const data = (await res.json()) as {
+			results: unknown[]
+			query: string
+			mode: string
+			total: number
+		}
 		expect(data.query).toBe('test')
 		expect(Array.isArray(data.results)).toBe(true)
 		expect(typeof data.total).toBe('number')
@@ -375,7 +391,7 @@ describe('GET /api/search', () => {
 	})
 
 	it('should accept mode parameter', async () => {
-		const res = await app.request('/api/search?q=hello&mode=fts')
+		const res = await request('/api/search?q=hello&mode=fts')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as { mode: string }
@@ -383,7 +399,7 @@ describe('GET /api/search', () => {
 	})
 
 	it('should accept type filter parameter', async () => {
-		const res = await app.request('/api/search?q=hello&type=task')
+		const res = await request('/api/search?q=hello&type=task')
 		expect(res.status).toBe(200)
 
 		const data = (await res.json()) as { results: unknown[]; query: string }

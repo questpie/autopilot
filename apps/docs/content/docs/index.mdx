@@ -1,15 +1,15 @@
 ---
 title: QUESTPIE Autopilot
-description: An AI-native company operating system where AI agents run your company through structured primitives, human approval gates, and a self-evolving dashboard.
+description: An AI-native company operating system where AI agents run your company through unified tools, human approval gates, and a self-evolving dashboard.
 ---
 
-QUESTPIE Autopilot is an AI-native company operating system where AI agents run your company through structured primitives, human approval gates, and a self-evolving dashboard. You define agents in YAML, give high-level intents, and approve at explicit gates. Company configuration lives in files you can `ls`, `grep`, and version with Git, while runtime data (tasks, messages, activity) is stored in SQLite for fast indexed queries. It runs as a single Bun process with zero infrastructure.
+QUESTPIE Autopilot is an AI-native company operating system where AI agents run your company through unified tools, human approval gates, and a self-evolving dashboard. You define agents in YAML, give high-level intents, and approve at explicit gates. Company configuration lives in files you can `ls`, `grep`, and version with Git, while runtime data (tasks, messages, activity) is stored in SQLite for fast indexed queries. It runs as a single Bun process with zero infrastructure.
 
 ## What Makes Autopilot Different
 
-### Primitives, Not Chat
+### Tools, Not Chat
 
-Agents don't generate text for you to read. They call 14 structured primitives -- `create_task()`, `send_message()`, `pin_to_board()`, `create_artifact()`, `skill_request()`, `search()`. Agent thinking is private. Only primitive calls produce visible effects. This is not a chatbot wrapper. It's a structured execution engine.
+Agents don't generate text for you to read. They call 7 unified tools -- `task()`, `message()`, `pin()`, `search()`, `http()`, `search_web()`, `browse()`. Agent thinking is private. Only tool calls produce visible effects. This is not a chatbot wrapper. It's a structured execution engine.
 
 ### Living Dashboard
 
@@ -33,9 +33,9 @@ YAML for configuration, Markdown for knowledge, SQLite for runtime data. Company
 
 Each agent is defined in YAML with an ID, role template, filesystem scope, and tool set. The default template ships 8 agents (CEO, Sam, Alex, Max, Riley, Ops, Morgan, Jordan) across 8 roles (meta, strategist, planner, developer, reviewer, devops, marketing, design). Each agent runs as a Claude session via the Claude Agent SDK with a 6-layer context assembly (identity + company state + agent memory + task context + skills discovery + tool list).
 
-### 03 -- Primitives as Actions
+### 03 -- Tools as Actions
 
-Agents don't produce text output. They call structured primitives -- typed function calls with clear targets and effects. `create_task()`, `send_message()`, `pin_to_board()`, `create_artifact()`, `skill_request()`, `search()`. Agent thinking is internal. Only primitive calls produce observable results.
+Agents don't produce text output. They call unified tools -- typed function calls with clear targets and effects. `task()`, `message()`, `pin()`, `search()`, `http()`, `search_web()`, `browse()`. Agent thinking is internal. Only tool calls produce observable results.
 
 ### 04 -- Workflows as Files
 
@@ -55,7 +55,7 @@ cd my-company
 export ANTHROPIC_API_KEY=sk-ant-xxx
 
 autopilot start
-autopilot ask "Build a landing page for our product"
+autopilot chat "Build a landing page for our product"
 autopilot attach max
 ```
 
@@ -64,7 +64,7 @@ autopilot attach max
 ## Documentation
 
 - [Getting Started](/docs/getting-started) -- Prerequisites, installation, first intent, first attach
-- [Primitives](/docs/primitives) -- The 14 structured primitives. Why not chat. Code examples
+- [Tools](/docs/primitives) -- The 7 unified tools. Why not chat. Code examples
 - [Architecture](/docs/architecture) -- Four-layer stack, zero-infra design, orchestrator internals
 - [Agents](/docs/agents) -- Agent definitions, role templates, memory isolation, context assembly
 - [Workflows](/docs/workflows) -- YAML workflows, human gates, CEO ownership

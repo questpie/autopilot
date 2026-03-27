@@ -35,6 +35,7 @@ export async function buildCompanySnapshot(
 		}))
 
 	// Load recent messages from channels the agent can read
+	// Legacy fallback: honor explicit comms channel fs scopes if present.
 	const readableChannels = agent.fs_scope.read
 		.filter((p: string) => p.includes('comms/channels/'))
 		.map((p: string) => {
@@ -42,13 +43,10 @@ export async function buildCompanySnapshot(
 			return match?.[1]
 		})
 		.filter((c): c is string => c != null)
+	const hasMessageTool = (agent.tools ?? []).includes('message')
 
 	const channelsToRead =
-		readableChannels.length > 0
-			? readableChannels
-			: agent.fs_scope.read.some((p: string) => p.includes('comms/**') || p.includes('comms/*'))
-				? ['general', 'dev']
-				: []
+		readableChannels.length > 0 ? readableChannels : hasMessageTool ? ['general', 'dev'] : []
 
 	const recentMessages: CompanySnapshot['recentMessages'] = []
 	for (const channel of channelsToRead.slice(0, 5)) {

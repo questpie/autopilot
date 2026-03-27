@@ -9,7 +9,7 @@ Claude sessions with persistent identity. Each agent has a name, role template, 
 
 An agent is a Claude session wrapped with a persistent identity. Between sessions, the orchestrator preserves everything the agent learned -- architecture decisions, mistakes to avoid, codebase patterns -- in a private memory store. When the agent is spawned again, that memory is injected into the system prompt so it picks up exactly where it left off.
 
-Agents do not chat. They call structured primitives: `read_file`, `write_file`, `send_message`, `create_task`. Thinking is private. Only tool calls produce visible effects.
+Agents do not chat. They call unified tools: `task`, `message`, `pin`, `search`, `http`, `search_web`, `browse`. Thinking is private. Only tool calls produce visible effects.
 
 ## The Default Team
 
@@ -34,14 +34,14 @@ A role defines the default system prompt, behavior rules, tool access, and files
 
 | Role | Purpose | Default Tools |
 |------|---------|--------------|
-| `meta` | Decomposes intent, manages team, owns workflows | fs, terminal, task, message, board |
-| `strategist` | Scopes features, writes specs, defines requirements | fs, terminal, task, message, knowledge |
-| `planner` | Creates implementation plans from specs | fs, terminal, task, message |
-| `developer` | Writes code, creates branches and PRs | fs, terminal, task, message, git |
-| `reviewer` | Reviews code quality, approves or rejects PRs | fs, terminal, task, message, git |
-| `devops` | Deploys, monitors infrastructure, incidents | fs, terminal, task, message, http |
-| `marketing` | Copy, social media, campaigns, announcements | fs, terminal, task, message, http |
-| `design` | UI/UX design, design system, mockups | fs, terminal, task, message |
+| `meta` | Decomposes intent, manages team, owns workflows | fs, terminal, task, message, pin, search, search_web, browse |
+| `strategist` | Scopes features, writes specs, defines requirements | fs, terminal, task, message, pin, search, search_web, browse |
+| `planner` | Creates implementation plans from specs | fs, terminal, task, message, pin, search, search_web, browse |
+| `developer` | Writes code, creates branches and PRs | fs, terminal, task, message, pin, search, git, search_web, browse |
+| `reviewer` | Reviews code quality, approves or rejects PRs | fs, terminal, task, message, pin, search, git, search_web, browse |
+| `devops` | Deploys, monitors infrastructure, incidents | fs, terminal, task, message, pin, search, http, search_web, browse |
+| `marketing` | Copy, social media, campaigns, announcements | fs, terminal, task, message, pin, search, http, search_web, browse |
+| `design` | UI/UX design, design system, mockups | fs, terminal, task, message, pin, search, search_web, browse |
 
 Custom roles go in `/company/team/roles/`. Any agent assigned to the custom role inherits its prompt, tools, and default FS scope.
 
@@ -64,8 +64,8 @@ system_prompt: |
 default_tools: [fs, terminal, task, message]
 
 default_fs_scope:
-  read: ["/projects/**", "/knowledge/technical/**", "/tasks/**"]
-  write: ["/projects/*/code/tests/**", "/tasks/**", "/comms/**"]
+  read: ["/projects/**", "/knowledge/technical/**"]
+  write: ["/projects/*/code/tests/**"]
 ```
 
 ## Defining Agents in YAML
@@ -80,35 +80,35 @@ agents:
     description: "Decomposes high-level intents into tasks, manages company structure"
     fs_scope:
       read: ["/**"]
-      write: ["/tasks/**", "/team/**", "/comms/**", "/dashboard/**"]
-    tools: ["fs", "terminal", "task", "message", "board"]
+      write: ["/team/**", "/dashboard/**"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]
 
   - id: sam
     name: "Sam"
     role: strategist
     description: "Scopes features, writes specs, defines business requirements"
     fs_scope:
-      read: ["/knowledge/**", "/projects/*/docs/**", "/tasks/**"]
-      write: ["/projects/*/docs/**", "/tasks/**", "/comms/**"]
-    tools: ["fs", "terminal", "task", "message", "knowledge"]
+      read: ["/knowledge/**", "/projects/*/docs/**"]
+      write: ["/projects/*/docs/**"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]
 
   - id: max
     name: "Max"
     role: developer
     description: "Implements features, writes code, creates branches and PRs"
     fs_scope:
-      read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
-      write: ["/projects/*/code/**", "/tasks/**", "/comms/**"]
-    tools: ["fs", "terminal", "task", "message", "git"]
+      read: ["/knowledge/technical/**", "/projects/**"]
+      write: ["/projects/*/code/**"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "git", "search_web", "browse"]
 
   - id: riley
     name: "Riley"
     role: reviewer
     description: "Reviews code quality, architecture decisions, suggests improvements"
     fs_scope:
-      read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
-      write: ["/tasks/**", "/comms/**"]
-    tools: ["fs", "terminal", "task", "message", "git"]
+      read: ["/knowledge/technical/**", "/projects/**"]
+      write: []
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "git", "search_web", "browse"]
 ```
 
 ## Per-Agent Model Selection
@@ -138,8 +138,8 @@ Every agent is sandboxed. The orchestrator enforces filesystem scope at the prov
 ```text title="fs-scope-definition"
 # FS scope is defined per agent in agents.yaml
 fs_scope:
-  read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
-  write: ["/projects/*/code/**", "/tasks/**", "/comms/**"]
+  read: ["/knowledge/technical/**", "/projects/**"]
+  write: ["/projects/*/code/**"]
 
 # What happens when an agent tries to access outside scope:
 max> read_file("/secrets/stripe.yaml")
@@ -230,19 +230,20 @@ $ autopilot ask "Add a QA agent for testing"
 $ vim team/agents.yaml
 ```
 
-## Agent Primitives
+## Agent Tools
 
-Agents interact with the system through structured primitives. Each primitive is a typed tool call with validated input and output.
+Agents interact with the system through 7 unified tools. Each tool is a multipurpose function with validated input and output.
 
-| Category | Primitives | Used By |
-|----------|-----------|---------|
-| Communication | `send_message, ask_agent` | All agents |
-| Tasks | `create_task, update_task, add_blocker` | All agents |
-| Dashboard | `pin_to_board, unpin_from_board` | All agents |
-| Files & Git | `read_file, write_file, git_commit, git_create_pr` | Scoped per agent |
-| Knowledge | `search_knowledge, semantic_search` | All agents |
-| Artifacts | `create_artifact` | Developer, Design |
-| External | `http_request, run_command` | Developer, DevOps, Marketing |
+| Tool | Purpose | Used By |
+|------|---------|---------|
+| `task` | Create, update, approve, reject, block, unblock tasks | All agents |
+| `message` | Send DMs, post to task threads and project channels | All agents |
+| `pin` | Create and remove dashboard pins | All agents |
+| `search` | Universal search across all entity types | All agents |
+| `http` | External API calls with SSRF protection | Developer, DevOps, Marketing |
+| `search_web` | Web search via Brave/Tavily/SerpAPI | All agents |
+| `browse` | Headless browser for web interaction | Developer, DevOps |
 
-See the [Primitives](/docs/primitives) page for full documentation on every primitive with code examples.
-examples.
+Agents also use native `read_file`/`write_file` from their LLM SDK for filesystem operations (knowledge, artifacts, config, skills).
+
+See the [Tools](/docs/primitives) page for full documentation on every tool with code examples.

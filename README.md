@@ -98,7 +98,7 @@ Human         CLI · Dashboard · Telegram · Webhooks
   │
 Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · SSE
   │
-Agents        Claude Agent SDK · 14 Primitives · Sandboxed FS · Memory
+Agents        Claude Agent SDK · 7 Tools · Sandboxed FS · Memory
   │
 Storage       SQLite + Drizzle · YAML/MD/JSON · FTS5 + sqlite-vec · Git
 ```

@@ -1,12 +1,36 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { createAutopilotTools, executeTool, type ToolContext, type ToolDefinition } from '../src/agent/tools'
-import type { StorageBackend, ActivityEntry, Task, Message } from '../src/fs/storage'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import {
+	type ToolContext,
+	type ToolDefinition,
+	createAutopilotTools,
+	executeTool,
+} from '../src/agent/tools'
+import { EventBus } from '../src/events/event-bus'
+import type {
+	ActivityEntry,
+	Channel,
+	ChannelFilter,
+	ChannelMember,
+	Message,
+	MessageFilter,
+	StorageBackend,
+	Task,
+} from '../src/fs/storage'
 import { createTestCompany } from './helpers'
 
 function createMockStorage() {
-	const tasks: Map<string, any> = new Map()
-	const messages: any[] = []
+	const tasks = new Map<string, Task>()
+	const messages: Message[] = []
 	const activityLog: ActivityEntry[] = []
+	const channels: Map<string, Channel & { members: ChannelMember[] }> = new Map()
+
+	const ensureChannel = (channel: Channel) => {
+		const existing = channels.get(channel.id)
+		if (existing) return existing
+		const withMembers = { ...channel, members: [] as ChannelMember[] }
+		channels.set(channel.id, withMembers)
+		return withMembers
+	}
 
 	const storage: StorageBackend = {
 		initialize: async () => {},
@@ -19,17 +43,17 @@ function createMockStorage() {
 			return created
 		},
 		readTask: async (id: string) => tasks.get(id) ?? null,
-		updateTask: async (id: string, updates: Partial<Task>) => {
+		updateTask: async (id: string, updates: Partial<Task>, _updatedBy: string) => {
 			const existing = tasks.get(id)
 			if (!existing) throw new Error(`Task not found: ${id}`)
 			const updated = { ...existing, ...updates }
 			tasks.set(id, updated)
 			return updated
 		},
-		moveTask: async (id: string, newStatus: string) => {
+		moveTask: async (id: string, newStatus: string, _movedBy: string) => {
 			const existing = tasks.get(id)
 			if (!existing) throw new Error(`Task not found: ${id}`)
-			existing.status = newStatus
+			existing.status = newStatus as Task['status']
 			tasks.set(id, existing)
 			return existing
 		},
@@ -43,16 +67,67 @@ function createMockStorage() {
 			messages.push(msg)
 			return msg
 		},
-		readMessages: async () => messages,
+		readMessages: async (_filter: MessageFilter) => messages,
 		searchMessages: async () => [],
 
 		appendActivity: async (entry: ActivityEntry) => {
 			activityLog.push(entry)
 		},
 		readActivity: async () => activityLog,
+
+		createChannel: async (channel) => ensureChannel(channel),
+		readChannel: async (id) => channels.get(id) ?? null,
+		listChannels: async (_filter?: ChannelFilter) => Array.from(channels.values()),
+		deleteChannel: async (id) => {
+			channels.delete(id)
+		},
+
+		addChannelMember: async (channelId, actorId, actorType, role = 'member') => {
+			const channel = channels.get(channelId)
+			if (!channel) throw new Error(`Channel not found: ${channelId}`)
+			if (channel.members.some((m) => m.actor_id === actorId)) return
+			channel.members.push({
+				channel_id: channelId,
+				actor_id: actorId,
+				actor_type: actorType === 'human' ? 'human' : 'agent',
+				role: role === 'owner' || role === 'readonly' ? role : 'member',
+				joined_at: new Date().toISOString(),
+			})
+		},
+		removeChannelMember: async (channelId, actorId) => {
+			const channel = channels.get(channelId)
+			if (!channel) return
+			channel.members = channel.members.filter((m) => m.actor_id !== actorId)
+		},
+		getChannelMembers: async (channelId) => channels.get(channelId)?.members ?? [],
+		isChannelMember: async (channelId, actorId) => {
+			const channel = channels.get(channelId)
+			return channel?.members.some((m) => m.actor_id === actorId) ?? false
+		},
+		getOrCreateDirectChannel: async (actorA, actorB) => {
+			const sorted = [actorA, actorB].sort()
+			const id = `dm-${sorted[0]}-${sorted[1]}`
+			const existing = channels.get(id)
+			if (existing) return existing
+			const now = new Date().toISOString()
+			const channel: Channel = {
+				id,
+				name: `DM ${sorted[0]} ${sorted[1]}`,
+				type: 'direct',
+				description: '',
+				created_by: actorA,
+				created_at: now,
+				updated_at: now,
+				metadata: {},
+			}
+			const created = ensureChannel(channel)
+			await storage.addChannelMember(id, actorA, 'agent', 'member')
+			await storage.addChannelMember(id, actorB, 'agent', 'member')
+			return created
+		},
 	}
 
-	return { storage, tasks, messages, activityLog }
+	return { storage, tasks, messages, activityLog, channels }
 }
 
 describe('createAutopilotTools', () => {
@@ -77,6 +152,7 @@ describe('createAutopilotTools', () => {
 		companyRoot: companyRoot,
 		agentId,
 		storage: mockStorage.storage,
+		eventBus: new EventBus(),
 	})
 
 	it('returns an array of tool definitions', () => {
@@ -94,94 +170,99 @@ describe('createAutopilotTools', () => {
 		}
 	})
 
-	it('create_task tool creates a task via storage', async () => {
+	it('task tool creates a task via storage', async () => {
 		const result = await executeTool(
 			tools,
-			'create_task',
-			{ title: 'Test task', type: 'implementation', priority: 'medium' },
+			'task',
+			{ action: 'create', title: 'Test task', type: 'implementation', priority: 'medium' },
 			makeContext(),
 		)
+		const firstContent = result.content[0]
 		expect(result.isError).toBeUndefined()
-		expect(result.content[0]!.text).toContain('Created task')
-		expect(result.content[0]!.text).toContain('Test task')
+		expect(firstContent?.text).toContain('Created task')
+		expect(firstContent?.text).toContain('Test task')
 		expect(mockStorage.tasks.size).toBe(1)
-		const task = [...mockStorage.tasks.values()][0]!
+		const task = [...mockStorage.tasks.values()][0]
+		expect(task).toBeDefined()
 		expect(task.title).toBe('Test task')
 		expect(task.created_by).toBe('test-agent')
 	})
 
-	it('update_task tool updates task via storage', async () => {
+	it('task tool updates task via storage', async () => {
 		// Create a task first
 		await executeTool(
 			tools,
-			'create_task',
-			{ title: 'To update', type: 'implementation' },
+			'task',
+			{ action: 'create', title: 'To update', type: 'implementation' },
 			makeContext(),
 		)
-		const taskId = [...mockStorage.tasks.keys()][0]!
+		const taskId = [...mockStorage.tasks.keys()][0]
+		expect(taskId).toBeDefined()
 
 		const result = await executeTool(
 			tools,
-			'update_task',
-			{ task_id: taskId, status: 'in_progress' },
+			'task',
+			{ action: 'update', task_id: taskId as string, status: 'in_progress' },
 			makeContext(),
 		)
+		const firstContent = result.content[0]
 		expect(result.isError).toBeUndefined()
-		expect(result.content[0]!.text).toContain('Updated task')
-		const updated = mockStorage.tasks.get(taskId)!
+		expect(firstContent?.text).toContain('Updated task')
+		const updated = mockStorage.tasks.get(taskId as string)
+		expect(updated).toBeDefined()
+		if (!updated) throw new Error('expected updated task')
 		expect(updated.status).toBe('in_progress')
 	})
 
-	it('send_message tool sends message via storage', async () => {
+	it('message tool sends message via storage', async () => {
 		const result = await executeTool(
 			tools,
-			'send_message',
-			{ to: 'channel:dev', content: 'Hello team' },
+			'message',
+			{ channel: 'task-123', content: 'Hello team' },
 			makeContext('dev-agent'),
 		)
+		const firstContent = result.content[0]
 		expect(result.isError).toBeUndefined()
-		expect(result.content[0]!.text).toContain('Message sent to channel:dev')
+		expect(firstContent?.text).toContain('Message sent to #task-123')
 		expect(mockStorage.messages).toHaveLength(1)
-		expect(mockStorage.messages[0]!.content).toBe('Hello team')
-		expect(mockStorage.messages[0]!.from).toBe('dev-agent')
+		expect(mockStorage.messages[0]?.content).toBe('Hello team')
+		expect(mockStorage.messages[0]?.from).toBe('dev-agent')
 	})
 
-	it('pin_to_board tool creates a pin', async () => {
+	it('pin tool creates a pin', async () => {
 		const result = await executeTool(
 			tools,
-			'pin_to_board',
-			{ group: 'alerts', title: 'Test pin', type: 'info' },
+			'pin',
+			{ action: 'create', group: 'alerts', title: 'Test pin', type: 'info' },
 			makeContext(),
 		)
+		const firstContent = result.content[0]
 		expect(result.isError).toBeUndefined()
-		expect(result.content[0]!.text).toContain('Pinned: Test pin')
+		expect(firstContent?.text).toContain('Pinned: Test pin')
 	})
 
 	it('search tool returns results (graceful fallback)', async () => {
 		// The search tool tries to import db modules which may not have an initialized db.
 		// It should gracefully return "Search index not available." rather than throwing.
-		const result = await executeTool(
-			tools,
-			'search',
-			{ query: 'test query' },
-			makeContext(),
-		)
+		const result = await executeTool(tools, 'search', { query: 'test query' }, makeContext())
+		const firstContent = result.content[0]
 		expect(result.isError).toBeUndefined()
 		// Either "No results found." or "Search index not available." is acceptable
 		expect(
-			result.content[0]!.text === 'No results found.' ||
-				result.content[0]!.text === 'Search index not available.',
+			firstContent?.text === 'No results found.' ||
+				firstContent?.text === 'Search index not available.',
 		).toBe(true)
 	})
 
 	it('tools use correct ToolContext.agentId', async () => {
 		await executeTool(
 			tools,
-			'create_task',
-			{ title: 'Agent check', type: 'implementation' },
+			'task',
+			{ action: 'create', title: 'Agent check', type: 'implementation' },
 			makeContext('custom-agent-id'),
 		)
-		const task = [...mockStorage.tasks.values()][0]!
+		const task = [...mockStorage.tasks.values()][0]
+		expect(task).toBeDefined()
 		expect(task.created_by).toBe('custom-agent-id')
 	})
 })

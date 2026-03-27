@@ -1,37 +1,35 @@
-import { describe, test, expect } from 'bun:test'
-import { resolveActor, getRequiredPermission } from '../src/auth/middleware'
-import { checkPermission, resolveRolePermissions, loadRoles } from '../src/auth/roles'
-import type { Actor } from '../src/auth/types'
-import { createTestCompany } from './helpers'
-import { writeYaml } from '../src/fs/yaml'
+import { describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
+import { getRequiredPermission, resolveActor } from '../src/auth/middleware'
+import { checkPermission, loadRoles, resolveRolePermissions } from '../src/auth/roles'
+import type { Actor } from '../src/auth/types'
+import { writeYaml } from '../src/fs/yaml'
+import { createTestCompany } from './helpers'
 
 describe('resolveActor', () => {
-	test('returns implicit owner when auth disabled', async () => {
+	test('returns webhook actor for /hooks/* without credentials', async () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
-			const request = new Request('http://localhost:7778/api/status')
+			const request = new Request('http://localhost:7778/hooks/test')
 			const actor = await resolveActor(request, {
-				authEnabled: false,
 				companyRoot: root,
 				auth: {} as any,
 			})
 
 			expect(actor).not.toBeNull()
-			expect(actor!.id).toBe('implicit-owner')
-			expect(actor!.role).toBe('owner')
-			expect(actor!.type).toBe('human')
+			expect(actor!.id).toBe('webhook')
+			expect(actor!.role).toBe('member')
+			expect(actor!.type).toBe('api')
 		} finally {
 			await cleanup()
 		}
 	})
 
-	test('returns null when auth enabled and no credentials', async () => {
+	test('returns null when no credentials are provided', async () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			const request = new Request('http://localhost:7778/api/tasks')
 			const actor = await resolveActor(request, {
-				authEnabled: true,
 				companyRoot: root,
 				auth: {
 					api: {
@@ -48,16 +46,11 @@ describe('resolveActor', () => {
 })
 
 describe('resolveActor 2FA enforcement for owner/admin', () => {
-	async function makeSessionAuth(
-		root: string,
-		role: string,
-		twoFactorEnabled: boolean,
-	) {
+	async function makeSessionAuth(root: string, role: string, twoFactorEnabled: boolean) {
 		await writeYaml(join(root, 'team', 'humans.yaml'), {
 			humans: [{ email: 'user@example.com', role }],
 		})
 		return {
-			authEnabled: true,
 			companyRoot: root,
 			auth: {
 				api: {
@@ -166,27 +159,60 @@ describe('resolveActor 2FA enforcement for owner/admin', () => {
 
 describe('getRequiredPermission', () => {
 	test('maps task endpoints correctly', () => {
-		expect(getRequiredPermission('/api/tasks', 'GET')).toEqual({ resource: 'tasks', action: 'read' })
-		expect(getRequiredPermission('/api/tasks', 'POST')).toEqual({ resource: 'tasks', action: 'create' })
-		expect(getRequiredPermission('/api/tasks/123/approve', 'POST')).toEqual({ resource: 'tasks', action: 'approve' })
-		expect(getRequiredPermission('/api/tasks/123/reject', 'POST')).toEqual({ resource: 'tasks', action: 'reject' })
-		expect(getRequiredPermission('/api/tasks/123', 'DELETE')).toEqual({ resource: 'tasks', action: 'delete' })
+		expect(getRequiredPermission('/api/tasks', 'GET')).toEqual({
+			resource: 'tasks',
+			action: 'read',
+		})
+		expect(getRequiredPermission('/api/tasks', 'POST')).toEqual({
+			resource: 'tasks',
+			action: 'create',
+		})
+		expect(getRequiredPermission('/api/tasks/123/approve', 'POST')).toEqual({
+			resource: 'tasks',
+			action: 'approve',
+		})
+		expect(getRequiredPermission('/api/tasks/123/reject', 'POST')).toEqual({
+			resource: 'tasks',
+			action: 'reject',
+		})
+		expect(getRequiredPermission('/api/tasks/123', 'DELETE')).toEqual({
+			resource: 'tasks',
+			action: 'delete',
+		})
 	})
 
 	test('maps team endpoints correctly', () => {
 		expect(getRequiredPermission('/api/team', 'GET')).toEqual({ resource: 'team', action: 'read' })
-		expect(getRequiredPermission('/api/team/invite', 'POST')).toEqual({ resource: 'team', action: 'invite' })
-		expect(getRequiredPermission('/api/team/user-123/role', 'PUT')).toEqual({ resource: 'team', action: 'change_role' })
-		expect(getRequiredPermission('/api/team/user-123', 'DELETE')).toEqual({ resource: 'team', action: 'remove' })
+		expect(getRequiredPermission('/api/team/invite', 'POST')).toEqual({
+			resource: 'team',
+			action: 'invite',
+		})
+		expect(getRequiredPermission('/api/team/user-123/role', 'PUT')).toEqual({
+			resource: 'team',
+			action: 'change_role',
+		})
+		expect(getRequiredPermission('/api/team/user-123', 'DELETE')).toEqual({
+			resource: 'team',
+			action: 'remove',
+		})
 	})
 
 	test('maps agent endpoints', () => {
-		expect(getRequiredPermission('/api/agents', 'GET')).toEqual({ resource: 'agents', action: 'read' })
-		expect(getRequiredPermission('/api/agents/ceo', 'PUT')).toEqual({ resource: 'agents', action: 'configure' })
+		expect(getRequiredPermission('/api/agents', 'GET')).toEqual({
+			resource: 'agents',
+			action: 'read',
+		})
+		expect(getRequiredPermission('/api/agents/ceo', 'PUT')).toEqual({
+			resource: 'agents',
+			action: 'configure',
+		})
 	})
 
 	test('maps chat endpoint', () => {
-		expect(getRequiredPermission('/api/chat', 'POST')).toEqual({ resource: 'chat', action: 'write' })
+		expect(getRequiredPermission('/api/chat', 'POST')).toEqual({
+			resource: 'chat',
+			action: 'write',
+		})
 	})
 
 	test('returns null for unknown paths', () => {

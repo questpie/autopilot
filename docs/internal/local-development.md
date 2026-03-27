@@ -119,7 +119,7 @@ The tunnel stays open as long as the command runs. No account needed for quick t
 | `NODE_ENV` | `development` | Set `production` for secure cookies |
 | `AUTOPILOT_MASTER_KEY` | Auto-generated | Secrets encryption key |
 
-For local dev, auth is disabled by default. To test auth flows, set `settings.auth.enabled: true` in your test company's `company.yaml`.
+For local dev, auth is always enabled by default.
 
 ## 10. Monorepo Structure
 
@@ -169,9 +169,6 @@ questpie-autopilot/
 ### Testing auth locally
 
 ```bash
-# Enable auth in your test company
-# Edit company.yaml: settings.auth.enabled: true
-
 # Create an owner account
 bun packages/cli/bin/autopilot.ts auth setup
 

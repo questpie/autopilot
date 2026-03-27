@@ -1,10 +1,10 @@
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { stringify as stringifyYaml } from 'yaml'
-import { parseCidr, isIpAllowed, getClientIp } from '../src/api/middleware/ip-allowlist'
-import { container, configureContainer } from '../src/container'
+import { getClientIp, isIpAllowed, parseCidr } from '../src/api/middleware/ip-allowlist'
+import { configureContainer, container } from '../src/container'
 import type { StorageBackend } from '../src/fs/storage'
 
 function makeCtx(headers: Record<string, string>) {
@@ -21,22 +21,22 @@ describe('parseCidr', () => {
 	test('parses /24 subnet correctly', () => {
 		const result = parseCidr('192.168.1.0/24')
 		expect(result).not.toBeNull()
-		expect(result!.mask).toBe(0xFFFFFF00 >>> 0)
-		expect(result!.network).toBe((192 << 24 | 168 << 16 | 1 << 8 | 0) >>> 0)
+		expect(result!.mask).toBe(0xffffff00 >>> 0)
+		expect(result!.network).toBe(((192 << 24) | (168 << 16) | (1 << 8) | 0) >>> 0)
 	})
 
 	test('parses /8 subnet correctly', () => {
 		const result = parseCidr('10.0.0.0/8')
 		expect(result).not.toBeNull()
-		expect(result!.mask).toBe(0xFF000000 >>> 0)
+		expect(result!.mask).toBe(0xff000000 >>> 0)
 		expect(result!.network).toBe((10 << 24) >>> 0)
 	})
 
 	test('parses /10 subnet (Tailscale CGNAT)', () => {
 		const result = parseCidr('100.64.0.0/10')
 		expect(result).not.toBeNull()
-		expect(result!.mask).toBe(0xFFC00000 >>> 0)
-		expect(result!.network).toBe((100 << 24 | 64 << 16) >>> 0)
+		expect(result!.mask).toBe(0xffc00000 >>> 0)
+		expect(result!.network).toBe(((100 << 24) | (64 << 16)) >>> 0)
 	})
 
 	test('parses /0 (match all)', () => {
@@ -49,8 +49,8 @@ describe('parseCidr', () => {
 	test('single IP without prefix treated as /32', () => {
 		const result = parseCidr('1.2.3.4')
 		expect(result).not.toBeNull()
-		expect(result!.mask).toBe(0xFFFFFFFF >>> 0)
-		expect(result!.network).toBe((1 << 24 | 2 << 16 | 3 << 8 | 4) >>> 0)
+		expect(result!.mask).toBe(0xffffffff >>> 0)
+		expect(result!.network).toBe(((1 << 24) | (2 << 16) | (3 << 8) | 4) >>> 0)
 	})
 
 	test('returns null for invalid input', () => {
@@ -78,10 +78,10 @@ describe('isIpAllowed', () => {
 
 	test('boundary IPs (first and last in subnet)', () => {
 		const cidrs = [parseCidr('192.168.1.0/24')!]
-		expect(isIpAllowed('192.168.1.0', cidrs)).toBe(true)   // network address
-		expect(isIpAllowed('192.168.1.255', cidrs)).toBe(true)  // broadcast
+		expect(isIpAllowed('192.168.1.0', cidrs)).toBe(true) // network address
+		expect(isIpAllowed('192.168.1.255', cidrs)).toBe(true) // broadcast
 		expect(isIpAllowed('192.168.0.255', cidrs)).toBe(false) // just before
-		expect(isIpAllowed('192.168.2.0', cidrs)).toBe(false)   // just after
+		expect(isIpAllowed('192.168.2.0', cidrs)).toBe(false) // just after
 	})
 
 	test('0.0.0.0/0 matches any IP', () => {
@@ -159,30 +159,43 @@ describe('IP allowlist middleware', () => {
 		companyRoot = await mkdtemp(join(tmpdir(), 'ip-allowlist-test-'))
 
 		const dirs = [
-			'tasks/backlog', 'tasks/active', 'tasks/review', 'tasks/blocked', 'tasks/done',
-			'comms/channels/general', 'comms/direct', 'dashboard/pins',
-			'logs/activity', 'logs/sessions', 'team', 'team/workflows',
-			'context/memory', 'context/indexes',
+			'tasks/backlog',
+			'tasks/active',
+			'tasks/review',
+			'tasks/blocked',
+			'tasks/done',
+			'comms/channels/general',
+			'comms/direct',
+			'dashboard/pins',
+			'logs/activity',
+			'logs/sessions',
+			'team',
+			'team/workflows',
+			'context/memory',
+			'context/indexes',
 		]
 		for (const dir of dirs) {
 			await mkdir(join(companyRoot, dir), { recursive: true })
 		}
 
 		// Write company.yaml WITH ip_allowlist
-		await writeFile(join(companyRoot, 'company.yaml'), stringifyYaml({
-			name: 'Test Company',
-			slug: 'test-company',
-			description: 'IP allowlist test',
-			timezone: 'UTC',
-			language: 'en',
-			languages: ['en'],
-			owner: { name: 'Test', email: 'test@test.com', notification_channels: [] },
-			settings: {
-				auth: {
-					ip_allowlist: ['192.168.1.0/24'],
+		await writeFile(
+			join(companyRoot, 'company.yaml'),
+			stringifyYaml({
+				name: 'Test Company',
+				slug: 'test-company',
+				description: 'IP allowlist test',
+				timezone: 'UTC',
+				language: 'en',
+				languages: ['en'],
+				owner: { name: 'Test', email: 'test@test.com', notification_channels: [] },
+				settings: {
+					auth: {
+						ip_allowlist: ['192.168.1.0/24'],
+					},
 				},
-			},
-		}))
+			}),
+		)
 
 		await writeFile(join(companyRoot, 'team', 'agents.yaml'), stringifyYaml({ agents: [] }))
 
@@ -203,19 +216,19 @@ describe('IP allowlist middleware', () => {
 
 	test('blocks non-allowed IP via X-Forwarded-For', async () => {
 		const { createApp } = await import('../src/api/app')
-		const app = createApp({ authEnabled: false, corsOrigin: '*' })
+		const app = createApp({ corsOrigin: '*' })
 
 		const res = await app.request('/api/tasks', {
 			headers: { 'X-Forwarded-For': '10.0.0.1' },
 		})
 		expect(res.status).toBe(403)
-		const body = await res.json() as { error: string }
+		const body = (await res.json()) as { error: string }
 		expect(body.error).toBe('IP not allowed')
 	})
 
 	test('allows request from allowed IP', async () => {
 		const { createApp } = await import('../src/api/app')
-		const app = createApp({ authEnabled: false, corsOrigin: '*' })
+		const app = createApp({ corsOrigin: '*' })
 
 		const res = await app.request('/api/tasks', {
 			headers: { 'X-Forwarded-For': '192.168.1.50' },
@@ -225,19 +238,22 @@ describe('IP allowlist middleware', () => {
 
 	test('empty allowlist allows all traffic', async () => {
 		// Rewrite company.yaml without allowlist
-		await writeFile(join(companyRoot, 'company.yaml'), stringifyYaml({
-			name: 'Test Company',
-			slug: 'test-company',
-			description: 'IP allowlist test',
-			timezone: 'UTC',
-			language: 'en',
-			languages: ['en'],
-			owner: { name: 'Test', email: 'test@test.com', notification_channels: [] },
-			settings: {},
-		}))
+		await writeFile(
+			join(companyRoot, 'company.yaml'),
+			stringifyYaml({
+				name: 'Test Company',
+				slug: 'test-company',
+				description: 'IP allowlist test',
+				timezone: 'UTC',
+				language: 'en',
+				languages: ['en'],
+				owner: { name: 'Test', email: 'test@test.com', notification_channels: [] },
+				settings: {},
+			}),
+		)
 
 		const { createApp } = await import('../src/api/app')
-		const app = createApp({ authEnabled: false, corsOrigin: '*' })
+		const app = createApp({ corsOrigin: '*' })
 
 		const res = await app.request('/api/tasks', {
 			headers: { 'X-Forwarded-For': '10.0.0.1' },
@@ -245,25 +261,28 @@ describe('IP allowlist middleware', () => {
 		expect(res.status).not.toBe(403)
 
 		// Restore allowlist
-		await writeFile(join(companyRoot, 'company.yaml'), stringifyYaml({
-			name: 'Test Company',
-			slug: 'test-company',
-			description: 'IP allowlist test',
-			timezone: 'UTC',
-			language: 'en',
-			languages: ['en'],
-			owner: { name: 'Test', email: 'test@test.com', notification_channels: [] },
-			settings: {
-				auth: {
-					ip_allowlist: ['192.168.1.0/24'],
+		await writeFile(
+			join(companyRoot, 'company.yaml'),
+			stringifyYaml({
+				name: 'Test Company',
+				slug: 'test-company',
+				description: 'IP allowlist test',
+				timezone: 'UTC',
+				language: 'en',
+				languages: ['en'],
+				owner: { name: 'Test', email: 'test@test.com', notification_channels: [] },
+				settings: {
+					auth: {
+						ip_allowlist: ['192.168.1.0/24'],
+					},
 				},
-			},
-		}))
+			}),
+		)
 	})
 
 	test('/hooks/* path is exempt from IP allowlist', async () => {
 		const { createApp } = await import('../src/api/app')
-		const app = createApp({ authEnabled: false, corsOrigin: '*' })
+		const app = createApp({ corsOrigin: '*' })
 
 		const res = await app.request('/hooks/github', {
 			method: 'POST',
@@ -274,7 +293,7 @@ describe('IP allowlist middleware', () => {
 
 	test('/api/status is exempt from IP allowlist', async () => {
 		const { createApp } = await import('../src/api/app')
-		const app = createApp({ authEnabled: false, corsOrigin: '*' })
+		const app = createApp({ corsOrigin: '*' })
 
 		const res = await app.request('/api/status', {
 			headers: { 'X-Forwarded-For': '10.0.0.1' },
@@ -284,23 +303,26 @@ describe('IP allowlist middleware', () => {
 
 	test('X-Forwarded-For is ignored when socket IP is not a trusted proxy', async () => {
 		// Restore allowlist first (in case previous test left it empty)
-		await writeFile(join(companyRoot, 'company.yaml'), stringifyYaml({
-			name: 'Test Company',
-			slug: 'test-company',
-			description: 'IP allowlist test',
-			timezone: 'UTC',
-			language: 'en',
-			languages: ['en'],
-			owner: { name: 'Test', email: 'test@test.com', notification_channels: [] },
-			settings: {
-				auth: {
-					ip_allowlist: ['192.168.1.0/24'],
+		await writeFile(
+			join(companyRoot, 'company.yaml'),
+			stringifyYaml({
+				name: 'Test Company',
+				slug: 'test-company',
+				description: 'IP allowlist test',
+				timezone: 'UTC',
+				language: 'en',
+				languages: ['en'],
+				owner: { name: 'Test', email: 'test@test.com', notification_channels: [] },
+				settings: {
+					auth: {
+						ip_allowlist: ['192.168.1.0/24'],
+					},
 				},
-			},
-		}))
+			}),
+		)
 
 		const { createApp } = await import('../src/api/app')
-		const app = createApp({ authEnabled: false, corsOrigin: '*' })
+		const app = createApp({ corsOrigin: '*' })
 
 		// Socket IP (x-real-ip) is 5.5.5.5 — not a trusted proxy.
 		// Even though XFF claims 192.168.1.50 (allowed), it should be ignored.

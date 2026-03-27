@@ -5,15 +5,14 @@ description: Better Auth configuration, actor resolution, RBAC roles, permission
 
 Authentication is powered by [Better Auth](https://better-auth.com) with email/password, bearer tokens, and API keys. It shares the same SQLite database (`autopilot.db`) as the rest of the system.
 
-## Enabling Authentication
+## Authentication Is Always On
 
-Add the auth section to your `company.yaml` and restart the orchestrator:
+Authentication is enabled by default. You only need auth settings in `company.yaml` if you want to customize CORS or network controls:
 
 ```yaml title="company.yaml"
 settings:
   auth:
-    enabled: true
-    # cors_origin: "https://dashboard.example.com"  # optional, defaults to '*'
+    # cors_origin: "https://dashboard.example.com"  # optional, defaults to localhost dashboard origins
 ```
 
 Then create the first owner account:
@@ -48,11 +47,10 @@ The auth middleware resolves every request to an Actor using this priority:
 
 | Priority | Condition | Result |
 |----------|-----------|--------|
-| 1 | Auth disabled (`settings.auth.enabled: false`) | Implicit owner with full permissions |
-| 2 | Path starts with `/hooks/*` | Webhook actor with member permissions |
-| 3 | `X-API-Key` header present | Agent key or Better Auth API key |
-| 4 | `Authorization: Bearer` header | Better Auth session (human), agent key fallback |
-| 5 | No credentials | 401 Unauthorized |
+| 1 | Path starts with `/hooks/*` | Webhook actor with member permissions |
+| 2 | `X-API-Key` header present | Agent key or Better Auth API key |
+| 3 | `Authorization: Bearer` header | Better Auth session (human), agent key fallback |
+| 4 | No credentials | 401 Unauthorized |
 
 ### Actor Types
 
@@ -205,7 +203,7 @@ autopilot auth revoke-all
 
 ## Cookie & Rate Limit Security
 
-When authentication is enabled, Better Auth enforces:
+Better Auth enforces:
 
 | Protection | Setting |
 |-----------|---------|
@@ -218,12 +216,11 @@ When authentication is enabled, Better Auth enforces:
 
 ## CORS
 
-CORS origin is configurable via `settings.auth.cors_origin` in `company.yaml`. Defaults to `*` (all origins). For production, restrict to your dashboard domain:
+CORS origin is configurable via `settings.auth.cors_origin` in `company.yaml`. By default, local dashboard origins are allowed. For production, restrict to your dashboard domain:
 
 ```yaml title="company.yaml"
 settings:
   auth:
-    enabled: true
     cors_origin: "https://dashboard.mycompany.com"
 ```
 

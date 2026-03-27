@@ -1,9 +1,10 @@
 import { z } from 'zod'
-import { TaskSchema } from './task'
 import { PinSchema } from './pin'
+import { TaskSchema } from './task'
 
 export const StatusResponseSchema = z.object({
 	company: z.string(),
+	userCount: z.number(),
 	agentCount: z.number(),
 	activeTasks: z.number(),
 	runningSessions: z.number(),

@@ -9,7 +9,6 @@ const sessions = new Hono<AppEnv>()
 	.get('/', async (c) => {
 		const actor = c.get('actor')
 		if (!actor) return c.json([])
-		if (actor.id === 'implicit-owner') return c.json([])
 
 		const auth = c.get('auth')
 		try {
@@ -17,7 +16,7 @@ const sessions = new Hono<AppEnv>()
 			const listFn = authApi.listSessions ?? authApi.listUserSessions
 			if (!listFn) return c.json([])
 
-			const result = await listFn({ headers: c.req.raw.headers }) as unknown[]
+			const result = (await listFn({ headers: c.req.raw.headers })) as unknown[]
 			return c.json(result ?? [])
 		} catch {
 			return c.json([])

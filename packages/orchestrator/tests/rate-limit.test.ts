@@ -1,14 +1,16 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { stringify as stringifyYaml } from 'yaml'
-import { container, configureContainer } from '../src/container'
+import { configureContainer, container } from '../src/container'
 import type { StorageBackend } from '../src/fs/storage'
+import { setupTestApiKey, withApiKey } from './auth-helpers'
 
 let app: ReturnType<typeof import('../src/api/app').createApp>
 let companyRoot: string
 let storage: StorageBackend
+let apiKey: string
 
 beforeAll(async () => {
 	companyRoot = await mkdtemp(join(tmpdir(), 'rate-limit-test-'))
@@ -62,9 +64,10 @@ beforeAll(async () => {
 	const { storageFactory } = await import('../src/fs/sqlite-backend')
 	const resolved = await container.resolveAsync([storageFactory])
 	storage = resolved.storage
+	apiKey = await setupTestApiKey(companyRoot)
 
 	const { createApp } = await import('../src/api/app')
-	app = createApp({ authEnabled: false, corsOrigin: '*' })
+	app = createApp({ corsOrigin: '*' })
 })
 
 afterAll(async () => {
@@ -72,6 +75,10 @@ afterAll(async () => {
 	container.clearAllInstances()
 	if (companyRoot) await rm(companyRoot, { recursive: true, force: true })
 })
+
+function request(path: string, init?: RequestInit) {
+	return app.request(path, withApiKey(init, apiKey))
+}
 
 // ─── checkRateLimit unit tests ──────────────────────────────────────────────
 
@@ -116,9 +123,7 @@ describe('checkRateLimit', () => {
 		const key = `test:concurrent:${Date.now()}`
 
 		// 5 concurrent calls on the same key
-		const results = Array.from({ length: 5 }, () =>
-			checkRateLimit(dbResult.db, key, 60, 100),
-		)
+		const results = Array.from({ length: 5 }, () => checkRateLimit(dbResult.db, key, 60, 100))
 
 		// All should be allowed and remaining should decrease
 		const remainings = results.map((r) => r.remaining)
@@ -139,9 +144,11 @@ describe('checkRateLimit', () => {
 		// Manually insert a previous window entry with count=10
 		const raw = (dbResult.db as any).$client
 		const expiresAt = windowStart + windowSec * 2
-		raw.prepare(
-			`INSERT OR REPLACE INTO rate_limit_entries (key, window_start, count, expires_at) VALUES (?, ?, ?, ?)`,
-		).run(`test:sliding:boundary`, prevWindowStart, 10, expiresAt)
+		raw
+			.prepare(
+				`INSERT OR REPLACE INTO rate_limit_entries (key, window_start, count, expires_at) VALUES (?, ?, ?, ?)`,
+			)
+			.run(`test:sliding:boundary`, prevWindowStart, 10, expiresAt)
 
 		// Now call checkRateLimit — the sliding window should factor in the previous count
 		const result = checkRateLimit(dbResult.db, `test:sliding:boundary`, windowSec, 20)
@@ -221,7 +228,7 @@ describe('ipRateLimit', () => {
 		// Use a unique IP per test to avoid interference
 		const testIp = '10.0.0.1'
 
-		const res = await app.request('/api/tasks', {
+		const res = await request('/api/tasks', {
 			headers: { 'X-Forwarded-For': testIp },
 		})
 
@@ -236,14 +243,14 @@ describe('ipRateLimit', () => {
 
 		// Send 20 requests (the limit)
 		for (let i = 0; i < 20; i++) {
-			const res = await app.request('/api/tasks', {
+			const res = await request('/api/tasks', {
 				headers: { 'X-Forwarded-For': testIp },
 			})
 			expect(res.status).not.toBe(429)
 		}
 
 		// 21st request should be rate limited
-		const res = await app.request('/api/tasks', {
+		const res = await request('/api/tasks', {
 			headers: { 'X-Forwarded-For': testIp },
 		})
 		expect(res.status).toBe(429)
@@ -256,7 +263,7 @@ describe('ipRateLimit', () => {
 
 		// Send 100 requests to /hooks/ — all should pass through (no 429)
 		for (let i = 0; i < 25; i++) {
-			const res = await app.request('/hooks/test', {
+			const res = await request('/hooks/test', {
 				headers: { 'X-Forwarded-For': testIp },
 			})
 			// Hooks may 404 (no route), but should never be 429
@@ -269,7 +276,7 @@ describe('ipRateLimit', () => {
 
 		// Send more than 20 requests to /api/status
 		for (let i = 0; i < 25; i++) {
-			const res = await app.request('/api/status', {
+			const res = await request('/api/status', {
 				headers: { 'X-Forwarded-For': testIp },
 			})
 			expect(res.status).not.toBe(429)
@@ -279,15 +286,15 @@ describe('ipRateLimit', () => {
 	it('should set decreasing X-RateLimit-Remaining header', async () => {
 		const testIp = '10.55.55.55'
 
-		const res1 = await app.request('/api/tasks', {
+		const res1 = await request('/api/tasks', {
 			headers: { 'X-Forwarded-For': testIp },
 		})
-		const remaining1 = parseInt(res1.headers.get('X-RateLimit-Remaining')!, 10)
+		const remaining1 = Number.parseInt(res1.headers.get('X-RateLimit-Remaining')!, 10)
 
-		const res2 = await app.request('/api/tasks', {
+		const res2 = await request('/api/tasks', {
 			headers: { 'X-Forwarded-For': testIp },
 		})
-		const remaining2 = parseInt(res2.headers.get('X-RateLimit-Remaining')!, 10)
+		const remaining2 = Number.parseInt(res2.headers.get('X-RateLimit-Remaining')!, 10)
 
 		expect(remaining2).toBe(remaining1 - 1)
 	})
@@ -297,11 +304,11 @@ describe('ipRateLimit', () => {
 
 describe('actorRateLimit', () => {
 	it('should set actor rate limit headers on API routes', async () => {
-		// With authEnabled: false, the auth middleware creates a default owner actor
-		// Use a unique IP to avoid ipRateLimit interference
+		// Use a unique IP to avoid ipRateLimit interference.
+		// Requests are authenticated via test API key.
 		const testIp = '10.20.0.1'
 
-		const res = await app.request('/api/tasks', {
+		const res = await request('/api/tasks', {
 			headers: { 'X-Forwarded-For': testIp },
 		})
 
@@ -314,13 +321,13 @@ describe('actorRateLimit', () => {
 	it('should apply lower limits on /api/search', async () => {
 		const testIp = '10.20.0.2'
 
-		const res = await app.request('/api/search?q=test', {
+		const res = await request('/api/search?q=test', {
 			headers: { 'X-Forwarded-For': testIp },
 		})
 
-		// Search limit is 10/min for humans
+		// Search limit is 50/min for agent actors
 		const limit = res.headers.get('X-RateLimit-Limit')
-		expect(limit).toBe('10')
+		expect(limit).toBe('50')
 	})
 })
 

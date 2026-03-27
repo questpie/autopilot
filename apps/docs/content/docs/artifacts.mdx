@@ -9,28 +9,25 @@ Agent-created previews. Agents write code, run dev servers, and pin live URLs to
 
 Artifacts are live previews created by agents. No special system needed -- agents have filesystem and terminal access. They write code, run a dev server, and pin the URL to the dashboard. You click the link and see a running React app, HTML page, or static site.
 
-## create_artifact Tool
+## Artifact Workflow
 
-The `create_artifact` primitive is a convenience wrapper. Under the hood it writes files, creates the `.artifact.yaml` config, and pins the URL. Available to Developer and Design agents.
+There is no special artifact-only primitive. Agents create artifacts with the normal tool stack: filesystem writes, terminal commands, and `pin` for human visibility.
 
-```ts title="create_artifact.ts"
-// React artifact — full Vite + React app
-create_artifact({
-  name: "landing-v2",
-  type: "react",
-  files: {
-    "src/App.tsx": `export default function App() { ... }`,
-    "src/main.tsx": `import App from './App' ...`
-  }
-})
+```ts title="artifact-workflow.ts"
+// 1) Write files for the artifact
+write_file("artifacts/landing-v2/src/App.tsx", "...")
+write_file("artifacts/landing-v2/.artifact.yaml", "...")
 
-// HTML artifact — single page, no build step
-create_artifact({
-  name: "email-template",
-  type: "html",
-  files: {
-    "index.html": `<!DOCTYPE html>...`
-  }
+// 2) (Optional) run build/dev command via terminal
+bash("bun run dev --cwd artifacts/landing-v2")
+
+// 3) Surface preview URL in dashboard
+pin({
+  action: "create",
+  group: "recent",
+  title: "Artifact: landing-v2",
+  type: "success",
+  content: "Preview: /artifacts/landing-v2/"
 })
 ```
 

@@ -1,15 +1,15 @@
 ---
 title: Features
-description: Complete feature list for QUESTPIE Autopilot. Structured primitives, living dashboard, zero-infra architecture, hybrid search, multiple providers, and trust model.
+description: Complete feature list for QUESTPIE Autopilot. Unified tools, living dashboard, zero-infra architecture, hybrid search, multiple providers, and trust model.
 ---
 
 Everything QUESTPIE Autopilot can do today. Organized by what matters most.
 
 ## Category-Defining Features
 
-### Primitives-First Agent Model
+### Tools-First Agent Model
 
-Agents don't generate text. They call 13 structured primitives that produce visible, auditable effects in the filesystem. `create_task`, `send_message`, `pin_to_board`, `create_artifact`, `git_commit`, `search_knowledge`, `skill_request`, `http_request`, and more. Agent thinking is private. Only effects are visible. This is the core architectural differentiator. See [Primitives](/docs/primitives).
+Agents don't generate text. They call 7 unified tools that produce visible, auditable effects: `task`, `message`, `pin`, `search`, `http`, `search_web`, `browse`. Agent thinking is private. Only effects are visible. This is the core architectural differentiator. See [Tools](/docs/primitives).
 
 ### Living Dashboard
 
@@ -31,7 +31,7 @@ Hardcoded filesystem deny patterns: `.auth/`, `.master-key`, `.data/`, `.git/` a
 
 ### Session Attach / Replay
 
-`autopilot attach max` streams the agent's live session -- like `kubectl logs -f` for AI agents. Watch tool calls, file reads, file writes, and primitive invocations in real time. Ctrl+C to detach; the agent keeps working. `autopilot replay <session>` for post-hoc review.
+`autopilot attach max` streams the agent's live session -- like `kubectl logs -f` for AI agents. Watch tool calls, file reads, file writes, and tool invocations in real time. Ctrl+C to detach; the agent keeps working. `autopilot replay <session>` for post-hoc review.
 
 ### Git Audit Trail
 
@@ -73,7 +73,7 @@ Vector embeddings power semantic search and knowledge retrieval. Primary and fal
 
 ### Persistent Memory
 
-Per-agent memory: facts, decisions, mistakes, patterns. Extracted automatically after every session. Private -- no agent reads another agent's memory. Cross-agent sharing only through channels and `ask_agent`.
+Per-agent memory: facts, decisions, mistakes, patterns. Extracted automatically after every session. Private -- no agent reads another agent's memory. Cross-agent sharing only through channels and `message`.
 
 ### 4-Layer Context Assembly
 

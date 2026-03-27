@@ -1,159 +1,215 @@
 ---
-title: Primitives, Not Chat
-description: The core differentiator. Agents call 13 structured primitives that produce visible, auditable effects. No text generation. No chat. Structured execution.
+title: Tools, Not Chat
+description: The core differentiator. Agents call 7 unified tools that produce visible, auditable effects. No text generation. No chat. Structured execution.
 ---
 
-The single most important architectural idea in Autopilot. Agents don't generate text for you to read. They call structured primitives that produce visible effects in the company filesystem.
+The single most important architectural idea in Autopilot. Agents don't generate text for you to read. They call unified tools that produce visible effects in the company.
 
 ## Why This Matters
 
 Most AI agent frameworks are chatbot wrappers. The agent generates text, you read it, you copy-paste it somewhere. You are the middleware.
 
-Autopilot agents call typed function calls with clear targets and effects. Agent thinking is private and messy. Only primitive calls produce observable results. Every call writes to the filesystem. Every write is a git commit. Every commit is auditable.
+Autopilot agents call typed function calls with clear targets and effects. Agent thinking is private and messy. Only tool calls produce observable results. Every call writes to the database or triggers an action. Every action is auditable.
 
 ```text title="the difference"
 Chatbot agent:    "Here's the code for your pricing page..." → you copy-paste
-Autopilot agent:  create_artifact({ type: "react", source: "..." }) → live preview appears
+Autopilot agent:  task({ action: "create", title: "Build pricing page" }) → task appears, agent starts working
 ```
 
-## The 13 Primitives
+## The 7 Unified Tools
 
-### Communication
+### task
 
-Inter-agent and agent-to-human communication. Messages are written to `/company/comms/`.
+Unified task management. One tool for all task operations.
 
-```ts title="primitives/communication.ts"
-send_message({
-  to: 'channel:dev',
-  content: 'PR is ready for review. Branch: feat/auth-flow',
-  priority: 'normal',
-  references: ['TASK-042']
+```ts title="tools/task"
+// Create a task
+task({
+  action: "create",
+  title: "Implement Stripe checkout flow",
+  type: "feature",
+  priority: "high",
+  assigned_to: "max",
+  workflow: "development",
 })
 
-ask_agent({
-  to: 'agent:riley',
-  question: 'What auth library did you use for the login flow?',
-  reason: 'Need to document the API endpoints',
-  urgency: 'normal',
-  references: ['TASK-043']
+// Update task status
+task({
+  action: "update",
+  task_id: "TASK-042",
+  status: "review",
+  note: "Implementation complete. PR #17 ready for review."
+})
+
+// Approve a task
+task({
+  action: "approve",
+  task_id: "TASK-042",
+  note: "Code looks good. Ready for merge."
+})
+
+// Reject a task
+task({
+  action: "reject",
+  task_id: "TASK-042",
+  note: "Missing error handling for Stripe webhooks."
+})
+
+// Block a task
+task({
+  action: "block",
+  task_id: "TASK-042",
+  reason: "Need admin access to create org repo",
+  assigned_to: "dominik",
+  blocking: ["TASK-040"]
+})
+
+// Unblock a task
+task({
+  action: "unblock",
+  task_id: "TASK-042",
+  resolution: "Access granted by admin"
 })
 ```
 
-### Tasks
+**Actions:** `create`, `update`, `approve`, `reject`, `block`, `unblock`
 
-Task lifecycle management. Tasks are YAML files that move between status folders (`backlog/ -> active/ -> review/ -> done/`).
+### message
 
-```ts title="primitives/tasks.ts"
-create_task({
-  title: 'Implement Stripe checkout flow',
-  type: 'feature',
-  priority: 'high',
-  assigned_to: 'max',
-  workflow: 'development',
+Unified messaging. One tool for DMs, task threads, and project channels.
+
+```ts title="tools/message"
+// Direct message to an agent
+message({
+  channel: "dm-riley",
+  content: "PR #47 ready for review. Landing page implementation."
 })
 
-update_task({
-  task_id: 'TASK-042',
-  status: 'review',
-  note: 'Implementation complete. PR #17 ready for review.'
+// Post to a task thread
+message({
+  channel: "task-042",
+  content: "Implementation complete. All tests passing."
 })
 
-add_blocker({
-  task_id: 'TASK-042',
-  reason: 'Need admin access to create org repo',
-  assigned_to: 'dominik',
-  blocking: ['TASK-040']
+// Post to a project channel
+message({
+  channel: "project-studio",
+  content: "Pricing page deployed to staging."
 })
 
-resolve_blocker({
-  task_id: 'TASK-042',
-  resolution: 'Access granted by admin'
+// Post to a general channel
+message({
+  channel: "general",
+  content: "Sprint 12 completed. 14/14 tasks done."
 })
 ```
 
-### Dashboard
+**Channel conventions:** `general`, `dm-{agentId}`, `task-{taskId}`, `project-{name}`
 
-Agents pin information to the dashboard for human visibility. Pins appear instantly in the Living Dashboard.
+### pin
 
-```ts title="primitives/dashboard.ts"
-pin_to_board({
-  group: 'deployments',
-  title: 'Staging Deploy: v1.2.0',
-  content: 'Deployed to staging. All health checks passing.',
-  type: 'status',
+Dashboard pins. Agents surface important information for humans.
+
+```ts title="tools/pin"
+// Create a pin
+pin({
+  action: "create",
+  group: "deployments",
+  title: "Staging Deploy: v1.2.0",
+  content: "Deployed to staging. All health checks passing.",
+  type: "status",
   metadata: {
     progress: 100,
-    expires_at: '2026-03-23T00:00:00Z',
+    expires_at: "2026-03-23T00:00:00Z",
   }
 })
 
-unpin_from_board({
-  pin_id: 'pin-staging-v120',
-  reason: 'Superseded by v1.3.0 deploy'
+// Remove a pin
+pin({
+  action: "remove",
+  pin_id: "pin-staging-v120",
+  reason: "Superseded by v1.3.0 deploy"
 })
 ```
 
-### Knowledge
+**Actions:** `create`, `remove`
 
-Search and update the company knowledge base. Supports both keyword (FTS5) and semantic (sqlite-vec) search.
+### search
 
-```ts title="primitives/knowledge.ts"
-search_knowledge({
-  query: 'authentication flow',
-  scope: 'technical',
-  max_results: 5
+Universal search across all entity types. Supports both keyword (FTS5) and semantic (sqlite-vec) search.
+
+```ts title="tools/search"
+// Search tasks
+search({
+  query: "authentication flow",
+  type: "task",
+  scope: "active"
 })
 
-update_knowledge({
-  path: 'knowledge/technical/auth-patterns.md',
-  content: '# Authentication Patterns\n...',
-  reason: 'Documenting the new OAuth flow'
+// Search knowledge
+search({
+  query: "Stripe webhook patterns",
+  type: "knowledge"
 })
-```
 
-### Artifacts
-
-Create live previews of agent-built apps. The artifact router spins up a Vite dev server and serves a live URL.
-
-```ts title="primitives/artifacts.ts"
-create_artifact({
-  type: 'react',
-  title: 'Pricing Page Preview',
-  source_path: '/projects/studio/code/src/pages/pricing',
-  pin_to_board: true
+// Search messages
+search({
+  query: "deployment failure",
+  type: "message"
 })
-```
 
-The agent writes code, the artifact router serves it, you click and see it running. Before it ships.
-
-### Skills
-
-Request execution of a learned skill. Skills are SKILL.md files in the filesystem.
-
-```ts title="primitives/skills.ts"
-skill_request({
-  skill: 'deployment',
-  parameters: {
-    service: 'billing-api',
-    target: 'production',
-    domain: 'billing.company.com'
-  }
+// Search everything
+search({
+  query: "pricing page"
 })
 ```
 
-### External
+**Types:** `task`, `message`, `knowledge`, `pin`, `agent`, `channel`, `skill` (or omit for all)
 
-Interact with external services. Secret references are resolved at runtime from encrypted storage.
+### http
 
-```ts title="primitives/external.ts"
-http_request({
-  method: 'POST',
-  url: 'https://api.stripe.com/v1/products',
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  body: 'name=Premium+Plan&active=true',
-  secret_ref: 'secrets/stripe.yaml#api_key'
+External API calls with SSRF protection and secret injection.
+
+```ts title="tools/http"
+http({
+  method: "POST",
+  url: "https://api.stripe.com/v1/products",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body: "name=Premium+Plan&active=true",
+  secret_ref: "secrets/stripe.yaml#api_key"
 })
 ```
+
+Secret references are resolved at runtime from encrypted storage. SSRF protection blocks requests to private IP ranges.
+
+### search_web
+
+Web search via configurable provider (Brave, Tavily, or SerpAPI).
+
+```ts title="tools/search_web"
+search_web({
+  query: "best practices for Stripe checkout integration 2026"
+})
+```
+
+### browse
+
+Headless browser for web interaction via agent-browser.
+
+```ts title="tools/browse"
+browse({
+  url: "https://docs.stripe.com/payments/checkout",
+})
+```
+
+## Filesystem Operations
+
+Agents also use native `write_file`/`read_file` from their LLM SDK for:
+
+- **Knowledge docs** (`knowledge/*.md`) -- watcher reindexes automatically
+- **Artifacts** (`artifacts/*`) -- watcher detects `.artifact.yaml`
+- **Config** (`team/agents.yaml`, `team/roles/*.md`) -- watcher validates + reloads
+- **Skills** (`read_file` for on-demand loading)
 
 ## Approval Gates
 
@@ -177,18 +233,18 @@ Some actions require human approval, others agents handle between themselves.
 
 These gates are defined in workflow YAML as `type: human_gate` steps -- not bolted-on permissions. The workflow engine enforces them.
 
-## Primitive Summary
+## Tool Summary
 
-| Category | Primitives | Used by |
-|----------|-----------|---------|
-| Communication | `send_message`, `ask_agent` | All agents |
-| Tasks | `create_task`, `update_task`, `add_blocker`, `resolve_blocker` | All agents |
-| Dashboard | `pin_to_board`, `unpin_from_board` | All agents |
-| Knowledge | `search_knowledge`, `update_knowledge` | Strategist, Planner, Developer |
-| Artifacts | `create_artifact` | Developer, Designer |
-| Skills | `skill_request` | All agents |
-| External | `http_request` | Developer, DevOps |
+| Tool | Purpose | Used by |
+|------|---------|---------|
+| `task` | Create, update, approve, reject, block, unblock tasks | All agents |
+| `message` | Send DMs, post to task threads and project channels | All agents |
+| `pin` | Create and remove dashboard pins | All agents |
+| `search` | Universal search across all entity types | All agents |
+| `http` | External API calls with SSRF protection | Developer, DevOps, Marketing |
+| `search_web` | Web search via Brave/Tavily/SerpAPI | All agents |
+| `browse` | Headless browser for web interaction | Developer, DevOps |
 
 ## The Key Insight
 
-The mechanism is the moat. Other frameworks also have "AI agents." What makes Autopilot different is not that agents exist, but **how they work**: through structured primitives (not chat), on a filesystem (not a database), with a dashboard they can edit (not a fixed UI), under human gates (not autonomous chaos), visible through session attach (not a black box).
+The mechanism is the moat. Other frameworks also have "AI agents." What makes Autopilot different is not that agents exist, but **how they work**: through unified tools (not chat), on a filesystem (not a database), with a dashboard they can edit (not a fixed UI), under human gates (not autonomous chaos), visible through session attach (not a black box).

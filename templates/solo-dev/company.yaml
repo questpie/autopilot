@@ -20,8 +20,7 @@ settings:
     daily_token_limit: 2000000
     alert_at: 80
   auth:
-    enabled: false             # Set to true to require authentication
-    # cors_origin: "https://dashboard.example.com"  # Restrict CORS (default: '*')
+    # cors_origin: "https://dashboard.example.com"  # Restrict CORS (default: localhost dashboard origins)
   embeddings:
     provider: none            # 'gemini' | 'multilingual-e5' | 'nomic' | 'none'
     # fallback: multilingual-e5  # local fallback when primary unavailable

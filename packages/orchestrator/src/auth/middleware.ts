@@ -1,21 +1,19 @@
+import { loadAgents } from '../fs'
+import { verifyAgentKey } from './agent-keys'
 /**
  * Auth middleware — resolves every request to an Actor.
  *
  * Resolution order:
- * 1. auth.enabled = false → implicit owner (zero friction)
- * 2. /hooks/* → HMAC webhook auth (exempt from bearer/API key)
- * 3. X-API-Key header → agent key or Better Auth API key
- * 4. Authorization: Bearer → Better Auth session or agent key
- * 5. null → 401
+ * 1. /hooks/* → HMAC webhook auth (exempt from bearer/API key)
+ * 2. X-API-Key header → agent key or Better Auth API key
+ * 3. Authorization: Bearer → Better Auth session or agent key
+ * 4. null → 401
  */
 import type { Auth } from './index'
-import type { Actor } from './types'
-import { verifyAgentKey } from './agent-keys'
 import { resolveRolePermissions } from './roles'
-import { loadAgents } from '../fs'
+import type { Actor } from './types'
 
 export interface ResolveActorConfig {
-	authEnabled: boolean
 	companyRoot: string
 	auth: Auth
 }
@@ -27,18 +25,6 @@ export async function resolveActor(
 	request: Request,
 	config: ResolveActorConfig,
 ): Promise<Actor | null> {
-	// 0. Auth disabled → implicit owner
-	if (!config.authEnabled) {
-		return {
-			id: 'implicit-owner',
-			type: 'human',
-			name: 'Owner',
-			role: 'owner',
-			permissions: { '*': ['*'] },
-			source: detectSource(request),
-		}
-	}
-
 	const path = new URL(request.url).pathname
 
 	// 1. Webhook HMAC auth (/hooks/*)
@@ -67,10 +53,16 @@ export async function resolveActor(
 
 		// 3a. Try Better Auth session (human bearer token)
 		try {
-			const authApi = config.auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
+			const authApi = config.auth.api as Record<
+				string,
+				((args: unknown) => Promise<unknown>) | undefined
+			>
 			const getSessionFn = authApi.getSession
 			if (!getSessionFn) return null
-			const session = await getSessionFn({ headers: request.headers }) as { user: { id: string; email: string; name?: string; twoFactorEnabled?: boolean }; twoFactorVerified?: boolean } | null
+			const session = (await getSessionFn({ headers: request.headers })) as {
+				user: { id: string; email: string; name?: string; twoFactorEnabled?: boolean }
+				twoFactorVerified?: boolean
+			} | null
 			if (session) {
 				return resolveHumanActor(session, request, config)
 			}
@@ -106,7 +98,7 @@ async function resolveApiKeyActor(
 				scope: {
 					fsRead: agent?.fs_scope?.read ?? ['**'],
 					fsWrite: agent?.fs_scope?.write ?? [],
-					secrets: (agent as Record<string, unknown>)?.allowed_secrets as string[] ?? [],
+					secrets: ((agent as Record<string, unknown>)?.allowed_secrets as string[]) ?? [],
 				},
 				source: 'internal',
 				ip: request.headers.get('x-forwarded-for') ?? undefined,
@@ -119,7 +111,9 @@ async function resolveApiKeyActor(
 		const authApi = config.auth.api as Record<string, (args: unknown) => Promise<unknown>>
 		const verifyFn = authApi.verifyApiKey
 		if (!verifyFn) return null
-		const result = await verifyFn({ body: { key } }) as { data?: { valid: boolean; key: { id: string; name?: string } } }
+		const result = (await verifyFn({ body: { key } })) as {
+			data?: { valid: boolean; key: { id: string; name?: string } }
+		}
 		const data = result?.data
 		if (data?.valid) {
 			return {
@@ -140,7 +134,10 @@ async function resolveApiKeyActor(
 }
 
 async function resolveHumanActor(
-	session: { user: { id: string; email: string; name?: string; twoFactorEnabled?: boolean }; twoFactorVerified?: boolean },
+	session: {
+		user: { id: string; email: string; name?: string; twoFactorEnabled?: boolean }
+		twoFactorVerified?: boolean
+	},
 	request: Request,
 	config: ResolveActorConfig,
 ): Promise<Actor | null> {
@@ -153,18 +150,26 @@ async function resolveHumanActor(
 	const { readYamlUnsafe } = await import('../fs/yaml')
 	const { join } = await import('node:path')
 
-	let role: 'owner' | 'admin' | 'member' | 'viewer' = 'viewer'
+	let roleFromHumans: string | undefined
 	try {
-		const humansData = (await readYamlUnsafe(
-			join(config.companyRoot, 'team', 'humans.yaml'),
-		)) as { humans: Array<{ email?: string; role: string }> }
+		const humansData = (await readYamlUnsafe(join(config.companyRoot, 'team', 'humans.yaml'))) as {
+			humans: Array<{ email?: string; role: string }>
+		}
 		const human = humansData.humans.find((h) => h.email === session.user.email)
 		if (human) {
-			role = human.role as typeof role
+			roleFromHumans = human.role
 		}
 	} catch {
 		// Fallback to viewer if humans.yaml not found
 	}
+
+	const role: 'owner' | 'admin' | 'member' | 'viewer' =
+		roleFromHumans === 'owner' ||
+		roleFromHumans === 'admin' ||
+		roleFromHumans === 'member' ||
+		roleFromHumans === 'viewer'
+			? roleFromHumans
+			: 'viewer'
 
 	// Mandatory 2FA for owner/admin: if not enabled and path is not an auth route, block access.
 	// Exempt /api/auth/* so users can still configure 2FA.
@@ -214,20 +219,28 @@ export function getRequiredPermission(
 	// Team
 	if (path.startsWith('/api/team')) {
 		if (path.includes('/invite') && method === 'POST') return { resource: 'team', action: 'invite' }
-		if (path.includes('/invite') && method === 'DELETE') return { resource: 'team', action: 'invite' }
-		if (path.includes('/role') && method === 'PUT') return { resource: 'team', action: 'change_role' }
+		if (path.includes('/invite') && method === 'DELETE')
+			return { resource: 'team', action: 'invite' }
+		if (path.includes('/role') && method === 'PUT')
+			return { resource: 'team', action: 'change_role' }
 		if (method === 'DELETE') return { resource: 'team', action: 'remove' }
 		return { resource: 'team', action: 'read' }
 	}
 
 	// Agents
-	if (path.startsWith('/api/agents')) return { resource: 'agents', action: method === 'GET' ? 'read' : 'configure' }
+	if (path.startsWith('/api/agents'))
+		return { resource: 'agents', action: method === 'GET' ? 'read' : 'configure' }
 
 	// Secrets
-	if (path.startsWith('/api/secrets')) return { resource: 'secrets', action: method === 'GET' ? 'read' : method === 'DELETE' ? 'delete' : 'create' }
+	if (path.startsWith('/api/secrets'))
+		return {
+			resource: 'secrets',
+			action: method === 'GET' ? 'read' : method === 'DELETE' ? 'delete' : 'create',
+		}
 
 	// Knowledge
-	if (path.startsWith('/api/knowledge')) return { resource: 'knowledge', action: method === 'GET' ? 'read' : 'write' }
+	if (path.startsWith('/api/knowledge'))
+		return { resource: 'knowledge', action: method === 'GET' ? 'read' : 'write' }
 
 	// Chat
 	if (path.startsWith('/api/chat')) return { resource: 'chat', action: 'write' }
@@ -249,9 +262,12 @@ export function getRequiredPermission(
 
 	// Dashboard read endpoints
 	if (
-		path.startsWith('/api/pins') || path.startsWith('/api/activity') ||
-		path.startsWith('/api/inbox') || path.startsWith('/api/skills') ||
-		path.startsWith('/api/artifacts') || path.startsWith('/api/groups') ||
+		path.startsWith('/api/pins') ||
+		path.startsWith('/api/activity') ||
+		path.startsWith('/api/inbox') ||
+		path.startsWith('/api/skills') ||
+		path.startsWith('/api/artifacts') ||
+		path.startsWith('/api/groups') ||
 		path.startsWith('/api/dashboard')
 	) {
 		return { resource: 'dashboard', action: 'read' }

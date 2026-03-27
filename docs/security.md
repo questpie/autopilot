@@ -16,31 +16,24 @@ export ANTHROPIC_API_KEY=sk-ant-...
 export OPENAI_API_KEY=sk-...
 ```
 
-## Auth Modes
+## Authentication
 
-| Mode | Setting | Use Case |
-|------|---------|----------|
-| **Disabled** (default) | `auth.enabled: false` | Solo developer, local machine |
-| **Enabled** | `auth.enabled: true` | Multi-user, remote server |
+Authentication is always enabled. Dashboard and API access require Better Auth session or API key credentials.
 
-When disabled: no login required, no bearer tokens, secrets stored as plain text.
-When enabled: Better Auth enforced, dashboard requires login, CLI requires `autopilot auth login`.
-
-## Enable Auth
+## Configure Auth (optional)
 
 Edit `company.yaml`:
 
 ```yaml
 settings:
   auth:
-    enabled: true
     cors_origin: "https://autopilot.yourdomain.com"
 ```
 
 Then create the first user:
 
 ```bash
-autopilot auth create-user --email admin@example.com --role owner
+autopilot auth setup
 ```
 
 ## Roles & Permissions
@@ -60,7 +53,7 @@ Defined in `team/roles.yaml`:
 # Check provider auth status
 autopilot provider status
 
-# Add a secret (encrypted at rest when auth enabled)
+# Add a secret (encrypted at rest)
 autopilot secrets add STRIPE_KEY --value sk_live_...
 
 # List secrets (values hidden)
@@ -71,7 +64,7 @@ autopilot secrets
 
 ## Secret Encryption
 
-When `auth.enabled: true`:
+Secrets are encrypted at rest:
 - Secrets encrypted with AES-GCM
 - Master key stored in `.auth/.master-key`
 - Back up the master key: `autopilot secrets export-key > /safe/master-key.b64`

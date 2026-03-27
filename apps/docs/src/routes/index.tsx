@@ -18,13 +18,13 @@ export const Route = createFileRoute('/')({
 			{
 				name: 'description',
 				content:
-					'Filesystem-native operating system where AI agents run your company through structured primitives, human approval gates, and a self-evolving dashboard. Zero infrastructure. Open source.',
+					'Filesystem-native operating system where AI agents run your company through unified tools, human approval gates, and a self-evolving dashboard. Zero infrastructure. Open source.',
 			},
 			{ property: 'og:title', content: 'QUESTPIE Autopilot — Agents That Act, Not Chat' },
 			{
 				property: 'og:description',
 				content:
-					'Filesystem-native operating system where AI agents run your company through structured primitives, human approval gates, and a self-evolving dashboard. Zero infrastructure. Open source.',
+					'Filesystem-native operating system where AI agents run your company through unified tools, human approval gates, and a self-evolving dashboard. Zero infrastructure. Open source.',
 			},
 			{ property: 'og:type', content: 'website' },
 			{ property: 'og:url', content: 'https://autopilot.questpie.com' },
@@ -53,7 +53,7 @@ function LandingPage() {
 						company operating system
 					</h1>
 					<p className="font-sans text-base sm:text-[20px] text-lp-muted mt-5 font-light leading-relaxed max-w-[640px] mx-auto text-center">
-						AI agents that don't chat -- they act. Structured primitives create tasks,
+						AI agents that don't chat -- they act. Unified tools create tasks,
 						write code, deploy services, and build dashboards.
 						You approve the results.
 					</p>
@@ -177,52 +177,44 @@ You'll be notified when approvals are needed.`}
 						This isn't a chatbot. It's a company. Sam writes the spec. Alex plans
 						the implementation. Max codes it. Riley reviews it. You merge. Ops
 						deploys. Morgan announces. Each agent has persistent memory, scoped
-						filesystem access, and communicates through structured primitives -- not
+						filesystem access, and communicates through unified tools -- not
 						natural language.
 					</p>
 				</Section>
 
 				{/* ========== 4. PRIMITIVES, NOT CHAT ========== */}
-				<Section id="primitives">
+				<Section id="tools">
 					<SectionHeader num="03" sub="Agent thinking is private. Only effects are visible. Every agent action is a typed function call with clear targets and effects -- not a text response for you to parse.">
-						Primitives, Not Chat
+						Tools, Not Chat
 					</SectionHeader>
 					<CodeBlock title="what agents actually do">
 						{`// Max tells Riley PR is ready
-send_message({
-  to: "agent:riley",
-  content: "PR #47 ready for review. Landing page implementation.",
-  references: ["/projects/studio/docs/landing-spec.md", "task-040"]
+message({
+  channel: "dm-riley",
+  content: "PR #47 ready for review. Landing page implementation."
 })
 
 // Ops pins health status to dashboard
-pin_to_board({
+pin({
+  action: "create",
   group: "overview",
   title: "Cluster Health",
   content: "12/12 pods OK | CPU 23% | Memory 41% | Disk 55%",
-  type: "success",
-  metadata: { expires_at: "+6h" }
+  type: "success"
 })
 
-// Riley approves and surfaces to human for merge
-pin_to_board({
-  group: "alerts",
-  title: "PR #47 Approved -- Needs Your Merge",
-  type: "warning",
-  metadata: {
-    actions: [
-      { label: "Merge PR", action: "approve:task-040" },
-      { label: "Reject",   action: "reject:task-040" }
-    ]
-  }
+// Riley approves task
+task({
+  action: "approve",
+  task_id: "task-040",
+  note: "PR #47 looks good. Ready for merge."
 })
 
-// Max creates a live preview via artifact system
-create_artifact({
-  type: "react",
-  title: "Pricing Page Preview",
-  source_path: "/projects/studio/code/src/pages/pricing",
-  pin_to_board: true
+// Search across all entity types
+search({
+  query: "pricing page",
+  type: "task",
+  scope: "active"
 })`}
 					</CodeBlock>
 					<div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -231,8 +223,8 @@ create_artifact({
 								AUTOPILOT AGENTS
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-								Call 13 typed primitives: <code className="font-mono text-[11px] text-lp-purple">create_task</code>, <code className="font-mono text-[11px] text-lp-purple">send_message</code>, <code className="font-mono text-[11px] text-lp-purple">pin_to_board</code>, <code className="font-mono text-[11px] text-lp-purple">create_artifact</code>, <code className="font-mono text-[11px] text-lp-purple">git_commit</code>...
-								Every call produces a visible, auditable effect in the filesystem.
+								Call 7 unified tools: <code className="font-mono text-[11px] text-lp-purple">task</code>, <code className="font-mono text-[11px] text-lp-purple">message</code>, <code className="font-mono text-[11px] text-lp-purple">pin</code>, <code className="font-mono text-[11px] text-lp-purple">search</code>, <code className="font-mono text-[11px] text-lp-purple">http</code>, <code className="font-mono text-[11px] text-lp-purple">search_web</code>, <code className="font-mono text-[11px] text-lp-purple">browse</code>.
+								Every call produces a visible, auditable effect.
 							</div>
 						</div>
 						<div className="bg-lp-card border border-lp-border p-6">
@@ -485,7 +477,8 @@ $ autopilot attach max
 [ops] Setting DNS: billing.company.com
 [ops] Health check: 200 OK
 
-pin_to_board({
+pin({
+  action: "create",
   group: "overview",
   title: "billing.company.com LIVE",
   type: "success"
@@ -794,7 +787,7 @@ patterns:
 									only through channels and task history. If you need info
 									outside your scope, use{' '}
 									<code className="font-mono text-[11px] text-lp-purple">
-										ask_agent
+										message
 									</code>{' '}
 									-- the owning agent decides to share or escalate.
 								</div>

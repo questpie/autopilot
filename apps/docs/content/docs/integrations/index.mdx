@@ -16,7 +16,7 @@ Integration = Secret + Knowledge Doc + Primitive
 2. KNOWLEDGE DOC   → /company/knowledge/integrations/{service}.md
                      API docs, endpoints, conventions, examples
 
-3. PRIMITIVE       → Agent calls http_request() or MCP server tool
+3. TOOL            → Agent calls http() or MCP server tool
                      Orchestrator auto-injects credentials
 ```
 
@@ -34,24 +34,24 @@ Integration = Secret + Knowledge Doc + Primitive
 
 GitHub is best integrated via its MCP server, which provides typed tools like `create_pull_request`, `search_code`, and `create_issue`.
 
-### Linear (http_request + GraphQL)
+### Linear (http + GraphQL)
 
-Linear uses a GraphQL API. Agents learn the query format from the knowledge doc and call it via `http_request`.
+Linear uses a GraphQL API. Agents learn the query format from the knowledge doc and call it via `http`.
 
 ### Slack (Webhook)
 
 Slack can be used two ways: outbound messages via the Bot API, and inbound events via webhooks that trigger agents.
 
-### Stripe (http_request + Secret)
+### Stripe (http + Secret)
 
 Stripe uses a REST API with form-urlencoded bodies. The secret provides the API key; the knowledge doc teaches agents the endpoint patterns.
 
-## When to Use MCP vs http_request
+## When to Use MCP vs http
 
 | Method | When to Use | Examples |
 |--------|------------|---------|
 | `MCP server` | Well-maintained MCP server exists | GitHub, Figma, Playwright |
-| `http_request + secret` | Any REST or GraphQL API | Linear, Stripe, Slack |
+| `http + secret` | Any REST or GraphQL API | Linear, Stripe, Slack |
 | `run_command` | A CLI tool exists on the host | kubectl, terraform, gh |
 | `Agent SDK built-in` | Web browsing and search | WebSearch, WebFetch |
 

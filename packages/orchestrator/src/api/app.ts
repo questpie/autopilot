@@ -35,6 +35,7 @@ import {
 	files,
 	fsBrowser,
 	inbox,
+	notifications,
 	pins,
 	search,
 	sessions,
@@ -44,7 +45,6 @@ import {
 	tasks,
 	teamHumans,
 	upload,
-	notifications,
 } from './routes'
 
 export interface AppEnv {
@@ -58,7 +58,6 @@ export interface AppEnv {
 }
 
 export interface AppConfig {
-	authEnabled: boolean
 	corsOrigin?: string
 }
 
@@ -82,12 +81,14 @@ export interface AppConfig {
  */
 export function createApp(config: AppConfig) {
 	const app = new Hono<AppEnv>()
+	const corsOrigin = config.corsOrigin ??
+		process.env.CORS_ORIGIN ?? ['http://localhost:3000', 'http://localhost:3001']
 
 	// ── 1. CORS ──────────────────────────────────────────────────────────
 	app.use(
 		'*',
 		cors({
-			origin: config.corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:3000',
+			origin: corsOrigin,
 			allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
 			allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
 			credentials: true,
@@ -143,7 +144,7 @@ export function createApp(config: AppConfig) {
 	app.use('*', ipRateLimit())
 
 	// ── 3.7. Artifact proxy (auth + reverse proxy) ──────────────────────
-	app.use('/artifacts/*', artifactProxyAuth({ authEnabled: config.authEnabled }))
+	app.use('/artifacts/*', artifactProxyAuth())
 	app.route('/artifacts', artifactProxy)
 
 	// ── 4. Better Auth passthrough ───────────────────────────────────────
@@ -153,7 +154,7 @@ export function createApp(config: AppConfig) {
 	})
 
 	// ── 5. Auth middleware on /api/* ──────────────────────────────────────
-	app.use('/api/*', authMiddleware({ authEnabled: config.authEnabled }))
+	app.use('/api/*', authMiddleware())
 
 	// ── 5.5. Actor Rate Limit ───────────────────────────────────────────
 	app.use('/api/*', actorRateLimit())

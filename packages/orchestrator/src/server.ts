@@ -1,32 +1,32 @@
-import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
-import { parse as parseYaml } from 'yaml'
+import { join } from 'node:path'
 import { AgentsFileSchema } from '@questpie/autopilot-spec'
 import { WorkflowSchema } from '@questpie/autopilot-spec'
 import type { Schedule, Webhook } from '@questpie/autopilot-spec'
-import { loadCompany, loadAgents } from './fs'
-import { reloadRoles } from './auth/roles'
+import { parse as parseYaml } from 'yaml'
 import { spawnAgent } from './agent'
-import { evaluateTransition, advanceWorkflow } from './workflow'
-import { WorkflowLoader } from './workflow'
+import { createApp } from './api'
+import { reloadRoles } from './auth/roles'
+import { eventBus } from './events'
+import { loadAgents, loadCompany } from './fs'
+import { GitManager } from './git/git-manager'
+import { Scheduler } from './scheduler'
 import { Watcher } from './watcher'
 import type { WatchEvent } from './watcher'
-import { Scheduler } from './scheduler'
 import { WebhookServer, webhookHandlerRegistry } from './webhook'
 import { telegramWebhookHandler } from './webhook'
-import { createApp } from './api'
-import { eventBus } from './events'
-import { GitManager } from './git/git-manager'
+import { advanceWorkflow, evaluateTransition } from './workflow'
+import { WorkflowLoader } from './workflow'
 
-import { container, configureContainer } from './container'
-import { dbFactory } from './db'
 import { authFactory } from './auth'
-import { storageFactory } from './fs/sqlite-backend'
-import { embeddingServiceFactory } from './embeddings'
-import { streamManagerFactory } from './session/stream'
+import { configureContainer, container } from './container'
+import { dbFactory } from './db'
 import { indexerFactory } from './db/indexer'
-import { notifierFactory } from './notifier'
+import { embeddingServiceFactory } from './embeddings'
+import { storageFactory } from './fs/sqlite-backend'
 import { NotificationDispatcher } from './notifications'
+import { notifierFactory } from './notifier'
+import { streamManagerFactory } from './session/stream'
 
 /** Configuration options for the {@link Orchestrator}. */
 export interface OrchestratorOptions {
@@ -36,8 +36,6 @@ export interface OrchestratorOptions {
 	webhookPort?: number
 	/** Port for the read-only REST API server (default `7778`). */
 	apiPort?: number
-	/** @deprecated Storage is always SQLite now. */
-	storageMode?: 'sqlite'
 }
 
 /**
@@ -83,14 +81,19 @@ export class Orchestrator {
 			company = await loadCompany(root)
 			console.log(`[orchestrator] loaded company: ${company.name} (${company.slug})`)
 		} catch (err) {
-			console.error('[orchestrator] failed to load company.yaml — is this a valid company directory?')
+			console.error(
+				'[orchestrator] failed to load company.yaml — is this a valid company directory?',
+			)
 			throw err
 		}
 
 		// 2. Resolve core services from container (ordered by deps automatically)
 		try {
 			await container.resolveAsync([
-				storageFactory, dbFactory, authFactory, embeddingServiceFactory
+				storageFactory,
+				dbFactory,
+				authFactory,
+				embeddingServiceFactory,
 			])
 			console.log('[orchestrator] core services initialized')
 		} catch (err) {
@@ -123,7 +126,10 @@ export class Orchestrator {
 			eventBus.subscribe((event) => {
 				// Fire-and-forget — dispatcher handles its own errors
 				dispatcher.handle(event).catch((err) => {
-					console.error('[orchestrator] notification dispatcher error:', err instanceof Error ? err.message : err)
+					console.error(
+						'[orchestrator] notification dispatcher error:',
+						err instanceof Error ? err.message : err,
+					)
 				})
 			})
 			console.log('[orchestrator] notification dispatcher wired to event bus')
@@ -138,7 +144,9 @@ export class Orchestrator {
 		})
 		try {
 			await this.watcher.start()
-			console.log('[orchestrator] watcher started (watching tasks/, comms/, dashboard/, team/, knowledge/, artifacts/)')
+			console.log(
+				'[orchestrator] watcher started (watching tasks/, comms/, dashboard/, team/, knowledge/, artifacts/)',
+			)
 		} catch (err) {
 			console.error('[orchestrator] failed to start watcher:', err)
 		}
@@ -172,7 +180,9 @@ export class Orchestrator {
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
 			if (msg.includes('EADDRINUSE') || msg.includes('in use')) {
-				console.warn(`[orchestrator] webhook port ${port} already in use — skipping (kill the other process or use --webhook-port)`)
+				console.warn(
+					`[orchestrator] webhook port ${port} already in use — skipping (kill the other process or use --webhook-port)`,
+				)
 			} else {
 				console.error('[orchestrator] failed to start webhook server:', msg)
 			}
@@ -183,7 +193,6 @@ export class Orchestrator {
 		const authSettings = company.settings.auth
 		try {
 			const app = createApp({
-				authEnabled: authSettings.enabled,
 				corsOrigin: authSettings.cors_origin,
 			})
 			this.apiServer = Bun.serve({
@@ -194,7 +203,9 @@ export class Orchestrator {
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
 			if (msg.includes('EADDRINUSE') || msg.includes('in use')) {
-				console.warn(`[orchestrator] api port ${apiPort} already in use — skipping (kill the other process or use --api-port)`)
+				console.warn(
+					`[orchestrator] api port ${apiPort} already in use — skipping (kill the other process or use --api-port)`,
+				)
 			} else {
 				console.error('[orchestrator] failed to start api server:', msg)
 			}
@@ -202,7 +213,9 @@ export class Orchestrator {
 
 		// 10. Initialize GitManager
 		try {
-			const gitConfig = (company as Record<string, unknown>).settings as Record<string, unknown> | undefined
+			const gitConfig = (company as Record<string, unknown>).settings as
+				| Record<string, unknown>
+				| undefined
 			const gitSettings = (gitConfig?.git ?? {}) as Record<string, unknown>
 
 			this.gitManager = new GitManager({
@@ -215,7 +228,10 @@ export class Orchestrator {
 			})
 			await this.gitManager.initialize()
 		} catch (err) {
-			console.error('[orchestrator] failed to initialize git manager:', err instanceof Error ? err.message : err)
+			console.error(
+				'[orchestrator] failed to initialize git manager:',
+				err instanceof Error ? err.message : err,
+			)
 		}
 
 		// 11. Startup scan: process existing tasks from SQLite
@@ -368,7 +384,11 @@ export class Orchestrator {
 					break
 				case 'artifact_changed':
 					console.log(`[orchestrator] artifact registered: ${event.artifactId}`)
-					eventBus.emit({ type: 'artifact_changed', artifactId: event.artifactId, action: 'registered' })
+					eventBus.emit({
+						type: 'artifact_changed',
+						artifactId: event.artifactId,
+						action: 'registered',
+					})
 					break
 			}
 		} catch (err) {
@@ -418,7 +438,10 @@ export class Orchestrator {
 			await indexer.indexOne('knowledge', file, title, content)
 			eventBus.emit({ type: 'knowledge_changed', path: file, action: 'updated' })
 		} catch (err) {
-			console.error(`[orchestrator] failed to reindex knowledge file ${file}:`, err instanceof Error ? err.message : err)
+			console.error(
+				`[orchestrator] failed to reindex knowledge file ${file}:`,
+				err instanceof Error ? err.message : err,
+			)
 		}
 	}
 
@@ -445,7 +468,10 @@ export class Orchestrator {
 					console.error(`[orchestrator] dashboard rebuild failed (exit ${exitCode})`)
 				}
 			} catch (err) {
-				console.error('[orchestrator] dashboard rebuild error:', err instanceof Error ? err.message : err)
+				console.error(
+					'[orchestrator] dashboard rebuild error:',
+					err instanceof Error ? err.message : err,
+				)
 			}
 		}, 1000)
 	}
@@ -454,7 +480,7 @@ export class Orchestrator {
 		const root = this.options.companyRoot
 		try {
 			const { readYamlUnsafe } = await import('./fs/yaml')
-			const msg = await readYamlUnsafe(filePath) as Record<string, unknown>
+			const msg = (await readYamlUnsafe(filePath)) as Record<string, unknown>
 			const content = (msg?.content as string) ?? ''
 			const from = (msg?.from as string) ?? 'unknown'
 
@@ -474,7 +500,7 @@ export class Orchestrator {
 			const { storage } = await container.resolveAsync([storageFactory])
 
 			for (const mentionedId of mentions) {
-				const agent = agents.find(a => a.id === mentionedId)
+				const agent = agents.find((a) => a.id === mentionedId)
 				if (!agent) continue
 				if (agent.id === from) continue // don't spawn agent that sent the message
 
@@ -485,11 +511,18 @@ export class Orchestrator {
 					allAgents: agents,
 					storage,
 					trigger: { type: 'mention' },
-				}).then(result => {
-					console.log(`[orchestrator] agent ${agent.id} finished mention response: ${result.toolCalls} tool calls`)
-				}).catch(err => {
-					console.error(`[orchestrator] agent ${agent.id} failed:`, err instanceof Error ? err.message : err)
 				})
+					.then((result) => {
+						console.log(
+							`[orchestrator] agent ${agent.id} finished mention response: ${result.toolCalls} tool calls`,
+						)
+					})
+					.catch((err) => {
+						console.error(
+							`[orchestrator] agent ${agent.id} failed:`,
+							err instanceof Error ? err.message : err,
+						)
+					})
 			}
 		} catch (err) {
 			// Ignore parse errors — might be a partial write
@@ -573,7 +606,9 @@ export class Orchestrator {
 			return
 		}
 
-		console.log(`[orchestrator] processing task: ${task.id} (status: ${task.status}, workflow_step: ${task.workflow_step ?? 'none'})`)
+		console.log(
+			`[orchestrator] processing task: ${task.id} (status: ${task.status}, workflow_step: ${task.workflow_step ?? 'none'})`,
+		)
 
 		// 2. If task has a workflow but no step, initialize to first step and continue
 		if (task.workflow && !task.workflow_step) {
@@ -581,10 +616,14 @@ export class Orchestrator {
 				const workflow = await workflowLoader.load(task.workflow)
 				const firstStep = workflow.steps[0]
 				if (firstStep) {
-					await storage.updateTask(taskId, {
-						workflow_step: firstStep.id,
-						status: 'assigned',
-					}, 'system')
+					await storage.updateTask(
+						taskId,
+						{
+							workflow_step: firstStep.id,
+							status: 'assigned',
+						},
+						'system',
+					)
 					await storage.moveTask(taskId, 'assigned', 'system')
 					console.log(`[orchestrator] initialized ${taskId} to workflow step: ${firstStep.id}`)
 					// Update local task reference and fall through to evaluation
@@ -610,15 +649,28 @@ export class Orchestrator {
 					// Task finished current step → advance to next step
 					result = advanceWorkflow(workflow, task, 'done', agents)
 					if (result.nextStep && result.nextStep !== task.workflow_step) {
-						await storage.updateTask(taskId, { workflow_step: result.nextStep, status: 'assigned' }, 'system')
+						await storage.updateTask(
+							taskId,
+							{ workflow_step: result.nextStep, status: 'assigned' },
+							'system',
+						)
 						await storage.moveTask(taskId, 'assigned', 'system')
-						eventBus.emit({ type: 'workflow_advanced', taskId, from: task.workflow_step!, to: result.nextStep })
-						console.log(`[orchestrator] advanced ${taskId}: ${task.workflow_step} → ${result.nextStep}`)
+						eventBus.emit({
+							type: 'workflow_advanced',
+							taskId,
+							from: task.workflow_step!,
+							to: result.nextStep,
+						})
+						console.log(
+							`[orchestrator] advanced ${taskId}: ${task.workflow_step} → ${result.nextStep}`,
+						)
 					} else if (result.action === 'complete') {
 						console.log(`[orchestrator] task ${taskId} workflow complete`)
 					} else {
 						// Can't advance — don't respawn
-						console.log(`[orchestrator] task ${taskId} done but can't advance: ${result.error ?? 'unknown'}`)
+						console.log(
+							`[orchestrator] task ${taskId} done but can't advance: ${result.error ?? 'unknown'}`,
+						)
 						return
 					}
 				} else if (task.status === 'blocked') {
@@ -643,7 +695,8 @@ export class Orchestrator {
 				// Log notifications based on result
 				switch (result.action) {
 					case 'assign_agent': {
-						const assignedAgentId = result.assignTo ?? agents.find(a => a.role === result.assignRole)?.id
+						const assignedAgentId =
+							result.assignTo ?? agents.find((a) => a.role === result.assignRole)?.id
 						await notifier.notify({
 							type: 'task_assigned',
 							title: `Task assigned: ${task.title}`,
@@ -655,10 +708,12 @@ export class Orchestrator {
 
 						// Actually spawn the agent
 						if (assignedAgentId) {
-							const agent = agents.find(a => a.id === assignedAgentId)
+							const agent = agents.find((a) => a.id === assignedAgentId)
 							if (agent) {
 								const company = await loadCompany(root)
-								console.log(`[orchestrator] spawning agent: ${agent.id} (${agent.role}) for task ${taskId}`)
+								console.log(
+									`[orchestrator] spawning agent: ${agent.id} (${agent.role}) for task ${taskId}`,
+								)
 								spawnAgent({
 									agent,
 									company,
@@ -666,11 +721,18 @@ export class Orchestrator {
 									task,
 									storage,
 									trigger: { type: 'task_assigned', task_id: taskId },
-								}).then(result => {
-									console.log(`[orchestrator] agent ${agent.id} finished: ${result.toolCalls} tool calls${result.error ? `, error: ${result.error}` : ''}`)
-								}).catch(err => {
-									console.error(`[orchestrator] agent ${agent.id} failed:`, err instanceof Error ? err.message : err)
 								})
+									.then((result) => {
+										console.log(
+											`[orchestrator] agent ${agent.id} finished: ${result.toolCalls} tool calls${result.error ? `, error: ${result.error}` : ''}`,
+										)
+									})
+									.catch((err) => {
+										console.error(
+											`[orchestrator] agent ${agent.id} failed:`,
+											err instanceof Error ? err.message : err,
+										)
+									})
 							}
 						}
 						break

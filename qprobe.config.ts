@@ -10,10 +10,10 @@ export default defineConfig({
 			health: '/api/status',
 		},
 		dashboard: {
-			cmd: 'bun run serve.ts',
-			cwd: 'apps/dashboard',
+			cmd: 'node .output/server/index.mjs',
+			cwd: 'apps/dashboard-v2',
 			ready: 'listening on',
-			port: 3001,
+			port: 3000,
 			depends: ['autopilot'],
 		},
 	},

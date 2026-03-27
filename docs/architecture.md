@@ -11,7 +11,7 @@
 ┌──────────────────────▼──────────────────────────────────┐
 │  ORCHESTRATOR (single Bun process)                      │
 │                                                         │
-│  FS Watcher ──── watches tasks/, comms/, team/          │
+│  FS Watcher ──── watches team/, knowledge/, dashboard/  │
 │  Workflow Engine ── matches task state → next step      │
 │  Agent Spawner ──── Claude Agent SDK sessions           │
 │  Context Builder ── role-scoped company snapshots       │
@@ -27,7 +27,7 @@
 │  AGENT LAYER                                            │
 │                                                         │
 │  8 roles with system prompts + scoped tools             │
-│  14 structured primitives (not chat)                    │
+│  7 unified tools (not chat)                             │
 │  Sandboxed filesystem access                            │
 │  Per-agent persistent memory                            │
 └──────────────────────┬──────────────────────────────────┘
@@ -69,24 +69,23 @@
    - **Agent memory** (~15-20K tokens) — persistent facts, decisions, patterns
    - **Task context** (~8-15K tokens) — task details, specs, history
    - **Skills discovery** — available skills from `skills/` directory
-   - **Tool list** — available primitives scoped to the agent's role
+   - **Tool list** — available unified tools scoped to the agent's role
 4. The agent spawner creates a Claude session via Agent SDK
-5. The agent executes tool calls (primitives)
+5. The agent executes unified tool calls
 6. Post-session: memory extractor (Claude Haiku) persists learnings to `context/memory/{agentId}/memory.yaml`
 7. Task moves to next workflow step
 
-## Primitives (Agent Tools)
+## Unified Tools
 
-Agents don't generate text. They call structured primitives:
+Agents don't generate text. They call 7 unified tools:
 
-| Category | Primitives |
-|----------|-----------|
-| Communication | `send_message`, `ask_agent` |
-| Tasks | `create_task`, `update_task`, `add_blocker`, `resolve_blocker` |
-| Dashboard | `pin_to_board`, `unpin_from_board` |
-| Knowledge | `search_knowledge`, `update_knowledge` |
-| Content | `create_artifact`, `skill_request` |
-| External | `search`, `http_request` |
+| Category | Tools |
+|----------|-------|
+| Workflow | `task` |
+| Collaboration | `message`, `pin` |
+| Internal Search | `search` |
+| External APIs | `http` |
+| Web Discovery | `search_web`, `browse` |
 
 ## Git Auto-Commit
 

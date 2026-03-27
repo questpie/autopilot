@@ -11,68 +11,68 @@ agents:
     description: "Decomposes high-level intents into tasks, manages company structure, proposes workflow changes"
     fs_scope:
       read: ["/**"]
-      write: ["/tasks/**", "/team/**", "/comms/**", "/dashboard/**"]
-    tools: ["fs", "terminal", "task", "message", "board"]
+      write: ["/team/**", "/dashboard/**"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]
 
   - id: sam
     name: "Sam"
     role: strategist
     description: "Scopes features, writes specs, defines business requirements"
     fs_scope:
-      read: ["/knowledge/**", "/projects/*/docs/**", "/tasks/**"]
-      write: ["/projects/*/docs/**", "/tasks/**", "/comms/**"]
-    tools: ["fs", "terminal", "task", "message", "knowledge"]
+      read: ["/knowledge/**", "/projects/*/docs/**"]
+      write: ["/projects/*/docs/**"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]
 
   - id: alex
     name: "Alex"
     role: planner
     description: "Creates detailed implementation plans from specs"
     fs_scope:
-      read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
-      write: ["/projects/*/docs/**", "/tasks/**", "/comms/**"]
-    tools: ["fs", "terminal", "task", "message"]
+      read: ["/knowledge/technical/**", "/projects/**"]
+      write: ["/projects/*/docs/**"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]
 
   - id: max
     name: "Max"
     role: developer
     description: "Implements features, writes code, creates branches and PRs"
     fs_scope:
-      read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
-      write: ["/projects/*/code/**", "/tasks/**", "/comms/**"]
-    tools: ["fs", "terminal", "task", "message", "git"]
+      read: ["/knowledge/technical/**", "/projects/**"]
+      write: ["/projects/*/code/**"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "git", "search_web", "browse"]
 
   - id: riley
     name: "Riley"
     role: reviewer
     description: "Reviews code quality, architecture decisions, suggests improvements"
     fs_scope:
-      read: ["/knowledge/technical/**", "/projects/**", "/tasks/**"]
-      write: ["/tasks/**", "/comms/**"]
-    tools: ["fs", "terminal", "task", "message", "git"]
+      read: ["/knowledge/technical/**", "/projects/**"]
+      write: []
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "git", "search_web", "browse"]
 
   - id: ops
     name: "Ops"
     role: devops
     description: "Deploys applications, monitors infrastructure, handles incidents"
     fs_scope:
-      read: ["/infra/**", "/projects/*/code/**", "/tasks/**", "/knowledge/technical/**"]
-      write: ["/infra/**", "/tasks/**", "/comms/**", "/logs/**"]
-    tools: ["fs", "terminal", "task", "message", "http"]
+      read: ["/infra/**", "/projects/*/code/**", "/knowledge/technical/**"]
+      write: ["/infra/**", "/logs/**"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "http", "search_web", "browse"]
 
   - id: morgan
     name: "Morgan"
     role: marketing
     description: "Writes copy, manages social media, plans campaigns, announces features"
     fs_scope:
-      read: ["/knowledge/brand/**", "/knowledge/business/**", "/projects/*/marketing/**", "/tasks/**"]
-      write: ["/projects/*/marketing/**", "/tasks/**", "/comms/**"]
-    tools: ["fs", "terminal", "task", "message", "http"]
+      read: ["/knowledge/brand/**", "/knowledge/business/**", "/projects/*/marketing/**"]
+      write: ["/projects/*/marketing/**"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "http", "search_web", "browse"]
 
   - id: jordan
     name: "Jordan"
     role: design
     description: "Creates UI/UX designs, maintains design system, produces mockups"
     fs_scope:
-      read: ["/knowledge/brand/**", "/projects/*/design/**", "/tasks/**"]
-      write: ["/projects/*/design/**", "/tasks/**", "/comms/**"]
-    tools: ["fs", "terminal", "task", "message"]
+      read: ["/knowledge/brand/**", "/projects/*/design/**"]
+      write: ["/projects/*/design/**"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]

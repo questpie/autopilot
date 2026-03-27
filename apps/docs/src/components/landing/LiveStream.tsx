@@ -52,7 +52,7 @@ const lines: { t: string; icon: React.ReactNode; agent: string; color: string; m
 		icon: <PushPin size={14} className="text-lp-muted" />,
 		agent: 'max',
 		color: 'text-lp-purple',
-		msg: 'pin_to_board \u2192 "Landing Page: 50%"',
+		msg: 'pin({ action: "create" }) \u2192 "Landing Page: 50%"',
 	},
 	{
 		t: '14:32:00',

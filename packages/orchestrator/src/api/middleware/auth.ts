@@ -4,25 +4,21 @@
  * writes an audit trail.
  */
 import { createMiddleware } from 'hono/factory'
-import type { AppEnv } from '../app'
-import { resolveActor, getRequiredPermission } from '../../auth/middleware'
-import { checkPermission } from '../../auth/roles'
 import { logAudit } from '../../auth/audit'
-
-interface AuthMiddlewareOptions {
-	authEnabled: boolean
-}
+import { getRequiredPermission, resolveActor } from '../../auth/middleware'
+import { checkPermission } from '../../auth/roles'
+import type { AppEnv } from '../app'
 
 /**
  * Factory that returns a Hono middleware performing:
- * 1. Actor resolution (bearer / API key / implicit owner)
+ * 1. Actor resolution (bearer / API key)
  * 2. Permission check against the RBAC matrix
  * 3. Audit logging (denied + success)
  *
  * Paths handled *before* this middleware (/api/auth/*) are never reached here
  * because Hono short-circuits on the first matching handler.
  */
-export function authMiddleware(options: AuthMiddlewareOptions) {
+export function authMiddleware() {
 	return createMiddleware<AppEnv>(async (c, next) => {
 		const path = new URL(c.req.url).pathname
 
@@ -33,7 +29,6 @@ export function authMiddleware(options: AuthMiddlewareOptions) {
 
 		// Resolve actor
 		const actor = await resolveActor(c.req.raw, {
-			authEnabled: options.authEnabled,
 			companyRoot: c.get('companyRoot'),
 			auth: c.get('auth'),
 		})

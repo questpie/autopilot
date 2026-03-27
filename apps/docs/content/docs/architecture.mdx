@@ -45,7 +45,7 @@ What competitors require: Docker + Postgres + Redis + vector DB + message queue 
                            v
 +-----------------------------------------------------------+
 |  LAYER 3 -- AGENTS                                         |
-|  Claude Agent SDK sessions with 13 primitives + MCP        |
+|  Claude Agent SDK sessions with 7 tools + MCP              |
 |  Role-scoped FS access, sandboxed shell, deny patterns     |
 |  Human gates at explicit workflow steps                     |
 +-----------------------------------------------------------+
@@ -127,8 +127,8 @@ The Claude Agent SDK provider gives agents built-in infrastructure -- file I/O, 
 Human: "Build a pricing page"
   |
   v
-CLI: autopilot ask "Build a pricing page"
-  | Creates task in /tasks/backlog/ (type: intent, assigned: ceo)
+CLI: autopilot chat "Build a pricing page"
+  | Router decides which agent responds
   v
 Watcher: detects new task file
   |
@@ -142,21 +142,21 @@ Orchestrator: routes to CEO agent
   v
 CEO Agent Session:
   | Reads company knowledge, evaluates scope
-  | Calls: create_task("Scope requirements") -> sam
-  | Calls: create_task("Plan implementation") -> alex
-  | Calls: create_task("Implement + Stripe")  -> max
+  | Calls: task({ action: "create", title: "Scope requirements", assigned_to: "sam" })
+  | Calls: task({ action: "create", title: "Plan implementation", assigned_to: "alex" })
+  | Calls: task({ action: "create", title: "Implement + Stripe", assigned_to: "max" })
   | Sets dependencies: implement -> plan -> scope
   v
 Watcher: detects new tasks
   |
   v
-Sam (strategist): writes spec -> update_task(status: done)
+Sam (strategist): writes spec -> task({ action: "update", status: "done" })
   v
 Workflow Engine: scope -> plan transition -> activates Alex's task
   v
-Alex (planner): writes plan -> update_task(status: done)
+Alex (planner): writes plan -> task({ action: "update", status: "done" })
   v
-Max (developer): implements, creates PR -> update_task(status: done)
+Max (developer): implements, creates PR -> task({ action: "update", status: "done" })
   v
 Riley (reviewer): reviews PR -> approves
   v
