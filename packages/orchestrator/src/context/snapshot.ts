@@ -1,6 +1,7 @@
 import type { Agent } from '@questpie/autopilot-spec'
 import { listPins, loadAgents } from '../fs'
 import type { StorageBackend } from '../fs/storage'
+import type { SessionStreamManager } from '../session/stream'
 
 /** A point-in-time snapshot of company state scoped to a single agent. */
 export interface CompanySnapshot {
@@ -20,6 +21,7 @@ export async function buildCompanySnapshot(
 	companyRoot: string,
 	agent: Agent,
 	storage: StorageBackend,
+	streamManager?: SessionStreamManager | null,
 ): Promise<CompanySnapshot> {
 	// Load active tasks from SQLite
 	const allTasks = await storage.listTasks()
@@ -72,16 +74,20 @@ export async function buildCompanySnapshot(
 		content: p.content ?? '',
 	}))
 
-	// Load agent statuses (YAML)
+	// Load agent statuses — use real session state when available
 	let agentStatuses: CompanySnapshot['agentStatuses'] = []
 	try {
 		const agents = await loadAgents(companyRoot)
-		agentStatuses = agents.map((a) => ({
-			id: a.id,
-			name: a.name,
-			role: a.role,
-			status: 'idle',
-		}))
+		const activeStreams = streamManager?.getActiveStreams() ?? []
+		agentStatuses = agents.map((a) => {
+			const hasActiveStream = activeStreams.some((s) => s.agentId === a.id)
+			return {
+				id: a.id,
+				name: a.name,
+				role: a.role,
+				status: hasActiveStream ? 'working' : 'idle',
+			}
+		})
 	} catch {
 		// agents.yaml may not exist
 	}

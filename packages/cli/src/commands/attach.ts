@@ -26,7 +26,7 @@ const EVENT_ICONS: Record<string, string> = {
 const TOOL_COLORS: Record<string, string> = {
 	read_file: 'dim',
 	list_directory: 'dim',
-	search_knowledge: 'dim',
+	search: 'dim',
 	write_file: 'green',
 	append_file: 'green',
 	update_knowledge: 'green',

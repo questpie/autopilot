@@ -16,6 +16,7 @@ export const MemoryMistakeSchema = z.object({
 export const MemoryFactsSchema = z.record(z.string(), z.array(z.string()))
 
 export const AgentMemorySchema = z.object({
+	bio: z.string().optional().describe('1-2 sentence self-description of what this agent does and is currently focused on'),
 	facts: MemoryFactsSchema.default({}),
 	decisions: z.array(MemoryDecisionSchema).default([]),
 	patterns: z.array(z.string()).default([]),

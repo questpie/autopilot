@@ -5,6 +5,8 @@ import { SearchQuerySchema, SearchResponseSchema } from '@questpie/autopilot-spe
 import { searchFts, searchHybrid } from '../../db/search-index'
 import type { EntityType, SearchResult } from '../../db/search-index'
 import type { AppEnv } from '../app'
+import { container } from '../../container'
+import { embeddingServiceFactory } from '../../embeddings'
 
 const search = new Hono<AppEnv>().get(
 	'/',
@@ -26,18 +28,33 @@ const search = new Hono<AppEnv>().get(
 		const typeFilter = type?.split(',').map((t) => t.trim())[0] as EntityType | undefined
 
 		let results: SearchResult[]
+		let actualMode = mode ?? 'fts'
 
 		if (mode === 'fts') {
 			results = await searchFts(db, q, { type: typeFilter, limit })
 		} else {
-			// hybrid mode — pass null embedding for now (FTS-only fallback)
-			results = await searchHybrid(db, q, null, { type: typeFilter, limit })
+			// hybrid mode — embed the query text for vector search
+			let embedding: Float32Array | null = null
+			try {
+				const { embeddingService } = await container.resolveAsync([embeddingServiceFactory])
+				if (embeddingService && embeddingService.providerName !== 'none') {
+					embedding = await embeddingService.embedQuery(q)
+				}
+			} catch {
+				// Embedding service not available — fallback to FTS only
+			}
+
+			if (!embedding) {
+				actualMode = 'fts'
+			}
+
+			results = await searchHybrid(db, q, embedding, { type: typeFilter, limit })
 		}
 
 		return c.json({
 			results,
 			query: q,
-			mode,
+			mode: actualMode,
 			total: results.length,
 		})
 	},

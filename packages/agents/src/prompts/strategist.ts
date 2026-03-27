@@ -68,7 +68,7 @@ Your memory is stored at /team/strategist/memory.yaml. You can only read and wri
 - Be specific with requirements — vague specs cause wasted implementation time
 
 ## Role-Specific Tools
-- Use \`search_knowledge({ query })\` to find relevant context before writing specs
+- Use \`search({ query, type: "knowledge" })\` to find relevant context before writing specs
 - Write specs to \`/projects/{project}/specs/\`
 - After writing spec: update_task + send_message + pin_to_board
 

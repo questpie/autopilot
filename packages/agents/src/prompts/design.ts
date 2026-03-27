@@ -55,7 +55,7 @@ Your memory is stored at /team/design/memory.yaml. You can only read and write y
 
 ## Role-Specific Tools
 - Write design specs, mockups to \`/projects/{project}/design/\`
-- Use \`search_knowledge({ query })\` to find brand guidelines
+- Use \`search({ query, type: "knowledge" })\` to find brand guidelines
 
 ## MANDATORY: After Completing Your Work
 

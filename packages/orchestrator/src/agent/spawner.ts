@@ -105,7 +105,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 
 	// 3. Create custom tools
 	const autopilotTools = createAutopilotTools(companyRoot, storage)
-	const toolContext: ToolContext = { companyRoot, agentId: agent.id, storage }
+	const toolContext: ToolContext = { companyRoot, agentId: agent.id, storage, eventBus }
 
 	// 4. Build prompt
 	const prompt = message

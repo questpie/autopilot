@@ -38,6 +38,7 @@ export async function extractMemory(
 			role: 'user',
 			content: `Extract structured memory from this agent session log. Return YAML with these sections:
 
+bio: (1-2 sentence summary of what this agent does and is currently focused on, based on recent work)
 facts: (new things learned, as category -> array of strings)
 decisions: (decisions made, as array of {date, decision, reason})
 mistakes: (mistakes made, as array of {date, what, fix})
@@ -103,6 +104,11 @@ export function mergeMemory(
 	extracted: Record<string, unknown>,
 ): Record<string, unknown> {
 	const result = { ...existing }
+
+	// Bio: always replace with latest (reflects current focus)
+	if (typeof extracted.bio === 'string' && extracted.bio.trim()) {
+		result.bio = extracted.bio.trim()
+	}
 
 	// Merge facts (merge arrays per category)
 	if (extracted.facts && typeof extracted.facts === 'object') {

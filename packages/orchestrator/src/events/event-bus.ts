@@ -11,6 +11,7 @@ export type AutopilotEvent =
 	| { type: 'settings_changed' }
 	| { type: 'file_locked'; path: string; lockedBy: string }
 	| { type: 'file_unlocked'; path: string }
+	| { type: 'knowledge_changed'; path: string; action: 'created' | 'updated' }
 
 export class EventBus {
 	private listeners = new Set<(event: AutopilotEvent) => void>()

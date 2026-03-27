@@ -4,7 +4,7 @@ import { searchIndex } from './schema'
 import type { AutopilotDb } from './index'
 import { createHash } from 'node:crypto'
 
-export type EntityType = 'task' | 'message' | 'knowledge' | 'pin' | 'file'
+export type EntityType = 'task' | 'message' | 'knowledge' | 'pin' | 'file' | 'agent' | 'channel' | 'skill'
 
 export interface SearchResult {
 	entityType: EntityType

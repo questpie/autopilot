@@ -1,4 +1,4 @@
-import { mkdir, readdir } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { join, relative, resolve } from 'path'
 import dns from 'node:dns/promises'
 import { stringify } from 'yaml'
@@ -9,7 +9,23 @@ import { createPin, removePin } from '../fs/pins'
 import { readYamlUnsafe, writeYaml } from '../fs/yaml'
 import { loadSkillContent } from '../skills'
 import { isDeniedPath } from '../auth/deny-patterns'
-import { eventBus } from '../events/event-bus'
+import type { EventBus } from '../events/event-bus'
+import { container } from '../container'
+import { indexerFactory } from '../db/indexer'
+import type { Indexer } from '../db/indexer'
+import { loadAgents } from '../fs'
+import { loadAgentMemory } from '../context/memory-loader'
+import { streamManagerFactory } from '../session/stream'
+
+/** Best-effort resolve the indexer for real-time index updates. */
+async function getIndexer(): Promise<Indexer | null> {
+	try {
+		const { indexer } = await container.resolveAsync([indexerFactory])
+		return indexer
+	} catch {
+		return null
+	}
+}
 
 // ─── Tool definition types ─────────────────────────────────────────────────
 
@@ -26,6 +42,7 @@ export interface ToolContext {
 	companyRoot: string
 	agentId: string
 	storage: StorageBackend
+	eventBus: EventBus
 }
 
 /** Structured result returned to the LLM after a tool call. */
@@ -107,8 +124,8 @@ export interface AutopilotToolOptions {
  *
  * Includes: `send_message`, `create_task`, `update_task`, `add_blocker`,
  * `pin_to_board`, `unpin_from_board`, `create_artifact`, `skill_request`,
- * `search_knowledge`, `update_knowledge`, `http_request`, `message_agent`,
- * and `resolve_blocker`.
+ * `search`, `update_knowledge`, `http_request`, `message_agent`,
+ * `list_agents`, and `resolve_blocker`.
  */
 export function createAutopilotTools(companyRoot: string, storage: StorageBackend, options?: AutopilotToolOptions): ToolDefinition[] {
 	// biome-ignore lint: generic variance is intentional
@@ -141,7 +158,10 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 					external: false,
 				} as any)
 
-				eventBus.emit({ type: 'message', channel: args.channel, from: ctx.agentId, content: args.content })
+				ctx.eventBus.emit({ type: 'message', channel: args.channel, from: ctx.agentId, content: args.content })
+				// Real-time index
+				const msgId = `msg-${Date.now().toString(36)}`
+				getIndexer().then((idx) => idx?.indexOne('message', msgId, `#${args.channel}`, args.content)).catch(() => {})
 
 				return { content: [{ type: 'text' as const, text: `Message sent to #${args.channel}` }] }
 			},
@@ -176,6 +196,9 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 					created_at: new Date().toISOString(),
 					updated_at: new Date().toISOString(),
 				} as any)
+				ctx.eventBus.emit({ type: 'task_changed', taskId: task.id, status: task.status, assignedTo: task.assigned_to })
+				// Real-time index
+				getIndexer().then((idx) => idx?.indexOne('task', task.id, task.title, `${task.title} ${task.description ?? ''} ${task.status} ${task.type}`)).catch(() => {})
 				return { content: [{ type: 'text' as const, text: `Created task ${task.id}: ${task.title}` }] }
 			},
 		),
@@ -189,12 +212,29 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 				note: z.string().optional(),
 			}),
 			async (args, ctx) => {
-				const updates: Record<string, unknown> = {}
-				if (args.status) updates.status = args.status
-				await storage.updateTask(args.task_id, updates, ctx.agentId)
+				// If note provided, append to task history
+				if (args.note) {
+					const task = await storage.readTask(args.task_id)
+					const timestamp = new Date().toISOString()
+					const history = [...(task?.history ?? []), {
+						at: timestamp,
+						by: ctx.agentId,
+						action: 'note',
+						note: args.note,
+					}]
+					await storage.updateTask(args.task_id, { history, updated_at: timestamp } as any, ctx.agentId)
+				}
+
+				// If status provided, update and move task
 				if (args.status) {
+					await storage.updateTask(args.task_id, { status: args.status } as any, ctx.agentId)
 					await storage.moveTask(args.task_id, args.status, ctx.agentId)
 				}
+
+				// Emit event
+				const updatedTask = await storage.readTask(args.task_id)
+				ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: updatedTask?.status ?? 'unknown', assignedTo: updatedTask?.assigned_to })
+
 				return { content: [{ type: 'text' as const, text: `Updated task ${args.task_id}` }] }
 			},
 		),
@@ -208,15 +248,45 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 				assigned_to: z.string().describe('Who should resolve this (human ID)'),
 			}),
 			async (args, ctx) => {
+				const task = await storage.readTask(args.task_id)
+				if (!task) {
+					return { content: [{ type: 'text' as const, text: `Task not found: ${args.task_id}` }], isError: true }
+				}
+
+				const blocker = {
+					id: `blocker-${Date.now()}`,
+					type: 'dependency' as const,
+					reason: args.reason,
+					assigned_to: args.assigned_to,
+					resolved: false,
+					created_at: new Date().toISOString(),
+					created_by: ctx.agentId,
+				}
+				const blockers = [...(task.blockers ?? []), blocker]
+				const timestamp = new Date().toISOString()
+
 				await storage.updateTask(
 					args.task_id,
 					{
-						status: 'blocked',
-					},
+						blockers,
+						updated_at: timestamp,
+						history: [
+							...(task.history ?? []),
+							{
+								at: timestamp,
+								by: ctx.agentId,
+								action: 'blocker_added',
+								note: `Blocker: ${args.reason} (assigned to ${args.assigned_to})`,
+							},
+						],
+					} as any,
 					ctx.agentId,
 				)
 				await storage.moveTask(args.task_id, 'blocked', ctx.agentId)
-				return { content: [{ type: 'text' as const, text: `Task ${args.task_id} blocked: ${args.reason}` }] }
+
+				ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: 'blocked', assignedTo: task.assigned_to })
+
+				return { content: [{ type: 'text' as const, text: `Blocker added to ${args.task_id}: ${args.reason} (assigned to ${args.assigned_to})` }] }
 			},
 		),
 
@@ -237,8 +307,9 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 				}).optional(),
 			}),
 			async (args, ctx) => {
+				const pinId = `pin-${Date.now().toString(36)}`
 				await createPin(companyRoot, {
-					id: `pin-${Date.now().toString(36)}`,
+					id: pinId,
 					group: args.group,
 					title: args.title,
 					content: args.content ?? '',
@@ -247,6 +318,9 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 					created_at: new Date().toISOString(),
 					metadata: args.metadata ?? {},
 				})
+				ctx.eventBus.emit({ type: 'pin_changed', pinId, action: 'created' })
+				// Real-time index
+				getIndexer().then((idx) => idx?.indexOne('pin', pinId, args.title, `${args.title} ${args.content ?? ''}`)).catch(() => {})
 				return { content: [{ type: 'text' as const, text: `Pinned: ${args.title}` }] }
 			},
 		),
@@ -257,8 +331,9 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 			z.object({
 				pin_id: z.string(),
 			}),
-			async (args) => {
+			async (args, ctx) => {
 				await removePin(companyRoot, args.pin_id)
+				ctx.eventBus.emit({ type: 'pin_changed', pinId: args.pin_id, action: 'removed' })
 				return { content: [{ type: 'text' as const, text: `Unpinned: ${args.pin_id}` }] }
 			},
 		),
@@ -372,10 +447,11 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 		// Universal search across all entity types
 		defineTool(
 			'search',
-			'Search across all entities (tasks, messages, knowledge, pins). Returns ranked results.',
+			'Search across all entities (tasks, messages, knowledge, pins, agents, channels, skills). Returns ranked results.',
 			z.object({
 				query: z.string().describe('Search query'),
-				type: z.string().optional().describe('Filter: task, message, knowledge, pin'),
+				type: z.enum(['task', 'message', 'knowledge', 'pin', 'agent', 'channel', 'skill']).optional().describe('Filter by entity type'),
+				scope: z.string().optional().describe('Path prefix filter, e.g. "technical" for knowledge/technical/'),
 				limit: z.number().optional().describe('Max results, default 10'),
 			}),
 			async (args) => {
@@ -385,7 +461,14 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 					const { searchFts: fts } = await import('../db/search-index')
 					const { db } = await createDb(companyRoot)
 					const typeFilter = args.type as import('../db/search-index').EntityType | undefined
-					const results = await fts(db, args.query, { type: typeFilter, limit: maxResults })
+					let results = await fts(db, args.query, { type: typeFilter, limit: maxResults * 2 })
+
+					// Apply scope filter (path prefix) for knowledge and other path-based entities
+					if (args.scope) {
+						results = results.filter((r) => r.entityId.startsWith(args.scope!))
+					}
+
+					results = results.slice(0, maxResults)
 
 					if (results.length === 0) {
 						return { content: [{ type: 'text' as const, text: 'No results found.' }] }
@@ -398,110 +481,6 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 				} catch {
 					return { content: [{ type: 'text' as const, text: 'Search index not available.' }] }
 				}
-			},
-		),
-
-		// Knowledge — uses FTS5 index when available, falls back to FS scan
-		defineTool(
-			'search_knowledge',
-			'Search the company knowledge base. Wrapper around unified search with type=knowledge filter, with FS fallback.',
-			z.object({
-				query: z.string().describe('Search query — supports FTS5 syntax (AND, OR, NOT, phrases)'),
-				scope: z.string().optional().describe('Limit to path like "technical" or "brand"'),
-				max_results: z.number().optional().describe('Max results, default 10'),
-			}),
-			async (args) => {
-				const maxResults = args.max_results ?? 10
-
-				// Try unified search index first (type=knowledge)
-				try {
-					const { createDb } = await import('../db')
-					const { searchFts: unifiedFts } = await import('../db/search-index')
-					const { db } = await createDb(companyRoot)
-					const unifiedResults = await unifiedFts(db, args.query, { type: 'knowledge', limit: maxResults })
-
-					if (unifiedResults.length > 0) {
-						let filtered = unifiedResults
-						if (args.scope) {
-							filtered = filtered.filter((r) => r.entityId.startsWith(args.scope!))
-						}
-						if (filtered.length > 0) {
-							const text = filtered
-								.map((r) => `- **${r.entityId}** ${r.title ? `(${r.title})` : ''}: ${r.snippet}`)
-								.join('\n')
-							return { content: [{ type: 'text' as const, text }] }
-						}
-					}
-				} catch {
-					// Unified index not available — try legacy knowledge index
-				}
-
-				// Try legacy FTS5 knowledge index
-				try {
-					const { createDb } = await import('../db')
-					const { searchKnowledge } = await import('../db/knowledge-index')
-					const { db } = await createDb(companyRoot)
-					let ftsResults = searchKnowledge(db, args.query, maxResults)
-
-					// Filter by scope if provided
-					if (args.scope && ftsResults.length > 0) {
-						ftsResults = ftsResults.filter((r) => r.path.startsWith(args.scope!))
-					}
-
-					if (ftsResults.length > 0) {
-						const text = ftsResults
-							.map((r) => `- **${r.path}** (${r.title}): ${r.snippet}`)
-							.join('\n')
-						return { content: [{ type: 'text' as const, text }] }
-					}
-				} catch {
-					// FTS not available — fall through to FS scan
-				}
-
-				// Fallback: filesystem scan
-				const knowledgeDir = join(companyRoot, PATHS.KNOWLEDGE_DIR.replace(/^\/company/, ''))
-				const searchDir = args.scope ? join(knowledgeDir, args.scope) : knowledgeDir
-				const results: Array<{ path: string; snippet: string }> = []
-
-				async function searchRecursive(dir: string): Promise<void> {
-					let entries: import('node:fs').Dirent[]
-					try {
-						entries = await readdir(dir, { withFileTypes: true })
-					} catch {
-						return
-					}
-					for (const entry of entries) {
-						if (results.length >= maxResults) return
-						const fullPath = join(dir, entry.name)
-						if (entry.isDirectory()) {
-							await searchRecursive(fullPath)
-						} else if (entry.name.endsWith('.md')) {
-							try {
-								const content = await Bun.file(fullPath).text()
-								const queryLower = args.query.toLowerCase()
-								const lines = content.split('\n')
-								for (const line of lines) {
-									if (line.toLowerCase().includes(queryLower)) {
-										const relPath = fullPath.slice(knowledgeDir.length + 1)
-										results.push({ path: relPath, snippet: line.trim() })
-										break
-									}
-								}
-							} catch {
-								// skip unreadable files
-							}
-						}
-					}
-				}
-
-				await searchRecursive(searchDir)
-
-				if (results.length === 0) {
-					return { content: [{ type: 'text' as const, text: 'No results found.' }] }
-				}
-
-				const text = results.map((r) => `- ${r.path}: ${r.snippet}`).join('\n')
-				return { content: [{ type: 'text' as const, text }] }
 			},
 		),
 
@@ -526,7 +505,14 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 				}
 				const dirPath = join(filePath, '..')
 				await mkdir(dirPath, { recursive: true })
+				const existed = await Bun.file(filePath).exists()
 				await Bun.write(filePath, args.content)
+
+				ctx.eventBus.emit({ type: 'knowledge_changed', path: args.path, action: existed ? 'updated' : 'created' })
+				// Real-time index
+				const titleMatch = args.content.match(/^#\s+(.+)$/m)
+				const knTitle = titleMatch?.[1]?.trim() ?? args.path.replace(/\.md$/, '')
+				getIndexer().then((idx) => idx?.indexOne('knowledge', args.path, knTitle, args.content)).catch(() => {})
 
 				await storage.appendActivity({
 					at: new Date().toISOString(),
@@ -660,7 +646,7 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 					external: false,
 				} as any)
 
-				eventBus.emit({ type: 'message', channel: channel.id, from: ctx.agentId, content: args.content })
+				ctx.eventBus.emit({ type: 'message', channel: channel.id, from: ctx.agentId, content: args.content })
 
 				await createPin(companyRoot, {
 					type: 'info',
@@ -672,6 +658,57 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 				})
 
 				return { content: [{ type: 'text' as const, text: `Direct message sent to ${args.to} in channel ${channel.id}` }] }
+			},
+		),
+
+		// Agent discovery
+		defineTool(
+			'list_agents',
+			'List all agents with their role, bio, status, current work, and capabilities.',
+			z.object({}),
+			async (_args, ctx) => {
+				try {
+					const agents = await loadAgents(ctx.companyRoot)
+
+					// Get real statuses from stream manager
+					let activeStreams: Array<{ sessionId: string; agentId: string }> = []
+					try {
+						const { streamManager } = container.resolve([streamManagerFactory])
+						activeStreams = streamManager.getActiveStreams()
+					} catch {
+						// StreamManager may not be initialized
+					}
+
+					// Get in-progress tasks
+					const inProgressTasks = await ctx.storage.listTasks({ status: 'in_progress' })
+
+					const result = await Promise.all(agents.map(async (agent) => {
+						const isWorking = activeStreams.some((s) => s.agentId === agent.id)
+						const currentTask = inProgressTasks.find((t) => t.assigned_to === agent.id)
+
+						// Try to load bio from memory
+						let bio: string | null = null
+						try {
+							const memory = await loadAgentMemory(ctx.companyRoot, agent.id)
+							bio = (memory as Record<string, unknown> | null)?.bio as string | null ?? null
+						} catch {
+							// No memory available
+						}
+
+						return [
+							`**${agent.name}** (${agent.id}) — ${agent.role}`,
+							bio ? `  Bio: ${bio}` : `  ${agent.description}`,
+							`  Status: ${isWorking ? 'working' : 'idle'}`,
+							currentTask ? `  Working on: ${currentTask.id} — ${currentTask.title}` : null,
+							`  Tools: ${agent.tools?.join(', ') ?? 'default'}`,
+						].filter(Boolean).join('\n')
+					}))
+
+					return { content: [{ type: 'text' as const, text: result.join('\n\n') }] }
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					return { content: [{ type: 'text' as const, text: `Failed to list agents: ${msg}` }], isError: true }
+				}
 			},
 		),
 
@@ -730,9 +767,13 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 
 				// If task was blocked and all blockers now resolved, move back to active
 				const allResolved = updatedBlockers.every((b) => b.resolved)
+				let newStatus = task.status
 				if (task.status === 'blocked' && allResolved) {
 					await storage.moveTask(args.task_id, 'in_progress', ctx.agentId)
+					newStatus = 'in_progress'
 				}
+
+				ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: newStatus, assignedTo: task.assigned_to })
 
 				return {
 					content: [{ type: 'text' as const, text: `Blocker resolved on task ${args.task_id}: ${args.note}` }],

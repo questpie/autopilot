@@ -6,6 +6,8 @@ import { loadAgentMemory } from './memory-loader'
 import { getSkillsForRole } from '../skills'
 import { stringify as stringifyYaml } from 'yaml'
 import type { StorageBackend } from '../fs/storage'
+import { container } from '../container'
+import { streamManagerFactory } from '../session/stream'
 
 /** The final output of the context assembly pipeline. */
 export interface AssembledContext {
@@ -104,7 +106,14 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 	sections.push(identityPrompt)
 
 	// Layer 2: Company State (~5K tokens) — role-scoped snapshot
-	const snapshot = await buildCompanySnapshot(companyRoot, agent, storage)
+	let streamManager: import('../session/stream').SessionStreamManager | null = null
+	try {
+		const resolved = container.resolve([streamManagerFactory])
+		streamManager = resolved.streamManager
+	} catch {
+		// StreamManager may not be initialized yet
+	}
+	const snapshot = await buildCompanySnapshot(companyRoot, agent, storage, streamManager)
 	const stateLines: string[] = ['## Current Company State']
 
 	const tasksSummary = formatTasksSummary(snapshot.activeTasks)
@@ -205,17 +214,20 @@ You have these tools via the "autopilot" MCP server. Use them to interact with t
 - **resolve_blocker**({ task_id, note }) — Mark a blocker as resolved.
 
 ### Communication
-- **send_message**({ to, content }) — Send to "channel:dev", "agent:max", or "human:founder". CALL THIS after completing work.
-- **ask_agent**({ to, question, reason }) — Ask another agent for information.
+- **send_message**({ channel, content }) — Send to a channel. CALL THIS after completing work.
+- **message_agent**({ to, content, reason }) — Send a direct message to another agent.
 
 ### Dashboard
 - **pin_to_board**({ group, title, type, content }) — Pin output for human visibility. CALL THIS for important results.
 - **unpin_from_board**({ pin_id }) — Remove a pin.
 
-### Knowledge
-- **search_knowledge**({ query }) — Search the company knowledge base.
+### Search & Knowledge
+- **search**({ query, type?, scope? }) — Search across all entities (tasks, messages, knowledge, pins, agents, channels, skills).
 - **update_knowledge**({ path, content, reason }) — Add/update a knowledge document.
 - **skill_request**({ skill_id }) — Load a skill document for guidance.
+
+### Discovery
+- **list_agents**({}) — List all agents with role, bio, status, current work, and capabilities.
 
 ### External
 - **http_request**({ method, url, secret_ref }) — Call an external API with secret injection.

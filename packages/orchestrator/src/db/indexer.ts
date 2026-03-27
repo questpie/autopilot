@@ -10,6 +10,9 @@ import { container, companyRootFactory } from '../container'
 import { dbFactory } from './index'
 import { embeddingServiceFactory } from '../embeddings'
 import type { EmbeddingService } from '../embeddings'
+import { loadAgents } from '../fs'
+import { loadSkillCatalog } from '../skills/loader'
+import type { StorageBackend } from '../fs/storage'
 
 /**
  * Unified indexer that populates the search_index table from all entity sources.
@@ -31,16 +34,48 @@ export class Indexer {
 	}
 
 	/**
+	 * Index a single entity (used for real-time indexing after writes).
+	 */
+	async indexOne(type: EntityType, id: string, title: string, content: string): Promise<void> {
+		await this.indexEntitySafe(type, id, title, content)
+	}
+
+	/**
+	 * Remove a single entity from the index.
+	 */
+	async removeOne(type: EntityType, id: string): Promise<void> {
+		try {
+			await removeEntity(this.db, type, id)
+		} catch {
+			// Silently ignore removal errors
+		}
+	}
+
+	/**
 	 * Reindex all entity types. Returns counts per type.
 	 */
-	async reindexAll(): Promise<{ tasks: number; messages: number; knowledge: number; pins: number }> {
+	async reindexAll(storage?: StorageBackend): Promise<{
+		tasks: number; messages: number; knowledge: number; pins: number
+		agents: number; channels: number; skills: number
+	}> {
 		const [tasks, messages, knowledge, pins] = await Promise.all([
 			this.indexTasks(),
 			this.indexMessages(),
 			this.indexKnowledge(),
 			this.indexPins(),
 		])
-		return { tasks, messages, knowledge, pins }
+
+		// Index agents and skills from YAML config
+		const agents = await this.indexAgents()
+		const skills = await this.indexSkills()
+
+		// Index channels from storage if available
+		let channels = 0
+		if (storage) {
+			channels = await this.indexChannels(storage)
+		}
+
+		return { tasks, messages, knowledge, pins, agents, channels, skills }
 	}
 
 	/**
@@ -147,6 +182,66 @@ export class Indexer {
 	}
 
 	/**
+	 * Index all agents from agents.yaml.
+	 */
+	async indexAgents(): Promise<number> {
+		let count = 0
+		try {
+			const agents = await loadAgents(this.companyRoot)
+			for (const agent of agents) {
+				const content = [agent.name, agent.role, agent.description, agent.tools?.join(' ') ?? '']
+					.filter(Boolean)
+					.join('\n')
+				const changed = await this.indexEntitySafe('agent', agent.id, agent.name, content)
+				if (changed) count++
+			}
+		} catch {
+			// agents.yaml may not exist
+		}
+		return count
+	}
+
+	/**
+	 * Index all channels from storage.
+	 */
+	async indexChannels(storage: StorageBackend): Promise<number> {
+		let count = 0
+		try {
+			const channels = await storage.listChannels()
+			for (const ch of channels) {
+				const content = [ch.name, ch.description ?? '', ch.type]
+					.filter(Boolean)
+					.join('\n')
+				const changed = await this.indexEntitySafe('channel', ch.id, ch.name, content)
+				if (changed) count++
+			}
+		} catch {
+			// Channels may not be available
+		}
+		return count
+	}
+
+	/**
+	 * Index all skills from the skills catalog.
+	 */
+	async indexSkills(): Promise<number> {
+		let count = 0
+		try {
+			const catalog = await loadSkillCatalog(this.companyRoot)
+			for (const skill of catalog.skills) {
+				const content = [skill.name, skill.description, skill.roles?.join(' ') ?? '']
+					.filter(Boolean)
+					.join('\n')
+				const changed = await this.indexEntitySafe('skill', skill.id, skill.name, content)
+				if (changed) count++
+			}
+		} catch {
+			// Skills may not exist
+		}
+		return count
+	}
+
+	/**
 	 * Index a single entity, comparing content hash. Returns true if content changed.
 	 * When an embedding service is available, also generates and stores a vector embedding.
 	 */
@@ -220,11 +315,13 @@ export class Indexer {
 	}
 }
 
+import { storageFactory } from '../fs/sqlite-backend'
+
 export const indexerFactory = container.registerAsync('indexer', async (c) => {
-	const { db, embeddingService, companyRoot } = await c.resolveAsync([
-		dbFactory, embeddingServiceFactory, companyRootFactory
+	const { db, embeddingService, companyRoot, storage } = await c.resolveAsync([
+		dbFactory, embeddingServiceFactory, companyRootFactory, storageFactory
 	])
 	const indexer = new Indexer(db.db, companyRoot, embeddingService)
-	await indexer.reindexAll()
+	await indexer.reindexAll(storage)
 	return indexer
 })
