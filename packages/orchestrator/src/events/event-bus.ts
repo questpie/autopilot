@@ -2,12 +2,15 @@ export type AutopilotEvent =
 	| { type: 'task_changed'; taskId: string; status: string; assignedTo?: string }
 	| { type: 'message'; channel: string; from: string; content: string }
 	| { type: 'activity'; agent: string; toolName: string; summary: string }
-	| { type: 'pin_changed'; pinId: string; action: 'created' | 'removed' }
+	| { type: 'pin_changed'; pinId: string; action: 'created' | 'removed' | 'updated' }
 	| { type: 'agent_session'; agentId: string; status: 'started' | 'ended'; sessionId: string }
 	| { type: 'workflow_advanced'; taskId: string; from: string; to: string }
 	| { type: 'channel_created'; channelId: string; name: string }
 	| { type: 'channel_deleted'; channelId: string }
 	| { type: 'channel_member_changed'; channelId: string; actorId: string; action: 'added' | 'removed' }
+	| { type: 'settings_changed' }
+	| { type: 'file_locked'; path: string; lockedBy: string }
+	| { type: 'file_unlocked'; path: string }
 
 export class EventBus {
 	private listeners = new Set<(event: AutopilotEvent) => void>()

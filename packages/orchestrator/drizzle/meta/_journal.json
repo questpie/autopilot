@@ -29,6 +29,13 @@
       "when": 1774566089970,
       "tag": "0003_flippant_mimic",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1774940000000,
+      "tag": "0004_file_locks_and_pins",
+      "breakpoints": true
     }
   ]
 }

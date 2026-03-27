@@ -20,8 +20,10 @@ const pins = new Hono<AppEnv>().get(
 	}),
 	async (c) => {
 		const root = c.get('companyRoot')
-		const result = await listPins(root)
-		return c.json(result)
+		const db = c.get('db')
+		const group = c.req.query('group')
+		const result = await listPins(root, group ?? undefined, db)
+		return c.json(result, 200)
 	},
 )
 

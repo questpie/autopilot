@@ -163,6 +163,36 @@ export const channelMembers = sqliteTable('channel_members', {
 	uniqueIndex('uq_channel_member').on(table.channel_id, table.actor_id),
 ])
 
+// ─── File Locks ─────────────────────────────────────────────────────────────
+
+export const fileLocks = sqliteTable('file_locks', {
+	path: text('path').primaryKey(),
+	locked_by: text('locked_by').notNull(),
+	locked_at: integer('locked_at').notNull(),
+	expires_at: integer('expires_at').notNull(),
+}, (table) => [
+	index('idx_file_locks_expires').on(table.expires_at),
+])
+
+// ─── Pins ───────────────────────────────────────────────────────────────────
+
+export const pins = sqliteTable('pins', {
+	id: text('id').primaryKey(),
+	title: text('title').notNull(),
+	content: text('content'),
+	type: text('type').notNull().default('info'),
+	group_id: text('group_id').default('overview'),
+	metadata: text('metadata').default('{}'),
+	created_by: text('created_by'),
+	created_at: integer('created_at').notNull(),
+	updated_at: integer('updated_at').notNull(),
+	expires_at: integer('expires_at'),
+}, (table) => [
+	index('idx_pins_group').on(table.group_id),
+	index('idx_pins_type').on(table.type),
+	index('idx_pins_expires').on(table.expires_at),
+])
+
 // ─── Rate Limiting ──────────────────────────────────────────────────────────
 
 export const rateLimitEntries = sqliteTable('rate_limit_entries', {

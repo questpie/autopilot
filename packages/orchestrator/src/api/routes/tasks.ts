@@ -9,6 +9,7 @@ import {
 	OkResponseSchema,
 } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
+import { eventBus } from '../../events/event-bus'
 
 const tasks = new Hono<AppEnv>()
 	// GET /tasks — list with query filters
@@ -91,6 +92,57 @@ const tasks = new Hono<AppEnv>()
 			const task = await storage.readTask(id)
 			if (!task) return c.json({ error: 'task not found' }, 404)
 			return c.json(task)
+		},
+	)
+	// PATCH /tasks/:id — general-purpose partial update
+	.patch(
+		'/:id',
+		describeRoute({
+			tags: ['tasks'],
+			description: 'Update a task (status, assignee, priority, project, description, etc.)',
+			responses: {
+				200: {
+					description: 'Updated task',
+					content: { 'application/json': { schema: resolver(TaskSchema) } },
+				},
+				404: { description: 'Task not found' },
+			},
+		}),
+		zValidator('param', z.object({ id: z.string() })),
+		zValidator(
+			'json',
+			TaskSchema.partial().omit({ id: true, created_at: true, created_by: true }),
+		),
+		async (c) => {
+			const storage = c.get('storage')
+			const { id } = c.req.valid('param')
+			const body = c.req.valid('json')
+			const task = await storage.readTask(id)
+			if (!task) return c.json({ error: 'task not found' }, 404)
+
+			let result: typeof task
+
+			// If status changed, use moveTask for proper workflow tracking
+			if (body.status && body.status !== task.status) {
+				result = await storage.moveTask(id, body.status, 'human')
+				// Apply any additional field changes beyond status
+				const { status, ...otherUpdates } = body
+				if (Object.keys(otherUpdates).length > 0) {
+					result = await storage.updateTask(id, otherUpdates, 'human')
+				}
+			} else {
+				result = await storage.updateTask(id, body, 'human')
+			}
+
+			// Emit SSE event
+			eventBus.emit({
+				type: 'task_changed',
+				taskId: id,
+				status: result.status,
+				assignedTo: result.assigned_to,
+			})
+
+			return c.json(result)
 		},
 	)
 	// POST /tasks/:id/approve — move task to done

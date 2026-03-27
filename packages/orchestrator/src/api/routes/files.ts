@@ -1,9 +1,12 @@
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
+import { z } from 'zod'
 import { OkResponseSchema, FileWriteRequestSchema } from '@questpie/autopilot-spec'
 import { writeFile, unlink, mkdir } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
+import { acquireLock, releaseLock, getLockStatus, computeFileHash } from '../../fs/file-locks'
+import { eventBus } from '../../events/event-bus'
 import type { AppEnv } from '../app'
 
 /**
@@ -19,10 +22,53 @@ function safePath(root: string, subPath: string): string {
 	return target
 }
 
+const LockResponseSchema = z.object({
+	path: z.string(),
+	locked_by: z.string(),
+	locked_at: z.number(),
+	expires_at: z.number(),
+})
+
 const files = new Hono<AppEnv>()
-	// ── POST /files/* — create a new file ───────────────────────────────
+	// ── GET /files/:path — read file content ────────────────────────────
+	.get(
+		'/files/:path{.+}',
+		describeRoute({
+			tags: ['files'],
+			description: 'Read a file at the given path',
+			responses: {
+				200: { description: 'File content' },
+				403: { description: 'Path traversal blocked' },
+				404: { description: 'File not found' },
+			},
+		}),
+		async (c) => {
+			const root = c.get('companyRoot')
+			const subPath = c.req.param('path')
+
+			let target: string
+			try {
+				target = safePath(root, subPath)
+			} catch {
+				return c.json({ error: 'path traversal blocked' }, 403)
+			}
+
+			const file = Bun.file(target)
+			if (!(await file.exists())) {
+				return c.json({ error: 'file not found' }, 404)
+			}
+
+			const content = await file.text()
+			const hash = await computeFileHash(content)
+
+			// Return ETag header so clients can use If-Match on PUT
+			c.header('ETag', `"${hash}"`)
+			return c.json({ content, hash }, 200)
+		},
+	)
+	// ── POST /files/:path — create a new file ───────────────────────────
 	.post(
-		'/files/*',
+		'/files/:path{.+}',
 		describeRoute({
 			tags: ['files'],
 			description: 'Create a new file at the given path (fails if file already exists)',
@@ -38,7 +84,7 @@ const files = new Hono<AppEnv>()
 		zValidator('json', FileWriteRequestSchema),
 		async (c) => {
 			const root = c.get('companyRoot')
-			const subPath = c.req.path.replace(/^.*\/files\//, '')
+			const subPath = c.req.param('path')
 
 			let target: string
 			try {
@@ -59,24 +105,28 @@ const files = new Hono<AppEnv>()
 			return c.json({ ok: true as const }, 201)
 		},
 	)
-	// ── PUT /files/* — overwrite (or create) a file ─────────────────────
+	// ── PUT /files/:path — overwrite (or create) a file ─────────────────
 	.put(
-		'/files/*',
+		'/files/:path{.+}',
 		describeRoute({
 			tags: ['files'],
-			description: 'Overwrite (or create) a file at the given path',
+			description: 'Overwrite (or create) a file at the given path. Supports If-Match header for optimistic concurrency.',
 			responses: {
 				200: {
 					description: 'File written',
 					content: { 'application/json': { schema: resolver(OkResponseSchema) } },
 				},
 				403: { description: 'Path traversal blocked' },
+				409: { description: 'Conflict — file changed since last read' },
+				423: { description: 'Locked — file is locked by another actor' },
 			},
 		}),
 		zValidator('json', FileWriteRequestSchema),
 		async (c) => {
 			const root = c.get('companyRoot')
-			const subPath = c.req.path.replace(/^.*\/files\//, '')
+			const db = c.get('db')
+			const actor = c.get('actor')
+			const subPath = c.req.param('path')
 
 			let target: string
 			try {
@@ -85,16 +135,45 @@ const files = new Hono<AppEnv>()
 				return c.json({ error: 'path traversal blocked' }, 403)
 			}
 
+			// Check file lock
+			const lock = await getLockStatus(db, subPath)
+			if (lock && actor && lock.locked_by !== actor.id) {
+				return c.json({
+					error: 'File is locked',
+					locked_by: lock.locked_by,
+					expires_at: lock.expires_at,
+				}, 423)
+			}
+
+			// Optimistic concurrency: If-Match header
+			const ifMatch = c.req.header('If-Match')
+			if (ifMatch) {
+				const expectedHash = ifMatch.replace(/^"/, '').replace(/"$/, '')
+				const file = Bun.file(target)
+				if (await file.exists()) {
+					const currentContent = await file.text()
+					const currentHash = await computeFileHash(currentContent)
+
+					if (currentHash !== expectedHash) {
+						return c.json({
+							error: 'Conflict — file changed since last read',
+							current_hash: currentHash,
+							current_content: currentContent,
+						}, 409)
+					}
+				}
+			}
+
 			const { content } = c.req.valid('json')
 			await mkdir(dirname(target), { recursive: true })
 			await writeFile(target, content, 'utf-8')
 
-			return c.json({ ok: true as const })
+			return c.json({ ok: true as const }, 200)
 		},
 	)
-	// ── DELETE /files/* — remove a file ─────────────────────────────────
+	// ── DELETE /files/:path — remove a file ─────────────────────────────
 	.delete(
-		'/files/*',
+		'/files/:path{.+}',
 		describeRoute({
 			tags: ['files'],
 			description: 'Delete a file at the given path',
@@ -109,7 +188,7 @@ const files = new Hono<AppEnv>()
 		}),
 		async (c) => {
 			const root = c.get('companyRoot')
-			const subPath = c.req.path.replace(/^.*\/files\//, '')
+			const subPath = c.req.param('path')
 
 			let target: string
 			try {
@@ -124,51 +203,91 @@ const files = new Hono<AppEnv>()
 			}
 
 			await unlink(target)
-			return c.json({ ok: true as const })
+			return c.json({ ok: true as const }, 200)
 		},
 	)
-	// ── POST /upload — multipart file upload ────────────────────────────
+	// ── POST /files/:path/lock — acquire a lock ─────────────────────────
 	.post(
-		'/upload',
+		'/files/:path{.+}/lock',
 		describeRoute({
 			tags: ['files'],
-			description: 'Upload a file via multipart form data (fields: path, file)',
+			description: 'Acquire an advisory lock on a file (expires after 60s)',
 			responses: {
-				201: {
-					description: 'File uploaded',
-					content: { 'application/json': { schema: resolver(OkResponseSchema) } },
+				200: {
+					description: 'Lock acquired',
+					content: { 'application/json': { schema: resolver(LockResponseSchema) } },
 				},
-				400: { description: 'Missing required fields' },
-				403: { description: 'Path traversal blocked' },
+				423: { description: 'File already locked by another actor' },
 			},
 		}),
 		async (c) => {
-			const root = c.get('companyRoot')
-			const body = await c.req.parseBody()
+			const db = c.get('db')
+			const actor = c.get('actor')
+			const subPath = c.req.param('path')
+			const actorId = actor?.id ?? 'anonymous'
 
-			const pathField = body['path']
-			const fileField = body['file']
-
-			if (typeof pathField !== 'string' || !pathField) {
-				return c.json({ error: 'missing "path" field' }, 400)
+			const lock = await acquireLock(db, subPath, actorId)
+			if (!lock) {
+				const current = await getLockStatus(db, subPath)
+				return c.json({
+					error: 'File is locked by another actor',
+					locked_by: current?.locked_by,
+					expires_at: current?.expires_at,
+				}, 423)
 			}
 
-			if (!(fileField instanceof File)) {
-				return c.json({ error: 'missing "file" field' }, 400)
+			eventBus.emit({ type: 'file_locked', path: subPath, lockedBy: actorId })
+			return c.json(lock, 200)
+		},
+	)
+	// ── DELETE /files/:path/lock — release a lock ───────────────────────
+	.delete(
+		'/files/:path{.+}/lock',
+		describeRoute({
+			tags: ['files'],
+			description: 'Release an advisory lock on a file',
+			responses: {
+				200: {
+					description: 'Lock released',
+					content: { 'application/json': { schema: resolver(z.object({ ok: z.literal(true) })) } },
+				},
+				404: { description: 'No lock found' },
+			},
+		}),
+		async (c) => {
+			const db = c.get('db')
+			const actor = c.get('actor')
+			const subPath = c.req.param('path')
+			const actorId = actor?.id ?? 'anonymous'
+
+			const released = await releaseLock(db, subPath, actorId)
+			if (!released) {
+				return c.json({ error: 'No lock found or not owned by you' }, 404)
 			}
 
-			let target: string
-			try {
-				target = safePath(root, pathField)
-			} catch {
-				return c.json({ error: 'path traversal blocked' }, 403)
-			}
+			eventBus.emit({ type: 'file_unlocked', path: subPath })
+			return c.json({ ok: true as const }, 200)
+		},
+	)
+	// ── GET /files/:path/lock — check lock status ───────────────────────
+	.get(
+		'/files/:path{.+}/lock',
+		describeRoute({
+			tags: ['files'],
+			description: 'Check the lock status of a file',
+			responses: {
+				200: {
+					description: 'Lock status',
+					content: { 'application/json': { schema: resolver(LockResponseSchema.nullable()) } },
+				},
+			},
+		}),
+		async (c) => {
+			const db = c.get('db')
+			const subPath = c.req.param('path')
 
-			await mkdir(dirname(target), { recursive: true })
-			const buffer = await fileField.arrayBuffer()
-			await writeFile(target, Buffer.from(buffer))
-
-			return c.json({ ok: true as const }, 201)
+			const lock = await getLockStatus(db, subPath)
+			return c.json({ lock }, 200)
 		},
 	)
 

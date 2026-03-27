@@ -38,7 +38,7 @@ const upload = new Hono<AppEnv>().post(
 		const fullPath = join(fullDir, file.name)
 		const buffer = await file.arrayBuffer()
 		await writeFile(fullPath, Buffer.from(buffer))
-		return c.json({ ok: true as const, path: join(targetDir, file.name) })
+		return c.json({ ok: true as const, path: join(targetDir, file.name) }, 200)
 	},
 )
 

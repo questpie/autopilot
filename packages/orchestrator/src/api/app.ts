@@ -30,6 +30,7 @@ import {
 	artifacts,
 	channels,
 	chat,
+	danger,
 	dashboard,
 	files,
 	fsBrowser,
@@ -37,9 +38,11 @@ import {
 	pins,
 	search,
 	sessions,
+	settings,
 	skills,
 	status,
 	tasks,
+	teamHumans,
 	upload,
 } from './routes'
 
@@ -99,8 +102,8 @@ export function createApp(config: AppConfig) {
 		const path = new URL(c.req.url).pathname
 		// Artifact proxy responses can be large — skip body limit
 		if (path.startsWith('/artifacts/')) return next()
-		// The upload endpoint is POST /api/ (mounted via .route('/api', upload))
-		const isUpload = path === '/api/' || path === '/api'
+		// The upload endpoint is POST /api/upload
+		const isUpload = path.startsWith('/api/upload')
 		const limit = isUpload ? 10 * 1024 * 1024 : 1 * 1024 * 1024
 		return bodyLimit({
 			maxSize: limit,
@@ -168,13 +171,15 @@ export function createApp(config: AppConfig) {
 		.route('/api/artifacts', artifacts)
 		.route('/api/skills', skills)
 		.route('/api/dashboard', dashboard)
-		.route('/api', dashboard)
+		.route('/api/settings', settings)
+		.route('/api/team/humans', teamHumans)
+		.route('/api', danger)
 		.route('/api', files)
-		.route('/api', upload)
+		.route('/api/upload', upload)
 		.route('/api/events', events)
 		.route('/api/sessions', sessions)
+		.route('/api/fs', fsBrowser)
 		.route('/', docs)
-		.route('/fs', fsBrowser)
 }
 
 /** App type for SDK / hono client type inference. */

@@ -71,6 +71,21 @@ export async function createDb(companyRoot: string): Promise<DbResult> {
 		catch { /* db closed */ }
 	}, 5 * 60 * 1000)
 
+	// Cleanup expired file locks on startup and every minute
+	const nowMs = Date.now()
+	try { sqlite.exec(`DELETE FROM file_locks WHERE expires_at < ${nowMs}`) } catch { /* table may not exist yet */ }
+	setInterval(() => {
+		try { sqlite.exec(`DELETE FROM file_locks WHERE expires_at < ${Date.now()}`) }
+		catch { /* db closed */ }
+	}, 60 * 1000)
+
+	// Cleanup expired pins on startup and every 5 minutes
+	try { sqlite.exec(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${nowMs}`) } catch { /* table may not exist yet */ }
+	setInterval(() => {
+		try { sqlite.exec(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${Date.now()}`) }
+		catch { /* db closed */ }
+	}, 5 * 60 * 1000)
+
 	return { db, raw: sqlite }
 }
 

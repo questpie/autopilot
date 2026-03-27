@@ -80,7 +80,43 @@ const artifacts = new Hono<AppEnv>().get(
 
 		return c.json({
 			artifacts: configs.filter((c): c is NonNullable<typeof c> => c !== null),
-		})
+		}, 200)
+	},
+).get(
+	'/:id',
+	describeRoute({
+		tags: ['artifacts'],
+		description: 'Get a single artifact by ID with config and runtime status',
+		responses: {
+			200: {
+				description: 'Artifact detail',
+				content: { 'application/json': { schema: resolver(ArtifactConfigSchema) } },
+			},
+			404: { description: 'Artifact not found' },
+		},
+	}),
+	zValidator('param', ArtifactIdParamSchema),
+	async (c) => {
+		const root = c.get('companyRoot')
+		const { id } = c.req.valid('param')
+		const router = getRouter(root)
+
+		let config: { name: string; serve: string; build?: string; health?: string; timeout?: string }
+		try {
+			config = await router.readConfig(id)
+		} catch {
+			return c.json({ error: `Artifact "${id}" not found` }, 404)
+		}
+
+		const running = router.list()
+		const proc = running.find((p) => p.id === id)
+
+		return c.json({
+			id,
+			...config,
+			status: proc ? 'running' as const : 'stopped' as const,
+			port: proc?.port ?? null,
+		}, 200)
 	},
 ).post(
 	'/:id/start',
@@ -107,7 +143,7 @@ const artifacts = new Hono<AppEnv>().get(
 		}
 
 		const result = await router.route(id)
-		return c.json({ id, port: result.port, url: result.url })
+		return c.json({ id, port: result.port, url: result.url }, 200)
 	},
 ).post(
 	'/:id/stop',
@@ -128,7 +164,7 @@ const artifacts = new Hono<AppEnv>().get(
 		const router = getRouter(root)
 
 		await router.stop(id)
-		return c.json({ ok: true as const })
+		return c.json({ ok: true as const }, 200)
 	},
 )
 
