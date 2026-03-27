@@ -8,7 +8,6 @@ import {
   ShieldCheckIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
-import { EmptyState } from "@/components/feedback/empty-state"
 import { useTranslation } from "@/lib/i18n"
 import { pinsQuery, inboxQuery } from "@/features/dashboard/dashboard.queries"
 import { useApproveTask, useRejectTask } from "@/features/inbox/inbox.mutations"
@@ -170,35 +169,27 @@ export function AlertsSection() {
     return new Date(b.time).getTime() - new Date(a.time).getTime()
   })
 
+  // Hide entire section when no alerts — no empty state on dashboard
+  if (alerts.length === 0) return null
+
   return (
     <section className="flex flex-col">
       <div className="flex items-center justify-between px-1 pb-3">
         <h2 className="font-heading text-xs font-medium uppercase tracking-widest text-muted-foreground">
           {t("dashboard.needs_attention")}
         </h2>
-        {alerts.length > 0 && (
-          <span className="font-heading text-xs text-muted-foreground">
-            {alerts.length}
-          </span>
-        )}
+        <span className="font-heading text-xs text-muted-foreground">
+          {alerts.length}
+        </span>
       </div>
 
-      {alerts.length === 0 ? (
-        <EmptyState
-          icon={<CheckCircleIcon size={28} />}
-          message={t("dashboard.all_clear")}
-          description={t("dashboard.all_clear_description")}
-          className="border border-border py-8"
-        />
-      ) : (
-        <div className={cn("border border-border")}>
-          <AnimatePresence mode="popLayout">
-            {alerts.map((item) => (
-              <AlertItemCard key={item.id} item={item} />
-            ))}
-          </AnimatePresence>
-        </div>
-      )}
+      <div className={cn("border border-border")}>
+        <AnimatePresence mode="popLayout">
+          {alerts.map((item) => (
+            <AlertItemCard key={item.id} item={item} />
+          ))}
+        </AnimatePresence>
+      </div>
     </section>
   )
 }

@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { motion } from "framer-motion"
 import { CircleIcon, PlayIcon, UsersIcon } from "@phosphor-icons/react"
-import { EmptyState } from "@/components/feedback"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/lib/i18n"
@@ -102,12 +101,10 @@ export function AgentsSection() {
             {t("dashboard.agents_title")}
           </h2>
         </div>
-        <EmptyState
-          icon={<UsersIcon size={28} />}
-          message={t("dashboard.agents_empty")}
-          description={t("dashboard.agents_empty_description")}
-          className="border border-border py-8"
-        />
+        <div className="flex items-center gap-3 border border-border px-4 py-3 text-xs text-muted-foreground">
+          <UsersIcon size={18} />
+          <span>{t("dashboard.agents_empty_description")}</span>
+        </div>
       </section>
     )
   }

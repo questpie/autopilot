@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "framer-motion"
-import { ArrowRightIcon, LightningIcon } from "@phosphor-icons/react"
+import { ArrowRightIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
-import { EmptyState } from "@/components/feedback/empty-state"
 import { useTranslation } from "@/lib/i18n"
 import { activityQuery } from "@/features/dashboard/dashboard.queries"
 import { ActivitySkeleton } from "./dashboard-skeleton"
@@ -60,6 +59,9 @@ export function ActivitySection() {
 
   const entries = (activityResult.data ?? []) as ActivityEntry[]
 
+  // Hide section when no activity — no empty state on dashboard
+  if (entries.length === 0) return null
+
   return (
     <section className="flex flex-col">
       <div className="flex items-center justify-between px-1 pb-3">
@@ -75,14 +77,7 @@ export function ActivitySection() {
         </Link>
       </div>
 
-      {entries.length === 0 ? (
-        <EmptyState
-          icon={<LightningIcon size={28} />}
-          message={t("dashboard.no_activity")}
-          description={t("dashboard.no_activity_description")}
-          className="border border-border py-8"
-        />
-      ) : (
+      {(
         <div className="border border-border">
           <AnimatePresence mode="popLayout">
             {entries.map((entry, i) => (

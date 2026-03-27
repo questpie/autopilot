@@ -7,10 +7,8 @@ import {
   XCircleIcon,
   ArrowSquareOutIcon,
   ChartBarIcon,
-  PushPinIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
-import { EmptyState } from "@/components/feedback/empty-state"
 import { useTranslation } from "@/lib/i18n"
 import { pinsQuery, dashboardGroupsQuery } from "@/features/dashboard/dashboard.queries"
 import { PinsSkeleton } from "./dashboard-skeleton"
@@ -178,23 +176,8 @@ export function PinsSection() {
       ) && !isExpired(pin.expires_at),
   )
 
-  if (displayPins.length === 0) {
-    return (
-      <section className="flex flex-col">
-        <div className="flex items-center gap-2 px-1 pb-3">
-          <h2 className="font-heading text-xs font-medium uppercase tracking-widest text-muted-foreground">
-            {t("dashboard.pinned")}
-          </h2>
-        </div>
-        <EmptyState
-          icon={<PushPinIcon size={28} />}
-          message={t("dashboard.no_pins")}
-          description={t("dashboard.no_pins_description")}
-          className="border border-border py-8"
-        />
-      </section>
-    )
-  }
+  // Hide section when no pins — no empty state on dashboard
+  if (displayPins.length === 0) return null
 
   // Group pins by their group field
   const groupedPins = new Map<string, PinData[]>()
