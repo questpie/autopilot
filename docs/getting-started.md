@@ -78,7 +78,7 @@ autopilot attach peter
 autopilot inbox
 
 # View the dashboard
-open http://localhost:3001
+open http://localhost:3000
 ```
 
 ## What Just Happened?
@@ -88,7 +88,7 @@ When you ran `autopilot start`, the orchestrator:
 2. Started watching the filesystem for changes
 3. Started the API server on port 7778
 4. Started the webhook server on port 7777
-5. Started the dashboard on port 3001
+5. Started the dashboard on port 3000
 6. Initialized the SQLite database with FTS5 + vector search
 
 When you ran `autopilot ask`, it:

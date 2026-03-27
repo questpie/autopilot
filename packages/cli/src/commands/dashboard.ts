@@ -6,7 +6,7 @@ import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { section, badge, dim, table, success, error, warning, separator } from '../utils/format'
 
-const DASHBOARD_PORT = 3001
+const DASHBOARD_PORT = 3000
 
 const dashboardCmd = new Command('dashboard')
 	.description('Manage the Living Dashboard')

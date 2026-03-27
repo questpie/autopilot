@@ -11,17 +11,17 @@ const CLI_ROOT = resolve(import.meta.dir, '..', '..')
 
 /**
  * Resolve dashboard directory.
- * When installed from npm: packages/cli/../../apps/dashboard
- * In Docker: /app/apps/dashboard
+ * When installed from npm: packages/cli/../../apps/dashboard-v2
+ * In Docker: /app/apps/dashboard-v2
  */
 async function resolveDashboardDir(): Promise<string | null> {
 	const candidates = [
-		resolve(CLI_ROOT, '..', '..', 'apps', 'dashboard'),
-		'/app/apps/dashboard',
+		resolve(CLI_ROOT, '..', '..', 'apps', 'dashboard-v2'),
+		'/app/apps/dashboard-v2',
 	]
 	for (const dir of candidates) {
 		try {
-			await access(join(dir, 'serve.ts'))
+			await access(join(dir, 'package.json'))
 			return dir
 		} catch {}
 	}
@@ -33,7 +33,7 @@ program.addCommand(
 		.description('Start the Autopilot orchestrator + dashboard')
 		.option('-p, --port <port>', 'Webhook server port', '7777')
 		.option('--no-dashboard', 'Skip starting the dashboard')
-		.option('--dashboard-port <port>', 'Dashboard port', '3001')
+		.option('--dashboard-port <port>', 'Dashboard port', '3000')
 		.action(async (opts: { port: string; dashboard: boolean; dashboardPort: string }) => {
 			let dashboardProc: ChildProcess | null = null
 
@@ -57,9 +57,9 @@ program.addCommand(
 				if (opts.dashboard) {
 					const dashDir = await resolveDashboardDir()
 					if (dashDir) {
-						const isBuilt = await access(join(dashDir, 'dist')).then(() => true).catch(() => false)
-						const cmd = isBuilt ? 'bun' : 'bun'
-						const args = isBuilt ? ['run', 'serve.ts'] : ['run', 'dev']
+						const isBuilt = await access(join(dashDir, '.output', 'server', 'index.mjs')).then(() => true).catch(() => false)
+						const cmd = isBuilt ? 'node' : 'bun'
+						const args = isBuilt ? [join(dashDir, '.output', 'server', 'index.mjs')] : ['run', 'dev']
 
 						dashboardProc = spawn(cmd, args, {
 							cwd: dashDir,

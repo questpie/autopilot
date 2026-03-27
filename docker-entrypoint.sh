@@ -5,11 +5,9 @@ set -e
 bun packages/cli/bin/autopilot.ts start &
 ORCHESTRATOR_PID=$!
 
-# Start the dashboard in background
-cd /app/apps/dashboard
-bun run serve.ts &
+# Start the dashboard in background (Nitro server)
+node /app/apps/dashboard-v2/.output/server/index.mjs &
 DASHBOARD_PID=$!
-cd /app
 
 # Shutdown handler — forward signals to child processes
 shutdown() {

@@ -44,11 +44,11 @@ If you have the CLI installed globally (`bun add -g @questpie/autopilot`), it us
 ## 4. Running the Dashboard
 
 ```bash
-cd apps/dashboard
+cd apps/dashboard-v2
 bun dev
 ```
 
-Opens at `http://localhost:3001`. Connects to the orchestrator API at `http://localhost:7778`.
+Opens at `http://localhost:3000`. Connects to the orchestrator API at `http://localhost:7778`.
 
 ## 5. Running the Docs Site
 
@@ -126,7 +126,7 @@ For local dev, auth is disabled by default. To test auth flows, set `settings.au
 ```
 questpie-autopilot/
 ├── apps/
-│   ├── dashboard/        # Living Dashboard (Vite + React)
+│   ├── dashboard-v2/     # Living Dashboard (Vite + React + TanStack Start)
 │   ├── docs/             # Public documentation (Fumadocs)
 │   └── web/              # Landing page (TanStack Start)
 ├── packages/

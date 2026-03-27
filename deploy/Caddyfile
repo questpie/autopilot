@@ -10,7 +10,7 @@
 #   /artifacts/*   → artifact proxy   (port 7778)
 #   /fs/*          → filesystem browser (port 7778)
 #   /api/auth/*    → Better Auth      (port 7778)
-#   /*             → dashboard         (port 3001)
+#   /*             → dashboard         (port 3000)
 #
 # Webhooks are on a separate subdomain for external services.
 # =============================================================================
@@ -42,7 +42,7 @@
 
 	# Dashboard (catch-all) → dashboard server
 	handle {
-		reverse_proxy autopilot:3001
+		reverse_proxy autopilot:3000
 	}
 }
 

@@ -1,6 +1,6 @@
 # Dockerfile for QuestPie Autopilot (orchestrator + dashboard)
 # Build: docker build -t questpie/autopilot .
-# Run:   docker run -p 7778:7778 -p 7777:7777 -p 3001:3001 questpie/autopilot
+# Run:   docker run -p 7778:7778 -p 7777:7777 -p 3000:3000 questpie/autopilot
 
 # ── Stage 1: Install dependencies ────────────────────────────────────────────
 FROM oven/bun:1.3-alpine AS deps
@@ -15,7 +15,7 @@ COPY packages/orchestrator/package.json packages/orchestrator/package.json
 COPY packages/spec/package.json packages/spec/package.json
 COPY packages/agents/package.json packages/agents/package.json
 COPY packages/avatar/package.json packages/avatar/package.json
-COPY apps/dashboard/package.json apps/dashboard/package.json
+COPY apps/dashboard-v2/package.json apps/dashboard-v2/package.json
 COPY apps/docs/package.json apps/docs/package.json
 
 # Install deps — skip postinstall scripts (fumadocs-mdx from docs app fails in Docker)
@@ -30,10 +30,10 @@ COPY tsconfig.base.json biome.json turbo.json ./
 
 # Copy all source (dashboard imports types from other workspace packages)
 COPY packages packages
-COPY apps/dashboard apps/dashboard
+COPY apps/dashboard-v2 apps/dashboard-v2
 
-# Build dashboard — output goes to apps/dashboard/dist/
-RUN cd apps/dashboard && bun run build
+# Build dashboard — output goes to apps/dashboard-v2/.output/
+RUN cd apps/dashboard-v2 && bun run build
 
 # ── Stage 3: Production dependencies only ───────────────────────────────────
 FROM oven/bun:1.3-alpine AS prod-deps
@@ -46,7 +46,7 @@ COPY packages/orchestrator/package.json packages/orchestrator/package.json
 COPY packages/spec/package.json packages/spec/package.json
 COPY packages/agents/package.json packages/agents/package.json
 COPY packages/avatar/package.json packages/avatar/package.json
-COPY apps/dashboard/package.json apps/dashboard/package.json
+COPY apps/dashboard-v2/package.json apps/dashboard-v2/package.json
 COPY apps/docs/package.json apps/docs/package.json
 
 # Install production deps only, then prune large packages not needed at runtime
@@ -85,11 +85,9 @@ COPY packages/avatar packages/avatar
 COPY packages/orchestrator packages/orchestrator
 COPY packages/cli packages/cli
 
-# Copy built dashboard (dist/ has client + server bundles, serve.ts is the entry)
-COPY --from=dashboard-build /app/apps/dashboard/dist apps/dashboard/dist
-COPY --from=dashboard-build /app/apps/dashboard/serve.ts apps/dashboard/serve.ts
-COPY --from=dashboard-build /app/apps/dashboard/package.json apps/dashboard/package.json
-COPY --from=dashboard-build /app/apps/dashboard/src apps/dashboard/src
+# Copy built dashboard (.output/ has Nitro server bundle)
+COPY --from=dashboard-build /app/apps/dashboard-v2/.output apps/dashboard-v2/.output
+COPY --from=dashboard-build /app/apps/dashboard-v2/package.json apps/dashboard-v2/package.json
 
 # Copy company templates (used by `autopilot init`)
 COPY templates templates
@@ -104,7 +102,7 @@ ENV PORT=7778
 ENV WEBHOOK_PORT=7777
 
 # Expose API, webhook, and dashboard ports
-EXPOSE 7778 7777 3001
+EXPOSE 7778 7777 3000
 
 # Health check against the API status endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

@@ -13,7 +13,7 @@ autopilot provider login claude   # Use Claude subscription (recommended, works 
 # OR set ANTHROPIC_API_KEY in .env  # Use API key
 ```
 
-Dashboard: http://localhost:3001
+Dashboard: http://localhost:3000
 API: http://localhost:7778
 
 ## docker-compose.yml Explained
@@ -25,7 +25,7 @@ services:
     ports:
       - "7778:7778"                   # API server
       - "7777:7777"                   # Webhook server
-      - "3001:3001"                   # Dashboard
+      - "3000:3000"                   # Dashboard
     volumes:
       - ./company:/data/company       # Company files (persisted)
     environment:

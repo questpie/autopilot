@@ -59,7 +59,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-5. Access dashboard at `http://YOUR_SERVER_IP:3001`
+5. Access dashboard at `http://YOUR_SERVER_IP:3000`
 
 ## Add Domain + HTTPS
 
@@ -70,7 +70,7 @@ apt install -y caddy
 
 cat > /etc/caddy/Caddyfile << 'EOF'
 autopilot.yourdomain.com {
-    reverse_proxy localhost:3001
+    reverse_proxy localhost:3000
 
     handle /api/* {
         reverse_proxy localhost:7778
@@ -105,7 +105,7 @@ tunnel: <tunnel-id>
 credentials-file: /root/.cloudflared/<tunnel-id>.json
 ingress:
   - hostname: autopilot.yourdomain.com
-    service: http://localhost:3001
+    service: http://localhost:3000
   - service: http_status:404
 EOF
 
@@ -157,7 +157,7 @@ Only these ports need to be open:
 | Port | Service | Required |
 |------|---------|----------|
 | 22 | SSH | Yes |
-| 3001 | Dashboard | Yes (or behind reverse proxy) |
+| 3000 | Dashboard | Yes (or behind reverse proxy) |
 | 7778 | API | Optional (if accessed remotely) |
 | 7777 | Webhooks | Optional (if using external webhooks) |
 | 80/443 | HTTP/HTTPS | If using Caddy/reverse proxy |
@@ -165,7 +165,7 @@ Only these ports need to be open:
 ```bash
 # UFW example
 ufw allow 22/tcp
-ufw allow 3001/tcp
+ufw allow 3000/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
 ufw enable

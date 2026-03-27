@@ -39,7 +39,7 @@ services:
     # No ports exposed — Caddy handles all external traffic
     expose:
       - "7778"
-      - "3001"
+      - "3000"
       - "7777"
     volumes:
       - ${COMPANY_ROOT:-./company}:/data/company
