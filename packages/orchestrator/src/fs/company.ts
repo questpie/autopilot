@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 import {
 	CompanySchema,
 	AgentsFileSchema,
@@ -20,9 +21,23 @@ export async function loadCompany(companyRoot: string) {
 	return readYaml(resolvePath(companyRoot, PATHS.COMPANY_CONFIG), CompanySchema)
 }
 
-/** Read `agents.yaml` and return the `agents` array. */
+/**
+ * Read `team/agents.yaml` and return the `agents` array.
+ * Falls back to root `agents.yaml` with a deprecation warning.
+ */
 export async function loadAgents(companyRoot: string) {
-	const file = await readYaml(resolvePath(companyRoot, PATHS.AGENTS), AgentsFileSchema)
+	const primaryPath = resolvePath(companyRoot, PATHS.AGENTS)
+	const legacyPath = resolvePath(companyRoot, '/agents.yaml')
+
+	let agentsPath = primaryPath
+	if (!existsSync(primaryPath) && existsSync(legacyPath)) {
+		console.warn(
+			'[autopilot] DEPRECATED: agents.yaml found at root level. Move it to team/agents.yaml.',
+		)
+		agentsPath = legacyPath
+	}
+
+	const file = await readYaml(agentsPath, AgentsFileSchema)
 	return file.agents
 }
 

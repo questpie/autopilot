@@ -1,12 +1,6 @@
-export { buildSystemPrompt } from './build-prompt'
-export {
-	ceoPrompt,
-	strategistPrompt,
-	plannerPrompt,
-	developerPrompt,
-	reviewerPrompt,
-	devopsPrompt,
-	marketingPrompt,
-	designPrompt,
-} from './prompts'
-export type { AgentRole, PromptContext, PromptTemplate } from './prompts/types'
+/**
+ * @deprecated This package is deprecated. Agent prompts are now stored as
+ * markdown files in `team/roles/*.md` and loaded from the filesystem by the
+ * orchestrator's assembler. See `packages/orchestrator/src/context/assembler.ts`.
+ */
+export {}

@@ -43,6 +43,7 @@ const PdfView = lazy(() => import("@/features/files/views/pdf-view"))
 
 const WorkflowDiagramView = lazy(() => import("@/features/files/views/workflow-diagram-view"))
 const AgentCardsView = lazy(() => import("@/features/files/views/agent-cards-view"))
+const RoleEditorView = lazy(() => import("@/features/files/views/role-editor-view"))
 const CompanySettingsView = lazy(() => import("@/features/files/views/company-settings-view"))
 const SecretLockedView = lazy(() => import("@/features/files/views/secret-locked-view"))
 const SkillDetailView = lazy(() => import("@/features/files/views/skill-detail-view"))
@@ -50,6 +51,12 @@ const WidgetPreviewView = lazy(() => import("@/features/files/views/widget-previ
 const PinCardView = lazy(() => import("@/features/files/views/pin-card-view"))
 
 const builtInRegistry: FileViewRegistration[] = [
+  {
+    pattern: "team/roles/*.md",
+    component: RoleEditorView,
+    label: "Role Editor",
+    priority: 500,
+  },
   {
     pattern: "workflows/*.yaml",
     component: WorkflowDiagramView,
@@ -63,13 +70,13 @@ const builtInRegistry: FileViewRegistration[] = [
     priority: 500,
   },
   {
-    pattern: "agents.yaml",
+    pattern: "team/agents.yaml",
     component: AgentCardsView,
     label: "Agent Cards",
     priority: 500,
   },
   {
-    pattern: "agents.yml",
+    pattern: "team/agents.yml",
     component: AgentCardsView,
     label: "Agent Cards",
     priority: 500,

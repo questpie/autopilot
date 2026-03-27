@@ -9,6 +9,7 @@ export const PATHS = {
 	// Team
 	AGENTS: '/team/agents.yaml',
 	HUMANS: '/team/humans.yaml',
+	ROLES_DIR: '/team/roles',
 	WORKFLOWS_DIR: '/team/workflows',
 	SCHEDULES: '/team/schedules.yaml',
 	WEBHOOKS: '/team/webhooks.yaml',
@@ -115,3 +116,9 @@ export const secretPath = (name: string) => `${PATHS.SECRETS_DIR}/${name}.yaml`
  * @param id - Unique pin identifier
  */
 export const pinPath = (id: string) => `${PATHS.PINS_DIR}/${id}.yaml`
+
+/**
+ * Returns the filesystem path for a role prompt markdown file.
+ * @param role - Role identifier (e.g. 'developer', 'data-scientist')
+ */
+export const rolePath = (role: string) => `${PATHS.ROLES_DIR}/${role}.md`

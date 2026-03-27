@@ -1,13 +1,14 @@
 import type { Agent, Company, Task } from '@questpie/autopilot-spec'
-import { buildSystemPrompt } from '@questpie/autopilot-agents'
-import type { AgentRole } from '@questpie/autopilot-agents'
+import { rolePath as specRolePath } from '@questpie/autopilot-spec'
 import { buildCompanySnapshot } from './snapshot'
 import { loadAgentMemory } from './memory-loader'
 import { getSkillsForRole } from '../skills'
-import { stringify as stringifyYaml } from 'yaml'
+import { stringify as stringifyYaml, parse as parseYaml } from 'yaml'
 import type { StorageBackend } from '../fs/storage'
 import { container } from '../container'
 import { streamManagerFactory } from '../session/stream'
+import { join } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
 
 /** The final output of the context assembly pipeline. */
 export interface AssembledContext {
@@ -75,11 +76,127 @@ function formatPins(
 	return pins.map((p) => `- [${p.type}] ${p.title}: ${p.content}`).join('\n')
 }
 
+/** Parsed defaults from a role prompt file's YAML frontmatter. */
+export interface RoleDefaults {
+	tools?: string[]
+	fs_scope?: { read?: string[]; write?: string[] }
+	description?: string
+}
+
+/**
+ * Parse YAML frontmatter from a markdown file.
+ * Returns the frontmatter as a record and the body content.
+ */
+function parseFrontmatter(raw: string): { frontmatter: Record<string, unknown>; content: string } {
+	const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
+	if (!match) return { frontmatter: {}, content: raw }
+
+	try {
+		const frontmatter = parseYaml(match[1]!) as Record<string, unknown>
+		return { frontmatter: frontmatter ?? {}, content: (match[2] ?? '').trim() }
+	} catch {
+		return { frontmatter: {}, content: raw }
+	}
+}
+
+/**
+ * Load a role prompt from the filesystem.
+ *
+ * Reads `team/roles/{role}.md`, parses YAML frontmatter for defaults,
+ * and returns the prompt body with template variables replaced.
+ *
+ * Fallback chain:
+ * 1. `team/roles/{role}.md` exists -> use it
+ * 2. Doesn't exist -> use agent.description as minimal prompt
+ * 3. Neither -> generic fallback
+ */
+export function loadRolePrompt(
+	companyRoot: string,
+	role: string,
+	variables: { companyName: string; teamRoster: string },
+): { prompt: string; defaults: RoleDefaults } {
+	const rolePath = join(companyRoot, specRolePath(role))
+
+	if (!existsSync(rolePath)) {
+		return { prompt: '', defaults: {} }
+	}
+
+	const raw = readFileSync(rolePath, 'utf-8')
+	const { frontmatter, content } = parseFrontmatter(raw)
+
+	// Replace template variables in the prompt body
+	const prompt = content
+		.replace(/\{\{companyName\}\}/g, variables.companyName)
+		.replace(/\{\{teamRoster\}\}/g, variables.teamRoster)
+
+	return {
+		prompt,
+		defaults: {
+			tools: frontmatter.default_tools as string[] | undefined,
+			fs_scope: frontmatter.default_fs_scope as RoleDefaults['fs_scope'],
+			description: frontmatter.description as string | undefined,
+		},
+	}
+}
+
+/**
+ * Build the identity prompt for an agent, with language and timezone addons.
+ */
+function buildIdentityPrompt(
+	companyRoot: string,
+	agent: Agent,
+	company: Company,
+	teamRoster: string,
+): string {
+	const { prompt: rolePrompt } = loadRolePrompt(companyRoot, agent.role, {
+		companyName: company.name,
+		teamRoster,
+	})
+
+	const sections: string[] = []
+
+	if (rolePrompt) {
+		sections.push(rolePrompt)
+	} else if (agent.description) {
+		// Fallback: use agent description from agents.yaml
+		sections.push(
+			`You are ${agent.name}, a ${agent.role} at ${company.name}.\n\n${agent.description}\n\n## Your Team\n${teamRoster}`,
+		)
+	} else {
+		// Generic fallback
+		sections.push(
+			`You are ${agent.name}, an AI assistant at ${company.name}.\n\n## Your Team\n${teamRoster}`,
+		)
+	}
+
+	// Language instructions (additive — only for non-English)
+	if (company.language && company.language !== 'en') {
+		const langLines: string[] = [
+			`LANGUAGE: The primary communication language for this company is ${company.language}. Respond in ${company.language} when communicating with humans. Use English for code, technical terms, and tool outputs.`,
+		]
+
+		if (company.languages && company.languages.length > 1) {
+			langLines.push(
+				`The company operates in multiple languages: ${company.languages.join(', ')}. Default to ${company.language} for human communication.`,
+			)
+		}
+
+		sections.push(langLines.join('\n'))
+	}
+
+	// Timezone instruction
+	if (company.timezone) {
+		sections.push(`TIMEZONE: The company operates in the ${company.timezone} timezone.`)
+	}
+
+	return sections.join('\n\n')
+}
+
 /**
  * Build a multi-layer system prompt for an agent session.
  *
  * Layers (each capped to a token budget):
- * 1. **Identity** (~2K) -- role prompt from `@questpie/autopilot-agents`.
+ * 1. **Identity** (~2K) -- role prompt from `team/roles/{role}.md`.
  * 2. **Company state** (~5K) -- active tasks, messages, pins, team status.
  * 3. **Agent memory** (~20K) -- persistent memory from `memory.yaml`.
  * 4. **Task context** (~15K) -- detailed current-task information.
@@ -93,16 +210,9 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 
 	const sections: string[] = []
 
-	// Layer 1: Identity (~2K tokens) — agent role prompt via buildSystemPrompt
+	// Layer 1: Identity (~2K tokens) — agent role prompt from filesystem
 	const teamRoster = formatTeamRoster(allAgents)
-	const identityPrompt = buildSystemPrompt(agent.role as AgentRole, {
-		companyName: company.name,
-		teamRoster,
-		currentTasksSummary: '',
-		language: company.language,
-		languages: company.languages,
-		timezone: company.timezone,
-	})
+	const identityPrompt = buildIdentityPrompt(companyRoot, agent, company, teamRoster)
 	sections.push(identityPrompt)
 
 	// Layer 2: Company State (~5K tokens) — role-scoped snapshot

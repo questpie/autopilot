@@ -52,6 +52,12 @@ export function parseWatchEvent(companyRoot: string, filePath: string): WatchEve
 		}
 	}
 
+	// team/roles/*.md — role prompt files
+	const roleMatch = rel.match(/^team\/roles\/(.+\.md)$/)
+	if (roleMatch?.[1]) {
+		return { type: 'config_changed', file: `roles/${roleMatch[1]}`, path: filePath }
+	}
+
 	// team/*.yaml
 	const teamMatch = rel.match(/^team\/(.+\.yaml)$/)
 	if (teamMatch?.[1]) {
@@ -93,7 +99,8 @@ export class Watcher {
 		const handleFile = (filePath: string) => {
 			const rel = relative(root, filePath).split(sep).join('/')
 			const isDashboardFile = rel.startsWith('dashboard/') && !rel.startsWith('dashboard/pins/') && rel !== 'dashboard/groups.yaml'
-			if (!filePath.endsWith('.yaml') && !isDashboardFile) return
+			const isRoleFile = rel.startsWith('team/roles/') && filePath.endsWith('.md')
+			if (!filePath.endsWith('.yaml') && !isDashboardFile && !isRoleFile) return
 
 			const existing = this.debounceTimers.get(filePath)
 			if (existing) clearTimeout(existing)
