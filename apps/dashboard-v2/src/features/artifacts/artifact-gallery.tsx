@@ -1,12 +1,14 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { RowsIcon, SquaresFourIcon, PaintBrushIcon } from "@phosphor-icons/react"
+import { motion } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/empty-state"
 import { artifactsListQuery } from "./artifacts.queries"
 import { ArtifactCard } from "./artifact-card"
+import { EASING, DURATION, clampedDelay, useMotionPreference } from "@/lib/motion"
 
 type ViewMode = "grid" | "list"
 
@@ -17,6 +19,7 @@ export function ArtifactGallery() {
   const { t } = useTranslation()
   const [view, setView] = useState<ViewMode>("grid")
   const { data: artifacts, isLoading } = useQuery(artifactsListQuery())
+  const { shouldReduce } = useMotionPreference()
 
   if (isLoading) {
     return (
@@ -75,14 +78,36 @@ export function ArtifactGallery() {
       {/* Content */}
       {view === "grid" ? (
         <div className="grid grid-cols-1 gap-3 px-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
-          {artifacts.map((artifact) => (
-            <ArtifactCard key={artifact.id} artifact={artifact} view="grid" />
+          {artifacts.map((artifact, i) => (
+            <motion.div
+              key={artifact.id}
+              initial={shouldReduce ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: DURATION.normal,
+                ease: EASING.enter,
+                delay: shouldReduce ? 0 : clampedDelay(i, 40, 300),
+              }}
+            >
+              <ArtifactCard artifact={artifact} view="grid" />
+            </motion.div>
           ))}
         </div>
       ) : (
         <div className="flex flex-col">
-          {artifacts.map((artifact) => (
-            <ArtifactCard key={artifact.id} artifact={artifact} view="list" />
+          {artifacts.map((artifact, i) => (
+            <motion.div
+              key={artifact.id}
+              initial={shouldReduce ? false : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: DURATION.fast,
+                ease: EASING.enter,
+                delay: shouldReduce ? 0 : clampedDelay(i, 20, 300),
+              }}
+            >
+              <ArtifactCard artifact={artifact} view="list" />
+            </motion.div>
           ))}
         </div>
       )}

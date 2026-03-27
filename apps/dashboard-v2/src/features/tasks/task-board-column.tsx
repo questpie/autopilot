@@ -40,8 +40,8 @@ export function TaskBoardColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex min-w-[240px] flex-1 flex-col border border-border",
-        isOver && "bg-primary/[0.08]",
+        "flex min-w-[240px] flex-1 flex-col border border-border transition-colors duration-200",
+        isOver && "border-primary/20 bg-primary/[0.06]",
       )}
     >
       {/* Column header */}

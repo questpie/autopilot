@@ -9,6 +9,7 @@ import { PaperPlaneTiltIcon, PaperclipIcon } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/lib/i18n"
 import { useUpload } from "@/hooks/use-upload"
+import { useHapticPattern } from "@/hooks/use-haptic"
 import { useChatUIStore } from "./chat-ui.store"
 import { useSendMessage } from "./chat.mutations"
 import { MentionAutocomplete } from "./mention-autocomplete"
@@ -35,6 +36,7 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
   const clearDraft = useChatUIStore((s) => s.clearDraft)
 
   const sendMessage = useSendMessage(channelId)
+  const { trigger: haptic } = useHapticPattern()
 
   const [autocompleteMode, setAutocompleteMode] = useState<AutocompleteMode>("none")
   const [autocompleteFilter, setAutocompleteFilter] = useState("")
@@ -106,6 +108,7 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
   const handleSend = useCallback(() => {
     const content = draft.trim()
     if (!content && attachedFiles.length === 0) return
+    haptic("tap")
 
     // Append file references to content
     const fileRefs = attachedFiles.join("\n")
@@ -133,7 +136,7 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
     }
-  }, [draft, attachedFiles, channelId, clearDraft, sendMessage])
+  }, [draft, attachedFiles, channelId, clearDraft, sendMessage, haptic])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {

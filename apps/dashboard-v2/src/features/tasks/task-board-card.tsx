@@ -3,6 +3,7 @@ import { CSS } from "@dnd-kit/utilities"
 import { motion } from "framer-motion"
 import { ClockIcon } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
+import { SPRING } from "@/lib/motion"
 import { PRIORITY_COLORS, formatTaskId, formatTimeAgo } from "./task-list-item"
 
 interface TaskBoardCardProps {
@@ -38,19 +39,24 @@ export function TaskBoardCard({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    // Only add will-change during active drag for compositing
+    willChange: isDragging ? ("transform" as const) : ("auto" as const),
   }
 
   return (
     <motion.div
       layoutId={isDragOverlay ? undefined : task.id}
+      layout={!isDragOverlay}
+      transition={SPRING.snappy}
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
       className={cn(
         "cursor-grab border border-border bg-card p-3 transition-colors hover:border-primary/30 active:cursor-grabbing",
-        isDragging && "opacity-50",
-        isDragOverlay && "rotate-2 opacity-90 shadow-lg",
+        isDragging && "opacity-40",
+        isDragOverlay &&
+          "rotate-2 scale-[1.03] border-primary/30 opacity-95 shadow-[0_8px_24px_rgba(0,0,0,0.15)]",
       )}
       onClick={() => onClick(task.id)}
       role="button"

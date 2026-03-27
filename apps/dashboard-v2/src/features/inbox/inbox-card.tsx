@@ -16,7 +16,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/lib/i18n"
 import { useApproveTask, useRejectTask } from "./inbox.mutations"
-import { useHaptic } from "@/hooks/use-haptic"
+import { useHapticPattern } from "@/hooks/use-haptic"
+import { EASING, DURATION, SPRING, useMotionPreference } from "@/lib/motion"
 import type { Icon } from "@phosphor-icons/react"
 
 interface Task {
@@ -73,7 +74,8 @@ function formatTimeAgo(dateStr: string): string {
 
 function TaskInboxCard({ task }: { task: Task }) {
   const { t } = useTranslation()
-  const { triggerHaptic } = useHaptic()
+  const { trigger: haptic } = useHapticPattern()
+  const { shouldReduce } = useMotionPreference()
   const approveMutation = useApproveTask()
   const rejectMutation = useRejectTask()
 
@@ -84,10 +86,14 @@ function TaskInboxCard({ task }: { task: Task }) {
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 8 }}
+      initial={shouldReduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -40, height: 0 }}
-      transition={{ duration: 0.2 }}
+      exit={shouldReduce ? { opacity: 0 } : { opacity: 0, x: -60, height: 0, marginBottom: 0 }}
+      transition={{
+        duration: DURATION.normal,
+        ease: EASING.enter,
+        layout: SPRING.snappy,
+      }}
       className="flex items-start gap-3 border border-border p-4"
     >
       <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-primary/10">
@@ -126,43 +132,53 @@ function TaskInboxCard({ task }: { task: Task }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
-        <Button
-          variant="default"
-          size="sm"
-          disabled={isLoading}
-          onClick={() => {
-            triggerHaptic()
-            approveMutation.mutate(task.id)
-          }}
-        >
-          <CheckCircleIcon size={14} aria-hidden="true" />
-          {t("inbox.approve")}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isLoading}
-          onClick={() => {
-            triggerHaptic()
-            rejectMutation.mutate({ taskId: task.id })
-          }}
-        >
-          <XCircleIcon size={14} aria-hidden="true" />
-          {t("inbox.reject")}
-        </Button>
+        <motion.div whileTap={{ scale: 0.95 }} transition={SPRING.snappy}>
+          <Button
+            variant="default"
+            size="sm"
+            disabled={isLoading}
+            onClick={() => {
+              haptic("success")
+              approveMutation.mutate(task.id)
+            }}
+          >
+            <CheckCircleIcon size={14} aria-hidden="true" />
+            {t("inbox.approve")}
+          </Button>
+        </motion.div>
+        <motion.div whileTap={{ scale: 0.95 }} transition={SPRING.snappy}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isLoading}
+            onClick={() => {
+              haptic("error")
+              rejectMutation.mutate({ taskId: task.id })
+            }}
+          >
+            <XCircleIcon size={14} aria-hidden="true" />
+            {t("inbox.reject")}
+          </Button>
+        </motion.div>
       </div>
     </motion.div>
   )
 }
 
 function PinInboxCard({ pin }: { pin: Pin }) {
+  const { shouldReduce } = useMotionPreference()
+
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 8 }}
+      initial={shouldReduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -40, height: 0 }}
-      transition={{ duration: 0.2 }}
+      exit={shouldReduce ? { opacity: 0 } : { opacity: 0, x: -60, height: 0, marginBottom: 0 }}
+      transition={{
+        duration: DURATION.normal,
+        ease: EASING.enter,
+        layout: SPRING.snappy,
+      }}
       className="flex items-start gap-3 border border-border p-4"
     >
       <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-amber-500/10">

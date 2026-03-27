@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router"
 import { Badge } from "@/components/ui/badge"
 import { useTranslation } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { EASING, DURATION, clampedDelay, useMotionPreference } from "@/lib/motion"
 
 /**
  * Deterministic color from any string (role, agent ID, etc.).
@@ -50,19 +51,24 @@ interface AgentCardProps {
 
 export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }: AgentCardProps) {
   const { t } = useTranslation()
+  const { shouldReduce } = useMotionPreference()
   const bgColor = getAvatarColor(agent.id)
   const initial = agent.name.charAt(0).toUpperCase()
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={shouldReduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, delay: index * 0.05 }}
+      transition={{
+        duration: DURATION.normal,
+        ease: EASING.enter,
+        delay: shouldReduce ? 0 : clampedDelay(index, 50, 300),
+      }}
     >
       <Link
         to="/team/$id"
         params={{ id: agent.id }}
-        className="group flex flex-col items-center gap-2 border border-border p-4 transition-colors hover:bg-muted/30"
+        className="group flex flex-col items-center gap-2 border border-border p-4 transition-all duration-200 hover:-translate-y-0.5 hover:bg-muted/30 hover:shadow-sm"
       >
         {/* Square avatar */}
         <div
@@ -85,7 +91,7 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
         </Badge>
 
         {/* Status */}
-        <div className="flex items-center gap-1.5" aria-live="polite">
+        <div className="flex items-center gap-1.5">
           <CircleIcon
             size={8}
             weight={isWorking ? "fill" : "regular"}
@@ -109,5 +115,4 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
   )
 }
 
-// TODO: Future — allow custom avatar colors per agent in agents.yaml (e.g. `color: "#B700FF"`)
 export { AVATAR_PALETTE, getAvatarColor, hashStringToIndex }

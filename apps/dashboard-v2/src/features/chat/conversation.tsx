@@ -8,6 +8,7 @@ import { DayDivider } from "./day-divider"
 import { ConversationSkeleton } from "./chat-skeletons"
 import { ConversationEmpty } from "./chat-empty-states"
 import { cn } from "@/lib/utils"
+import { EASING, DURATION, useMotionPreference } from "@/lib/motion"
 
 interface Message {
   id: string
@@ -79,6 +80,7 @@ export function Conversation({ channelId, compact = false }: ConversationProps) 
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   const prevMessageCountRef = useRef(0)
+  const { shouldReduce } = useMotionPreference()
 
   const { data, isLoading } = useQuery(messagesQuery(channelId))
 
@@ -137,13 +139,19 @@ export function Conversation({ channelId, compact = false }: ConversationProps) 
               const msg = group.message
               const isSending = msg.id.startsWith("temp-")
 
+              // Directional slide: own messages from right, others from left
+              const slideX = msg.external ? -12 : 12
+
               return (
                 <motion.div
                   key={msg.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  initial={shouldReduce ? false : { opacity: 0, x: slideX }}
+                  animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
+                  transition={{
+                    duration: DURATION.normal,
+                    ease: EASING.enter,
+                  }}
                 >
                   <MessageBubble
                     message={msg}

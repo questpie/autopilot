@@ -1,5 +1,8 @@
+import type { ReactNode } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { t } from "@/lib/i18n"
+import { EASING, DURATION, useMotionPreference } from "@/lib/motion"
 
 interface SkeletonProps {
   className?: string
@@ -46,5 +49,50 @@ export function SkeletonCard() {
       <SkeletonText lines={2} />
       <Skeleton className="h-6 w-20" />
     </div>
+  )
+}
+
+/**
+ * Crossfade wrapper for skeleton→content transitions.
+ * Wraps loading/loaded states with AnimatePresence mode="wait".
+ *
+ * Usage:
+ *   <ContentTransition isLoading={isLoading} skeleton={<SkeletonCard />}>
+ *     <ActualContent />
+ *   </ContentTransition>
+ */
+export function ContentTransition({
+  isLoading,
+  skeleton,
+  children,
+}: {
+  isLoading: boolean
+  skeleton: ReactNode
+  children: ReactNode
+}) {
+  const { shouldReduce } = useMotionPreference()
+
+  return (
+    <AnimatePresence mode="wait">
+      {isLoading ? (
+        <motion.div
+          key="skeleton"
+          initial={shouldReduce ? false : { opacity: 1 }}
+          exit={shouldReduce ? undefined : { opacity: 0 }}
+          transition={{ duration: DURATION.fast, ease: EASING.enter }}
+        >
+          {skeleton}
+        </motion.div>
+      ) : (
+        <motion.div
+          key="content"
+          initial={shouldReduce ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: DURATION.normal, ease: EASING.enter }}
+        >
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }

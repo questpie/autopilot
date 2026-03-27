@@ -53,9 +53,13 @@ function AppLayout() {
       <KeyboardHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <Toaster
         position="bottom-right"
+        dir="ltr"
+        gap={8}
+        visibleToasts={5}
         toastOptions={{
           className:
             "rounded-none border border-border bg-card text-card-foreground font-heading text-xs",
+          duration: 4000,
         }}
       />
     </>

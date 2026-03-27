@@ -58,10 +58,10 @@ export function ArtifactCard({ artifact, view }: ArtifactCardProps) {
     <Link
       to="/artifacts/$id"
       params={{ id: artifact.id }}
-      className="group flex flex-col border border-border transition-colors hover:border-foreground/20"
+      className="group flex flex-col border border-border transition-all duration-200 hover:-translate-y-1 hover:border-foreground/20 hover:shadow-sm"
     >
       {/* Thumbnail area (16:10 ratio) */}
-      <div className="relative flex aspect-[16/10] items-center justify-center bg-muted/30 transition-transform group-hover:scale-[1.02]">
+      <div className="relative flex aspect-[16/10] items-center justify-center bg-muted/30 transition-transform duration-200 group-hover:scale-[1.02]">
         {isRunning ? (
           <PlayIcon size={24} weight="fill" className="text-green-500/50" />
         ) : (

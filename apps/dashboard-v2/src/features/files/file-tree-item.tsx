@@ -2,6 +2,7 @@ import { useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate, useMatches } from "@tanstack/react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
+import { motion, AnimatePresence } from "framer-motion"
 import {
   FolderSimpleIcon,
   CaretRightIcon,
@@ -17,6 +18,7 @@ import { useFileUIStore } from "./file-ui.store"
 import { directoryQuery, type FsEntry } from "./files.queries"
 import { FileTreeContextMenu } from "./file-tree-context-menu"
 import { cn } from "@/lib/utils"
+import { EASING, DURATION, useMotionPreference } from "@/lib/motion"
 import type { Icon } from "@phosphor-icons/react"
 
 function getFileIcon(entry: FsEntry, path: string): Icon {
@@ -42,6 +44,7 @@ export function FileTreeItem({ entry, parentPath, depth }: FileTreeItemProps) {
   const navigate = useNavigate()
   const matches = useMatches()
   const currentPath = matches[matches.length - 1]?.pathname ?? ""
+  const { shouldReduce } = useMotionPreference()
 
   const fullPath = parentPath ? `${parentPath}/${entry.name}` : entry.name
   const routePath = `/files/${fullPath}`
@@ -122,18 +125,32 @@ export function FileTreeItem({ entry, parentPath, depth }: FileTreeItemProps) {
         </button>
       </FileTreeContextMenu>
 
-      {/* Children */}
-      {isDir && isExpanded && sortedChildren.length > 0 && (
-        <div>
-          {sortedChildren.map((child) => (
-            <FileTreeItem
-              key={child.name}
-              entry={child}
-              parentPath={fullPath}
-              depth={depth + 1}
-            />
-          ))}
-        </div>
+      {/* Children — animated expand/collapse */}
+      {isDir && (
+        <AnimatePresence initial={false}>
+          {isExpanded && sortedChildren.length > 0 && (
+            <motion.div
+              key="children"
+              initial={shouldReduce ? false : { height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{
+                height: { duration: DURATION.normal, ease: EASING.enter },
+                opacity: { duration: DURATION.fast },
+              }}
+              className="overflow-hidden"
+            >
+              {sortedChildren.map((child) => (
+                <FileTreeItem
+                  key={child.name}
+                  entry={child}
+                  parentPath={fullPath}
+                  depth={depth + 1}
+                />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       )}
     </div>
   )

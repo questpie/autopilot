@@ -11,7 +11,7 @@ import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core"
 import { TaskBoardColumn } from "./task-board-column"
 import { TaskBoardCard } from "./task-board-card"
 import { useUpdateTask } from "./task.mutations"
-import { useHaptic } from "@/hooks/use-haptic"
+import { useHapticPattern } from "@/hooks/use-haptic"
 import type { Task } from "./task-list"
 
 const BOARD_STATUSES = [
@@ -30,7 +30,7 @@ interface TaskBoardProps {
 
 export function TaskBoard({ tasks, searchQuery, onOpenTask }: TaskBoardProps) {
   const updateTask = useUpdateTask()
-  const { triggerHaptic } = useHaptic()
+  const { trigger: haptic } = useHapticPattern()
   const [activeId, setActiveId] = useState<string | null>(null)
 
   const sensors = useSensors(
@@ -100,10 +100,10 @@ export function TaskBoard({ tasks, searchQuery, onOpenTask }: TaskBoardProps) {
       const task = filtered.find((t) => t.id === taskId)
       if (!task || task.status === newStatus) return
 
-      triggerHaptic()
+      haptic("success")
       updateTask.mutate({ id: taskId, status: newStatus })
     },
-    [filtered, updateTask, triggerHaptic],
+    [filtered, updateTask, haptic],
   )
 
   return (

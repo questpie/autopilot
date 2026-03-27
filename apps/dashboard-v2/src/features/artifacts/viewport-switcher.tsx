@@ -1,6 +1,7 @@
 import { DesktopIcon, DeviceTabletIcon, DeviceMobileIcon } from "@phosphor-icons/react"
 import { useTranslation } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
+import { useHapticPattern } from "@/hooks/use-haptic"
 
 export type ViewportSize = "desktop" | "tablet" | "mobile"
 
@@ -17,6 +18,7 @@ interface ViewportSwitcherProps {
 
 export function ViewportSwitcher({ value, onChange }: ViewportSwitcherProps) {
   const { t } = useTranslation()
+  const { trigger: haptic } = useHapticPattern()
 
   const viewports: Array<{ key: ViewportSize; icon: typeof DesktopIcon }> = [
     { key: "desktop", icon: DesktopIcon },
@@ -31,7 +33,10 @@ export function ViewportSwitcher({ value, onChange }: ViewportSwitcherProps) {
           key={key}
           variant={value === key ? "default" : "ghost"}
           size="sm"
-          onClick={() => onChange(key)}
+          onClick={() => {
+            haptic("tap")
+            onChange(key)
+          }}
           className="h-7 w-7 rounded-none p-0"
           title={t(VIEWPORT_SIZES[key].label)}
         >

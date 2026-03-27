@@ -1,6 +1,4 @@
 import { createFileRoute, Outlet, useMatches } from "@tanstack/react-router"
-import { useTranslation } from "@/lib/i18n"
-import { SquareBuildLogo } from "@/components/brand"
 
 export const Route = createFileRoute("/_auth")({
   component: AuthLayout,
@@ -12,7 +10,6 @@ export const Route = createFileRoute("/_auth")({
  * Setup wizard gets a wider card (640px) vs regular auth (400px).
  */
 function AuthLayout() {
-  const { t } = useTranslation()
   const matches = useMatches()
 
   // Check if we're on the setup route for wider layout
@@ -21,11 +18,11 @@ function AuthLayout() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-8">
       {/* Brand header -- only show for non-setup routes (setup has its own header) */}
-      {!isSetup && (
+      {/* {!isSetup && (
         <div className="mb-8 flex flex-col items-center gap-3">
           <SquareBuildLogo size={48} />
         </div>
-      )}
+      )} */}
 
       {/* Content card */}
       <div
@@ -37,9 +34,9 @@ function AuthLayout() {
       </div>
 
       {/* Footer */}
-      <p className="mt-6 text-xs text-muted-foreground">
+      {/* <p className="mt-6 text-xs text-muted-foreground">
         {t("app.name")} {t("app.version")}
-      </p>
+      </p> */}
     </div>
   )
 }

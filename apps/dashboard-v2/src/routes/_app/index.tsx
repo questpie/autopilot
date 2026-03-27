@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react"
+import { motion } from "framer-motion"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { api } from "@/lib/api"
@@ -10,6 +11,8 @@ import { DashboardGroups } from "@/features/dashboard/dashboard-groups"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { PageTransition } from "@/components/layouts/page-transition"
+import { useHapticPattern } from "@/hooks/use-haptic"
+import { SPRING } from "@/lib/motion"
 
 export const Route = createFileRoute("/_app/")({ component: DashboardHome })
 
@@ -17,6 +20,7 @@ function QuickAskInput() {
   const { t } = useTranslation()
   const [value, setValue] = useState("")
   const queryClient = useQueryClient()
+  const { trigger: haptic } = useHapticPattern()
 
   const createIntent = useMutation({
     mutationFn: async (message: string) => {
@@ -48,6 +52,7 @@ function QuickAskInput() {
     e.preventDefault()
     const trimmed = value.trim()
     if (!trimmed) return
+    haptic("tap")
     createIntent.mutate(trimmed)
   }
 
@@ -60,15 +65,17 @@ function QuickAskInput() {
         className="flex-1 font-heading text-sm"
         disabled={createIntent.isPending}
       />
-      <Button
-        type="submit"
-        size="sm"
-        disabled={!value.trim() || createIntent.isPending}
-        className="shrink-0 gap-1.5"
-      >
-        <PaperPlaneTiltIcon size={14} />
-        {t("dashboard.ask")}
-      </Button>
+      <motion.div whileTap={{ scale: 0.95 }} transition={SPRING.snappy}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={!value.trim() || createIntent.isPending}
+          className="shrink-0 gap-1.5"
+        >
+          <PaperPlaneTiltIcon size={14} />
+          {t("dashboard.ask")}
+        </Button>
+      </motion.div>
     </form>
   )
 }

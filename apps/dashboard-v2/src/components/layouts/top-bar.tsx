@@ -7,17 +7,40 @@ import {
   GearIcon,
   UserIcon,
 } from "@phosphor-icons/react"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
 import { useHapticPattern } from "@/hooks/use-haptic"
+import { SPRING, useMotionPreference } from "@/lib/motion"
 import { ConnectionIndicatorDot } from "./connection-indicator"
 
-/** Hover/tap scale for icon buttons — gated behind @media (hover: hover) via CSS */
+/** Hover/tap scale for icon buttons */
 const iconMotion = {
   whileHover: { scale: 1.08 },
   whileTap: { scale: 0.92 },
   transition: { type: "spring" as const, stiffness: 400, damping: 25 },
+}
+
+/** Animated count badge — bounces on count change */
+function NotificationBadge({ count }: { count: number }) {
+  const { shouldReduce } = useMotionPreference()
+
+  if (count <= 0) return null
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.span
+        key={count}
+        initial={shouldReduce ? false : { scale: 0.6, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={shouldReduce ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
+        transition={shouldReduce ? { duration: 0 } : SPRING.bouncy}
+        className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center bg-destructive px-0.5 text-[9px] font-bold text-white"
+      >
+        {count > 99 ? "99+" : count}
+      </motion.span>
+    </AnimatePresence>
+  )
 }
 
 export function TopBar() {
@@ -25,6 +48,9 @@ export function TopBar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const { trigger } = useHapticPattern()
+
+  // TODO: wire to real notification count from SSE/query
+  const notificationCount = 0
 
   return (
     <header className="flex h-12 shrink-0 items-center border-b border-border bg-background px-4 font-heading">
@@ -78,6 +104,7 @@ export function TopBar() {
         aria-label={t("nav.notifications")}
       >
         <BellIcon size={18} aria-hidden="true" />
+        <NotificationBadge count={notificationCount} />
       </motion.button>
 
       {/* Inbox */}

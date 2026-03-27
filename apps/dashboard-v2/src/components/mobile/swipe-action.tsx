@@ -4,11 +4,13 @@ import {
   useMotionValue,
   useTransform,
   useReducedMotion,
+  animate,
 } from "framer-motion"
 import { useDrag } from "@use-gesture/react"
 import { CheckCircleIcon, XCircleIcon } from "@phosphor-icons/react"
 import { useTranslation } from "@/lib/i18n"
-import { useHaptic } from "@/hooks/use-haptic"
+import { useHapticPattern } from "@/hooks/use-haptic"
+import { SPRING } from "@/lib/motion"
 
 interface SwipeActionProps {
   children: ReactNode
@@ -27,8 +29,8 @@ interface SwipeActionProps {
  * Swipe action wrapper for list items.
  * Swipe right = positive action (green, approve).
  * Swipe left = negative action (red, reject).
- * Reveals at 80px drag, triggers at 160px, springs back if released early.
- * Calls navigator.vibrate(10) on trigger for haptic feedback.
+ * Uses exponential boundary damping instead of hard clamp.
+ * Springs back with physics-based animation.
  */
 export function SwipeAction({
   children,
@@ -41,7 +43,7 @@ export function SwipeAction({
   className,
 }: SwipeActionProps) {
   const { t } = useTranslation()
-  const { triggerHaptic } = useHaptic()
+  const { trigger: haptic } = useHapticPattern()
   const shouldReduce = useReducedMotion()
   const x = useMotionValue(0)
   const dragRef = useRef<HTMLDivElement>(null)
@@ -49,6 +51,11 @@ export function SwipeAction({
   // Background opacity based on drag distance
   const rightBgOpacity = useTransform(x, [0, revealThreshold, triggerThreshold], [0, 0.3, 1])
   const leftBgOpacity = useTransform(x, [-triggerThreshold, -revealThreshold, 0], [1, 0.3, 0])
+
+  // Exponential boundary damping: max * (1 - exp(-offset / max))
+  function dampedValue(offset: number, max: number): number {
+    return max * (1 - Math.exp(-Math.abs(offset) / max)) * Math.sign(offset)
+  }
 
   useDrag(
     ({ movement: [mx], last, velocity: [vx] }) => {
@@ -58,23 +65,24 @@ export function SwipeAction({
         // Check if trigger threshold reached
         if (mx > triggerThreshold || (mx > revealThreshold && vx > 0.5)) {
           if (onSwipeRight) {
-            triggerHaptic()
+            haptic("success")
             onSwipeRight()
           }
         } else if (mx < -triggerThreshold || (mx < -revealThreshold && vx < -0.5)) {
           if (onSwipeLeft) {
-            triggerHaptic()
+            haptic("error")
             onSwipeLeft()
           }
         }
-        // Spring back
-        x.set(0)
+        // Spring back with physics
+        void animate(x, 0, SPRING.snappy)
         return
       }
 
-      // Clamp movement to prevent over-drag
-      const clamped = Math.max(-triggerThreshold * 1.2, Math.min(triggerThreshold * 1.2, mx))
-      x.set(clamped)
+      // Apply exponential damping beyond trigger threshold
+      const maxDrag = triggerThreshold * 1.5
+      const damped = dampedValue(mx, maxDrag)
+      x.set(damped)
     },
     {
       target: dragRef,
@@ -123,4 +131,3 @@ export function SwipeAction({
     </div>
   )
 }
-
