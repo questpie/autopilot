@@ -25,11 +25,6 @@ export async function loadRoles(companyRoot: string): Promise<RolesFile> {
 	return rolesFile
 }
 
-/** Get the currently cached roles (loaded at startup). */
-export function getCachedRoles(): RolesFile | null {
-	return cachedRoles
-}
-
 /** Clear cached roles and reload from disk. */
 export async function reloadRoles(companyRoot: string): Promise<void> {
 	cachedRoles = null

@@ -2,7 +2,6 @@ import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { ZodType } from 'zod'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
-import { encryptToBase64, decryptFromBase64 } from '../auth/crypto'
 
 /**
  * Read a YAML file from disk, parse it, and validate with a Zod schema.
@@ -44,35 +43,4 @@ export async function readYamlUnsafe(path: string): Promise<unknown> {
 /** Check whether a file exists at the given path. */
 export async function fileExists(path: string): Promise<boolean> {
 	return Bun.file(path).exists()
-}
-
-const ENCRYPTED_PREFIX = '!encrypted:'
-
-/**
- * Read a YAML file from disk, decrypting it first if it starts with the
- * `!encrypted:` prefix.
- */
-export async function readEncryptedYaml<T>(path: string, masterKey: CryptoKey): Promise<T> {
-	const raw = await Bun.file(path).text()
-	if (raw.startsWith(ENCRYPTED_PREFIX)) {
-		const base64 = raw.slice(ENCRYPTED_PREFIX.length).trim()
-		const decrypted = await decryptFromBase64(base64, masterKey)
-		return parseYaml(decrypted) as T
-	}
-	return parseYaml(raw) as T
-}
-
-/**
- * Serialize data to YAML, encrypt it with the master key, and write it to
- * disk with the `!encrypted:` prefix.
- */
-export async function writeEncryptedYaml(
-	path: string,
-	data: unknown,
-	masterKey: CryptoKey,
-): Promise<void> {
-	await mkdir(dirname(path), { recursive: true })
-	const yamlStr = stringifyYaml(data, { lineWidth: 120 })
-	const encrypted = await encryptToBase64(yamlStr, masterKey)
-	await Bun.write(path, ENCRYPTED_PREFIX + encrypted)
 }

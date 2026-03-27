@@ -154,14 +154,3 @@ export function actorRateLimit() {
 	})
 }
 
-/**
- * Password reset rate limiter — 3 attempts per 15 minutes per email address.
- * Call this before issuing a reset token or sending a reset email.
- */
-export function checkPasswordResetLimit(
-	db: AutopilotDb,
-	email: string,
-): { allowed: boolean; remaining: number; resetAt: number } {
-	const key = `auth:reset:${email}`
-	return checkRateLimit(db, key, 900, 3)
-}
