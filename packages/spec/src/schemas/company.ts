@@ -33,7 +33,9 @@ export const CompanySettingsSchema = z.object({
 			ip_allowlist: z.array(z.string()).default([]),
 			trusted_proxies: z.array(z.string()).default(['127.0.0.1', '::1', '::ffff:127.0.0.1']),
 		})
-		.default({}),
+		.nullable()
+		.default({})
+		.transform((v) => v ?? { ip_allowlist: [], trusted_proxies: ['127.0.0.1', '::1', '::ffff:127.0.0.1'] }),
 	embeddings: z
 		.object({
 			provider: z.enum(['gemini', 'multilingual-e5', 'nomic', 'none']).default('none'),
