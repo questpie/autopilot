@@ -8,6 +8,8 @@ export type WatchEvent =
 	| { type: 'pin_changed'; pinId: string; path: string }
 	| { type: 'config_changed'; file: string; path: string }
 	| { type: 'dashboard_changed'; file: string; path: string }
+	| { type: 'knowledge_changed'; file: string; path: string }
+	| { type: 'artifact_changed'; artifactId: string; path: string }
 
 /** Configuration for the filesystem {@link Watcher}. */
 export interface WatcherOptions {
@@ -52,6 +54,18 @@ export function parseWatchEvent(companyRoot: string, filePath: string): WatchEve
 		}
 	}
 
+	// TM-005: knowledge/{path} — any file change triggers reindex
+	const knowledgeMatch = rel.match(/^knowledge\/(.+)$/)
+	if (knowledgeMatch?.[1]) {
+		return { type: 'knowledge_changed', file: knowledgeMatch[1], path: filePath }
+	}
+
+	// TM-006: artifacts/{name}/.artifact.yaml — artifact registration
+	const artifactMatch = rel.match(/^artifacts\/([^/]+)\/.artifact\.yaml$/)
+	if (artifactMatch?.[1]) {
+		return { type: 'artifact_changed', artifactId: artifactMatch[1], path: filePath }
+	}
+
 	// team/roles/*.md — role prompt files
 	const roleMatch = rel.match(/^team\/roles\/(.+\.md)$/)
 	if (roleMatch?.[1]) {
@@ -68,7 +82,7 @@ export function parseWatchEvent(companyRoot: string, filePath: string): WatchEve
 }
 
 /**
- * Watches company directories for YAML file changes using chokidar.
+ * Watches company directories for file changes using chokidar.
  *
  * Debounces rapid writes (default 500ms) and emits typed events via
  * the `onEvent` callback.
@@ -79,7 +93,7 @@ export class Watcher {
 
 	constructor(private options: WatcherOptions) {}
 
-	/** Start watching `tasks/`, `comms/`, `dashboard/pins/`, and `team/`. */
+	/** Start watching `tasks/`, `comms/`, `dashboard/`, `team/`, `knowledge/`, and `artifacts/`. */
 	async start(): Promise<void> {
 		const root = this.options.companyRoot
 		const debounceMs = this.options.debounceMs ?? 500
@@ -89,6 +103,8 @@ export class Watcher {
 			join(root, 'comms'),
 			join(root, 'dashboard'),
 			join(root, 'team'),
+			join(root, 'knowledge'),
+			join(root, 'artifacts'),
 		]
 
 		this.watcher = watch(watchPaths, {
@@ -100,7 +116,9 @@ export class Watcher {
 			const rel = relative(root, filePath).split(sep).join('/')
 			const isDashboardFile = rel.startsWith('dashboard/') && !rel.startsWith('dashboard/pins/') && rel !== 'dashboard/groups.yaml'
 			const isRoleFile = rel.startsWith('team/roles/') && filePath.endsWith('.md')
-			if (!filePath.endsWith('.yaml') && !isDashboardFile && !isRoleFile) return
+			const isKnowledgeFile = rel.startsWith('knowledge/')
+			const isArtifactConfig = rel.match(/^artifacts\/[^/]+\/.artifact\.yaml$/)
+			if (!filePath.endsWith('.yaml') && !isDashboardFile && !isRoleFile && !isKnowledgeFile && !isArtifactConfig) return
 
 			const existing = this.debounceTimers.get(filePath)
 			if (existing) clearTimeout(existing)

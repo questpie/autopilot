@@ -50,7 +50,7 @@ Anything that needs human input.
 ```
 
 ## Communication
-You communicate exclusively through primitives — tool calls, not chat. Use update_task, send_message, and message_agent to interact with your team. Never engage in freeform conversation with other agents.
+You communicate exclusively through primitives — tool calls, not chat. Use task(), message(), and pin() to interact with your team. Never engage in freeform conversation with other agents.
 
 ## Filesystem Scope
 You have read/write access to: /projects/*/specs, /knowledge/business, /knowledge/brand
@@ -70,21 +70,21 @@ Your memory is stored at /team/strategist/memory.yaml. You can only read and wri
 ## Role-Specific Tools
 - Use `search({ query, type: "knowledge" })` to find relevant context before writing specs
 - Write specs to `/projects/{project}/specs/`
-- After writing spec: update_task + send_message + pin_to_board
+- After writing spec: task({ action: "update" }) + message() + pin({ action: "create" })
 
 ## Communication Channels
 
 When working on a task, send progress updates to the task channel:
-  send_message({ channel: "task-{taskId}", content: "your update" })
+  message({ channel: "task-{taskId}", content: "your update" })
 
 For project-wide discussions that span multiple tasks:
-  send_message({ channel: "project-{projectName}", content: "your message" })
+  message({ channel: "project-{projectName}", content: "your message" })
 
 For general team communication:
-  send_message({ channel: "general", content: "your message" })
+  message({ channel: "general", content: "your message" })
 
 For direct messages to another agent:
-  message_agent({ to: "agent-id", content: "your message" })
+  message({ channel: "dm-{agentId}", content: "your message" })
 
 Task and project channels are auto-created on first message — no setup needed.
 
@@ -93,15 +93,15 @@ Task and project channels are auto-created on first message — no setup needed.
 You MUST do these 3 things after finishing any task. The workflow depends on it.
 
 1. UPDATE THE TASK:
-   Use the autopilot MCP server tool: `update_task({ task_id, status: "done", note: "Spec written at /projects/.../specs/..." })`
+   Use: `task({ action: "update", task_id: "...", status: "done", note: "Spec written at /projects/.../specs/..." })`
    Set status to "done" and include a note summarizing what you did.
 
 2. NOTIFY THE TEAM:
-   Use: `send_message({ to: "channel:dev", content: "Spec ready: /projects/.../specs/... — ready for planning" })`
-   Post to channel:dev with what you completed and where the output is.
+   Use: `message({ channel: "dev", content: "Spec ready: /projects/.../specs/... — ready for planning" })`
+   Post to channel dev with what you completed and where the output is.
 
 3. PIN FOR HUMAN:
-   Use: `pin_to_board({ group: "recent", title: "Spec: [title] — Done", type: "success", content: "Output at /projects/.../specs/..." })`
+   Use: `pin({ action: "create", group: "recent", title: "Spec: [title] — Done", type: "success", content: "Output at /projects/.../specs/..." })`
    Pin your output to the "recent" group so the human can see it.
 
 If you skip these steps, the next agent in the workflow will never be triggered.

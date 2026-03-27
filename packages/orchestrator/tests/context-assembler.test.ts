@@ -5,7 +5,7 @@ import { loadAgentMemory } from '../src/context/memory-loader'
 import { buildCompanySnapshot } from '../src/context/snapshot'
 import { writeYaml } from '../src/fs/yaml'
 import { join } from 'node:path'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import type { Agent, Company, Task } from '@questpie/autopilot-spec'
 import type { StorageBackend } from '../src/fs/storage'
 
@@ -133,6 +133,45 @@ describe('context assembler', () => {
 
 		// Write agents.yaml
 		await writeYaml(join(root, 'team', 'agents.yaml'), { agents: testAgents })
+
+		// Write role prompt for developer
+		await writeFile(
+			join(root, 'team', 'roles', 'developer.md'),
+			[
+				'---',
+				'name: Developer',
+				'description: Implements features, writes code',
+				'default_tools: [fs, terminal, git]',
+				'---',
+				'',
+				'You are Peter, a Senior Fullstack Developer at {{companyName}}.',
+				'',
+				'## Your Team',
+				'{{teamRoster}}',
+				'',
+				'## Rules',
+				'- Write clean code',
+			].join('\n'),
+			'utf-8',
+		)
+
+		// Write role prompt for planner
+		await writeFile(
+			join(root, 'team', 'roles', 'planner.md'),
+			[
+				'---',
+				'name: Planner',
+				'description: Creates implementation plans',
+				'default_tools: [fs, terminal]',
+				'---',
+				'',
+				'You are a planner at {{companyName}}.',
+				'',
+				'## Your Team',
+				'{{teamRoster}}',
+			].join('\n'),
+			'utf-8',
+		)
 
 		return root
 	}

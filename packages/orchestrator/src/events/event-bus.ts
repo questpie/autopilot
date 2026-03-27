@@ -12,6 +12,8 @@ export type AutopilotEvent =
 	| { type: 'file_locked'; path: string; lockedBy: string }
 	| { type: 'file_unlocked'; path: string }
 	| { type: 'knowledge_changed'; path: string; action: 'created' | 'updated' }
+	| { type: 'artifact_changed'; artifactId: string; action: 'registered' | 'updated' }
+	| { type: 'validation_error'; file: string; error: string }
 
 export class EventBus {
 	private listeners = new Set<(event: AutopilotEvent) => void>()

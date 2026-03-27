@@ -1,4 +1,8 @@
 import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { parse as parseYaml } from 'yaml'
+import { AgentsFileSchema } from '@questpie/autopilot-spec'
+import { WorkflowSchema } from '@questpie/autopilot-spec'
 import type { Schedule, Webhook } from '@questpie/autopilot-spec'
 import { loadCompany, loadAgents } from './fs'
 import { reloadRoles } from './auth/roles'
@@ -118,7 +122,7 @@ export class Orchestrator {
 		})
 		try {
 			await this.watcher.start()
-			console.log('[orchestrator] watcher started (watching tasks/, comms/, dashboard/, team/)')
+			console.log('[orchestrator] watcher started (watching tasks/, comms/, dashboard/, team/, knowledge/, artifacts/)')
 		} catch (err) {
 			console.error('[orchestrator] failed to start watcher:', err)
 		}
@@ -340,18 +344,65 @@ export class Orchestrator {
 					break
 				case 'config_changed':
 					console.log(`[orchestrator] config changed: ${event.file}`)
-					if (event.file === 'schedules.yaml' && this.scheduler) {
-						console.log('[orchestrator] reloading scheduler...')
-						await this.scheduler.reload()
-					}
-					if (event.file === 'roles.yaml') {
-						await reloadRoles(this.options.companyRoot)
-						console.log('[orchestrator] roles reloaded')
-					}
+					await this.handleConfigChanged(event.file, event.path)
+					break
+				case 'knowledge_changed':
+					console.log(`[orchestrator] knowledge changed: ${event.file}`)
+					await this.handleKnowledgeChanged(event.file, event.path)
+					break
+				case 'artifact_changed':
+					console.log(`[orchestrator] artifact registered: ${event.artifactId}`)
+					eventBus.emit({ type: 'artifact_changed', artifactId: event.artifactId, action: 'registered' })
 					break
 			}
 		} catch (err) {
 			console.error(`[orchestrator] error handling watch event (${event.type}):`, err)
+		}
+	}
+
+	/** TM-008: Validate config files with Zod before reloading. */
+	private async handleConfigChanged(file: string, path: string): Promise<void> {
+		try {
+			const content = readFileSync(path, 'utf-8')
+			const parsed = parseYaml(content)
+
+			// Validate with Zod schemas depending on file type
+			if (file === 'agents.yaml') {
+				AgentsFileSchema.parse(parsed)
+			} else if (file.startsWith('workflows/')) {
+				WorkflowSchema.parse(parsed)
+			}
+
+			// Valid config — proceed with reload
+			if (file === 'schedules.yaml' && this.scheduler) {
+				console.log('[orchestrator] reloading scheduler...')
+				await this.scheduler.reload()
+			}
+			if (file === 'roles.yaml') {
+				await reloadRoles(this.options.companyRoot)
+				console.log('[orchestrator] roles reloaded')
+			}
+
+			eventBus.emit({ type: 'settings_changed' })
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err)
+			console.error(`[watcher] Invalid config: ${file}`, msg)
+			eventBus.emit({ type: 'validation_error', file, error: msg })
+			// Old config stays active (safe fallback)
+		}
+	}
+
+	/** TM-005: Reindex knowledge files when they change on disk. */
+	private async handleKnowledgeChanged(file: string, filePath: string): Promise<void> {
+		try {
+			const { indexer } = await container.resolveAsync([indexerFactory])
+			const content = readFileSync(filePath, 'utf-8')
+			const titleMatch = content.match(/^#\s+(.+)$/m)
+			const title = titleMatch?.[1]?.trim() ?? file.replace(/\.md$/, '')
+			await indexer.indexOne('knowledge', file, title, content)
+			eventBus.emit({ type: 'knowledge_changed', path: file, action: 'updated' })
+		} catch (err) {
+			console.error(`[orchestrator] failed to reindex knowledge file ${file}:`, err instanceof Error ? err.message : err)
 		}
 	}
 

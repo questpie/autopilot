@@ -22,6 +22,7 @@ export async function createTestCompany(): Promise<{
 		'logs/activity',
 		'logs/sessions',
 		'team',
+		'team/roles',
 		'team/workflows',
 		'context/memory',
 		'context/indexes',

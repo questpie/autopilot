@@ -326,16 +326,21 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 		sections.push(truncateToTokens(taskLines.join('\n'), 15_000))
 	}
 
-	// Layer 5: Skills Discovery (~1K tokens) — available skills for the agent's role
+	// Layer 5: Skills Discovery (~2K tokens) — auto-load role-relevant skills (TM-007)
 	const roleSkills = await getSkillsForRole(companyRoot, agent.role)
 	if (roleSkills.length > 0) {
 		const skillLines: string[] = ['## Available Skills']
-		skillLines.push('Use the `skill_request` tool with a skill_id to load full content.\n')
-		for (const skill of roleSkills) {
+		skillLines.push('These skills are auto-loaded based on your role. Use `read_file("skills/{id}/SKILL.md")` for full content.\n')
+		// Include top 5 most relevant skill summaries directly in context
+		const topSkills = roleSkills.slice(0, 5)
+		for (const skill of topSkills) {
 			const desc = skill.description ? ` — ${skill.description}` : ''
 			skillLines.push(`- **${skill.name}** (\`${skill.id}\`)${desc}`)
 		}
-		sections.push(truncateToTokens(skillLines.join('\n'), 1_000))
+		if (roleSkills.length > 5) {
+			skillLines.push(`\n...and ${roleSkills.length - 5} more. Use \`read_file("skills/{id}/SKILL.md")\` to access any skill.`)
+		}
+		sections.push(truncateToTokens(skillLines.join('\n'), 2_000))
 	}
 
 	// Layer 6: Autopilot MCP Tools — explicit list so agent knows what's available
@@ -344,33 +349,39 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 You have these tools via the "autopilot" MCP server. Use them to interact with the company.
 
 ### Task Management
-- **update_task**({ task_id, status, note }) — Update a task's status. YOU MUST CALL THIS when done.
-- **create_task**({ title, type, priority, assigned_to, workflow }) — Create a new task.
-- **add_blocker**({ task_id, reason, assigned_to }) — Escalate a blocker to human.
-- **resolve_blocker**({ task_id, note }) — Mark a blocker as resolved.
+- **task**({ action: "create", title, type, priority, assigned_to, workflow }) — Create a new task.
+- **task**({ action: "update", task_id, status, note }) — Update a task's status. YOU MUST CALL THIS when done.
+- **task**({ action: "approve", task_id, note }) — Approve a task (moves to done).
+- **task**({ action: "reject", task_id, reason }) — Reject a task (moves to blocked).
+- **task**({ action: "block", task_id, reason, blocker_assigned_to }) — Escalate a blocker to human.
+- **task**({ action: "unblock", task_id, note }) — Mark a blocker as resolved.
 
 ### Communication
-- **send_message**({ channel, content }) — Send to a channel. Task/project channels (task-*, project-*) are auto-created on first message. CALL THIS after completing work.
-- **message_agent**({ to, content, reason }) — Send a direct message to another agent.
+- **message**({ channel, content }) — Send to a channel. Conventions:
+  - \`"dm-{agentId}"\` — Direct message (auto-creates DM channel)
+  - \`"task-{id}"\` — Task thread (auto-created)
+  - \`"project-{name}"\` — Project channel (auto-created)
+  - Any other name — standard channel (must exist)
 
 ### Dashboard
-- **pin_to_board**({ group, title, type, content }) — Pin output for human visibility. CALL THIS for important results.
-- **unpin_from_board**({ pin_id }) — Remove a pin.
+- **pin**({ action: "create", group, title, type, content }) — Pin output for human visibility.
+- **pin**({ action: "remove", pin_id }) — Remove a pin.
 
-### Search & Knowledge
+### Search
 - **search**({ query, type?, scope? }) — Search across all entities (tasks, messages, knowledge, pins, agents, channels, skills).
-- **update_knowledge**({ path, content, reason }) — Add/update a knowledge document.
-- **skill_request**({ skill_id }) — Load a skill document for guidance.
+
+### Knowledge & Artifacts
+- Use \`write_file("knowledge/...", content)\` to add/update knowledge docs (auto-indexed by watcher).
+- Use \`write_file("artifacts/{name}/...", ...)\` to create artifacts (watcher registers on .artifact.yaml).
 
 ### External
-- **http_request**({ method, url, secret_ref }) — Call an external API with secret injection.
-- **create_artifact**({ name, type, files }) — Create a previewable artifact.
+- **http**({ method, url, secret_ref }) — Call an external API with secret injection.
 
 ### CRITICAL REMINDER
 After finishing ANY task, you MUST:
-1. \`update_task({ task_id: "...", status: "done", note: "..." })\`
-2. \`send_message({ to: "channel:dev", content: "Done: ..." })\`
-3. \`pin_to_board({ group: "recent", title: "...", type: "success" })\`
+1. \`task({ action: "update", task_id: "...", status: "done", note: "..." })\`
+2. \`message({ channel: "dev", content: "Done: ..." })\`
+3. \`pin({ action: "create", group: "recent", title: "...", type: "success" })\`
 
 Without these 3 calls, the workflow pipeline stops.`)
 

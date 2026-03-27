@@ -1,14 +1,10 @@
-import { mkdir } from 'node:fs/promises'
-import { join, relative, resolve } from 'path'
+import { join } from 'path'
 import dns from 'node:dns/promises'
-import { stringify } from 'yaml'
 import { z } from 'zod'
 import { PATHS } from '@questpie/autopilot-spec'
 import type { StorageBackend } from '../fs/storage'
 import { createPin, removePin } from '../fs/pins'
-import { readYamlUnsafe, writeYaml } from '../fs/yaml'
-import { loadSkillContent } from '../skills'
-import { isDeniedPath } from '../auth/deny-patterns'
+import { readYamlUnsafe } from '../fs/yaml'
 import type { EventBus } from '../events/event-bus'
 import { container } from '../container'
 import { indexerFactory } from '../db/indexer'
@@ -119,27 +115,317 @@ export interface AutopilotToolOptions {
 /**
  * Build the full set of autopilot tools available to agents.
  *
- * Includes: `send_message`, `create_task`, `update_task`, `add_blocker`,
- * `pin_to_board`, `unpin_from_board`, `create_artifact`, `skill_request`,
- * `search`, `update_knowledge`, `http_request`, `message_agent`,
- * and `resolve_blocker`.
+ * Includes: `task`, `message`, `pin`, `search`, `http`.
  */
 export function createAutopilotTools(companyRoot: string, storage: StorageBackend, options?: AutopilotToolOptions): ToolDefinition[] {
 	// biome-ignore lint: generic variance is intentional
 	const tools: Array<ToolDefinition<any>> = [
-		// Communication
+		// ─── TM-001: Unified task tool ─────────────────────────────────────
 		defineTool(
-			'send_message',
-			'Send a message to a channel. Task and project channels (task-*, project-*) are auto-created on first message.',
+			'task',
+			'Manage tasks: create, update, approve, reject, block, or unblock.',
 			z.object({
-				channel: z.string().describe('Channel ID to send to (e.g. "general", "dev", "task-052", "project-studio")'),
-				content: z.string().describe('Message content'),
+				action: z.enum(['create', 'update', 'approve', 'reject', 'block', 'unblock']),
+				task_id: z.string().optional().describe('Required for update/approve/reject/block/unblock'),
+				title: z.string().optional().describe('For create'),
+				description: z.string().optional().describe('For create/update'),
+				type: z.enum(['intent', 'planning', 'implementation', 'review', 'deployment', 'marketing', 'monitoring', 'human_required']).optional().describe('For create'),
+				priority: z.enum(['critical', 'high', 'medium', 'low']).optional().describe('For create/update'),
+				assigned_to: z.string().optional().describe('For create/update'),
+				project: z.string().optional().describe('For create/update'),
+				workflow: z.string().optional().describe('For create'),
+				status: z.enum(['draft', 'backlog', 'assigned', 'in_progress', 'review', 'blocked', 'done', 'cancelled']).optional().describe('For update'),
+				note: z.string().optional().describe('For update/block/unblock'),
+				reason: z.string().optional().describe('For block/reject'),
+				blocker_assigned_to: z.string().optional().describe('For block: who should resolve'),
+			}),
+			async (args, ctx) => {
+				switch (args.action) {
+					// ── create ──────────────────────────────────────────────
+					case 'create': {
+						if (!args.title) {
+							return { content: [{ type: 'text' as const, text: 'Error: title is required for create' }], isError: true }
+						}
+						const task = await storage.createTask({
+							title: args.title,
+							description: args.description ?? '',
+							type: args.type ?? 'implementation',
+							status: args.assigned_to ? 'assigned' : 'backlog',
+							priority: args.priority ?? 'medium',
+							created_by: ctx.agentId,
+							assigned_to: args.assigned_to,
+							project: args.project,
+							depends_on: [],
+							workflow: args.workflow,
+							created_at: new Date().toISOString(),
+							updated_at: new Date().toISOString(),
+						} as any)
+						ctx.eventBus.emit({ type: 'task_changed', taskId: task.id, status: task.status, assignedTo: task.assigned_to })
+						// Real-time index
+						getIndexer().then((idx) => idx?.indexOne('task', task.id, task.title, `${task.title} ${task.description ?? ''} ${task.status} ${task.type}`)).catch(() => {})
+
+						// Auto-create task channel
+						const taskChannelId = `task-${task.id}`
+						try {
+							await storage.createChannel({
+								id: taskChannelId,
+								name: `Task ${task.id}`,
+								type: 'group',
+								description: task.title,
+								created_by: ctx.agentId,
+								created_at: new Date().toISOString(),
+								updated_at: new Date().toISOString(),
+								metadata: {},
+							})
+							await storage.addChannelMember(taskChannelId, ctx.agentId, 'agent', 'member')
+							if (task.assigned_to) {
+								await storage.addChannelMember(taskChannelId, task.assigned_to, 'agent', 'member')
+							}
+							ctx.eventBus.emit({ type: 'channel_created', channelId: taskChannelId, name: `Task ${task.id}` })
+						} catch {
+							// Channel may already exist — safe to ignore
+						}
+
+						return { content: [{ type: 'text' as const, text: `Created task ${task.id}: ${task.title}` }] }
+					}
+
+					// ── update ──────────────────────────────────────────────
+					case 'update': {
+						if (!args.task_id) {
+							return { content: [{ type: 'text' as const, text: 'Error: task_id is required for update' }], isError: true }
+						}
+						// If note provided, append to task history
+						if (args.note) {
+							const task = await storage.readTask(args.task_id)
+							const timestamp = new Date().toISOString()
+							const history = [...(task?.history ?? []), {
+								at: timestamp,
+								by: ctx.agentId,
+								action: 'note',
+								note: args.note,
+							}]
+							await storage.updateTask(args.task_id, { history, updated_at: timestamp } as any, ctx.agentId)
+						}
+
+						// If status provided, update and move task
+						if (args.status) {
+							await storage.updateTask(args.task_id, { status: args.status } as any, ctx.agentId)
+							await storage.moveTask(args.task_id, args.status, ctx.agentId)
+						}
+
+						// Update other fields if provided
+						const updates: Record<string, unknown> = {}
+						if (args.description !== undefined) updates.description = args.description
+						if (args.priority !== undefined) updates.priority = args.priority
+						if (args.assigned_to !== undefined) updates.assigned_to = args.assigned_to
+						if (args.project !== undefined) updates.project = args.project
+						if (Object.keys(updates).length > 0) {
+							updates.updated_at = new Date().toISOString()
+							await storage.updateTask(args.task_id, updates as any, ctx.agentId)
+						}
+
+						// Emit event
+						const updatedTask = await storage.readTask(args.task_id)
+						ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: updatedTask?.status ?? 'unknown', assignedTo: updatedTask?.assigned_to })
+
+						return { content: [{ type: 'text' as const, text: `Updated task ${args.task_id}` }] }
+					}
+
+					// ── approve ─────────────────────────────────────────────
+					case 'approve': {
+						if (!args.task_id) {
+							return { content: [{ type: 'text' as const, text: 'Error: task_id is required for approve' }], isError: true }
+						}
+						const task = await storage.readTask(args.task_id)
+						const timestamp = new Date().toISOString()
+						await storage.updateTask(args.task_id, {
+							status: 'done',
+							updated_at: timestamp,
+							history: [...(task?.history ?? []), {
+								at: timestamp,
+								by: ctx.agentId,
+								action: 'approved',
+								note: args.note ?? 'Approved',
+							}],
+						} as any, ctx.agentId)
+						await storage.moveTask(args.task_id, 'done', ctx.agentId)
+						ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: 'done', assignedTo: task?.assigned_to })
+						return { content: [{ type: 'text' as const, text: `Approved task ${args.task_id}` }] }
+					}
+
+					// ── reject ──────────────────────────────────────────────
+					case 'reject': {
+						if (!args.task_id) {
+							return { content: [{ type: 'text' as const, text: 'Error: task_id is required for reject' }], isError: true }
+						}
+						const task = await storage.readTask(args.task_id)
+						const timestamp = new Date().toISOString()
+						await storage.updateTask(args.task_id, {
+							status: 'blocked',
+							updated_at: timestamp,
+							history: [...(task?.history ?? []), {
+								at: timestamp,
+								by: ctx.agentId,
+								action: 'rejected',
+								note: args.reason ?? 'Rejected',
+							}],
+						} as any, ctx.agentId)
+						await storage.moveTask(args.task_id, 'blocked', ctx.agentId)
+						ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: 'blocked', assignedTo: task?.assigned_to })
+						return { content: [{ type: 'text' as const, text: `Rejected task ${args.task_id}: ${args.reason ?? 'no reason'}` }] }
+					}
+
+					// ── block ───────────────────────────────────────────────
+					case 'block': {
+						if (!args.task_id) {
+							return { content: [{ type: 'text' as const, text: 'Error: task_id is required for block' }], isError: true }
+						}
+						const task = await storage.readTask(args.task_id)
+						if (!task) {
+							return { content: [{ type: 'text' as const, text: `Task not found: ${args.task_id}` }], isError: true }
+						}
+
+						const blocker = {
+							id: `blocker-${Date.now()}`,
+							type: 'dependency' as const,
+							reason: args.reason ?? 'Blocked',
+							assigned_to: args.blocker_assigned_to ?? '',
+							resolved: false,
+							created_at: new Date().toISOString(),
+							created_by: ctx.agentId,
+						}
+						const blockers = [...(task.blockers ?? []), blocker]
+						const timestamp = new Date().toISOString()
+
+						await storage.updateTask(
+							args.task_id,
+							{
+								blockers,
+								updated_at: timestamp,
+								history: [
+									...(task.history ?? []),
+									{
+										at: timestamp,
+										by: ctx.agentId,
+										action: 'blocker_added',
+										note: `Blocker: ${args.reason} (assigned to ${args.blocker_assigned_to ?? 'unassigned'})`,
+									},
+								],
+							} as any,
+							ctx.agentId,
+						)
+						await storage.moveTask(args.task_id, 'blocked', ctx.agentId)
+
+						ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: 'blocked', assignedTo: task.assigned_to })
+
+						return { content: [{ type: 'text' as const, text: `Blocker added to ${args.task_id}: ${args.reason} (assigned to ${args.blocker_assigned_to ?? 'unassigned'})` }] }
+					}
+
+					// ── unblock ─────────────────────────────────────────────
+					case 'unblock': {
+						if (!args.task_id) {
+							return { content: [{ type: 'text' as const, text: 'Error: task_id is required for unblock' }], isError: true }
+						}
+						const task = await storage.readTask(args.task_id)
+						if (!task) {
+							return { content: [{ type: 'text' as const, text: `Task not found: ${args.task_id}` }], isError: true }
+						}
+
+						const blockerIdx = task.blockers.findIndex((b) => !b.resolved)
+						if (blockerIdx === -1) {
+							return { content: [{ type: 'text' as const, text: `No unresolved blockers on task ${args.task_id}` }], isError: true }
+						}
+
+						const updatedBlockers = [...task.blockers]
+						updatedBlockers[blockerIdx] = {
+							...updatedBlockers[blockerIdx]!,
+							resolved: true,
+							resolved_at: new Date().toISOString(),
+							resolved_by: ctx.agentId,
+							resolved_note: args.note ?? '',
+						}
+
+						const timestamp = new Date().toISOString()
+						await storage.updateTask(
+							args.task_id,
+							{
+								blockers: updatedBlockers,
+								updated_at: timestamp,
+								history: [
+									...task.history,
+									{
+										at: timestamp,
+										by: ctx.agentId,
+										action: 'blocker_resolved',
+										note: args.note ?? 'Resolved',
+									},
+								],
+							} as any,
+							ctx.agentId,
+						)
+
+						// If task was blocked and all blockers now resolved, move back to active
+						const allResolved = updatedBlockers.every((b) => b.resolved)
+						let newStatus = task.status
+						if (task.status === 'blocked' && allResolved) {
+							await storage.moveTask(args.task_id, 'in_progress', ctx.agentId)
+							newStatus = 'in_progress'
+						}
+
+						ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: newStatus, assignedTo: task.assigned_to })
+
+						return { content: [{ type: 'text' as const, text: `Blocker resolved on task ${args.task_id}: ${args.note ?? 'Resolved'}` }] }
+					}
+				}
+			},
+		),
+
+		// ─── TM-002: Unified message tool ──────────────────────────────────
+		defineTool(
+			'message',
+			'Send a message. Channel conventions: "dm-{agentId}" for DMs, "task-{id}" for task threads, "project-{name}" for project channels, or any existing channel name.',
+			z.object({
+				channel: z.string().describe('Channel: "general", "task-052", "project-studio", "dm-max"'),
+				content: z.string(),
 				references: z.array(z.string()).optional().describe('Referenced file paths or task IDs'),
 			}),
 			async (args, ctx) => {
+				const isDmChannel = args.channel.startsWith('dm-')
 				const isTaskOrProjectChannel = args.channel.startsWith('task-') || args.channel.startsWith('project-')
 
-				// Auto-create task/project channels on first message (CR-002)
+				// dm-{agentId} → auto-create DM channel
+				if (isDmChannel) {
+					const targetAgentId = args.channel.slice(3) // strip "dm-"
+					const channel = await storage.getOrCreateDirectChannel(ctx.agentId, targetAgentId)
+
+					await storage.sendMessage({
+						id: `msg-${Date.now().toString(36)}`,
+						from: ctx.agentId,
+						channel: channel.id,
+						at: new Date().toISOString(),
+						content: args.content,
+						mentions: [targetAgentId],
+						references: args.references ?? [],
+						reactions: [],
+						thread: null,
+						external: false,
+					} as any)
+
+					ctx.eventBus.emit({ type: 'message', channel: channel.id, from: ctx.agentId, content: args.content })
+
+					await createPin(companyRoot, {
+						type: 'info',
+						title: `Message from ${ctx.agentId}`,
+						content: args.content,
+						group: 'agents',
+						created_by: ctx.agentId,
+						metadata: { agent_id: targetAgentId, task_id: undefined },
+					})
+
+					return { content: [{ type: 'text' as const, text: `Direct message sent to ${targetAgentId} in channel ${channel.id}` }] }
+				}
+
+				// Auto-create task/project channels on first message
 				const existingChannel = await storage.readChannel(args.channel)
 				if (!existingChannel) {
 					if (isTaskOrProjectChannel) {
@@ -169,7 +455,7 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 					}
 				}
 
-				// Auto-join task/project channels (CR-003)
+				// Auto-join task/project channels
 				const isMember = await storage.isChannelMember(args.channel, ctx.agentId)
 				if (!isMember) {
 					if (isTaskOrProjectChannel) {
@@ -201,307 +487,52 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 			},
 		),
 
-		// Task management
+		// ─── TM-003: Unified pin tool ──────────────────────────────────────
 		defineTool(
-			'create_task',
-			'Create a new task',
+			'pin',
+			'Pin or unpin items on the dashboard. Use action "create" to pin, "remove" to unpin.',
 			z.object({
-				title: z.string(),
-				description: z.string().optional(),
-				type: z.enum(['intent', 'planning', 'implementation', 'review', 'deployment', 'marketing', 'monitoring', 'human_required']),
-				priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
-				assigned_to: z.string().optional(),
-				project: z.string().optional(),
-				depends_on: z.array(z.string()).optional(),
-				workflow: z.string().optional(),
+				action: z.enum(['create', 'remove']),
+				pin_id: z.string().optional().describe('Required for remove'),
+				group: z.string().optional().describe('For create: "alerts", "overview", "agents", "recent"'),
+				title: z.string().optional().describe('For create'),
+				content: z.string().optional().describe('For create'),
+				type: z.enum(['info', 'warning', 'success', 'error', 'progress']).optional().describe('For create'),
+				metadata: z.record(z.unknown()).optional().describe('For create'),
 			}),
 			async (args, ctx) => {
-				const task = await storage.createTask({
-					title: args.title,
-					description: args.description ?? '',
-					type: args.type,
-					status: args.assigned_to ? 'assigned' : 'backlog',
-					priority: args.priority ?? 'medium',
-					created_by: ctx.agentId,
-					assigned_to: args.assigned_to,
-					project: args.project,
-					depends_on: args.depends_on ?? [],
-					workflow: args.workflow,
-					created_at: new Date().toISOString(),
-					updated_at: new Date().toISOString(),
-				} as any)
-				ctx.eventBus.emit({ type: 'task_changed', taskId: task.id, status: task.status, assignedTo: task.assigned_to })
-				// Real-time index
-				getIndexer().then((idx) => idx?.indexOne('task', task.id, task.title, `${task.title} ${task.description ?? ''} ${task.status} ${task.type}`)).catch(() => {})
-
-				// CR-007: Auto-create task channel on task creation
-				const taskChannelId = `task-${task.id}`
-				try {
-					await storage.createChannel({
-						id: taskChannelId,
-						name: `Task ${task.id}`,
-						type: 'group',
-						description: task.title,
+				if (args.action === 'create') {
+					if (!args.title || !args.type) {
+						return { content: [{ type: 'text' as const, text: 'Error: title and type are required for pin create' }], isError: true }
+					}
+					const pinId = `pin-${Date.now().toString(36)}`
+					await createPin(companyRoot, {
+						id: pinId,
+						group: args.group ?? 'recent',
+						title: args.title,
+						content: args.content ?? '',
+						type: args.type,
 						created_by: ctx.agentId,
 						created_at: new Date().toISOString(),
-						updated_at: new Date().toISOString(),
-						metadata: {},
+						metadata: args.metadata ?? {},
 					})
-					await storage.addChannelMember(taskChannelId, ctx.agentId, 'agent', 'member')
-					if (task.assigned_to) {
-						await storage.addChannelMember(taskChannelId, task.assigned_to, 'agent', 'member')
-					}
-					ctx.eventBus.emit({ type: 'channel_created', channelId: taskChannelId, name: `Task ${task.id}` })
-				} catch {
-					// Channel may already exist — safe to ignore
+					ctx.eventBus.emit({ type: 'pin_changed', pinId, action: 'created' })
+					// Real-time index
+					getIndexer().then((idx) => idx?.indexOne('pin', pinId, args.title!, `${args.title} ${args.content ?? ''}`)).catch(() => {})
+					return { content: [{ type: 'text' as const, text: `Pinned: ${args.title}` }] }
 				}
 
-				return { content: [{ type: 'text' as const, text: `Created task ${task.id}: ${task.title}` }] }
-			},
-		),
-
-		defineTool(
-			'update_task',
-			'Update an existing task',
-			z.object({
-				task_id: z.string(),
-				status: z.enum(['draft', 'backlog', 'assigned', 'in_progress', 'review', 'blocked', 'done', 'cancelled']).optional(),
-				note: z.string().optional(),
-			}),
-			async (args, ctx) => {
-				// If note provided, append to task history
-				if (args.note) {
-					const task = await storage.readTask(args.task_id)
-					const timestamp = new Date().toISOString()
-					const history = [...(task?.history ?? []), {
-						at: timestamp,
-						by: ctx.agentId,
-						action: 'note',
-						note: args.note,
-					}]
-					await storage.updateTask(args.task_id, { history, updated_at: timestamp } as any, ctx.agentId)
+				// remove
+				if (!args.pin_id) {
+					return { content: [{ type: 'text' as const, text: 'Error: pin_id is required for remove' }], isError: true }
 				}
-
-				// If status provided, update and move task
-				if (args.status) {
-					await storage.updateTask(args.task_id, { status: args.status } as any, ctx.agentId)
-					await storage.moveTask(args.task_id, args.status, ctx.agentId)
-				}
-
-				// Emit event
-				const updatedTask = await storage.readTask(args.task_id)
-				ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: updatedTask?.status ?? 'unknown', assignedTo: updatedTask?.assigned_to })
-
-				return { content: [{ type: 'text' as const, text: `Updated task ${args.task_id}` }] }
-			},
-		),
-
-		defineTool(
-			'add_blocker',
-			'Add a blocker to a task -- escalates to human',
-			z.object({
-				task_id: z.string(),
-				reason: z.string(),
-				assigned_to: z.string().describe('Who should resolve this (human ID)'),
-			}),
-			async (args, ctx) => {
-				const task = await storage.readTask(args.task_id)
-				if (!task) {
-					return { content: [{ type: 'text' as const, text: `Task not found: ${args.task_id}` }], isError: true }
-				}
-
-				const blocker = {
-					id: `blocker-${Date.now()}`,
-					type: 'dependency' as const,
-					reason: args.reason,
-					assigned_to: args.assigned_to,
-					resolved: false,
-					created_at: new Date().toISOString(),
-					created_by: ctx.agentId,
-				}
-				const blockers = [...(task.blockers ?? []), blocker]
-				const timestamp = new Date().toISOString()
-
-				await storage.updateTask(
-					args.task_id,
-					{
-						blockers,
-						updated_at: timestamp,
-						history: [
-							...(task.history ?? []),
-							{
-								at: timestamp,
-								by: ctx.agentId,
-								action: 'blocker_added',
-								note: `Blocker: ${args.reason} (assigned to ${args.assigned_to})`,
-							},
-						],
-					} as any,
-					ctx.agentId,
-				)
-				await storage.moveTask(args.task_id, 'blocked', ctx.agentId)
-
-				ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: 'blocked', assignedTo: task.assigned_to })
-
-				return { content: [{ type: 'text' as const, text: `Blocker added to ${args.task_id}: ${args.reason} (assigned to ${args.assigned_to})` }] }
-			},
-		),
-
-		// Dashboard
-		defineTool(
-			'pin_to_board',
-			'Pin an item to the dashboard for human visibility',
-			z.object({
-				group: z.string().describe('Dashboard group: "alerts", "overview", "agents", "recent"'),
-				title: z.string(),
-				content: z.string().optional(),
-				type: z.enum(['info', 'warning', 'success', 'error', 'progress']),
-				metadata: z.object({
-					task_id: z.string().optional(),
-					progress: z.number().min(0).max(100).optional(),
-					expires_at: z.string().optional(),
-					actions: z.array(z.object({ label: z.string(), action: z.string() })).optional(),
-				}).optional(),
-			}),
-			async (args, ctx) => {
-				const pinId = `pin-${Date.now().toString(36)}`
-				await createPin(companyRoot, {
-					id: pinId,
-					group: args.group,
-					title: args.title,
-					content: args.content ?? '',
-					type: args.type,
-					created_by: ctx.agentId,
-					created_at: new Date().toISOString(),
-					metadata: args.metadata ?? {},
-				})
-				ctx.eventBus.emit({ type: 'pin_changed', pinId, action: 'created' })
-				// Real-time index
-				getIndexer().then((idx) => idx?.indexOne('pin', pinId, args.title, `${args.title} ${args.content ?? ''}`)).catch(() => {})
-				return { content: [{ type: 'text' as const, text: `Pinned: ${args.title}` }] }
-			},
-		),
-
-		defineTool(
-			'unpin_from_board',
-			'Remove a pin from the dashboard',
-			z.object({
-				pin_id: z.string(),
-			}),
-			async (args, ctx) => {
 				await removePin(companyRoot, args.pin_id)
 				ctx.eventBus.emit({ type: 'pin_changed', pinId: args.pin_id, action: 'removed' })
 				return { content: [{ type: 'text' as const, text: `Unpinned: ${args.pin_id}` }] }
 			},
 		),
 
-		// Artifacts
-		defineTool(
-			'create_artifact',
-			'Create a previewable artifact (React app, HTML page, or static files)',
-			z.object({
-				name: z.string().describe('Artifact name (used as directory name)'),
-				type: z.enum(['react', 'html', 'static']).describe('Artifact type'),
-				files: z.record(z.string()).describe('File paths (relative) mapped to their content'),
-			}),
-			async (args, ctx) => {
-				if (args.name.includes('..') || args.name.includes('/')) {
-					return { content: [{ type: 'text' as const, text: 'Error: artifact name must not contain ".." or "/"' }], isError: true }
-				}
-				const artifactDir = join(companyRoot, 'artifacts', args.name)
-				await Bun.write(join(artifactDir, '.gitkeep'), '')
-
-				for (const [filePath, content] of Object.entries(args.files)) {
-					const resolved = resolve(artifactDir, filePath)
-					const rel = relative(artifactDir, resolved)
-					if (rel.startsWith('..')) {
-						return { content: [{ type: 'text' as const, text: `Error: file path "${filePath}" escapes artifact directory` }], isError: true }
-					}
-					const relToCompany = relative(companyRoot, resolved)
-					if (isDeniedPath(relToCompany)) {
-						return { content: [{ type: 'text' as const, text: `Error: access denied to path "${filePath}"` }], isError: true }
-					}
-					await Bun.write(resolved, content)
-				}
-
-				// Ensure React artifacts have a vite config that respects ARTIFACT_BASE
-				if (args.type === 'react' && !args.files['vite.config.ts'] && !args.files['vite.config.js']) {
-					await Bun.write(
-						join(artifactDir, 'vite.config.ts'),
-						[
-							"import { defineConfig } from 'vite'",
-							"import react from '@vitejs/plugin-react'",
-							'',
-							'export default defineConfig({',
-							"  base: process.env.ARTIFACT_BASE || '/',",
-							'  plugins: [react()],',
-							'})',
-							'',
-						].join('\n'),
-					)
-				}
-
-				let artifactConfig: Record<string, string>
-				switch (args.type) {
-					case 'react':
-						artifactConfig = {
-							name: args.name,
-							serve: 'bunx vite --port {port}',
-							build: 'bun install',
-							health: '/',
-							timeout: '5m',
-						}
-						break
-					case 'html':
-						artifactConfig = {
-							name: args.name,
-							serve: 'bunx serve -p {port}',
-							health: '/',
-							timeout: '5m',
-						}
-						break
-					case 'static':
-						artifactConfig = {
-							name: args.name,
-						}
-						break
-				}
-
-				await Bun.write(
-					join(artifactDir, '.artifact.yaml'),
-					stringify(artifactConfig),
-				)
-
-				return {
-					content: [
-						{
-							type: 'text' as const,
-							text: `Created ${args.type} artifact "${args.name}" with ${Object.keys(args.files).length} files at /artifacts/${args.name}/`,
-						},
-					],
-				}
-			},
-		),
-
-		// Skills
-		defineTool(
-			'skill_request',
-			'Load the full content of a skill/knowledge document by its ID',
-			z.object({
-				skill_id: z.string().describe('The skill ID from the Available Skills list'),
-			}),
-			async (args) => {
-				try {
-					const content = await loadSkillContent(companyRoot, args.skill_id)
-					return { content: [{ type: 'text' as const, text: content }] }
-				} catch (err) {
-					const msg = err instanceof Error ? err.message : String(err)
-					return { content: [{ type: 'text' as const, text: msg }], isError: true }
-				}
-			},
-		),
-
-		// Universal search across all entity types
+		// ─── Universal search (unchanged) ──────────────────────────────────
 		defineTool(
 			'search',
 			'Search across all entities (tasks, messages, knowledge, pins, agents, channels, skills). Returns ranked results.',
@@ -541,51 +572,9 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 			},
 		),
 
+		// ─── TM-004: http ──────────────────────────────────────────────────
 		defineTool(
-			'update_knowledge',
-			'Create or update a knowledge document',
-			z.object({
-				path: z.string().describe('Path relative to /knowledge/, e.g. "technical/api-design.md"'),
-				content: z.string().describe('Markdown content'),
-				reason: z.string().optional().describe('Why this knowledge is being added/updated'),
-			}),
-			async (args, ctx) => {
-				const knowledgeDir = join(companyRoot, PATHS.KNOWLEDGE_DIR.replace(/^\/company/, ''))
-				const filePath = resolve(knowledgeDir, args.path)
-				const rel = relative(knowledgeDir, filePath)
-				if (rel.startsWith('..')) {
-					return { content: [{ type: 'text' as const, text: `Error: path "${args.path}" escapes knowledge directory` }], isError: true }
-				}
-				const relToCompany = relative(companyRoot, filePath)
-				if (isDeniedPath(relToCompany)) {
-					return { content: [{ type: 'text' as const, text: `Error: access denied to path "${args.path}"` }], isError: true }
-				}
-				const dirPath = join(filePath, '..')
-				await mkdir(dirPath, { recursive: true })
-				const existed = await Bun.file(filePath).exists()
-				await Bun.write(filePath, args.content)
-
-				ctx.eventBus.emit({ type: 'knowledge_changed', path: args.path, action: existed ? 'updated' : 'created' })
-				// Real-time index
-				const titleMatch = args.content.match(/^#\s+(.+)$/m)
-				const knTitle = titleMatch?.[1]?.trim() ?? args.path.replace(/\.md$/, '')
-				getIndexer().then((idx) => idx?.indexOne('knowledge', args.path, knTitle, args.content)).catch(() => {})
-
-				await storage.appendActivity({
-					at: new Date().toISOString(),
-					agent: ctx.agentId,
-					type: 'knowledge_update',
-					summary: `Updated knowledge: ${args.path}`,
-					details: { path: args.path, reason: args.reason },
-				})
-
-				return { content: [{ type: 'text' as const, text: `Knowledge updated: ${args.path}` }] }
-			},
-		),
-
-		// HTTP
-		defineTool(
-			'http_request',
+			'http',
 			'Make an HTTP request to an external API',
 			z.object({
 				method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
@@ -674,115 +663,6 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 						content: [{ type: 'text' as const, text: `HTTP request failed: ${msg}` }],
 						isError: true,
 					}
-				}
-			},
-		),
-
-		// Agent communication
-		defineTool(
-			'message_agent',
-			'Send a direct message to another agent via a direct channel',
-			z.object({
-				to: z.string().describe('Agent ID to message'),
-				content: z.string().describe('Message content'),
-				reason: z.string().describe('Why you need to reach this agent'),
-			}),
-			async (args, ctx) => {
-				const channel = await storage.getOrCreateDirectChannel(ctx.agentId, args.to)
-
-				await storage.sendMessage({
-					id: `msg-${Date.now().toString(36)}`,
-					from: ctx.agentId,
-					channel: channel.id,
-					at: new Date().toISOString(),
-					content: args.content,
-					mentions: [args.to],
-					references: [],
-					reactions: [],
-					thread: null,
-					external: false,
-				} as any)
-
-				ctx.eventBus.emit({ type: 'message', channel: channel.id, from: ctx.agentId, content: args.content })
-
-				await createPin(companyRoot, {
-					type: 'info',
-					title: `Message from ${ctx.agentId}`,
-					content: args.content,
-					group: 'agents',
-					created_by: ctx.agentId,
-					metadata: { agent_id: args.to, task_id: undefined },
-				})
-
-				return { content: [{ type: 'text' as const, text: `Direct message sent to ${args.to} in channel ${channel.id}` }] }
-			},
-		),
-
-		// Blocker resolution
-		defineTool(
-			'resolve_blocker',
-			'Mark a task blocker as resolved',
-			z.object({
-				task_id: z.string(),
-				note: z.string().describe('How the blocker was resolved'),
-			}),
-			async (args, ctx) => {
-				const task = await storage.readTask(args.task_id)
-				if (!task) {
-					return {
-						content: [{ type: 'text' as const, text: `Task not found: ${args.task_id}` }],
-						isError: true,
-					}
-				}
-
-				const blockerIdx = task.blockers.findIndex((b) => !b.resolved)
-				if (blockerIdx === -1) {
-					return {
-						content: [{ type: 'text' as const, text: `No unresolved blockers on task ${args.task_id}` }],
-						isError: true,
-					}
-				}
-
-				const updatedBlockers = [...task.blockers]
-				updatedBlockers[blockerIdx] = {
-					...updatedBlockers[blockerIdx]!,
-					resolved: true,
-					resolved_at: new Date().toISOString(),
-					resolved_by: ctx.agentId,
-					resolved_note: args.note,
-				}
-
-				const timestamp = new Date().toISOString()
-				await storage.updateTask(
-					args.task_id,
-					{
-						blockers: updatedBlockers,
-						updated_at: timestamp,
-						history: [
-							...task.history,
-							{
-								at: timestamp,
-								by: ctx.agentId,
-								action: 'blocker_resolved',
-								note: args.note,
-							},
-						],
-					} as any,
-					ctx.agentId,
-				)
-
-				// If task was blocked and all blockers now resolved, move back to active
-				const allResolved = updatedBlockers.every((b) => b.resolved)
-				let newStatus = task.status
-				if (task.status === 'blocked' && allResolved) {
-					await storage.moveTask(args.task_id, 'in_progress', ctx.agentId)
-					newStatus = 'in_progress'
-				}
-
-				ctx.eventBus.emit({ type: 'task_changed', taskId: args.task_id, status: newStatus, assignedTo: task.assigned_to })
-
-				return {
-					content: [{ type: 'text' as const, text: `Blocker resolved on task ${args.task_id}: ${args.note}` }],
 				}
 			},
 		),
