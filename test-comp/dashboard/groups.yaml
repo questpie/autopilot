@@ -1,0 +1,13 @@
+groups:
+  - id: alerts
+    title: "Needs Your Attention"
+    position: 0
+  - id: overview
+    title: "Overview"
+    position: 1
+  - id: agents
+    title: "Agents"
+    position: 2
+  - id: recent
+    title: "Recent Activity"
+    position: 3

@@ -12,6 +12,7 @@ import type { AutopilotDb } from '../db'
 import * as authSchema from '../db/auth-schema'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { hashPassword, verifyPassword } from 'better-auth/crypto'
 
 const PASSWORD_COMPLEXITY_RE = /^(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/
 
@@ -57,13 +58,10 @@ export async function createAuth(db: AutopilotDb, companyRoot: string) {
 			password: {
 				hash: async (password: string) => {
 					validatePasswordComplexity(password)
-					// Delegate to Better Auth's default hashing
-					const { hash } = await import('better-auth/crypto')
-					return hash(password)
+					return hashPassword(password)
 				},
-				verify: async ({ hash, password }: { hash: string; password: string }) => {
-					const { verify } = await import('better-auth/crypto')
-					return verify({ hash, password })
+				verify: ({ hash, password }: { hash: string; password: string }) => {
+					return verifyPassword({ hash, password })
 				},
 			},
 		},
@@ -77,11 +75,12 @@ export async function createAuth(db: AutopilotDb, companyRoot: string) {
 			},
 		},
 
+		trustedOrigins: (process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3001')
+			.split(',')
+			.map((o) => o.trim()),
 		advanced: {
-			// Better Auth validates Origin header on mutations by default (CSRF).
-			// SameSite=Strict prevents cookies from being sent on cross-origin requests.
 			defaultCookieAttributes: {
-				sameSite: 'strict',
+				sameSite: 'lax',
 				secure: process.env.NODE_ENV === 'production',
 				httpOnly: true,
 			},

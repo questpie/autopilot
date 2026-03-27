@@ -58,4 +58,7 @@ export const CompanySchema = z.object({
 	owner: CompanyOwnerSchema,
 	settings: CompanySettingsSchema.default({}),
 	integrations: IntegrationConfigSchema.optional().default({}),
+	setup_completed: z.boolean().default(false),
+	setup_completed_at: z.string().optional(),
+	setup_completed_by: z.string().optional(),
 })

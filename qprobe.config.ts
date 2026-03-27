@@ -2,20 +2,22 @@ import { defineConfig } from '@questpie/probe'
 
 export default defineConfig({
 	services: {
-		autopilot: {
-			cmd: 'bunx autopilot start --no-dashboard',
-			cwd: 'test-company',
+		orchestrator: {
+			cmd: 'bun run ../packages/cli/bin/autopilot.ts start --no-dashboard',
+			cwd: 'test-comp',
 			ready: 'Orchestrator is running',
 			port: 7778,
 			health: '/api/status',
 		},
 		dashboard: {
-			cmd: 'node .output/server/index.mjs',
+			cmd: 'bun node_modules/.bin/vite dev --port 3001',
 			cwd: 'apps/dashboard-v2',
-			ready: 'listening on',
-			port: 3000,
-			depends: ['autopilot'],
+			ready: 'Local',
+			port: 3001,
+			depends: ['orchestrator'],
 		},
 	},
-	baseUrl: 'http://localhost:7778',
+	http: {
+		baseUrl: 'http://localhost:7778',
+	},
 })

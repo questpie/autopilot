@@ -52,11 +52,12 @@ const status = new Hono<AppEnv>().get(
 		return c.json({
 			company: company.name,
 			userCount,
+			setupCompleted: company.setup_completed ?? false,
 			agentCount: agents.length,
 			activeTasks: activeTasks.length,
 			runningSessions: 0,
 			pendingApprovals: reviewTasks.length + blockedTasks.length,
-		})
+		}, 200)
 	},
 )
 
