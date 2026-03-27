@@ -12,9 +12,6 @@ import { useAppStore } from "@/stores/app.store"
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: async ({ location }) => {
-    // Skip auth on server — client hydration handles it
-    if (typeof window === "undefined") return
-
     const result = await checkAuth()
 
     // No users → setup wizard

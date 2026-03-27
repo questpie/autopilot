@@ -137,6 +137,43 @@ export class Orchestrator {
 			console.error('[orchestrator] failed to wire notification dispatcher:', err)
 		}
 
+		// 5c. Seed default data if DB is fresh
+		try {
+			const { storage } = await container.resolveAsync([storageFactory])
+			const channels = await storage.listChannels()
+			if (channels.length === 0) {
+				console.log('[orchestrator] seeding default channels...')
+				const now = new Date().toISOString()
+				await storage.createChannel({
+					id: 'general',
+					name: 'General',
+					type: 'group',
+					description: 'General team discussion',
+					created_by: 'system',
+					created_at: now,
+					updated_at: now,
+				})
+				await storage.createChannel({
+					id: 'dev',
+					name: 'Development',
+					type: 'group',
+					description: 'Development discussion',
+					created_by: 'system',
+					created_at: now,
+					updated_at: now,
+				})
+				// Add all agents as members of default channels
+				const agents = await loadAgents(root)
+				for (const agent of agents) {
+					await storage.addChannelMember('general', agent.id, 'agent', 'member').catch(() => {})
+					await storage.addChannelMember('dev', agent.id, 'agent', 'member').catch(() => {})
+				}
+				console.log(`[orchestrator] seeded 2 default channels with ${agents.length} agent members`)
+			}
+		} catch (err) {
+			console.error('[orchestrator] failed to seed defaults:', err)
+		}
+
 		// 6. Start watcher
 		this.watcher = new Watcher({
 			companyRoot: root,
