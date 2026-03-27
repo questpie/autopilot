@@ -34,7 +34,7 @@ function parseWidgetYaml(content: string): WidgetMeta {
     const key = line.slice(0, colonIdx).trim()
     const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, "")
     if (key in meta) {
-      ;(meta as Record<string, unknown>)[key] =
+      ;(meta as unknown as Record<string, unknown>)[key] =
         key === "refresh" ? Number.parseInt(value, 10) || 30000 : value
     }
   }

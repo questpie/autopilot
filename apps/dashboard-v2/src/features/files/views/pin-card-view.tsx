@@ -50,7 +50,7 @@ function parsePinYaml(raw: string): PinData {
     }
 
     if (key in pin) {
-      ;(pin as Record<string, unknown>)[key] = value
+      ;(pin as unknown as Record<string, unknown>)[key] = value
     }
   }
 

@@ -51,6 +51,9 @@ export async function checkAuth(): Promise<AuthCheckResult> {
 }
 
 export async function requireAuth(opts: { location: { href: string } }) {
+  // During SSR, skip auth check — client-side hydration will handle redirect
+  if (typeof window === "undefined") return
+
   const { isAuthenticated, needs2FA, noUsersExist } = await checkAuth()
 
   if (noUsersExist) {
@@ -58,13 +61,13 @@ export async function requireAuth(opts: { location: { href: string } }) {
   }
 
   if (isAuthenticated && needs2FA) {
-    throw redirect({ to: "/login/2fa" })
+    throw redirect({ to: "/login/2fa", search: {} as any })
   }
 
   if (!isAuthenticated) {
     throw redirect({
       to: "/login",
-      search: { redirect: opts.location.href },
+      search: { redirect: opts.location.href } as any,
     })
   }
 }

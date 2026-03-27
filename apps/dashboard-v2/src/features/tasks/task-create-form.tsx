@@ -49,7 +49,7 @@ export function TaskCreateForm({ onClose }: TaskCreateFormProps) {
   const createTask = useCreateTask()
 
   const form = useForm<CreateTaskFormValues>({
-    resolver: zodResolver(createTaskSchema),
+    resolver: zodResolver(createTaskSchema) as any,
     defaultValues: {
       title: "",
       description: "",

@@ -25,7 +25,7 @@ interface AgentDetailProps {
   onClose: () => void
 }
 
-export function AgentDetail({ agentId, onClose }: AgentDetailProps) {
+export function AgentDetail({ agentId, onClose: _onClose }: AgentDetailProps) {
   const { t } = useTranslation()
   const { data: agent, isLoading } = useQuery(agentDetailQuery(agentId))
 
@@ -45,7 +45,7 @@ export function AgentDetail({ agentId, onClose }: AgentDetailProps) {
 
   const bgColor = getAvatarColor(agent.id)
   const initial = agent.name.charAt(0).toUpperCase()
-  const isWorking = ("sessionStatus" in agent && agent.sessionStatus === "working") as boolean
+  const isWorking = ("sessionStatus" in agent && (agent.sessionStatus as string) === "working") as boolean
 
   return (
     <div className="flex flex-col gap-4 p-4">

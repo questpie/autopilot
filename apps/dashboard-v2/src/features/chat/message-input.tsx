@@ -159,11 +159,9 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
         if (e.key === "Tab" || e.key === "Enter") {
           // Let the autocomplete handle selection
           // This is handled by the select callbacks
-          if (autocompleteMode !== "none") {
-            e.preventDefault()
-            // Trigger selection of current index
-            return
-          }
+          e.preventDefault()
+          // Trigger selection of current index
+          return
         }
       }
 

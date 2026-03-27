@@ -8,7 +8,6 @@ import {
   PlugsIcon,
   PlusIcon,
   MagnifyingGlassIcon,
-  SpinnerIcon,
   TrashIcon,
   PlugIcon,
   WarningIcon,

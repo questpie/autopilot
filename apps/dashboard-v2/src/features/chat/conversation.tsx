@@ -130,7 +130,7 @@ export function Conversation({ channelId, compact = false }: ConversationProps) 
         onScroll={handleScroll}
       >
         <AnimatePresence initial={false}>
-          {grouped.map((group, i) => {
+          {grouped.map((group) => {
             if (group.type === "day-divider" && group.date) {
               return <DayDivider key={`day-${group.date.toISOString()}`} date={group.date} />
             }

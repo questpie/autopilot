@@ -124,7 +124,7 @@ function SessionsList() {
     queryFn: async () => {
       const res = await authClient.listSessions()
       if (res.error) return []
-      return res.data as SessionInfo[]
+      return res.data as unknown as SessionInfo[]
     },
     staleTime: 30_000,
   })

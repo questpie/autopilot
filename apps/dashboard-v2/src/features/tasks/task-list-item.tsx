@@ -62,7 +62,7 @@ export function TaskListItem({
   task,
   isSelected,
   isFocused,
-  onSelect,
+  onSelect: _onSelect,
   onOpen,
   onToggleSelection,
 }: TaskListItemProps) {

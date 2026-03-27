@@ -10,7 +10,7 @@ interface TaskFilters {
 
 export function tasksQuery(filters?: TaskFilters) {
   return queryOptions({
-    queryKey: queryKeys.tasks.list(filters),
+    queryKey: queryKeys.tasks.list(filters as Record<string, unknown>),
     queryFn: async () => {
       const res = await api.api.tasks.$get({
         query: {

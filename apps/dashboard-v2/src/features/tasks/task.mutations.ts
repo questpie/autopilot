@@ -44,9 +44,9 @@ export function useCreateTask() {
         json: {
           title: data.title,
           description: data.description ?? "",
-          type: data.type ?? "implementation",
-          status: "backlog",
-          priority: data.priority ?? "medium",
+          type: (data.type ?? "implementation") as "implementation",
+          status: "backlog" as const,
+          priority: (data.priority ?? "medium") as "medium",
           assigned_to: data.assigned_to,
           project: data.project,
           workflow: data.workflow,
@@ -86,7 +86,7 @@ export function useUpdateTask() {
     }) => {
       const res = await api.api.tasks[":id"].$patch({
         param: { id },
-        json: data,
+        json: data as any,
       })
       if (!res.ok) throw new Error("Failed to update task")
       return res.json()

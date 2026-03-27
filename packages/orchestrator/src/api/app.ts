@@ -86,7 +86,7 @@ export function createApp(config: AppConfig) {
 	app.use(
 		'*',
 		cors({
-			origin: config.corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:3001',
+			origin: config.corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:3000',
 			allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
 			allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
 			credentials: true,

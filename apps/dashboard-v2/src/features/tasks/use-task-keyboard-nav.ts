@@ -92,7 +92,7 @@ export function useTaskKeyboardNav({
               clearSelection()
             },
           }
-        : {},
+        : ({} as Record<string, (event: KeyboardEvent) => void>),
     [enabled, moveDown, moveUp, openFocused, selectFocused, clearSelection],
   )
 
