@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { XIcon } from "@phosphor-icons/react"
 import {
   Select,
   SelectContent,
@@ -133,24 +132,9 @@ export function ChatPanel() {
         aria-label={t("common.close")}
       />
 
-      {/* Panel */}
-      <aside className="z-50 flex w-[360px] shrink-0 flex-col border-l border-border bg-background fixed right-0 top-12 bottom-0 lg:relative lg:top-0">
-        {/* Header */}
-        <div className="flex h-10 items-center justify-between border-b border-border px-3 font-heading text-xs">
-          <span className="uppercase tracking-widest text-muted-foreground">
-            {t("chat.title")}
-          </span>
-          <button
-            type="button"
-            onClick={closeRightPanel}
-            className="p-1 text-muted-foreground hover:text-foreground"
-            aria-label={t("common.close")}
-          >
-            <XIcon size={14} />
-          </button>
-        </div>
-
-        {/* Tabs */}
+      {/* Panel — tabs at top, conversation fills remaining height, input pinned at bottom */}
+      <aside className="z-50 flex w-[360px] shrink-0 flex-col border-l border-border bg-background fixed right-0 top-0 bottom-0 lg:relative">
+        {/* Tabs — always at top */}
         <ChatTabs
           activeTab={activeTab}
           onTabChange={(tab) => {
@@ -190,12 +174,12 @@ export function ChatPanel() {
           </div>
         )}
 
-        {/* Conversation */}
+        {/* Conversation — fills remaining space */}
         {activeChannelId ? (
-          <>
+          <div className="flex min-h-0 flex-1 flex-col">
             <Conversation channelId={activeChannelId} compact />
             <MessageInput channelId={activeChannelId} compact />
-          </>
+          </div>
         ) : (
           <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
             {t("chat.no_channels_description")}
