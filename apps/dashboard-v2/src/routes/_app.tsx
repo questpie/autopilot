@@ -1,20 +1,57 @@
-import { useState, useEffect } from "react"
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { useState } from "react"
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router"
 import { AppShell } from "@/components/layouts/app-shell"
 import { CommandPalette } from "@/components/command-palette"
 import { KeyboardHelpDialog } from "@/components/keyboard-help-dialog"
 import { Toaster } from "sonner"
-import { requireAuth, checkAuth } from "@/lib/auth-guard"
+import { checkAuth } from "@/lib/auth-guard"
+import { QuestPieSpinner } from "@/components/brand"
 import { useSSE } from "@/hooks/use-sse"
 import { useGlobalShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { useAppStore } from "@/stores/app.store"
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: async ({ location }) => {
-    await requireAuth({ location })
+    // Skip auth on server — client hydration handles it
+    if (typeof window === "undefined") return
+
+    const result = await checkAuth()
+
+    // No users → setup wizard
+    if (result.noUsersExist) {
+      throw redirect({ to: "/setup" })
+    }
+
+    // Not authenticated → login
+    if (!result.isAuthenticated) {
+      throw redirect({ to: "/login", search: { redirect: location.href } as any })
+    }
+
+    // Needs 2FA
+    if (result.needs2FA) {
+      throw redirect({ to: "/login/2fa" })
+    }
+
+    // Setup not completed → finish setup
+    if (!result.setupCompleted) {
+      throw redirect({ to: "/setup" })
+    }
+
+    // Pass user to context for child routes
+    return { user: result.user }
   },
+  shouldReload: true,
+  pendingComponent: AuthPending,
   component: AppLayout,
 })
+
+function AuthPending() {
+  return (
+    <div className="flex h-screen w-screen items-center justify-center bg-background">
+      <QuestPieSpinner size={32} />
+    </div>
+  )
+}
 
 function AppLayout() {
   const navigate = useNavigate()
@@ -23,19 +60,6 @@ function AppLayout() {
   const rightPanel = useAppStore((s) => s.rightPanel)
   const closeRightPanel = useAppStore((s) => s.closeRightPanel)
   const [helpOpen, setHelpOpen] = useState(false)
-
-  // Client-side auth check on hydration (SSR skips beforeLoad auth)
-  useEffect(() => {
-    checkAuth().then(({ isAuthenticated, noUsersExist, needs2FA }) => {
-      if (noUsersExist) {
-        window.location.href = "/setup"
-      } else if (!isAuthenticated) {
-        window.location.href = "/login"
-      } else if (needs2FA) {
-        window.location.href = "/login/2fa"
-      }
-    })
-  }, [])
 
   // SSE connection
   useSSE()
