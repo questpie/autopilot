@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import {
   HeadContent,
   Outlet,
@@ -9,6 +10,7 @@ import { TanStackDevtools } from "@tanstack/react-devtools"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { createQueryClient } from "@/lib/query-client"
+import { useAppStore } from "@/stores/app.store"
 import { initWebVitals } from "@/lib/web-vitals"
 import "@/lib/i18n"
 
@@ -55,7 +57,49 @@ export const Route = createRootRoute({
   ),
 })
 
+/** Sync theme from Zustand store to <html> class */
+function useThemeSync() {
+  const theme = useAppStore((s) => s.theme)
+
+  useEffect(() => {
+    const root = document.documentElement
+    // Add data-theme-switching to disable transitions during swap
+    root.setAttribute("data-theme-switching", "")
+
+    if (theme === "system") {
+      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+      root.classList.toggle("light", !isDark)
+      root.classList.toggle("dark", isDark)
+    } else {
+      root.classList.toggle("light", theme === "light")
+      root.classList.toggle("dark", theme === "dark")
+    }
+
+    // Remove transition gate after a frame
+    requestAnimationFrame(() => {
+      root.removeAttribute("data-theme-switching")
+    })
+  }, [theme])
+
+  // Listen for system preference changes when theme === "system"
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(prefers-color-scheme: dark)")
+    const handler = (e: MediaQueryListEvent) => {
+      const theme = useAppStore.getState().theme
+      if (theme !== "system") return
+      const root = document.documentElement
+      root.classList.toggle("light", !e.matches)
+      root.classList.toggle("dark", e.matches)
+    }
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [])
+}
+
 function RootComponent() {
+  useThemeSync()
+
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />

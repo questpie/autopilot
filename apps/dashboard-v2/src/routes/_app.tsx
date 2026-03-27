@@ -28,14 +28,14 @@ function AppLayout() {
   useEffect(() => {
     checkAuth().then(({ isAuthenticated, noUsersExist, needs2FA }) => {
       if (noUsersExist) {
-        void navigate({ to: "/setup" })
+        window.location.href = "/setup"
       } else if (!isAuthenticated) {
-        void navigate({ to: "/login" })
+        window.location.href = "/login"
       } else if (needs2FA) {
-        void navigate({ to: "/login/2fa" })
+        window.location.href = "/login/2fa"
       }
     })
-  }, [navigate])
+  }, [])
 
   // SSE connection
   useSSE()
