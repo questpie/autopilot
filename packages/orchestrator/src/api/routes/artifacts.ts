@@ -55,7 +55,7 @@ const artifacts = new Hono<AppEnv>().get(
 		try {
 			entries = await readdir(artifactsDir)
 		} catch {
-			return c.json({ artifacts: [] })
+			return c.json({ artifacts: [] }, 200)
 		}
 
 		const running = router.list()
@@ -79,7 +79,7 @@ const artifacts = new Hono<AppEnv>().get(
 		)
 
 		return c.json({
-			artifacts: configs.filter((c): c is NonNullable<typeof c> => c !== null),
+			artifacts: configs.filter((item): item is NonNullable<typeof item> => item !== null),
 		}, 200)
 	},
 ).get(

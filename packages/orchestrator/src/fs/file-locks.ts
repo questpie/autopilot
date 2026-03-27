@@ -4,11 +4,11 @@
  * Locks expire after a configurable TTL (default 60 seconds).
  * Used for critical config files to prevent concurrent edits.
  */
-import { eq, and, gt } from 'drizzle-orm'
+import { eq, and, lt } from 'drizzle-orm'
 import type { AutopilotDb } from '../db'
 import { fileLocks } from '../db/schema'
 
-const DEFAULT_LOCK_TTL_MS = 60_000 // 60 seconds
+const DEFAULT_LOCK_TTL_MS = 60_000
 
 export interface FileLock {
 	path: string
@@ -29,9 +29,9 @@ export async function acquireLock(
 ): Promise<FileLock | null> {
 	const now = Date.now()
 
-	// Clean up expired locks first
+	// Clean up expired lock for this path
 	await db.delete(fileLocks).where(
-		and(eq(fileLocks.path, path), gt(fileLocks.expires_at, 0)),
+		and(eq(fileLocks.path, path), lt(fileLocks.expires_at, now)),
 	).execute()
 
 	// Check for existing non-expired lock
@@ -44,22 +44,17 @@ export async function acquireLock(
 
 	if (existing.length > 0) {
 		const lock = existing[0]!
-		// Expired — remove it
-		if (lock.expires_at < now) {
-			await db.delete(fileLocks).where(eq(fileLocks.path, path)).execute()
-		} else if (lock.locked_by !== lockedBy) {
-			// Locked by someone else and not expired
+		if (lock.locked_by !== lockedBy) {
 			return null
-		} else {
-			// Same actor — refresh the lock
-			const newExpiry = now + ttlMs
-			await db
-				.update(fileLocks)
-				.set({ locked_at: now, expires_at: newExpiry })
-				.where(eq(fileLocks.path, path))
-				.execute()
-			return { path, locked_by: lockedBy, locked_at: now, expires_at: newExpiry }
 		}
+		// Same actor — refresh the lock
+		const newExpiry = now + ttlMs
+		await db
+			.update(fileLocks)
+			.set({ locked_at: now, expires_at: newExpiry })
+			.where(eq(fileLocks.path, path))
+			.execute()
+		return { path, locked_by: lockedBy, locked_at: now, expires_at: newExpiry }
 	}
 
 	// Acquire new lock

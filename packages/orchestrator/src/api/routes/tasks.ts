@@ -36,7 +36,7 @@ const tasks = new Hono<AppEnv>()
 			if (project) filter.project = project
 
 			const result = await storage.listTasks(filter)
-			return c.json(result)
+			return c.json(result, 200)
 		},
 	)
 	// POST /tasks — create a new task
@@ -91,7 +91,7 @@ const tasks = new Hono<AppEnv>()
 			const { id } = c.req.valid('param')
 			const task = await storage.readTask(id)
 			if (!task) return c.json({ error: 'task not found' }, 404)
-			return c.json(task)
+			return c.json(task, 200)
 		},
 	)
 	// PATCH /tasks/:id — general-purpose partial update
@@ -125,8 +125,7 @@ const tasks = new Hono<AppEnv>()
 			// If status changed, use moveTask for proper workflow tracking
 			if (body.status && body.status !== task.status) {
 				result = await storage.moveTask(id, body.status, 'human')
-				// Apply any additional field changes beyond status
-				const { status, ...otherUpdates } = body
+				const { status: _status, ...otherUpdates } = body
 				if (Object.keys(otherUpdates).length > 0) {
 					result = await storage.updateTask(id, otherUpdates, 'human')
 				}
@@ -134,7 +133,6 @@ const tasks = new Hono<AppEnv>()
 				result = await storage.updateTask(id, body, 'human')
 			}
 
-			// Emit SSE event
 			eventBus.emit({
 				type: 'task_changed',
 				taskId: id,
@@ -142,7 +140,7 @@ const tasks = new Hono<AppEnv>()
 				assignedTo: result.assigned_to,
 			})
 
-			return c.json(result)
+			return c.json(result, 200)
 		},
 	)
 	// POST /tasks/:id/approve — move task to done
@@ -171,7 +169,7 @@ const tasks = new Hono<AppEnv>()
 			if (!task) return c.json({ error: 'task not found' }, 404)
 
 			await storage.moveTask(id, 'done', 'human')
-			return c.json({ ok: true as const, taskId: id, status: 'done' as const })
+			return c.json({ ok: true as const, taskId: id, status: 'done' as const }, 200)
 		},
 	)
 	// POST /tasks/:id/reject — move task to blocked
@@ -209,7 +207,7 @@ const tasks = new Hono<AppEnv>()
 
 			const rejectReason = reason ?? 'Rejected by human'
 			await storage.moveTask(id, 'blocked', 'human', { reason: rejectReason })
-			return c.json({ ok: true as const, taskId: id, status: 'blocked' as const, reason: rejectReason })
+			return c.json({ ok: true as const, taskId: id, status: 'blocked' as const, reason: rejectReason }, 200)
 		},
 	)
 

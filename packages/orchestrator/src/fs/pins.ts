@@ -172,11 +172,9 @@ export async function removePin(
 	if (db) {
 		await db.delete(pinsTable).where(eq(pinsTable.id, pinId)).execute()
 	} else {
-		// Fallback: remove YAML file
-		const { rm: rmFile } = await import('node:fs/promises')
 		const filePath = join(companyRoot, pinPath(pinId))
 		if (await fileExists(filePath)) {
-			await rmFile(filePath)
+			await rm(filePath)
 		}
 	}
 	eventBus.emit({ type: 'pin_changed', pinId, action: 'removed' })

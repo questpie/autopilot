@@ -15,7 +15,6 @@ import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
 import { join } from 'node:path'
-import { mkdir, writeFile } from 'node:fs/promises'
 import { readYamlUnsafe, fileExists, writeYaml } from '../../fs/yaml'
 import { HUMAN_ROLES } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
@@ -65,9 +64,7 @@ async function readInvites(companyRoot: string): Promise<string[]> {
 
 /** Write .auth/invites.yaml from a string array. */
 async function writeInvites(companyRoot: string, emails: string[]): Promise<void> {
-	const invitesDir = join(companyRoot, '.auth')
-	await mkdir(invitesDir, { recursive: true })
-	await writeYaml(join(invitesDir, 'invites.yaml'), emails)
+	await writeYaml(join(companyRoot, '.auth', 'invites.yaml'), emails)
 }
 
 /** Read humans.yaml and return parsed data. */
@@ -84,16 +81,14 @@ async function readHumansFile(companyRoot: string): Promise<{ humans: Array<{ id
 
 /** Write humans.yaml. */
 async function writeHumansFile(companyRoot: string, data: { humans: Array<Record<string, unknown>> }): Promise<void> {
-	const teamDir = join(companyRoot, 'team')
-	await mkdir(teamDir, { recursive: true })
-	await writeYaml(join(teamDir, 'humans.yaml'), data)
+	await writeYaml(join(companyRoot, 'team', 'humans.yaml'), data)
 }
 
 /** Guard: only owner/admin can access. Returns error response or null. */
 function requireAdminRole(c: { get(key: 'actor'): { role: string } | null; json: (data: unknown, status: number) => Response }): Response | null {
 	const actor = c.get('actor')
 	if (!actor || (actor.role !== 'owner' && actor.role !== 'admin')) {
-		return c.json({ error: 'Forbidden: owner or admin role required' }, 403) as unknown as Response
+		return c.json({ error: 'Forbidden: owner or admin role required' }, 403)
 	}
 	return null
 }

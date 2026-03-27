@@ -50,7 +50,7 @@ const agents = new Hono<AppEnv>()
 		async (c) => {
 			const root = c.get('companyRoot')
 			const result = await loadAgents(root)
-			return c.json(result)
+			return c.json(result, 200)
 		},
 	)
 	.get(
@@ -81,28 +81,16 @@ const agents = new Hono<AppEnv>()
 			const agent = allAgents.find((a) => a.id === id)
 			if (!agent) return c.json({ error: 'agent not found' }, 404)
 
-			// Parse memory stats from agent's memory.yaml
-			let memory:
-				| {
-						facts: number
-						decisions: number
-						mistakes: number
-						patterns: number
-				  }
-				| undefined
+			let memory: z.infer<typeof AgentDetailSchema>['memory']
 			try {
 				const memoryPath = join(root, `team/${id}/memory.yaml`)
 				const memFile = Bun.file(memoryPath)
 				if (await memFile.exists()) {
 					const content = await memFile.text()
-					// Count entries in each section
 					const countSection = (section: string): number => {
-						const regex = new RegExp(
-							`^${section}:([\\s\\S]*?)(?=^\\w|$)`,
-							'm',
-						)
+						const regex = new RegExp(`^${section}:([\\s\\S]*?)(?=^\\w|$)`, 'm')
 						const match = content.match(regex)
-						if (!match) return 0
+						if (!match?.[1]) return 0
 						return (match[1].match(/^\s*-\s/gm) ?? []).length
 					}
 					memory = {
@@ -113,44 +101,18 @@ const agents = new Hono<AppEnv>()
 					}
 				}
 			} catch {
-				// Memory file may not exist — that's fine
+				// Memory file may not exist
 			}
 
-			// Get recent tasks assigned to this agent
-			let recentTasks:
-				| Array<{
-						id: string
-						title: string
-						status: string
-						created_at: string
-				  }>
-				| undefined
+			let recentTasks: z.infer<typeof AgentDetailSchema>['recentTasks']
 			try {
-				const allTasks = await storage.listTasks({
-					assigned_to: id,
-				})
-				recentTasks = (
-					allTasks as Array<{
-						id: string
-						title: string
-						status: string
-						created_at: string
-					}>
-				)
-					.sort(
-						(a, b) =>
-							new Date(b.created_at).getTime() -
-							new Date(a.created_at).getTime(),
-					)
+				const allTasks = await storage.listTasks({ assigned_to: id })
+				recentTasks = (allTasks as Array<{ id: string; title: string; status: string; created_at: string }>)
+					.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 					.slice(0, 10)
-					.map((t) => ({
-						id: t.id,
-						title: t.title,
-						status: t.status,
-						created_at: t.created_at,
-					}))
+					.map((t) => ({ id: t.id, title: t.title, status: t.status, created_at: t.created_at }))
 			} catch {
-				// Tasks may not exist — that's fine
+				// Tasks may not exist
 			}
 
 			return c.json({
@@ -158,7 +120,7 @@ const agents = new Hono<AppEnv>()
 				memory,
 				recentTasks,
 				sessionStatus: 'idle' as const,
-			})
+			}, 200)
 		},
 	)
 

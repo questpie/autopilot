@@ -12,8 +12,8 @@ import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
 import { join, resolve } from 'node:path'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { readYamlUnsafe, fileExists } from '../../fs/yaml'
+import { readFile, writeFile } from 'node:fs/promises'
+import { readYamlUnsafe, fileExists, writeYaml } from '../../fs/yaml'
 import { eventBus } from '../../events/event-bus'
 import type { AppEnv } from '../app'
 
@@ -46,6 +46,8 @@ const ProviderParamSchema = z.object({
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
 /** Deep merge two objects, recursing into nested plain objects. */
 function deepMerge(
 	target: Record<string, unknown>,
@@ -53,6 +55,7 @@ function deepMerge(
 ): Record<string, unknown> {
 	const result = { ...target }
 	for (const key of Object.keys(source)) {
+		if (UNSAFE_KEYS.has(key)) continue
 		const tVal = target[key]
 		const sVal = source[key]
 		if (
@@ -186,12 +189,7 @@ const settings = new Hono<AppEnv>()
 			}
 
 			const merged = deepMerge(existing, body)
-
-			const yaml = await import('yaml')
-			const content = yaml.stringify(merged)
-
-			await mkdir(join(root), { recursive: true })
-			await writeFile(companyPath, content, 'utf-8')
+			await writeYaml(companyPath, merged)
 
 			eventBus.emit({ type: 'settings_changed' })
 
