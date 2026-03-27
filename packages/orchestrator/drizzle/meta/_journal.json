@@ -36,6 +36,13 @@
       "when": 1774940000000,
       "tag": "0004_file_locks_and_pins",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1774950000000,
+      "tag": "0005_notifications",
+      "breakpoints": true
     }
   ]
 }

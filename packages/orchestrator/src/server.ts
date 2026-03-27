@@ -26,6 +26,7 @@ import { embeddingServiceFactory } from './embeddings'
 import { streamManagerFactory } from './session/stream'
 import { indexerFactory } from './db/indexer'
 import { notifierFactory } from './notifier'
+import { NotificationDispatcher } from './notifications'
 
 /** Configuration options for the {@link Orchestrator}. */
 export interface OrchestratorOptions {
@@ -115,7 +116,22 @@ export class Orchestrator {
 		// 5. Notifier + StreamManager
 		await container.resolveAsync([notifierFactory, streamManagerFactory])
 
-		// 5. Start watcher
+		// 5b. Wire NotificationDispatcher into EventBus
+		try {
+			const { db: dbResult } = await container.resolveAsync([dbFactory])
+			const dispatcher = new NotificationDispatcher(root, dbResult.db)
+			eventBus.subscribe((event) => {
+				// Fire-and-forget — dispatcher handles its own errors
+				dispatcher.handle(event).catch((err) => {
+					console.error('[orchestrator] notification dispatcher error:', err instanceof Error ? err.message : err)
+				})
+			})
+			console.log('[orchestrator] notification dispatcher wired to event bus')
+		} catch (err) {
+			console.error('[orchestrator] failed to wire notification dispatcher:', err)
+		}
+
+		// 6. Start watcher
 		this.watcher = new Watcher({
 			companyRoot: root,
 			onEvent: (event) => this.handleWatchEvent(event),

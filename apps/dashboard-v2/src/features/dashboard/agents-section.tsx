@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { motion } from "framer-motion"
-import { CircleIcon, PlayIcon } from "@phosphor-icons/react"
+import { CircleIcon, PlayIcon, UsersIcon } from "@phosphor-icons/react"
+import { EmptyState } from "@/components/feedback"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/lib/i18n"
@@ -93,13 +94,28 @@ export function AgentsSection() {
   const agents = agentsResult.data ?? []
   const status = statusResult.data
 
-  // For now, derive working status from statusResult
-  // In the future, SSE agent_session events will update this
+  if (agents.length === 0) {
+    return (
+      <section className="flex flex-col">
+        <div className="flex items-center justify-between px-1 pb-3">
+          <h2 className="font-heading text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            {t("dashboard.agents_title")}
+          </h2>
+        </div>
+        <EmptyState
+          icon={<UsersIcon size={32} />}
+          message={t("dashboard.agents_empty")}
+          description={t("dashboard.agents_empty_description")}
+        />
+      </section>
+    )
+  }
+
   const agentStatuses: AgentStatus[] = agents.map((agent) => ({
     id: agent.id,
     name: agent.name,
     role: agent.role,
-    isWorking: false, // Will be updated via SSE
+    isWorking: false,
     currentTask: undefined,
     elapsedTime: undefined,
   }))

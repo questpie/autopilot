@@ -64,8 +64,8 @@ export function AppearanceForm() {
   const { t } = useTranslation()
   const theme = useAppStore((s) => s.theme)
   const setTheme = useAppStore((s) => s.setTheme)
-  const sidebarOpen = useAppStore((s) => s.sidebarOpen)
-  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen)
+  const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
+  const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed)
   const store = useAppearanceStore()
 
   const density = store.getItem("density", "comfortable") as Density
@@ -136,15 +136,15 @@ export function AppearanceForm() {
         <div className="grid grid-cols-3 gap-2">
           <ToggleCard
             label={t("settings.appearance_sidebar_expanded")}
-            selected={sidebarOpen}
+            selected={!sidebarCollapsed}
             icon={<SidebarIcon size={20} />}
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => setSidebarCollapsed(false)}
           />
           <ToggleCard
             label={t("settings.appearance_sidebar_collapsed")}
-            selected={!sidebarOpen}
+            selected={sidebarCollapsed}
             icon={<SidebarIcon size={20} weight="thin" />}
-            onClick={() => setSidebarOpen(false)}
+            onClick={() => setSidebarCollapsed(true)}
           />
         </div>
       </FormSection>

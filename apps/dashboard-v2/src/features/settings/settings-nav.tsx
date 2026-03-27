@@ -13,6 +13,7 @@ import {
   WarningIcon,
   KeyIcon,
   LockKeyIcon,
+  BellIcon,
 } from "@phosphor-icons/react"
 import { useTranslation } from "@/lib/i18n"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -36,6 +37,7 @@ const settingsItems: SettingsNavItem[] = [
   { icon: ShieldIcon, labelKey: "settings.security", to: "/settings/security" },
   { icon: LockKeyIcon, labelKey: "settings.two_factor", to: "/settings/security/2fa", indent: true },
   { icon: KeyIcon, labelKey: "settings.secrets", to: "/settings/security/secrets", indent: true },
+  { icon: BellIcon, labelKey: "settings.notifications", to: "/settings/notifications" },
   { icon: PaintBrushIcon, labelKey: "settings.appearance", to: "/settings/appearance" },
   { icon: GitBranchIcon, labelKey: "settings.git", to: "/settings/git" },
   { icon: CurrencyDollarIcon, labelKey: "settings.budget", to: "/settings/budget" },

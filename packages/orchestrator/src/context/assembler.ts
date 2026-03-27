@@ -377,6 +377,10 @@ You have these tools via the "autopilot" MCP server. Use them to interact with t
 ### External
 - **http**({ method, url, secret_ref }) — Call an external API with secret injection.
 
+### Web
+- **search_web**({ query, max_results? }) — Search the web. Returns ranked results with title, URL, and snippet. Provider configurable (Brave/Tavily/SerpAPI).
+- **browse**({ url, extract?, screenshot? }) — Browse a web page. Returns page text content, optionally saves a screenshot. Supports JS-rendered pages via headless browser.
+
 ### CRITICAL REMINDER
 After finishing ANY task, you MUST:
 1. \`task({ action: "update", task_id: "...", status: "done", note: "..." })\`

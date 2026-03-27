@@ -30,4 +30,5 @@ export const queryKeys = {
   providers: createKeys("providers"),
   company: createKeys("company"),
   userSessions: createKeys("userSessions"),
+  notifications: createKeys("notifications"),
 } as const

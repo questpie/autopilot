@@ -14,6 +14,7 @@ export type AutopilotEvent =
 	| { type: 'knowledge_changed'; path: string; action: 'created' | 'updated' }
 	| { type: 'artifact_changed'; artifactId: string; action: 'registered' | 'updated' }
 	| { type: 'validation_error'; file: string; error: string }
+	| { type: 'notification_new'; notificationId: string; userId: string; notificationType: string; priority: string; title: string; message: string; url?: string }
 
 export class EventBus {
 	private listeners = new Set<(event: AutopilotEvent) => void>()

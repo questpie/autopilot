@@ -74,7 +74,7 @@ export function BottomNav() {
   return (
     <>
       <nav
-        className="flex h-14 shrink-0 items-center border-t border-border bg-background pb-[var(--safe-bottom)] font-heading lg:hidden"
+        className="flex h-14 shrink-0 items-center border-t border-border bg-background pb-[var(--safe-bottom)] font-heading md:hidden"
         aria-label={t("nav.mobile_navigation")}
       >
         <LayoutGroup>

@@ -68,6 +68,11 @@ export function SessionView({ agentId, agentName, events: preloadedEvents, live 
       }
     }
 
+    es.onerror = () => {
+      // Silently close on error — the main SSE hook handles reconnection
+      es.close()
+    }
+
     return () => {
       es.close()
     }

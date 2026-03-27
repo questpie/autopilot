@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import { SSEClient } from "@/lib/sse-client"
 import type { SSEStatus } from "@/lib/sse-client"
 import { queryKeys } from "@/lib/query-keys"
@@ -17,6 +18,7 @@ const EVENT_INVALIDATION_MAP: Record<string, readonly (readonly string[])[]> = {
   channel_created: [queryKeys.channels.root],
   channel_deleted: [queryKeys.channels.root],
   channel_member_changed: [queryKeys.channels.root],
+  notification_new: [queryKeys.notifications.root],
 } as const
 
 interface SSEEvent {
@@ -43,6 +45,15 @@ export function useSSE(): void {
             for (const key of keysToInvalidate) {
               void queryClient.invalidateQueries({ queryKey: [...key] })
             }
+          }
+
+          // Show toast for new notifications
+          if (parsed.type === "notification_new") {
+            const notif = parsed as unknown as { title?: string; message?: string; url?: string }
+            toast(notif.title ?? "New notification", {
+              description: notif.message,
+              duration: 5000,
+            })
           }
         } catch {
           // Heartbeat or non-JSON messages ignored

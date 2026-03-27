@@ -195,6 +195,55 @@ export const pins = sqliteTable('pins', {
 
 // ─── Rate Limiting ──────────────────────────────────────────────────────────
 
+// ─── Notifications ─────────────────────────────────────────────────────────
+
+export const notifications = sqliteTable('notifications', {
+	id: text('id').primaryKey(),
+	user_id: text('user_id').notNull(),
+	type: text('type').notNull(),
+	priority: text('priority').notNull(),
+	title: text('title').notNull(),
+	message: text('message'),
+	url: text('url'),
+	task_id: text('task_id'),
+	agent_id: text('agent_id'),
+	read_at: integer('read_at'),
+	dismissed_at: integer('dismissed_at'),
+	delivered_via: text('delivered_via'),
+	created_at: integer('created_at').notNull(),
+}, (table) => [
+	index('idx_notifications_user').on(table.user_id, table.read_at, table.created_at),
+	index('idx_notifications_type').on(table.type),
+	index('idx_notifications_created').on(table.created_at),
+])
+
+// ─── Push Subscriptions ────────────────────────────────────────────────────
+
+export const pushSubscriptions = sqliteTable('push_subscriptions', {
+	id: text('id').primaryKey(),
+	user_id: text('user_id').notNull(),
+	endpoint: text('endpoint').notNull(),
+	keys_p256dh: text('keys_p256dh').notNull(),
+	keys_auth: text('keys_auth').notNull(),
+	created_at: integer('created_at').notNull(),
+}, (table) => [
+	index('idx_push_subs_user').on(table.user_id),
+	index('idx_push_subs_endpoint').on(table.endpoint),
+])
+
+// ─── Notification Throttle ─────────────────────────────────────────────────
+
+export const notificationThrottle = sqliteTable('notification_throttle', {
+	user_id: text('user_id').notNull(),
+	type: text('type').notNull(),
+	transport: text('transport').notNull(),
+	last_sent_at: integer('last_sent_at').notNull(),
+}, (table) => [
+	index('idx_throttle_pk').on(table.user_id, table.type, table.transport),
+])
+
+// ─── Rate Limiting ──────────────────────────────────────────────────────────
+
 export const rateLimitEntries = sqliteTable('rate_limit_entries', {
 	id: integer('id').primaryKey({ autoIncrement: true }),
 	key: text('key').notNull(),

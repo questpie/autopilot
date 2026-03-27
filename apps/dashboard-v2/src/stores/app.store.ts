@@ -11,9 +11,15 @@ interface RightPanelState {
 }
 
 interface AppState {
+  /** Mobile overlay: whether the sidebar sheet is open */
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
   toggleSidebar: () => void
+
+  /** Desktop: whether the sidebar is collapsed to icon rail */
+  sidebarCollapsed: boolean
+  setSidebarCollapsed: (collapsed: boolean) => void
+  toggleSidebarCollapsed: () => void
 
   rightPanel: RightPanelState
   setRightPanel: (panel: Partial<RightPanelState>) => void
@@ -33,10 +39,15 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      sidebarOpen: true,
+      sidebarOpen: false,
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       toggleSidebar: () =>
         set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+
+      sidebarCollapsed: false,
+      setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      toggleSidebarCollapsed: () =>
+        set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
       rightPanel: { open: false, mode: null, channel: null },
       setRightPanel: (panel) =>
@@ -61,7 +72,7 @@ export const useAppStore = create<AppState>()(
       name: "questpie-app-store",
       partialize: (state) => ({
         theme: state.theme,
-        sidebarOpen: state.sidebarOpen,
+        sidebarCollapsed: state.sidebarCollapsed,
       }),
     },
   ),

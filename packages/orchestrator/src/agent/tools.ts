@@ -1,10 +1,12 @@
 import { join } from 'path'
 import dns from 'node:dns/promises'
+import { mkdirSync, existsSync } from 'node:fs'
 import { z } from 'zod'
 import { PATHS } from '@questpie/autopilot-spec'
 import type { StorageBackend } from '../fs/storage'
 import { createPin, removePin } from '../fs/pins'
 import { readYamlUnsafe } from '../fs/yaml'
+import { loadCompany } from '../fs/company'
 import type { EventBus } from '../events/event-bus'
 import { container } from '../container'
 import { indexerFactory } from '../db/indexer'
@@ -115,7 +117,7 @@ export interface AutopilotToolOptions {
 /**
  * Build the full set of autopilot tools available to agents.
  *
- * Includes: `task`, `message`, `pin`, `search`, `http`.
+ * Includes: `task`, `message`, `pin`, `search`, `http`, `search_web`, `browse`.
  */
 export function createAutopilotTools(companyRoot: string, storage: StorageBackend, options?: AutopilotToolOptions): ToolDefinition[] {
 	// biome-ignore lint: generic variance is intentional
@@ -664,6 +666,318 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 						isError: true,
 					}
 				}
+			},
+		),
+
+		// ─── WT-001: search_web tool ───────────────────────────────────────
+		defineTool(
+			'search_web',
+			'Search the web using a search API. Returns titles, URLs, and snippets.',
+			z.object({
+				query: z.string().describe('Search query'),
+				max_results: z.number().optional().describe('Max results to return, default 5'),
+			}),
+			async (args, ctx) => {
+				const maxResults = args.max_results ?? 5
+
+				// Load search API key from secrets/search-api.yaml
+				const secretPath = join(
+					companyRoot,
+					PATHS.SECRETS_DIR.replace(/^\/company/, ''),
+					'search-api.yaml',
+				)
+				let apiKey: string | undefined
+				let allowedAgents: string[] | undefined
+				try {
+					const secret = (await readYamlUnsafe(secretPath)) as {
+						api_key?: string
+						allowed_agents?: string[]
+					}
+					apiKey = secret.api_key
+					allowedAgents = secret.allowed_agents
+				} catch {
+					return {
+						content: [{ type: 'text' as const, text: 'Web search not configured. Add search API key in secrets/search-api.yaml.' }],
+						isError: true,
+					}
+				}
+
+				if (!apiKey) {
+					return {
+						content: [{ type: 'text' as const, text: 'Web search not configured. Add search API key in secrets/search-api.yaml.' }],
+						isError: true,
+					}
+				}
+
+				// Check agent access
+				if (allowedAgents && allowedAgents.length > 0 && !allowedAgents.includes(ctx.agentId)) {
+					return {
+						content: [{ type: 'text' as const, text: `Agent ${ctx.agentId} not allowed to use search_web.` }],
+						isError: true,
+					}
+				}
+
+				// Determine search provider from company.yaml settings
+				let searchProvider = 'brave'
+				try {
+					const company = await loadCompany(companyRoot)
+					const settings = company.settings as Record<string, unknown>
+					if (settings.search_provider && typeof settings.search_provider === 'string') {
+						searchProvider = settings.search_provider
+					}
+				} catch {
+					// Use default provider
+				}
+
+				try {
+					let results: Array<{ title: string; url: string; snippet: string }> = []
+
+					switch (searchProvider) {
+						case 'tavily': {
+							const resp = await fetch('https://api.tavily.com/search', {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({
+									api_key: apiKey,
+									query: args.query,
+									max_results: maxResults,
+								}),
+							})
+							if (!resp.ok) {
+								return { content: [{ type: 'text' as const, text: `Tavily search failed: HTTP ${resp.status}` }], isError: true }
+							}
+							const data = (await resp.json()) as { results?: Array<{ title: string; url: string; content: string }> }
+							results = (data.results ?? []).slice(0, maxResults).map((r) => ({
+								title: r.title,
+								url: r.url,
+								snippet: r.content,
+							}))
+							break
+						}
+
+						case 'serpapi': {
+							const params = new URLSearchParams({
+								api_key: apiKey,
+								q: args.query,
+								num: String(maxResults),
+							})
+							const resp = await fetch(`https://serpapi.com/search.json?${params}`)
+							if (!resp.ok) {
+								return { content: [{ type: 'text' as const, text: `SerpAPI search failed: HTTP ${resp.status}` }], isError: true }
+							}
+							const data = (await resp.json()) as { organic_results?: Array<{ title: string; link: string; snippet: string }> }
+							results = (data.organic_results ?? []).slice(0, maxResults).map((r) => ({
+								title: r.title,
+								url: r.link,
+								snippet: r.snippet,
+							}))
+							break
+						}
+
+						case 'brave':
+						default: {
+							const params = new URLSearchParams({
+								q: args.query,
+								count: String(maxResults),
+							})
+							const resp = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
+								headers: {
+									'Accept': 'application/json',
+									'Accept-Encoding': 'gzip',
+									'X-Subscription-Token': apiKey,
+								},
+							})
+							if (!resp.ok) {
+								return { content: [{ type: 'text' as const, text: `Brave search failed: HTTP ${resp.status}` }], isError: true }
+							}
+							const data = (await resp.json()) as { web?: { results?: Array<{ title: string; url: string; description: string }> } }
+							results = (data.web?.results ?? []).slice(0, maxResults).map((r) => ({
+								title: r.title,
+								url: r.url,
+								snippet: r.description,
+							}))
+							break
+						}
+					}
+
+					if (results.length === 0) {
+						return { content: [{ type: 'text' as const, text: 'No search results found.' }] }
+					}
+
+					// SSRF check on result URLs
+					const safeResults: typeof results = []
+					for (const r of results) {
+						const ssrfError = await checkSsrf(r.url)
+						if (!ssrfError) {
+							safeResults.push(r)
+						}
+					}
+
+					if (safeResults.length === 0) {
+						return { content: [{ type: 'text' as const, text: 'All search results were filtered by SSRF protection.' }] }
+					}
+
+					const markdown = safeResults
+						.map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.snippet}`)
+						.join('\n\n')
+
+					return { content: [{ type: 'text' as const, text: markdown }] }
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					return { content: [{ type: 'text' as const, text: `Web search failed: ${msg}` }], isError: true }
+				}
+			},
+		),
+
+		// ─── WT-002: browse tool ───────────────────────────────────────────
+		defineTool(
+			'browse',
+			'Browse a web page. Returns page content as text, optionally takes a screenshot.',
+			z.object({
+				url: z.string().describe('URL to browse'),
+				extract: z.string().optional().describe('What to look for on the page, e.g. "pricing tiers"'),
+				screenshot: z.boolean().optional().describe('Save a screenshot (default false)'),
+			}),
+			async (args, ctx) => {
+				// SSRF protection
+				const ssrfError = await checkSsrf(args.url)
+				if (ssrfError) {
+					return { content: [{ type: 'text' as const, text: ssrfError }], isError: true }
+				}
+
+				// Try agent-browser CLI first, fall back to simple fetch
+				let pageContent = ''
+				let screenshotPath: string | undefined
+
+				try {
+					// Check if agent-browser binary is available
+					const which = Bun.spawnSync(['which', 'agent-browser'])
+					const hasBinary = which.exitCode === 0
+
+					// Also check local node_modules bin
+					const localBin = join(companyRoot, 'node_modules', '.bin', 'agent-browser')
+					const hasLocalBin = existsSync(localBin)
+
+					const browserCmd = hasBinary ? 'agent-browser' : hasLocalBin ? localBin : null
+
+					if (browserCmd) {
+						// Use agent-browser CLI for full JS rendering
+						// Open URL, wait for load, take snapshot
+						const openProc = Bun.spawnSync([browserCmd, 'open', args.url], {
+							timeout: 15_000,
+							stderr: 'pipe',
+						})
+						if (openProc.exitCode !== 0) {
+							throw new Error(`agent-browser open failed: ${openProc.stderr.toString()}`)
+						}
+
+						// Wait for network idle
+						Bun.spawnSync([browserCmd, 'wait', '--load', 'networkidle'], {
+							timeout: 20_000,
+							stderr: 'pipe',
+						})
+
+						// Take snapshot
+						const snapshotProc = Bun.spawnSync([browserCmd, 'snapshot', '--compact'], {
+							timeout: 10_000,
+							stdout: 'pipe',
+							stderr: 'pipe',
+						})
+						pageContent = snapshotProc.stdout.toString()
+
+						// Screenshot if requested
+						if (args.screenshot) {
+							const screenshotsDir = join(companyRoot, 'uploads', 'screenshots')
+							if (!existsSync(screenshotsDir)) {
+								mkdirSync(screenshotsDir, { recursive: true })
+							}
+							const timestamp = Date.now()
+							screenshotPath = join(screenshotsDir, `${timestamp}.png`)
+							Bun.spawnSync([browserCmd, 'screenshot', screenshotPath], {
+								timeout: 10_000,
+								stderr: 'pipe',
+							})
+						}
+					} else {
+						// Fallback: simple fetch (no JS rendering)
+						const controller = new AbortController()
+						const timeoutId = setTimeout(() => controller.abort(), 30_000)
+						try {
+							const resp = await fetch(args.url, {
+								signal: controller.signal,
+								headers: {
+									'User-Agent': 'QuestPie-Autopilot/1.0 (+https://autopilot.questpie.com)',
+									'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+								},
+							})
+							const html = await resp.text()
+							// Strip HTML tags for a basic text extraction
+							pageContent = html
+								.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+								.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+								.replace(/<[^>]+>/g, ' ')
+								.replace(/\s+/g, ' ')
+								.trim()
+						} finally {
+							clearTimeout(timeoutId)
+						}
+
+						if (args.screenshot) {
+							screenshotPath = undefined // Not available without agent-browser
+							pageContent += '\n\n[Note: screenshot requires agent-browser binary. Install with: bun add agent-browser]'
+						}
+					}
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					// Fall back to simple fetch on any agent-browser error
+					try {
+						const controller = new AbortController()
+						const timeoutId = setTimeout(() => controller.abort(), 30_000)
+						try {
+							const resp = await fetch(args.url, {
+								signal: controller.signal,
+								headers: {
+									'User-Agent': 'QuestPie-Autopilot/1.0 (+https://autopilot.questpie.com)',
+									'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+								},
+							})
+							const html = await resp.text()
+							pageContent = html
+								.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+								.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+								.replace(/<[^>]+>/g, ' ')
+								.replace(/\s+/g, ' ')
+								.trim()
+						} finally {
+							clearTimeout(timeoutId)
+						}
+					} catch (fetchErr) {
+						const fetchMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
+						return { content: [{ type: 'text' as const, text: `Browse failed: ${msg}. Fetch fallback also failed: ${fetchMsg}` }], isError: true }
+					}
+				}
+
+				// Truncate very long pages
+				const maxLen = 50_000
+				if (pageContent.length > maxLen) {
+					pageContent = `${pageContent.slice(0, maxLen)}\n\n[... truncated, ${pageContent.length} chars total ...]`
+				}
+
+				// Build response
+				const parts: string[] = []
+				parts.push(`## Page: ${args.url}\n`)
+
+				if (args.extract) {
+					parts.push(`*Extraction hint: "${args.extract}"*\n`)
+				}
+
+				parts.push(pageContent)
+
+				if (screenshotPath) {
+					parts.push(`\n**Screenshot saved:** ${screenshotPath}`)
+				}
+
+				return { content: [{ type: 'text' as const, text: parts.join('\n') }] }
 			},
 		),
 	]

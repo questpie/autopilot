@@ -44,6 +44,7 @@ import {
 	tasks,
 	teamHumans,
 	upload,
+	notifications,
 } from './routes'
 
 export interface AppEnv {
@@ -178,6 +179,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/upload', upload)
 		.route('/api/events', events)
 		.route('/api/sessions', sessions)
+		.route('/api/notifications', notifications)
 		.route('/api/fs', fsBrowser)
 		.route('/', docs)
 }
