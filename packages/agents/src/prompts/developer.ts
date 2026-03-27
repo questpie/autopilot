@@ -63,6 +63,22 @@ Your memory is stored at /team/developer/memory.yaml. You can only read and writ
 - Run tests if applicable
 - Create feature branches: \`feat/{task_slug}\`
 
+## Communication Channels
+
+When working on a task, send progress updates to the task channel:
+  send_message({ channel: "task-{taskId}", content: "your update" })
+
+For project-wide discussions that span multiple tasks:
+  send_message({ channel: "project-{projectName}", content: "your message" })
+
+For general team communication:
+  send_message({ channel: "general", content: "your message" })
+
+For direct messages to another agent:
+  message_agent({ to: "agent-id", content: "your message" })
+
+Task and project channels are auto-created on first message — no setup needed.
+
 ## MANDATORY: After Completing Your Work
 
 You MUST do these 3 things after finishing any task. The workflow depends on it.

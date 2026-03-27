@@ -187,6 +187,32 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 			}
 		}
 
+		// CR-005: Include recent task channel messages in context
+		try {
+			const taskChannelId = `task-${task.id}`
+			const taskMessages = await storage.readMessages({ channel: taskChannelId, limit: 10 })
+			if (taskMessages.length > 0) {
+				const taskDiscussion = formatMessages(taskMessages)
+				taskLines.push(`\n### Task Discussion\nRecent messages from #${taskChannelId}:\n${taskDiscussion}`)
+			}
+		} catch {
+			// Task channel may not exist yet — safe to ignore
+		}
+
+		// CR-006: Include recent project channel messages in context
+		if (task.project) {
+			try {
+				const projectChannelId = `project-${task.project}`
+				const projectMessages = await storage.readMessages({ channel: projectChannelId, limit: 5 })
+				if (projectMessages.length > 0) {
+					const projectDiscussion = formatMessages(projectMessages)
+					taskLines.push(`\n### Project Discussion\nRecent messages from #${projectChannelId}:\n${projectDiscussion}`)
+				}
+			} catch {
+				// Project channel may not exist yet — safe to ignore
+			}
+		}
+
 		sections.push(truncateToTokens(taskLines.join('\n'), 15_000))
 	}
 
@@ -214,7 +240,7 @@ You have these tools via the "autopilot" MCP server. Use them to interact with t
 - **resolve_blocker**({ task_id, note }) — Mark a blocker as resolved.
 
 ### Communication
-- **send_message**({ channel, content }) — Send to a channel. CALL THIS after completing work.
+- **send_message**({ channel, content }) — Send to a channel. Task/project channels (task-*, project-*) are auto-created on first message. CALL THIS after completing work.
 - **message_agent**({ to, content, reason }) — Send a direct message to another agent.
 
 ### Dashboard
@@ -225,9 +251,6 @@ You have these tools via the "autopilot" MCP server. Use them to interact with t
 - **search**({ query, type?, scope? }) — Search across all entities (tasks, messages, knowledge, pins, agents, channels, skills).
 - **update_knowledge**({ path, content, reason }) — Add/update a knowledge document.
 - **skill_request**({ skill_id }) — Load a skill document for guidance.
-
-### Discovery
-- **list_agents**({}) — List all agents with role, bio, status, current work, and capabilities.
 
 ### External
 - **http_request**({ method, url, secret_ref }) — Call an external API with secret injection.

@@ -13,9 +13,6 @@ import type { EventBus } from '../events/event-bus'
 import { container } from '../container'
 import { indexerFactory } from '../db/indexer'
 import type { Indexer } from '../db/indexer'
-import { loadAgents } from '../fs'
-import { loadAgentMemory } from '../context/memory-loader'
-import { streamManagerFactory } from '../session/stream'
 
 /** Best-effort resolve the indexer for real-time index updates. */
 async function getIndexer(): Promise<Indexer | null> {
@@ -125,7 +122,7 @@ export interface AutopilotToolOptions {
  * Includes: `send_message`, `create_task`, `update_task`, `add_blocker`,
  * `pin_to_board`, `unpin_from_board`, `create_artifact`, `skill_request`,
  * `search`, `update_knowledge`, `http_request`, `message_agent`,
- * `list_agents`, and `resolve_blocker`.
+ * and `resolve_blocker`.
  */
 export function createAutopilotTools(companyRoot: string, storage: StorageBackend, options?: AutopilotToolOptions): ToolDefinition[] {
 	// biome-ignore lint: generic variance is intentional
@@ -133,16 +130,53 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 		// Communication
 		defineTool(
 			'send_message',
-			'Send a message to a channel',
+			'Send a message to a channel. Task and project channels (task-*, project-*) are auto-created on first message.',
 			z.object({
-				channel: z.string().describe('Channel ID to send to (e.g. "general", "dev", or a direct channel ID)'),
+				channel: z.string().describe('Channel ID to send to (e.g. "general", "dev", "task-052", "project-studio")'),
 				content: z.string().describe('Message content'),
 				references: z.array(z.string()).optional().describe('Referenced file paths or task IDs'),
 			}),
 			async (args, ctx) => {
+				const isTaskOrProjectChannel = args.channel.startsWith('task-') || args.channel.startsWith('project-')
+
+				// Auto-create task/project channels on first message (CR-002)
+				const existingChannel = await storage.readChannel(args.channel)
+				if (!existingChannel) {
+					if (isTaskOrProjectChannel) {
+						const taskMatch = args.channel.match(/^task-(.+)$/)
+						const projectMatch = args.channel.match(/^project-(.+)$/)
+						const name = taskMatch
+							? `Task ${taskMatch[1]}`
+							: `Project ${projectMatch![1]}`
+
+						await storage.createChannel({
+							id: args.channel,
+							name,
+							type: 'group',
+							description: taskMatch
+								? `Discussion thread for task ${taskMatch[1]}`
+								: `Discussion channel for project ${projectMatch![1]}`,
+							created_by: ctx.agentId,
+							created_at: new Date().toISOString(),
+							updated_at: new Date().toISOString(),
+							metadata: {},
+						})
+
+						await storage.addChannelMember(args.channel, ctx.agentId, 'agent', 'member')
+						ctx.eventBus.emit({ type: 'channel_created', channelId: args.channel, name })
+					} else {
+						return { content: [{ type: 'text' as const, text: `Channel "${args.channel}" not found.` }] }
+					}
+				}
+
+				// Auto-join task/project channels (CR-003)
 				const isMember = await storage.isChannelMember(args.channel, ctx.agentId)
 				if (!isMember) {
-					return { content: [{ type: 'text' as const, text: `Access denied: not a member of channel #${args.channel}` }] }
+					if (isTaskOrProjectChannel) {
+						await storage.addChannelMember(args.channel, ctx.agentId, 'agent', 'member')
+					} else {
+						return { content: [{ type: 'text' as const, text: `Not a member of channel "${args.channel}".` }] }
+					}
 				}
 
 				await storage.sendMessage({
@@ -199,6 +233,29 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 				ctx.eventBus.emit({ type: 'task_changed', taskId: task.id, status: task.status, assignedTo: task.assigned_to })
 				// Real-time index
 				getIndexer().then((idx) => idx?.indexOne('task', task.id, task.title, `${task.title} ${task.description ?? ''} ${task.status} ${task.type}`)).catch(() => {})
+
+				// CR-007: Auto-create task channel on task creation
+				const taskChannelId = `task-${task.id}`
+				try {
+					await storage.createChannel({
+						id: taskChannelId,
+						name: `Task ${task.id}`,
+						type: 'group',
+						description: task.title,
+						created_by: ctx.agentId,
+						created_at: new Date().toISOString(),
+						updated_at: new Date().toISOString(),
+						metadata: {},
+					})
+					await storage.addChannelMember(taskChannelId, ctx.agentId, 'agent', 'member')
+					if (task.assigned_to) {
+						await storage.addChannelMember(taskChannelId, task.assigned_to, 'agent', 'member')
+					}
+					ctx.eventBus.emit({ type: 'channel_created', channelId: taskChannelId, name: `Task ${task.id}` })
+				} catch {
+					// Channel may already exist — safe to ignore
+				}
+
 				return { content: [{ type: 'text' as const, text: `Created task ${task.id}: ${task.title}` }] }
 			},
 		),
@@ -658,57 +715,6 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 				})
 
 				return { content: [{ type: 'text' as const, text: `Direct message sent to ${args.to} in channel ${channel.id}` }] }
-			},
-		),
-
-		// Agent discovery
-		defineTool(
-			'list_agents',
-			'List all agents with their role, bio, status, current work, and capabilities.',
-			z.object({}),
-			async (_args, ctx) => {
-				try {
-					const agents = await loadAgents(ctx.companyRoot)
-
-					// Get real statuses from stream manager
-					let activeStreams: Array<{ sessionId: string; agentId: string }> = []
-					try {
-						const { streamManager } = container.resolve([streamManagerFactory])
-						activeStreams = streamManager.getActiveStreams()
-					} catch {
-						// StreamManager may not be initialized
-					}
-
-					// Get in-progress tasks
-					const inProgressTasks = await ctx.storage.listTasks({ status: 'in_progress' })
-
-					const result = await Promise.all(agents.map(async (agent) => {
-						const isWorking = activeStreams.some((s) => s.agentId === agent.id)
-						const currentTask = inProgressTasks.find((t) => t.assigned_to === agent.id)
-
-						// Try to load bio from memory
-						let bio: string | null = null
-						try {
-							const memory = await loadAgentMemory(ctx.companyRoot, agent.id)
-							bio = (memory as Record<string, unknown> | null)?.bio as string | null ?? null
-						} catch {
-							// No memory available
-						}
-
-						return [
-							`**${agent.name}** (${agent.id}) — ${agent.role}`,
-							bio ? `  Bio: ${bio}` : `  ${agent.description}`,
-							`  Status: ${isWorking ? 'working' : 'idle'}`,
-							currentTask ? `  Working on: ${currentTask.id} — ${currentTask.title}` : null,
-							`  Tools: ${agent.tools?.join(', ') ?? 'default'}`,
-						].filter(Boolean).join('\n')
-					}))
-
-					return { content: [{ type: 'text' as const, text: result.join('\n\n') }] }
-				} catch (err) {
-					const msg = err instanceof Error ? err.message : String(err)
-					return { content: [{ type: 'text' as const, text: `Failed to list agents: ${msg}` }], isError: true }
-				}
 			},
 		),
 
