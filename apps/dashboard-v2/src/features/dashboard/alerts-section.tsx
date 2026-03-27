@@ -87,7 +87,6 @@ function AlertItemCard({ item }: { item: AlertItem }) {
           <>
             <Button
               variant="default"
-              size="sm"
               disabled={isLoading}
               onClick={() => approveMutation.mutate(item.taskId!)}
               className="h-7 px-2.5 text-xs"
@@ -97,7 +96,6 @@ function AlertItemCard({ item }: { item: AlertItem }) {
             </Button>
             <Button
               variant="outline"
-              size="sm"
               disabled={isLoading}
               onClick={() =>
                 rejectMutation.mutate({ taskId: item.taskId! })
@@ -112,7 +110,6 @@ function AlertItemCard({ item }: { item: AlertItem }) {
           <Button
             key={action.action}
             variant="outline"
-            size="sm"
             className="h-7 px-2.5 text-xs"
           >
             {action.label}

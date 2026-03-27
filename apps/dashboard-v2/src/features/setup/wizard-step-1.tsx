@@ -43,6 +43,11 @@ interface WizardStep1Props {
 
 function PasswordStrengthMeter({ score }: { score: number }) {
   const { t } = useTranslation()
+
+  // score -1 = no input yet, show empty bar
+  const isEmpty = score < 0
+  const effectiveScore = isEmpty ? 0 : score
+
   const labels = [
     t("auth.password_strength_weak"),
     t("auth.password_strength_weak"),
@@ -66,12 +71,14 @@ function PasswordStrengthMeter({ score }: { score: number }) {
           <div
             key={i}
             className={`h-1 flex-1 transition-colors ${
-              i <= score - 1 ? colors[score] : "bg-muted"
+              !isEmpty && i <= effectiveScore - 1 ? colors[effectiveScore] : "bg-muted"
             }`}
           />
         ))}
       </div>
-      <span className="text-xs text-muted-foreground">{labels[score]}</span>
+      <span className="text-xs text-muted-foreground">
+        {isEmpty ? "\u00A0" : labels[effectiveScore]}
+      </span>
     </div>
   )
 }
@@ -200,7 +207,7 @@ export function WizardStep1({ onComplete }: WizardStep1Props) {
                 {showPassword ? <EyeSlashIcon className="size-4" /> : <EyeIcon className="size-4" />}
               </button>
             </div>
-            {watchedPassword && <PasswordStrengthMeter score={passwordScore} />}
+            <PasswordStrengthMeter score={watchedPassword ? passwordScore : -1} />
             <p className="text-xs text-muted-foreground">{t("auth.password_requirements")}</p>
             {form.formState.errors.password && (
               <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>

@@ -93,7 +93,6 @@ function CompanySettingsView({ path, content }: FileViewProps) {
           {t("files.company_settings")}
         </h2>
         <Button
-          size="sm"
           onClick={handleSave}
           disabled={updateFile.isPending}
           className="gap-1 rounded-none font-heading text-[10px]"

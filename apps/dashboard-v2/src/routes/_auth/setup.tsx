@@ -12,15 +12,48 @@ import { WizardStep8 } from "@/features/setup/wizard-step-8"
 import { WizardStep9 } from "@/features/setup/wizard-step-9"
 import { WizardDone } from "@/features/setup/wizard-done"
 import { AnimatePresence, motion } from "framer-motion"
-import { useCallback, useState } from "react"
+import { useCallback, useState, useEffect } from "react"
+import { useNavigate } from "@tanstack/react-router"
+import { api } from "@/lib/api"
+import { authClient } from "@/lib/auth"
 
 export const Route = createFileRoute("/_auth/setup")({
   component: SetupPage,
 })
 
 function SetupPage() {
-  const { currentStep, nextStep, prevStep } = useWizardState()
+  const { currentStep, nextStep, prevStep, setStep } = useWizardState()
   const [showDone, setShowDone] = useState(false)
+  const navigate = useNavigate()
+
+  // Edge case: user already exists but wizard still showing step 1
+  // This happens on page reload after step 1 completed
+  useEffect(() => {
+    async function checkState() {
+      try {
+        const res = await api.api.status.$get()
+        if (res.ok) {
+          const data = await res.json() as { userCount?: number }
+          if ((data.userCount ?? 0) > 0) {
+            // User exists — check if we have a session
+            const session = await authClient.getSession()
+            if (session.data?.user) {
+              // Session active — skip step 1, go to step 2 or wherever we left off
+              if (currentStep <= 1) {
+                setStep(2 as WizardStep)
+              }
+            } else {
+              // User exists but no session — redirect to login
+              void navigate({ to: "/login" })
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    void checkState()
+  }, [])
 
   const handleNext = useCallback(() => {
     if (currentStep === WIZARD_TOTAL_STEPS) {

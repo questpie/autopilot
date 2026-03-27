@@ -162,7 +162,6 @@ function TasksPage() {
 
           {/* New task */}
           <Button
-            size="sm"
             className="gap-1.5"
             onClick={() => setCreateOpen(true)}
           >

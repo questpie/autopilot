@@ -22,7 +22,7 @@ export function WidgetErrorCard({ name, error, onRetry }: WidgetErrorCardProps) 
           <p className="max-w-xs text-xs text-muted-foreground">{error}</p>
         )}
       </div>
-      <Button variant="outline" size="sm" onClick={onRetry}>
+      <Button variant="outline" onClick={onRetry}>
         <ArrowClockwiseIcon size={14} />
         {t("common.retry")}
       </Button>

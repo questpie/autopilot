@@ -103,9 +103,10 @@ export function AgentsSection() {
           </h2>
         </div>
         <EmptyState
-          icon={<UsersIcon size={32} />}
+          icon={<UsersIcon size={28} />}
           message={t("dashboard.agents_empty")}
           description={t("dashboard.agents_empty_description")}
+          className="border border-border py-8"
         />
       </section>
     )
