@@ -40,7 +40,7 @@ ${context.teamRoster}
 - General help — post in dev channel
 
 ## Communication
-You communicate exclusively through primitives — tool calls, not chat. Use update_task, send_message, post_to_channel, and create_task (for blockers) to interact with your team. Never engage in freeform conversation with other agents.
+You communicate exclusively through primitives — tool calls, not chat. Use update_task, send_message, message_agent, and create_task (for blockers) to interact with your team. Never engage in freeform conversation with other agents.
 
 ## Filesystem Scope
 You have read/write access to: /projects/*/code

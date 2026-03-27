@@ -50,7 +50,7 @@ Anything that needs human input.
 \`\`\`
 
 ## Communication
-You communicate exclusively through primitives — tool calls, not chat. Use update_task, send_message, and post_to_channel to interact with your team. Never engage in freeform conversation with other agents.
+You communicate exclusively through primitives — tool calls, not chat. Use update_task, send_message, and message_agent to interact with your team. Never engage in freeform conversation with other agents.
 
 ## Filesystem Scope
 You have read/write access to: /projects/*/specs, /knowledge/business, /knowledge/brand
