@@ -10,25 +10,22 @@ interface AuthCheckResult {
   session: { twoFactorVerified?: boolean } | null
 }
 
-/**
- * Check authentication state and determine the appropriate redirect.
- * Used in route beforeLoad guards.
- */
+const NOT_AUTHENTICATED: AuthCheckResult = {
+  isAuthenticated: false,
+  needs2FA: false,
+  noUsersExist: false,
+  user: null,
+  session: null,
+}
+
 export async function checkAuth(): Promise<AuthCheckResult> {
   try {
-    // Check if any users exist
     const statusRes = await api.api.status.$get()
 
     if (statusRes.ok) {
       const statusData = (await statusRes.json()) as { userCount?: number }
       if (statusData.userCount === 0) {
-        return {
-          isAuthenticated: false,
-          needs2FA: false,
-          noUsersExist: true,
-          user: null,
-          session: null,
-        }
+        return { ...NOT_AUTHENTICATED, noUsersExist: true }
       }
     }
 
@@ -38,53 +35,32 @@ export async function checkAuth(): Promise<AuthCheckResult> {
       const user = sessionResult.data.user as { twoFactorEnabled?: boolean }
       const session = sessionResult.data.session as { twoFactorVerified?: boolean }
 
-      const needs2FA = !!user.twoFactorEnabled && !session.twoFactorVerified
-
       return {
         isAuthenticated: true,
-        needs2FA,
+        needs2FA: !!user.twoFactorEnabled && !session.twoFactorVerified,
         noUsersExist: false,
         user,
         session,
       }
     }
 
-    return {
-      isAuthenticated: false,
-      needs2FA: false,
-      noUsersExist: false,
-      user: null,
-      session: null,
-    }
+    return NOT_AUTHENTICATED
   } catch {
-    return {
-      isAuthenticated: false,
-      needs2FA: false,
-      noUsersExist: false,
-      user: null,
-      session: null,
-    }
+    return NOT_AUTHENTICATED
   }
 }
 
-/**
- * Guard for authenticated routes. Redirects to login if not authenticated.
- * Preserves the current URL in ?redirect= param for deep linking.
- */
 export async function requireAuth(opts: { location: { href: string } }) {
   const { isAuthenticated, needs2FA, noUsersExist } = await checkAuth()
 
-  // First-time install: redirect to setup
   if (noUsersExist) {
     throw redirect({ to: "/setup" })
   }
 
-  // 2FA pending: redirect to 2FA challenge
   if (isAuthenticated && needs2FA) {
     throw redirect({ to: "/login/2fa" })
   }
 
-  // Not authenticated: redirect to login
   if (!isAuthenticated) {
     throw redirect({
       to: "/login",
@@ -93,13 +69,9 @@ export async function requireAuth(opts: { location: { href: string } }) {
   }
 }
 
-/**
- * Guard for auth routes (login, signup). Redirects to / if already authenticated.
- */
 export async function requireGuest() {
   const { isAuthenticated, needs2FA } = await checkAuth()
 
-  // If authenticated but needs 2FA, allow access to 2FA page
   if (isAuthenticated && needs2FA) {
     return
   }

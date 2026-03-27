@@ -44,7 +44,6 @@ interface TaskDetailProps {
   onClose: () => void
 }
 
-
 export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
   const { t } = useTranslation()
   const { data: task, isLoading } = useQuery(taskDetailQuery(taskId))

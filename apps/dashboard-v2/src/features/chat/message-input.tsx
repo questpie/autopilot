@@ -108,7 +108,7 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
     if (!content && attachedFiles.length === 0) return
 
     // Append file references to content
-    const fileRefs = attachedFiles.map((f) => f).join("\n")
+    const fileRefs = attachedFiles.join("\n")
     const fullContent = fileRefs ? `${content}\n${fileRefs}` : content
 
     // Extract mentions from content
@@ -256,9 +256,9 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
     [upload],
   )
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  function handleDragOver(e: React.DragEvent) {
     e.preventDefault()
-  }, [])
+  }
 
   return (
     <div className="border-t border-border">

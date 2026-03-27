@@ -10,10 +10,9 @@ import {
   ChatCircleIcon,
   ChartBarIcon,
   GearIcon,
-  RobotIcon,
   LightningIcon,
-  MagnifyingGlassIcon,
 } from "@phosphor-icons/react"
+import { motion } from "framer-motion"
 import {
   CommandDialog,
   CommandEmpty,
@@ -24,10 +23,11 @@ import {
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
-import { useHaptic } from "@/hooks/use-haptic"
+import { useHapticPattern } from "@/hooks/use-haptic"
 import { api } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
 import { toast } from "sonner"
+import { EASING, DURATION, clampedDelay, useMotionPreference } from "@/lib/motion"
 
 interface CommandEntry {
   id: string
@@ -46,7 +46,8 @@ export function CommandPalette() {
   const open = useAppStore((s) => s.commandPaletteOpen)
   const setOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const navigate = useNavigate()
-  const { triggerHaptic } = useHaptic()
+  const { trigger } = useHapticPattern()
+  const { shouldReduce } = useMotionPreference()
   const [inputValue, setInputValue] = useState("")
 
   const isIntentMode = inputValue.startsWith(">")
@@ -80,11 +81,11 @@ export function CommandPalette() {
   const handleIntentSubmit = useCallback(() => {
     const message = inputValue.slice(1).trim()
     if (!message) return
-    triggerHaptic()
+    trigger("success")
     createIntent.mutate(message)
     setOpen(false)
     setInputValue("")
-  }, [inputValue, createIntent, setOpen])
+  }, [inputValue, createIntent, setOpen, trigger])
 
   const commands = useMemo<CommandEntry[]>(
     () => [
@@ -164,13 +165,13 @@ export function CommandPalette() {
     (commandId: string) => {
       const cmd = commands.find((c) => c.id === commandId)
       if (cmd) {
-        triggerHaptic()
+        trigger("tap")
         cmd.action()
         setOpen(false)
         setInputValue("")
       }
     },
-    [commands, setOpen, triggerHaptic],
+    [commands, setOpen, trigger],
   )
 
   const bindings = useMemo(
@@ -213,20 +214,36 @@ export function CommandPalette() {
         ) : (
           <>
             <CommandEmpty>{t("command_palette.no_results")}</CommandEmpty>
-            {Array.from(grouped.entries()).map(([category, items]) => (
-              <CommandGroup key={category} heading={t(category)}>
-                {items.map((item) => (
-                  <CommandItem
-                    key={item.id}
-                    value={item.id}
-                    onSelect={handleSelect}
-                  >
-                    {item.icon}
-                    <span>{t(item.labelKey)}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
+            {Array.from(grouped.entries()).map(([category, items]) => {
+              let itemIndex = 0
+              return (
+                <CommandGroup key={category} heading={t(category)}>
+                  {items.map((item) => {
+                    const delay = shouldReduce ? 0 : clampedDelay(itemIndex++)
+                    return (
+                      <motion.div
+                        key={item.id}
+                        initial={shouldReduce ? false : { opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                          duration: DURATION.normal,
+                          ease: EASING.enter,
+                          delay,
+                        }}
+                      >
+                        <CommandItem
+                          value={item.id}
+                          onSelect={handleSelect}
+                        >
+                          {item.icon}
+                          <span>{t(item.labelKey)}</span>
+                        </CommandItem>
+                      </motion.div>
+                    )
+                  })}
+                </CommandGroup>
+              )
+            })}
           </>
         )}
       </CommandList>

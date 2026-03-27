@@ -96,7 +96,6 @@ export function useUpdateTask() {
 
       const previousTasks = queryClient.getQueryData(queryKeys.tasks.list())
 
-      // Optimistic update for task list
       queryClient.setQueryData(
         queryKeys.tasks.list(),
         (old: TaskData[] | undefined) => {

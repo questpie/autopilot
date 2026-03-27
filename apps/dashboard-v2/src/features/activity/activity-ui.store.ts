@@ -1,11 +1,9 @@
 import { create } from "zustand"
 
 interface ActivityUIState {
-  /** Filter by activity type */
   filterType: string | null
   setFilterType: (type: string | null) => void
 
-  /** Filter by agent ID */
   filterAgentId: string | null
   setFilterAgentId: (id: string | null) => void
 }

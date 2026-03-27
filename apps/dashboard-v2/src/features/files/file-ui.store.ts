@@ -1,11 +1,9 @@
 import { create } from "zustand"
 
 interface FileUIState {
-  /** Currently expanded directory paths */
   expandedPaths: Set<string>
   togglePath: (path: string) => void
 
-  /** Currently selected file path */
   selectedPath: string | null
   setSelectedPath: (path: string | null) => void
 }

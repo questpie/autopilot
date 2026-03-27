@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { AppShell } from "@/components/layouts/app-shell"
 import { CommandPalette } from "@/components/command-palette"
@@ -43,10 +43,7 @@ function AppLayout() {
       // Context-dependent: navigate to task creation
       void navigate({ to: "/tasks", search: { create: true } as Record<string, unknown> })
     },
-    onNavigate: useCallback(
-      (path: string) => void navigate({ to: path }),
-      [navigate],
-    ),
+    onNavigate: (path: string) => void navigate({ to: path }),
   })
 
   return (

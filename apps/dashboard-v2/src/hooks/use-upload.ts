@@ -86,7 +86,6 @@ export function useUpload(options: UseUploadOptions = {}) {
           formData.append("file", file)
           formData.append("path", targetPath)
 
-          // Upload uses multipart form — not supported by Hono RPC typed client
           const response = await fetch(`${API_BASE}/api/upload`, {
             method: "POST",
             credentials: "include",

@@ -14,7 +14,7 @@ import { SkipLink } from "@/components/skip-link"
  */
 export function AppShell() {
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]">
       <SkipLink />
       <TopBar />
       <div className="flex min-h-0 flex-1">

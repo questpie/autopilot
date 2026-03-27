@@ -1,8 +1,3 @@
-/**
- * Resource linking system — auto-detects references in text and maps them to URLs.
- * See spec §12 for patterns and rendering.
- */
-
 export type ResourceType =
   | "task"
   | "agent"
@@ -59,7 +54,7 @@ const PATTERNS: PatternDef[] = [
     regex: /\bPR #(\d+)\b/g,
     type: "pr",
     getLabel: (m) => `PR #${m[1]}`,
-    getUrl: () => "#", // External URL would come from context
+    getUrl: () => "#",
   },
   {
     regex: /\bartifact:([\w-]+)\b/g,
@@ -69,20 +64,14 @@ const PATTERNS: PatternDef[] = [
   },
 ]
 
-/**
- * Scan text for resource references and return an array of matches
- * sorted by position, with no overlaps.
- */
 export function resolveReferences(text: string): LinkedReference[] {
   const refs: LinkedReference[] = []
 
   for (const pattern of PATTERNS) {
-    // Reset regex state
     pattern.regex.lastIndex = 0
     let match: RegExpExecArray | null
 
     while ((match = pattern.regex.exec(text)) !== null) {
-      // For the file pattern, trim leading whitespace
       const fullMatch = match[0]
       const trimmedStart = fullMatch.length - fullMatch.trimStart().length
       const start = match.index + trimmedStart
@@ -99,7 +88,6 @@ export function resolveReferences(text: string): LinkedReference[] {
     }
   }
 
-  // Sort by position, remove overlaps
   refs.sort((a, b) => a.start - b.start)
 
   const deduped: LinkedReference[] = []

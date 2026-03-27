@@ -5,8 +5,8 @@ import {
   SpinnerIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
+import { API_BASE } from "@/lib/api"
 import { useTranslation } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
 import {
   SessionEventItem,
   type SessionEvent,
@@ -22,8 +22,6 @@ interface SessionViewProps {
   /** Whether this is a live (SSE) session or replay. */
   live?: boolean
 }
-
-import { API_BASE } from "@/lib/api"
 
 export function SessionView({ agentId, agentName, events: preloadedEvents, live = true }: SessionViewProps) {
   const { t } = useTranslation()

@@ -107,15 +107,15 @@ export function FileUpload({
     [handleFiles]
   )
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  function handleDragOver(e: React.DragEvent) {
     e.preventDefault()
     setIsDragActive(true)
-  }, [])
+  }
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
+  function handleDragLeave(e: React.DragEvent) {
     e.preventDefault()
     setIsDragActive(false)
-  }, [])
+  }
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {

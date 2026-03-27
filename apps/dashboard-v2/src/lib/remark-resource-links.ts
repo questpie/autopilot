@@ -1,11 +1,3 @@
-/**
- * Custom remark plugin that detects resource references in text nodes
- * and wraps them in a custom MDAST node for rendering.
- *
- * This integrates with the resource-resolver to auto-link task IDs,
- * agent refs, file paths, channels, PRs, and artifacts in markdown.
- */
-
 import type { Root, Text, PhrasingContent } from "mdast"
 import { resolveReferences } from "./resource-resolver"
 
@@ -28,10 +20,6 @@ function isText(node: PhrasingContent): node is Text {
   return node.type === "text"
 }
 
-/**
- * Remark plugin that converts resource references (task-123, agent:max, etc.)
- * into custom `resource-link` HTML elements that the React renderer can handle.
- */
 export const remarkResourceLinks: RemarkPlugin = () => {
   return (tree: Root) => {
     visitTextNodes(tree as unknown as NodeWithChildren)
@@ -59,7 +47,6 @@ function visitTextNodes(node: NodeWithChildren) {
       let lastIndex = 0
 
       for (const ref of refs) {
-        // Text before reference
         if (ref.start > lastIndex) {
           newChildren.push({
             type: "text",
@@ -67,7 +54,6 @@ function visitTextNodes(node: NodeWithChildren) {
           })
         }
 
-        // Resource link node
         const linkNode: ResourceLinkNode = {
           type: "resourceLink" as unknown as "resourceLink",
           data: {
@@ -85,7 +71,6 @@ function visitTextNodes(node: NodeWithChildren) {
         lastIndex = ref.end
       }
 
-      // Remaining text
       if (lastIndex < child.value.length) {
         newChildren.push({
           type: "text",
@@ -93,7 +78,6 @@ function visitTextNodes(node: NodeWithChildren) {
         })
       }
     } else {
-      // Recurse into child nodes
       if ("children" in child) {
         visitTextNodes(child as unknown as { children: PhrasingContent[] })
       }

@@ -8,7 +8,7 @@ import {
   Sheet,
   SheetContent,
 } from "@/components/ui/sheet"
-import { useTranslation, t } from "@/lib/i18n"
+import { useTranslation } from "@/lib/i18n"
 import { useTaskUIStore } from "@/features/tasks/task-ui.store"
 import { tasksQuery } from "@/features/tasks/task.queries"
 import { TaskList } from "@/features/tasks/task-list"
@@ -227,6 +227,7 @@ function TasksPage() {
 }
 
 function TaskListSkeleton() {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-0" aria-busy="true" aria-label={t("a11y.loading_tasks")}>
       {/* Group header skeleton */}

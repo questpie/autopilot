@@ -1,10 +1,3 @@
-/**
- * Centralized TanStack Query key factory.
- * Every query key in the app MUST use this factory — no raw strings.
- *
- * Pattern: queryKeys.<entity>.root / .list(filters) / .detail(id)
- */
-
 function createKeys<T extends string>(entity: T) {
   return {
     root: [entity] as const,

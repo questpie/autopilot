@@ -1,15 +1,9 @@
-/**
- * SSEClient with exponential backoff reconnection.
- * Base: 1s, max: 30s, with jitter.
- * Tracks retry count and supports manual retry after max retries.
- */
 export type SSEStatus = "connected" | "reconnecting" | "offline"
 
 export interface SSEClientOptions {
   url: string
   onMessage: (event: MessageEvent) => void
   onStatusChange: (status: SSEStatus, retryCount: number) => void
-  /** Maximum reconnect attempts before going offline (default: 5) */
   maxRetries?: number
 }
 
@@ -72,7 +66,6 @@ export class SSEClient {
     }
   }
 
-  /** Manual retry — resets attempt counter and reconnects. */
   retry(): void {
     this.disposed = false
     this.reconnectAttempts = 0

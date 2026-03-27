@@ -1,10 +1,3 @@
-/**
- * Template registry — context-aware file creation templates.
- *
- * Maps directory patterns to creation templates with form fields.
- * Powers the "+ New" button in the file browser.
- */
-
 export interface TemplateField {
   name: string
   type: "text" | "textarea" | "select" | "toggle"
@@ -16,25 +9,15 @@ export interface TemplateField {
 }
 
 export interface FileTemplate {
-  /** Glob pattern — which directories this applies to */
   pattern: string
-  /** Display label */
   label: string
-  /** Phosphor icon name */
   icon: string
-  /** Short description */
   description?: string
-  /** Form fields to show */
   fields: TemplateField[]
-  /** Generate file path from field values */
   outputPath: (fields: Record<string, string>, currentDir: string) => string
-  /** Generate file content from field values */
   outputContent: (fields: Record<string, string>) => string
-  /** Whether AI can fill content from description */
   aiAssist?: boolean
 }
-
-// ── Template content strings ──────────────────────────────────────────
 
 const WORKFLOW_TEMPLATE = `name: {name}
 description: {description}
@@ -352,10 +335,7 @@ export default function ${componentName}() {
 `
 }
 
-// ── Built-in templates ────────────────────────────────────────────────
-
 export const builtInTemplates: FileTemplate[] = [
-  // Workflow template
   {
     pattern: "workflows",
     label: "files.new_workflow",
@@ -372,7 +352,6 @@ export const builtInTemplates: FileTemplate[] = [
         .replace(/{description}/g, f.description ?? ""),
     aiAssist: true,
   },
-  // Knowledge document template
   {
     pattern: "knowledge/**",
     label: "files.new_document",
@@ -390,7 +369,6 @@ export const builtInTemplates: FileTemplate[] = [
         .replace(/{date}/g, new Date().toISOString().split("T")[0] ?? ""),
     aiAssist: true,
   },
-  // Skill template
   {
     pattern: "skills",
     label: "files.new_skill",
@@ -408,7 +386,6 @@ export const builtInTemplates: FileTemplate[] = [
         .replace(/{description}/g, f.description ?? ""),
     aiAssist: true,
   },
-  // Widget template (widget.yaml + widget.tsx)
   {
     pattern: "dashboard/widgets",
     label: "files.new_widget",
@@ -433,7 +410,6 @@ export const builtInTemplates: FileTemplate[] = [
     outputContent: (f) => WIDGET_TSX_TEMPLATE(f.name ?? "custom-widget"),
     aiAssist: true,
   },
-  // File view template (view.yaml + view.tsx)
   {
     pattern: "dashboard/views",
     label: "files.new_view",
@@ -448,7 +424,6 @@ export const builtInTemplates: FileTemplate[] = [
     outputContent: (f) => VIEW_TSX_TEMPLATE(f.name ?? "custom-view"),
     aiAssist: true,
   },
-  // Custom page template
   {
     pattern: "dashboard/pages",
     label: "files.new_page",
@@ -461,7 +436,6 @@ export const builtInTemplates: FileTemplate[] = [
     outputContent: (f) => PAGE_TEMPLATE(f.name ?? "custom-page"),
     aiAssist: true,
   },
-  // Language / locale template
   {
     pattern: "dashboard/locales",
     label: "files.new_language",
@@ -474,7 +448,6 @@ export const builtInTemplates: FileTemplate[] = [
     outputContent: () => LANGUAGE_TEMPLATE,
     aiAssist: true,
   },
-  // Secret template
   {
     pattern: "secrets",
     label: "files.new_secret",
@@ -490,10 +463,6 @@ export const builtInTemplates: FileTemplate[] = [
   },
 ]
 
-/**
- * Get the widget.yaml content for a widget template.
- * Called separately when creating a widget to also generate the metadata file.
- */
 export function getWidgetYamlContent(fields: Record<string, string>): string {
   return WIDGET_YAML_TEMPLATE
     .replace(/{name}/g, fields.name ?? "")
@@ -501,9 +470,6 @@ export function getWidgetYamlContent(fields: Record<string, string>): string {
     .replace(/{description}/g, fields.description ?? "")
 }
 
-/**
- * Get the view.yaml content for a file view template.
- */
 export function getViewYamlContent(fields: Record<string, string>): string {
   return VIEW_YAML_TEMPLATE
     .replace(/{name}/g, fields.name ?? "")
@@ -511,9 +477,6 @@ export function getViewYamlContent(fields: Record<string, string>): string {
     .replace(/{extension}/g, fields.extension ?? "")
 }
 
-/**
- * Test whether a path matches a glob-like pattern.
- */
 function matchPattern(pattern: string, dirPath: string): boolean {
   const normPattern = pattern.replace(/^\/+/, "").replace(/\/+$/, "")
   const normPath = dirPath.replace(/^\/+/, "").replace(/\/+$/, "")
@@ -528,16 +491,10 @@ function matchPattern(pattern: string, dirPath: string): boolean {
   return false
 }
 
-/**
- * Get templates applicable to the current directory.
- */
 export function getTemplatesForDirectory(dirPath: string): FileTemplate[] {
   return builtInTemplates.filter((t) => matchPattern(t.pattern, dirPath))
 }
 
-/**
- * Generic "new file" template — always available as fallback.
- */
 export const genericFileTemplate: FileTemplate = {
   pattern: "**",
   label: "files.new_file",

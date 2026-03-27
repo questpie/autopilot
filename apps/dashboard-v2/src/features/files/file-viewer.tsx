@@ -12,6 +12,32 @@ interface FileViewerProps {
   path: string
 }
 
+function ViewerSkeleton() {
+  return (
+    <div className="flex flex-col gap-2 p-4">
+      <Skeleton className="h-6 w-48" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  )
+}
+
+function ViewerHeader({
+  label,
+  children,
+}: {
+  label: string
+  children?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between border-b border-border px-4 py-2">
+      <span className="font-heading text-xs text-muted-foreground">
+        {label}
+      </span>
+      {children}
+    </div>
+  )
+}
+
 /**
  * View dispatcher — resolves the best viewer for a file path
  * from the view registry and renders it with a "Raw" toggle.
@@ -31,12 +57,7 @@ export function FileViewer({ path }: FileViewerProps) {
   const registration = resolveView(path)
 
   if (isLoading && !isBinary) {
-    return (
-      <div className="flex flex-col gap-2 p-4">
-        <Skeleton className="h-6 w-48 rounded-none" />
-        <Skeleton className="h-64 w-full rounded-none" />
-      </div>
-    )
+    return <ViewerSkeleton />
   }
 
   if (error) {
@@ -50,30 +71,13 @@ export function FileViewer({ path }: FileViewerProps) {
 
   const fileContent = content ?? ""
 
-  // Raw view: show plain text
-  if (isRaw && !isBinary) {
+  // Raw view or no registration: show plain text
+  if ((isRaw && !isBinary) || !registration) {
     return (
       <div className="flex flex-col">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="font-heading text-xs text-muted-foreground">
-            {registration?.label ?? t("files.raw")}
-          </span>
-          <RawViewToggle isRaw={isRaw} onToggle={setIsRaw} />
-        </div>
-        <CodeViewFallback path={path} content={fileContent} />
-      </div>
-    )
-  }
-
-  // No registration — show raw
-  if (!registration) {
-    return (
-      <div className="flex flex-col">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="font-heading text-xs text-muted-foreground">
-            {t("files.raw")}
-          </span>
-        </div>
+        <ViewerHeader label={registration?.label ?? t("files.raw")}>
+          {registration && <RawViewToggle isRaw={isRaw} onToggle={setIsRaw} />}
+        </ViewerHeader>
         <CodeViewFallback path={path} content={fileContent} />
       </div>
     )
@@ -83,20 +87,10 @@ export function FileViewer({ path }: FileViewerProps) {
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center justify-between border-b border-border px-4 py-2">
-        <span className="font-heading text-xs text-muted-foreground">
-          {registration.label}
-        </span>
+      <ViewerHeader label={registration.label}>
         {!isBinary && <RawViewToggle isRaw={isRaw} onToggle={setIsRaw} />}
-      </div>
-      <Suspense
-        fallback={
-          <div className="flex flex-col gap-2 p-4">
-            <Skeleton className="h-6 w-48 rounded-none" />
-            <Skeleton className="h-64 w-full rounded-none" />
-          </div>
-        }
-      >
+      </ViewerHeader>
+      <Suspense fallback={<ViewerSkeleton />}>
         <ViewComponent path={path} content={fileContent} />
       </Suspense>
     </div>

@@ -14,8 +14,10 @@ import {
   CaretDownIcon,
 } from "@phosphor-icons/react"
 import { useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
+import { EASING, DURATION, useMotionPreference } from "@/lib/motion"
 import type { Icon } from "@phosphor-icons/react"
 
 interface NavItem {
@@ -77,7 +79,19 @@ function NavItemButton({
         title={collapsed ? label : undefined}
       >
         <Icon size={20} weight={isActive ? "fill" : "regular"} />
-        {!collapsed && <span className="truncate">{label}</span>}
+        <AnimatePresence>
+          {!collapsed && (
+            <motion.span
+              initial={{ opacity: 0, width: 0 }}
+              animate={{ opacity: 1, width: "auto" }}
+              exit={{ opacity: 0, width: 0 }}
+              transition={{ duration: DURATION.normal, ease: EASING.enter }}
+              className="truncate overflow-hidden"
+            >
+              {label}
+            </motion.span>
+          )}
+        </AnimatePresence>
       </a>
     )
   }
@@ -85,8 +99,20 @@ function NavItemButton({
   return (
     <Link to={item.to} className={className} title={collapsed ? label : undefined}>
       <Icon size={20} weight={isActive ? "fill" : "regular"} />
-      {!collapsed && <span className="truncate">{label}</span>}
-      {item.badge != null && item.badge > 0 && (
+      <AnimatePresence>
+        {!collapsed && (
+          <motion.span
+            initial={{ opacity: 0, width: 0 }}
+            animate={{ opacity: 1, width: "auto" }}
+            exit={{ opacity: 0, width: 0 }}
+            transition={{ duration: DURATION.normal, ease: EASING.enter }}
+            className="truncate overflow-hidden"
+          >
+            {label}
+          </motion.span>
+        )}
+      </AnimatePresence>
+      {!collapsed && item.badge != null && item.badge > 0 && (
         <span className="ml-auto rounded-none bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
           {item.badge}
         </span>
@@ -100,6 +126,7 @@ export function SideNav() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
   const matches = useMatches()
   const [secondaryOpen, setSecondaryOpen] = useState(true)
+  const { d } = useMotionPreference()
 
   const currentPath = matches[matches.length - 1]?.pathname ?? "/"
 
@@ -113,12 +140,13 @@ export function SideNav() {
   }
 
   return (
-    <nav
-      className={[
-        "hidden flex-col border-r border-border bg-sidebar font-heading lg:flex",
-        collapsed ? "w-[56px]" : "w-[220px]",
-        "shrink-0 transition-[width] duration-200",
-      ].join(" ")}
+    <motion.nav
+      animate={{ width: collapsed ? 56 : 220 }}
+      transition={{
+        duration: d(DURATION.normal),
+        ease: EASING.move,
+      }}
+      className="hidden shrink-0 flex-col border-r border-border bg-sidebar font-heading lg:flex"
       aria-label={t("a11y.main_navigation")}
     >
       {/* Primary items */}
@@ -133,19 +161,25 @@ export function SideNav() {
         ))}
 
         {/* Secondary section */}
-        {!collapsed && (
-          <button
-            type="button"
-            onClick={() => setSecondaryOpen(!secondaryOpen)}
-            className="mt-4 flex items-center gap-2 px-3 py-1 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
-          >
-            <CaretDownIcon
-              size={10}
-              className={`transition-transform ${secondaryOpen ? "" : "-rotate-90"}`}
-            />
-            {t("nav.more")}
-          </button>
-        )}
+        <AnimatePresence>
+          {!collapsed && (
+            <motion.button
+              type="button"
+              onClick={() => setSecondaryOpen(!secondaryOpen)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: d(DURATION.fast) }}
+              className="mt-4 flex items-center gap-2 px-3 py-1 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+            >
+              <CaretDownIcon
+                size={10}
+                className={`transition-transform ${secondaryOpen ? "" : "-rotate-90"}`}
+              />
+              {t("nav.more")}
+            </motion.button>
+          )}
+        </AnimatePresence>
         {(collapsed || secondaryOpen) &&
           secondaryItems.map((item) => (
             <NavItemButton
@@ -168,6 +202,6 @@ export function SideNav() {
           />
         ))}
       </div>
-    </nav>
+    </motion.nav>
   )
 }

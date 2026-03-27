@@ -1,5 +1,6 @@
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import type { ReactNode } from "react"
+import { cn } from "@/lib/utils"
 
 interface AnimatedSheetProps {
   open: boolean
@@ -51,13 +52,11 @@ export function AnimatedSheet({
               type: "tween",
               duration: shouldReduce ? 0 : 0.3,
             }}
-            className={[
-              "fixed top-0 z-50 flex h-full flex-col border-border bg-background",
+            className={cn(
+              "fixed top-0 z-50 flex h-full max-w-[100vw] flex-col border-border bg-background pt-[var(--safe-top)]",
               side === "right" ? "right-0 border-l" : "left-0 border-r",
               className,
-            ]
-              .filter(Boolean)
-              .join(" ")}
+            )}
             style={{ width }}
             role="dialog"
             aria-modal="true"

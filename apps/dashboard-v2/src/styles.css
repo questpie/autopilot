@@ -130,6 +130,35 @@
     }
 }
 
+/* ── Safe area insets for notched / punch-hole devices ── */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* ── Touch-target minimum size for coarse pointers ── */
+@media (pointer: coarse) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ── Gate hover animations: only on fine pointers ── */
+@media not (hover: hover) and (pointer: fine) {
+  .hover-animation {
+    --hover-scale: 1 !important;
+    --hover-y: 0 !important;
+  }
+}
+
+/* ── Disable transitions during theme switches ── */
+[data-theme-switching] * {
+  transition: none !important;
+}
+
 /* Shimmer animation for skeleton loading */
 @keyframes shimmer {
   0% {

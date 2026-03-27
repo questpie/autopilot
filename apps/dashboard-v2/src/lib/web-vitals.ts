@@ -1,11 +1,6 @@
 import { onCLS, onINP, onLCP, onFCP, onTTFB } from "web-vitals"
 import type { Metric } from "web-vitals"
 
-/**
- * Web Vitals reporter. Logs Core Web Vitals to console in development.
- * Can be extended to send to an analytics endpoint.
- * Uses INP (Interaction to Next Paint) instead of deprecated FID.
- */
 function reportMetric(metric: Metric) {
   if (import.meta.env.DEV) {
     // eslint-disable-next-line no-console

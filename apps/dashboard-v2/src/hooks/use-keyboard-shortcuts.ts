@@ -3,10 +3,6 @@ import { tinykeys } from "tinykeys"
 
 type KeyBindings = Record<string, (event: KeyboardEvent) => void>
 
-/**
- * Returns true when focus is inside a text input, textarea, or contenteditable.
- * Used to suppress shortcuts while typing.
- */
 function isTyping(): boolean {
   const el = document.activeElement
   if (!el) return false
@@ -16,9 +12,6 @@ function isTyping(): boolean {
   return false
 }
 
-/**
- * Wraps a handler to skip execution when user is typing in an input field.
- */
 export function whenNotTyping(handler: (e: KeyboardEvent) => void) {
   return (e: KeyboardEvent) => {
     if (isTyping()) return
@@ -26,25 +19,16 @@ export function whenNotTyping(handler: (e: KeyboardEvent) => void) {
   }
 }
 
-/**
- * Hook wrapping tinykeys for declarative keyboard shortcuts.
- * Bindings are cleaned up on unmount.
- */
 export function useKeyboardShortcuts(bindings: KeyBindings) {
   useEffect(() => {
     const unsubscribe = tinykeys(window, bindings)
     return () => {
       unsubscribe()
     }
-    // Re-bind when bindings object identity changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bindings])
 }
 
-/**
- * Hook that registers all global application keyboard shortcuts.
- * Should be called once in the app shell.
- */
 export function useGlobalShortcuts({
   onCommandPalette,
   onToggleChat,
@@ -62,7 +46,6 @@ export function useGlobalShortcuts({
 }) {
   const bindings = useCallback(
     (): KeyBindings => ({
-      // Global shortcuts (work even while typing for mod keys)
       "$mod+KeyK": (e: KeyboardEvent) => {
         e.preventDefault()
         onCommandPalette()
@@ -84,7 +67,6 @@ export function useGlobalShortcuts({
         onCreateNew()
       },
 
-      // Chord navigation shortcuts (g then letter)
       "g d": whenNotTyping((e) => {
         e.preventDefault()
         onNavigate("/")
@@ -106,7 +88,6 @@ export function useGlobalShortcuts({
         onNavigate("/chat")
       }),
 
-      // Help overlay
       "?": whenNotTyping((e) => {
         e.preventDefault()
         onShowHelp()

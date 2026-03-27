@@ -25,7 +25,6 @@ export function RightSidebar() {
             duration: shouldReduce ? 0 : 0.3,
           }}
           className="hidden shrink-0 overflow-hidden border-l border-border bg-background lg:flex lg:flex-col"
-          style={{ width: SIDEBAR_WIDTH }}
         >
           {rightPanel.mode === "chat" && <ChatPanel />}
         </motion.aside>

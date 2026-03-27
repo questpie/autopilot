@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ErrorBoundary } from "@/components/feedback/error-boundary"
 import { dashboardWidgetsQuery } from "./dashboard.queries"
@@ -43,6 +43,24 @@ function WidgetContainer({ widget }: { widget: WidgetSummary }) {
     setRetryKey((k) => k + 1)
   }, [])
 
+  // Memoize the lazy component so it's stable across renders
+  const WidgetComponent = useMemo(
+    () =>
+      lazy(async () => {
+        try {
+          const mod = await import(
+            /* @vite-ignore */ `${API_BASE}/fs/dashboard/widgets/${widget.name}/widget.tsx`
+          )
+          if (timerRef.current) clearTimeout(timerRef.current)
+          return { default: mod.default ?? mod.Widget ?? (() => null) }
+        } catch (err) {
+          if (timerRef.current) clearTimeout(timerRef.current)
+          throw err
+        }
+      }),
+    [widget.name, retryKey],
+  )
+
   if (hasTimedOut) {
     return (
       <WidgetErrorCard
@@ -52,20 +70,6 @@ function WidgetContainer({ widget }: { widget: WidgetSummary }) {
       />
     )
   }
-
-  // Dynamic import for the widget module
-  const WidgetComponent = lazy(async () => {
-    try {
-      const mod = await import(
-        /* @vite-ignore */ `${API_BASE}/fs/dashboard/widgets/${widget.name}/widget.tsx`
-      )
-      if (timerRef.current) clearTimeout(timerRef.current)
-      return { default: mod.default ?? mod.Widget ?? (() => null) }
-    } catch (err) {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      throw err
-    }
-  })
 
   return (
     <ErrorBoundary

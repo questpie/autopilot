@@ -8,10 +8,6 @@ export interface FsEntry {
   size: number
 }
 
-/**
- * Fetch directory listing from the fs-browser endpoint.
- * Returns an array of FsEntry objects.
- */
 async function fetchDirectory(dirPath: string): Promise<FsEntry[]> {
   const cleanPath = dirPath.replace(/^\/+/, "")
   const res = cleanPath
@@ -24,9 +20,6 @@ async function fetchDirectory(dirPath: string): Promise<FsEntry[]> {
   return res.json() as Promise<FsEntry[]>
 }
 
-/**
- * Fetch raw file content as text from the fs-browser endpoint.
- */
 async function fetchFileContent(filePath: string): Promise<string> {
   const cleanPath = filePath.replace(/^\/+/, "")
   const res = cleanPath
@@ -38,9 +31,6 @@ async function fetchFileContent(filePath: string): Promise<string> {
   return res.text()
 }
 
-/**
- * Fetch raw file as a blob (for images, PDFs, etc.)
- */
 async function fetchFileBlob(filePath: string): Promise<{ blob: Blob; contentType: string }> {
   const cleanPath = filePath.replace(/^\/+/, "")
   const res = cleanPath

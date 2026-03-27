@@ -2,7 +2,6 @@ import { CircleIcon, WifiHighIcon, WifiSlashIcon, ArrowsClockwiseIcon } from "@p
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
-import { cn } from "@/lib/utils"
 
 /**
  * Connection indicator dot shown in the top bar.
@@ -72,10 +71,7 @@ export function ConnectionStatus({
         >
           <ArrowsClockwiseIcon
             size={12}
-            className={cn(
-              "animate-spin",
-              "motion-reduce:animate-none",
-            )}
+            className="animate-spin motion-reduce:animate-none"
             aria-hidden="true"
           />
           {t("status_bar.reconnecting")}

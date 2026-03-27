@@ -1,7 +1,9 @@
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
 import { cva, type VariantProps } from "class-variance-authority"
+import { motion, LayoutGroup } from "framer-motion"
 
 import { cn } from "@/lib/utils"
+import { SPRING, useMotionPreference } from "@/lib/motion"
 
 function Tabs({
   className,
@@ -39,9 +41,14 @@ const tabsListVariants = cva(
 function TabsList({
   className,
   variant = "default",
+  animatedIndicator,
   ...props
-}: TabsPrimitive.List.Props & VariantProps<typeof tabsListVariants>) {
-  return (
+}: TabsPrimitive.List.Props &
+  VariantProps<typeof tabsListVariants> & {
+    /** Wrap in LayoutGroup for animated indicators */
+    animatedIndicator?: boolean
+  }) {
+  const content = (
     <TabsPrimitive.List
       data-slot="tabs-list"
       data-variant={variant}
@@ -49,6 +56,11 @@ function TabsList({
       {...props}
     />
   )
+
+  if (animatedIndicator) {
+    return <LayoutGroup>{content}</LayoutGroup>
+  }
+  return content
 }
 
 function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
@@ -67,6 +79,47 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   )
 }
 
+/**
+ * Animated tab indicator — renders a sliding underline between tabs.
+ * Place inside each tab trigger, only the active one renders.
+ * Uses framer-motion layoutId for smooth sliding.
+ */
+function TabsIndicator({
+  layoutId = "tabs-indicator",
+  className,
+  active,
+}: {
+  layoutId?: string
+  className?: string
+  active: boolean
+}) {
+  const { shouldReduce } = useMotionPreference()
+
+  if (!active) return null
+
+  if (shouldReduce) {
+    return (
+      <div
+        className={cn(
+          "absolute inset-x-0 bottom-[-5px] h-0.5 bg-foreground",
+          className
+        )}
+      />
+    )
+  }
+
+  return (
+    <motion.div
+      layoutId={layoutId}
+      className={cn(
+        "absolute inset-x-0 bottom-[-5px] h-0.5 bg-foreground",
+        className
+      )}
+      transition={SPRING.snappy}
+    />
+  )
+}
+
 function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
@@ -77,4 +130,11 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   )
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants }
+export {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  TabsIndicator,
+  tabsListVariants,
+}
