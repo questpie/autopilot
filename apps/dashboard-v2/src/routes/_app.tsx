@@ -1,10 +1,10 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { AppShell } from "@/components/layouts/app-shell"
 import { CommandPalette } from "@/components/command-palette"
 import { KeyboardHelpDialog } from "@/components/keyboard-help-dialog"
 import { Toaster } from "sonner"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireAuth, checkAuth } from "@/lib/auth-guard"
 import { useSSE } from "@/hooks/use-sse"
 import { useGlobalShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { useAppStore } from "@/stores/app.store"
@@ -23,6 +23,19 @@ function AppLayout() {
   const rightPanel = useAppStore((s) => s.rightPanel)
   const closeRightPanel = useAppStore((s) => s.closeRightPanel)
   const [helpOpen, setHelpOpen] = useState(false)
+
+  // Client-side auth check on hydration (SSR skips beforeLoad auth)
+  useEffect(() => {
+    checkAuth().then(({ isAuthenticated, noUsersExist, needs2FA }) => {
+      if (noUsersExist) {
+        void navigate({ to: "/setup" })
+      } else if (!isAuthenticated) {
+        void navigate({ to: "/login" })
+      } else if (needs2FA) {
+        void navigate({ to: "/login/2fa" })
+      }
+    })
+  }, [navigate])
 
   // SSE connection
   useSSE()
