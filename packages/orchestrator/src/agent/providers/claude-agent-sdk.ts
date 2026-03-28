@@ -2,7 +2,6 @@ import { query, tool as sdkTool, createSdkMcpServer } from '@anthropic-ai/claude
 import { relative, resolve } from 'node:path'
 import { z } from 'zod'
 import type { AgentProvider, AgentSpawnOptions, AgentSessionResult, AgentEvent } from '../provider'
-import type { ToolDefinition } from '../tools'
 import { isDeniedPath } from '../../auth/deny-patterns'
 import { checkScope } from '../../auth/permissions'
 import type { Actor } from '../../auth/types'

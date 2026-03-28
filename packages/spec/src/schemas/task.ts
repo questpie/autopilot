@@ -50,6 +50,10 @@ export const TaskSchema = z.object({
 	context: TaskContextSchema,
 	blockers: z.array(BlockerSchema).default([]),
 
+	resources: z.array(z.string()).default([]),
+	labels: z.array(z.string()).default([]),
+	milestone: z.string().optional(),
+
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
 	started_at: z.string().datetime().optional(),
