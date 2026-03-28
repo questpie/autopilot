@@ -6,6 +6,12 @@ export type Message = z.output<typeof MessageSchema>
 export type Channel = z.output<typeof ChannelSchema>
 export type ChannelMember = z.output<typeof ChannelMemberSchema>
 
+/** Input type for creating a task — `id` is optional (auto-generated if omitted). */
+export type TaskCreateInput = Omit<z.input<typeof TaskSchema>, 'id'> & { id?: string }
+
+/** Input type for sending a message — mirrors the schema output (all fields provided). */
+export type MessageCreateInput = z.input<typeof MessageSchema>
+
 export interface TaskFilter {
 	status?: string
 	assigned_to?: string
@@ -56,7 +62,7 @@ export interface StorageBackend {
 	close(): Promise<void>
 
 	// Tasks
-	createTask(task: Task): Promise<Task>
+	createTask(task: TaskCreateInput): Promise<Task>
 	readTask(id: string): Promise<Task | null>
 	updateTask(id: string, updates: Partial<Task>, updatedBy: string): Promise<Task>
 	moveTask(id: string, newStatus: string, movedBy: string, blocker?: { reason: string; assigned_to?: string }): Promise<Task>
@@ -65,7 +71,7 @@ export interface StorageBackend {
 	deleteTask(id: string): Promise<void>
 
 	// Messages
-	sendMessage(msg: Message): Promise<Message>
+	sendMessage(msg: MessageCreateInput): Promise<Message>
 	readMessages(filter: MessageFilter): Promise<Message[]>
 	searchMessages(query: string, limit?: number): Promise<Message[]>
 

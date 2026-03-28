@@ -18,6 +18,7 @@ import { telegramWebhookHandler } from './webhook'
 import { advanceWorkflow, evaluateTransition } from './workflow'
 import { WorkflowLoader } from './workflow'
 
+import { logger } from './logger'
 import { authFactory } from './auth'
 import { configureContainer, container } from './container'
 import { dbFactory } from './db'
@@ -66,7 +67,7 @@ export class Orchestrator {
 	 */
 	async start(): Promise<void> {
 		if (this.running) {
-			console.log('[orchestrator] already running')
+			logger.info('orchestrator', 'already running')
 			return
 		}
 
@@ -79,11 +80,9 @@ export class Orchestrator {
 		let company: Awaited<ReturnType<typeof loadCompany>>
 		try {
 			company = await loadCompany(root)
-			console.log(`[orchestrator] loaded company: ${company.name} (${company.slug})`)
+			logger.info('orchestrator', `loaded company: ${company.name} (${company.slug})`)
 		} catch (err) {
-			console.error(
-				'[orchestrator] failed to load company.yaml — is this a valid company directory?',
-			)
+			logger.error('orchestrator', 'failed to load company.yaml — is this a valid company directory?')
 			throw err
 		}
 
@@ -95,25 +94,25 @@ export class Orchestrator {
 				authFactory,
 				embeddingServiceFactory,
 			])
-			console.log('[orchestrator] core services initialized')
+			logger.info('orchestrator', 'core services initialized')
 		} catch (err) {
-			console.error('[orchestrator] failed to initialize core services:', err)
+			logger.error('orchestrator', 'failed to initialize core services', { error: err instanceof Error ? err.message : String(err) })
 		}
 
 		// 3. Indexer (triggers reindexAll inside factory)
 		try {
 			await container.resolveAsync([indexerFactory])
 		} catch (err) {
-			console.error('[orchestrator] indexer failed:', err)
+			logger.error('orchestrator', 'indexer failed', { error: err instanceof Error ? err.message : String(err) })
 		}
 
 		// 4. Load roles (needed for RBAC before first request)
 		try {
 			const { loadRoles } = await import('./auth/roles')
 			await loadRoles(root)
-			console.log('[orchestrator] roles loaded')
+			logger.info('orchestrator', 'roles loaded')
 		} catch (err) {
-			console.error('[orchestrator] failed to load roles:', err)
+			logger.error('orchestrator', 'failed to load roles', { error: err instanceof Error ? err.message : String(err) })
 		}
 
 		// 5. Notifier + StreamManager
@@ -126,15 +125,12 @@ export class Orchestrator {
 			eventBus.subscribe((event) => {
 				// Fire-and-forget — dispatcher handles its own errors
 				dispatcher.handle(event).catch((err) => {
-					console.error(
-						'[orchestrator] notification dispatcher error:',
-						err instanceof Error ? err.message : err,
-					)
+					logger.error('orchestrator', 'notification dispatcher error', { error: err instanceof Error ? err.message : String(err) })
 				})
 			})
-			console.log('[orchestrator] notification dispatcher wired to event bus')
+			logger.info('orchestrator', 'notification dispatcher wired to event bus')
 		} catch (err) {
-			console.error('[orchestrator] failed to wire notification dispatcher:', err)
+			logger.error('orchestrator', 'failed to wire notification dispatcher', { error: err instanceof Error ? err.message : String(err) })
 		}
 
 		// 5c. Seed default data if DB is fresh
@@ -142,7 +138,7 @@ export class Orchestrator {
 			const { storage } = await container.resolveAsync([storageFactory])
 			const channels = await storage.listChannels()
 			if (channels.length === 0) {
-				console.log('[orchestrator] seeding default channels...')
+				logger.info('orchestrator', 'seeding default channels...')
 				const now = new Date().toISOString()
 				await storage.createChannel({
 					id: 'general',
@@ -168,10 +164,10 @@ export class Orchestrator {
 					await storage.addChannelMember('general', agent.id, 'agent', 'member').catch(() => {})
 					await storage.addChannelMember('dev', agent.id, 'agent', 'member').catch(() => {})
 				}
-				console.log(`[orchestrator] seeded 2 default channels with ${agents.length} agent members`)
+				logger.info('orchestrator', `seeded 2 default channels with ${agents.length} agent members`)
 			}
 		} catch (err) {
-			console.error('[orchestrator] failed to seed defaults:', err)
+			logger.error('orchestrator', 'failed to seed defaults', { error: err instanceof Error ? err.message : String(err) })
 		}
 
 		// 6. Start watcher
@@ -181,11 +177,9 @@ export class Orchestrator {
 		})
 		try {
 			await this.watcher.start()
-			console.log(
-				'[orchestrator] watcher started (watching tasks/, comms/, dashboard/, team/, knowledge/, artifacts/)',
-			)
+			logger.info('orchestrator', 'watcher started (watching tasks/, comms/, dashboard/, team/, knowledge/, artifacts/)')
 		} catch (err) {
-			console.error('[orchestrator] failed to start watcher:', err)
+			logger.error('orchestrator', 'failed to start watcher', { error: err instanceof Error ? err.message : String(err) })
 		}
 
 		// 6. Start scheduler
@@ -196,9 +190,9 @@ export class Orchestrator {
 		try {
 			await this.scheduler.start()
 			const jobs = this.scheduler.getActiveJobs()
-			console.log(`[orchestrator] scheduler started (${jobs.length} active jobs)`)
+			logger.info('orchestrator', `scheduler started (${jobs.length} active jobs)`)
 		} catch (err) {
-			console.error('[orchestrator] failed to start scheduler:', err)
+			logger.error('orchestrator', 'failed to start scheduler', { error: err instanceof Error ? err.message : String(err) })
 		}
 
 		// 7. Register webhook handlers
@@ -213,15 +207,13 @@ export class Orchestrator {
 		})
 		try {
 			await this.webhookServer.start()
-			console.log(`[orchestrator] webhook server started on port ${port}`)
+			logger.info('orchestrator', `webhook server started on port ${port}`)
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
 			if (msg.includes('EADDRINUSE') || msg.includes('in use')) {
-				console.warn(
-					`[orchestrator] webhook port ${port} already in use — skipping (kill the other process or use --webhook-port)`,
-				)
+				logger.warn('orchestrator', `webhook port ${port} already in use — skipping (kill the other process or use --webhook-port)`)
 			} else {
-				console.error('[orchestrator] failed to start webhook server:', msg)
+				logger.error('orchestrator', 'failed to start webhook server', { error: msg })
 			}
 		}
 
@@ -236,15 +228,13 @@ export class Orchestrator {
 				port: apiPort,
 				fetch: app.fetch,
 			})
-			console.log(`[orchestrator] api server started on port ${apiPort}`)
+			logger.info('orchestrator', `api server started on port ${apiPort}`)
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
 			if (msg.includes('EADDRINUSE') || msg.includes('in use')) {
-				console.warn(
-					`[orchestrator] api port ${apiPort} already in use — skipping (kill the other process or use --api-port)`,
-				)
+				logger.warn('orchestrator', `api port ${apiPort} already in use — skipping (kill the other process or use --api-port)`)
 			} else {
-				console.error('[orchestrator] failed to start api server:', msg)
+				logger.error('orchestrator', 'failed to start api server', { error: msg })
 			}
 		}
 
@@ -265,10 +255,7 @@ export class Orchestrator {
 			})
 			await this.gitManager.initialize()
 		} catch (err) {
-			console.error(
-				'[orchestrator] failed to initialize git manager:',
-				err instanceof Error ? err.message : err,
-			)
+			logger.error('orchestrator', 'failed to initialize git manager', { error: err instanceof Error ? err.message : String(err) })
 		}
 
 		// 11. Startup scan: process existing tasks from SQLite
@@ -281,27 +268,27 @@ export class Orchestrator {
 				await this.handleTaskChange(task.id)
 			}
 			if (allTasks.length > 0) {
-				console.log(`[orchestrator] startup scan: processed ${allTasks.length} existing tasks`)
+				logger.info('orchestrator', `startup scan: processed ${allTasks.length} existing tasks`)
 			}
 		} catch {
 			// storage might not be ready
 		}
 
 		this.running = true
-		console.log('[orchestrator] startup complete')
+		logger.info('orchestrator', 'startup complete')
 	}
 
 	/** Gracefully shut down all subsystems. */
 	async stop(): Promise<void> {
 		if (!this.running) return
 
-		console.log('[orchestrator] shutting down...')
+		logger.info('orchestrator', 'shutting down...')
 
 		if (this.gitManager) {
 			try {
 				await this.gitManager.stop()
 			} catch (err) {
-				console.error('[orchestrator] error stopping git manager:', err)
+				logger.error('orchestrator', 'error stopping git manager', { error: err instanceof Error ? err.message : String(err) })
 			}
 			this.gitManager = null
 		}
@@ -310,7 +297,7 @@ export class Orchestrator {
 			try {
 				await this.watcher.stop()
 			} catch (err) {
-				console.error('[orchestrator] error stopping watcher:', err)
+				logger.error('orchestrator', 'error stopping watcher', { error: err instanceof Error ? err.message : String(err) })
 			}
 			this.watcher = null
 		}
@@ -319,7 +306,7 @@ export class Orchestrator {
 			try {
 				this.scheduler.stop()
 			} catch (err) {
-				console.error('[orchestrator] error stopping scheduler:', err)
+				logger.error('orchestrator', 'error stopping scheduler', { error: err instanceof Error ? err.message : String(err) })
 			}
 			this.scheduler = null
 		}
@@ -328,7 +315,7 @@ export class Orchestrator {
 			try {
 				this.webhookServer.stop()
 			} catch (err) {
-				console.error('[orchestrator] error stopping webhook server:', err)
+				logger.error('orchestrator', 'error stopping webhook server', { error: err instanceof Error ? err.message : String(err) })
 			}
 			this.webhookServer = null
 		}
@@ -337,7 +324,7 @@ export class Orchestrator {
 			try {
 				this.apiServer.stop(true)
 			} catch (err) {
-				console.error('[orchestrator] error stopping api server:', err)
+				logger.error('orchestrator', 'error stopping api server', { error: err instanceof Error ? err.message : String(err) })
 			}
 			this.apiServer = null
 		}
@@ -347,14 +334,14 @@ export class Orchestrator {
 			const { storage } = await container.resolveAsync([storageFactory])
 			await storage.close()
 		} catch (err) {
-			console.error('[orchestrator] error closing storage:', err)
+			logger.error('orchestrator', 'error closing storage', { error: err instanceof Error ? err.message : String(err) })
 		}
 
 		// Clear all cached singleton instances from the container
 		container.clearAllInstances()
 
 		this.running = false
-		console.log('[orchestrator] shutdown complete')
+		logger.info('orchestrator', 'shutdown complete')
 	}
 
 	/** Return the shared session stream manager (used by `attach`). */
@@ -397,39 +384,43 @@ export class Orchestrator {
 		try {
 			switch (event.type) {
 				case 'task_changed':
-					console.log(`[orchestrator] task changed: ${event.taskId}`)
+					logger.info('orchestrator', `task changed: ${event.taskId}`)
 					await this.handleTaskChange(event.taskId)
 					break
 				case 'message_received':
-					console.log(`[orchestrator] message received in channel: ${event.channel}`)
+					logger.info('orchestrator', `message received in channel: ${event.channel}`)
 					await this.handleMessage(event.channel, event.path)
 					break
 				case 'pin_changed':
-					console.log(`[orchestrator] pin changed: ${event.pinId}`)
+					logger.info('orchestrator', `pin changed: ${event.pinId}`)
 					break
 				case 'dashboard_changed':
-					console.log(`[orchestrator] dashboard files changed: ${event.file}`)
+					logger.info('orchestrator', `dashboard files changed: ${event.file}`)
 					await this.handleDashboardChange()
+					this.gitManager?.queueCommit([event.path], `dashboard: update ${event.file}`)
 					break
 				case 'config_changed':
-					console.log(`[orchestrator] config changed: ${event.file}`)
+					logger.info('orchestrator', `config changed: ${event.file}`)
 					await this.handleConfigChanged(event.file, event.path)
+					this.gitManager?.queueCommit([event.path], `config: update ${event.file}`)
 					break
 				case 'knowledge_changed':
-					console.log(`[orchestrator] knowledge changed: ${event.file}`)
+					logger.info('orchestrator', `knowledge changed: ${event.file}`)
 					await this.handleKnowledgeChanged(event.file, event.path)
+					this.gitManager?.queueCommit([event.path], `knowledge: update ${event.file}`)
 					break
 				case 'artifact_changed':
-					console.log(`[orchestrator] artifact registered: ${event.artifactId}`)
+					logger.info('orchestrator', `artifact registered: ${event.artifactId}`)
 					eventBus.emit({
 						type: 'artifact_changed',
 						artifactId: event.artifactId,
 						action: 'registered',
 					})
+					this.gitManager?.queueCommit([event.path], `artifact: register ${event.artifactId}`)
 					break
 			}
 		} catch (err) {
-			console.error(`[orchestrator] error handling watch event (${event.type}):`, err)
+			logger.error('orchestrator', `error handling watch event (${event.type})`, { error: err instanceof Error ? err.message : String(err) })
 		}
 	}
 
@@ -448,18 +439,18 @@ export class Orchestrator {
 
 			// Valid config — proceed with reload
 			if (file === 'schedules.yaml' && this.scheduler) {
-				console.log('[orchestrator] reloading scheduler...')
+				logger.info('orchestrator', 'reloading scheduler...')
 				await this.scheduler.reload()
 			}
 			if (file === 'roles.yaml') {
 				await reloadRoles(this.options.companyRoot)
-				console.log('[orchestrator] roles reloaded')
+				logger.info('orchestrator', 'roles reloaded')
 			}
 
 			eventBus.emit({ type: 'settings_changed' })
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
-			console.error(`[watcher] Invalid config: ${file}`, msg)
+			logger.error('watcher', `invalid config: ${file}`, { error: msg })
 			eventBus.emit({ type: 'validation_error', file, error: msg })
 			// Old config stays active (safe fallback)
 		}
@@ -475,10 +466,7 @@ export class Orchestrator {
 			await indexer.indexOne('knowledge', file, title, content)
 			eventBus.emit({ type: 'knowledge_changed', path: file, action: 'updated' })
 		} catch (err) {
-			console.error(
-				`[orchestrator] failed to reindex knowledge file ${file}:`,
-				err instanceof Error ? err.message : err,
-			)
+			logger.error('orchestrator', `failed to reindex knowledge file ${file}`, { error: err instanceof Error ? err.message : String(err) })
 		}
 	}
 
@@ -491,7 +479,7 @@ export class Orchestrator {
 			this.dashboardBuildTimer = null
 			const root = this.options.companyRoot
 			const dashboardDir = join(root, 'dashboard')
-			console.log('[orchestrator] auto-rebuilding dashboard (prod mode)...')
+			logger.info('orchestrator', 'auto-rebuilding dashboard (prod mode)...')
 			try {
 				const proc = Bun.spawn(['bunx', 'vite', 'build'], {
 					cwd: dashboardDir,
@@ -500,15 +488,12 @@ export class Orchestrator {
 				})
 				const exitCode = await proc.exited
 				if (exitCode === 0) {
-					console.log('[orchestrator] dashboard rebuild complete')
+					logger.info('orchestrator', 'dashboard rebuild complete')
 				} else {
-					console.error(`[orchestrator] dashboard rebuild failed (exit ${exitCode})`)
+					logger.error('orchestrator', `dashboard rebuild failed (exit ${exitCode})`)
 				}
 			} catch (err) {
-				console.error(
-					'[orchestrator] dashboard rebuild error:',
-					err instanceof Error ? err.message : err,
-				)
+				logger.error('orchestrator', 'dashboard rebuild error', { error: err instanceof Error ? err.message : String(err) })
 			}
 		}, 1000)
 	}
@@ -541,7 +526,7 @@ export class Orchestrator {
 				if (!agent) continue
 				if (agent.id === from) continue // don't spawn agent that sent the message
 
-				console.log(`[orchestrator] @${mentionedId} mentioned in #${channel} by ${from} — spawning`)
+				logger.info('orchestrator', `@${mentionedId} mentioned in #${channel} by ${from} — spawning`)
 				spawnAgent({
 					agent,
 					company,
@@ -550,15 +535,10 @@ export class Orchestrator {
 					trigger: { type: 'mention' },
 				})
 					.then((result) => {
-						console.log(
-							`[orchestrator] agent ${agent.id} finished mention response: ${result.toolCalls} tool calls`,
-						)
+						logger.info('orchestrator', `agent ${agent.id} finished mention response`, { toolCalls: result.toolCalls })
 					})
 					.catch((err) => {
-						console.error(
-							`[orchestrator] agent ${agent.id} failed:`,
-							err instanceof Error ? err.message : err,
-						)
+						logger.error('orchestrator', `agent ${agent.id} failed`, { error: err instanceof Error ? err.message : String(err) })
 					})
 			}
 		} catch (err) {
@@ -568,9 +548,61 @@ export class Orchestrator {
 
 	private async handleScheduleTrigger(schedule: Schedule): Promise<void> {
 		try {
-			console.log(`[orchestrator] schedule triggered: ${schedule.id} (agent: ${schedule.agent})`)
+			logger.info('orchestrator', `schedule triggered: ${schedule.id} (agent: ${schedule.agent})`)
 
+			const root = this.options.companyRoot
+			const { storage } = await container.resolveAsync([storageFactory])
 			const { notifier } = await container.resolveAsync([notifierFactory])
+
+			if (schedule.create_task) {
+				// Create a task from the schedule's task_template and let the workflow engine handle it
+				const now = new Date().toISOString()
+				const template = schedule.task_template ?? {}
+				const taskId = `sched-${schedule.id}-${Date.now()}`
+				const task = await storage.createTask({
+					id: taskId,
+					title: template.title ?? `Scheduled: ${schedule.description || schedule.id}`,
+					description: template.description ?? schedule.description,
+					type: (template.type as 'intent') ?? 'intent',
+					status: 'backlog',
+					priority: (template.priority as 'medium') ?? 'medium',
+					created_by: 'scheduler',
+					assigned_to: template.assigned_to ?? schedule.agent,
+					workflow: template.workflow,
+					created_at: now,
+					updated_at: now,
+				})
+				logger.info('orchestrator', `schedule ${schedule.id} created task ${task.id}`)
+
+				// Process the task through the workflow engine (spawns agents, etc.)
+				await this.handleTaskChange(task.id)
+			} else {
+				// No task creation — spawn the agent directly with schedule context
+				const agents = await loadAgents(root)
+				const agent = agents.find((a) => a.id === schedule.agent)
+				if (agent) {
+					const company = await loadCompany(root)
+					logger.info('orchestrator', `spawning agent ${agent.id} for schedule ${schedule.id}`)
+					spawnAgent({
+						agent,
+						company,
+						allAgents: agents,
+						storage,
+						trigger: { type: 'schedule', schedule_id: schedule.id },
+						message: `Scheduled task (${schedule.id}): ${schedule.description || 'No description'}. Check your current tasks and act accordingly.`,
+					})
+						.then((result) => {
+							logger.info('orchestrator', `agent ${agent.id} finished schedule ${schedule.id}`, { toolCalls: result.toolCalls })
+						})
+						.catch((err) => {
+							logger.error('orchestrator', `agent ${agent.id} failed schedule ${schedule.id}`, { error: err instanceof Error ? err.message : String(err) })
+						})
+				} else {
+					logger.warn('orchestrator', `schedule ${schedule.id} references unknown agent: ${schedule.agent}`)
+				}
+			}
+
+			// Notify that the schedule fired (secondary effect)
 			await notifier.notify({
 				type: 'task_assigned',
 				title: `Schedule triggered: ${schedule.id}`,
@@ -579,13 +611,13 @@ export class Orchestrator {
 				agentId: schedule.agent,
 			})
 		} catch (err) {
-			console.error(`[orchestrator] error handling schedule trigger (${schedule.id}):`, err)
+			logger.error('orchestrator', `error handling schedule trigger (${schedule.id})`, { error: err instanceof Error ? err.message : String(err) })
 		}
 	}
 
 	private async handleWebhook(webhook: Webhook, payload: unknown): Promise<void> {
 		try {
-			console.log(`[orchestrator] webhook received: ${webhook.id} (agent: ${webhook.agent})`)
+			logger.info('orchestrator', `webhook received: ${webhook.id} (agent: ${webhook.agent})`)
 
 			const { notifier } = await container.resolveAsync([notifierFactory])
 
@@ -614,7 +646,7 @@ export class Orchestrator {
 				agentId: webhook.agent,
 			})
 		} catch (err) {
-			console.error(`[orchestrator] error handling webhook (${webhook.id}):`, err)
+			logger.error('orchestrator', `error handling webhook (${webhook.id})`, { error: err instanceof Error ? err.message : String(err) })
 		}
 	}
 
@@ -628,8 +660,7 @@ export class Orchestrator {
 		// Debounce: skip if already processing this task
 		if (this.processingTasks.has(taskId)) return
 		this.processingTasks.add(taskId)
-		// Release lock after a short delay to absorb rapid file changes
-		setTimeout(() => this.processingTasks.delete(taskId), 2000)
+		try {
 
 		const root = this.options.companyRoot
 		const { storage } = await container.resolveAsync([storageFactory])
@@ -639,13 +670,11 @@ export class Orchestrator {
 		// 1. Read the task
 		const task = await storage.readTask(taskId)
 		if (!task) {
-			console.log(`[orchestrator] task not found: ${taskId}`)
+			logger.info('orchestrator', `task not found: ${taskId}`)
 			return
 		}
 
-		console.log(
-			`[orchestrator] processing task: ${task.id} (status: ${task.status}, workflow_step: ${task.workflow_step ?? 'none'})`,
-		)
+		logger.info('orchestrator', `processing task: ${task.id}`, { status: task.status, workflowStep: task.workflow_step ?? 'none' })
 
 		// 2. If task has a workflow but no step, initialize to first step and continue
 		if (task.workflow && !task.workflow_step) {
@@ -657,19 +686,18 @@ export class Orchestrator {
 						taskId,
 						{
 							workflow_step: firstStep.id,
-							status: 'assigned',
 						},
 						'system',
 					)
 					await storage.moveTask(taskId, 'assigned', 'system')
-					console.log(`[orchestrator] initialized ${taskId} to workflow step: ${firstStep.id}`)
+					logger.info('orchestrator', `initialized ${taskId} to workflow step: ${firstStep.id}`)
 					// Update local task reference and fall through to evaluation
 					task.workflow_step = firstStep.id
 					task.status = 'assigned'
 				}
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err)
-				console.error(`[orchestrator] failed to initialize workflow for ${taskId}: ${msg}`)
+				logger.error('orchestrator', `failed to initialize workflow for ${taskId}: ${msg}`)
 				return
 			}
 		}
@@ -688,7 +716,7 @@ export class Orchestrator {
 					if (result.nextStep && result.nextStep !== task.workflow_step) {
 						await storage.updateTask(
 							taskId,
-							{ workflow_step: result.nextStep, status: 'assigned' },
+							{ workflow_step: result.nextStep },
 							'system',
 						)
 						await storage.moveTask(taskId, 'assigned', 'system')
@@ -698,21 +726,17 @@ export class Orchestrator {
 							from: task.workflow_step!,
 							to: result.nextStep,
 						})
-						console.log(
-							`[orchestrator] advanced ${taskId}: ${task.workflow_step} → ${result.nextStep}`,
-						)
+						logger.info('orchestrator', `advanced ${taskId}: ${task.workflow_step} -> ${result.nextStep}`)
 					} else if (result.action === 'complete') {
-						console.log(`[orchestrator] task ${taskId} workflow complete`)
+						logger.info('orchestrator', `task ${taskId} workflow complete`)
 					} else {
 						// Can't advance — don't respawn
-						console.log(
-							`[orchestrator] task ${taskId} done but can't advance: ${result.error ?? 'unknown'}`,
-						)
+						logger.info('orchestrator', `task ${taskId} done but can't advance: ${result.error ?? 'unknown'}`)
 						return
 					}
 				} else if (task.status === 'blocked') {
 					// Don't respawn blocked tasks
-					console.log(`[orchestrator] task ${taskId} is blocked — waiting for human`)
+					logger.info('orchestrator', `task ${taskId} is blocked — waiting for human`)
 					return
 				} else if (task.status === 'assigned' || task.status === 'in_progress') {
 					result = evaluateTransition(workflow, task, agents)
@@ -720,7 +744,7 @@ export class Orchestrator {
 					return
 				}
 
-				console.log(`[orchestrator] workflow evaluation for ${taskId}:`, {
+				logger.info('orchestrator', `workflow evaluation for ${taskId}`, {
 					action: result.action,
 					nextStep: result.nextStep,
 					assignTo: result.assignTo,
@@ -748,9 +772,7 @@ export class Orchestrator {
 							const agent = agents.find((a) => a.id === assignedAgentId)
 							if (agent) {
 								const company = await loadCompany(root)
-								console.log(
-									`[orchestrator] spawning agent: ${agent.id} (${agent.role}) for task ${taskId}`,
-								)
+								logger.info('orchestrator', `spawning agent: ${agent.id} (${agent.role}) for task ${taskId}`)
 								spawnAgent({
 									agent,
 									company,
@@ -760,15 +782,10 @@ export class Orchestrator {
 									trigger: { type: 'task_assigned', task_id: taskId },
 								})
 									.then((result) => {
-										console.log(
-											`[orchestrator] agent ${agent.id} finished: ${result.toolCalls} tool calls${result.error ? `, error: ${result.error}` : ''}`,
-										)
+										logger.info('orchestrator', `agent ${agent.id} finished`, { toolCalls: result.toolCalls, error: result.error })
 									})
 									.catch((err) => {
-										console.error(
-											`[orchestrator] agent ${agent.id} failed:`,
-											err instanceof Error ? err.message : err,
-										)
+										logger.error('orchestrator', `agent ${agent.id} failed`, { error: err instanceof Error ? err.message : String(err) })
 									})
 							}
 						}
@@ -793,12 +810,16 @@ export class Orchestrator {
 						})
 						break
 					case 'error':
-						console.error(`[orchestrator] workflow error for ${taskId}: ${result.error}`)
+						logger.error('orchestrator', `workflow error for ${taskId}: ${result.error}`)
 						break
 				}
 			} catch (err) {
-				console.error(`[orchestrator] failed to evaluate workflow for task ${taskId}:`, err)
+				logger.error('orchestrator', `failed to evaluate workflow for task ${taskId}`, { error: err instanceof Error ? err.message : String(err) })
 			}
+		}
+
+		} finally {
+			this.processingTasks.delete(taskId)
 		}
 	}
 }

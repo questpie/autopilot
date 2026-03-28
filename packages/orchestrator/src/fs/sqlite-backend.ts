@@ -4,7 +4,7 @@ import { Database } from 'bun:sqlite'
 import { TaskSchema, MessageSchema } from '@questpie/autopilot-spec'
 import { createDb, initFts, type AutopilotDb } from '../db'
 import { schema } from '../db'
-import type { StorageBackend, Task, Message, Channel, ChannelMember, TaskFilter, MessageFilter, ActivityEntry, ActivityFilter, ChannelFilter } from './storage'
+import type { StorageBackend, Task, Message, Channel, ChannelMember, TaskFilter, MessageFilter, ActivityEntry, ActivityFilter, ChannelFilter, TaskCreateInput, MessageCreateInput } from './storage'
 
 /**
  * Convert all `null` values in an object to `undefined`.
@@ -55,7 +55,8 @@ export class SqliteBackend implements StorageBackend {
 
 	// ─── Tasks ──────────────────────────────────────────────────────────
 
-	async createTask(task: Task): Promise<Task> {
+	async createTask(input: TaskCreateInput): Promise<Task> {
+		const task = TaskSchema.parse({ ...input, id: input.id ?? `task-${Date.now().toString(36)}` })
 		await this.db.insert(schema.tasks).values({
 			id: task.id,
 			title: task.title,
@@ -76,9 +77,9 @@ export class SqliteBackend implements StorageBackend {
 			workflow_step: task.workflow_step ?? null,
 			context: JSON.stringify(task.context),
 			blockers: JSON.stringify(task.blockers),
-			resources: JSON.stringify((task as Record<string, unknown>).resources ?? []),
-			labels: JSON.stringify((task as Record<string, unknown>).labels ?? []),
-			milestone: (task as Record<string, unknown>).milestone as string ?? null,
+			resources: JSON.stringify(task.resources),
+			labels: JSON.stringify(task.labels),
+			milestone: task.milestone ?? null,
 			created_at: task.created_at ?? new Date().toISOString(),
 			updated_at: task.updated_at ?? new Date().toISOString(),
 			started_at: task.started_at ?? null,
@@ -143,6 +144,9 @@ export class SqliteBackend implements StorageBackend {
 			workflow_step: validated.workflow_step ?? null,
 			context: JSON.stringify(validated.context),
 			blockers: JSON.stringify(validated.blockers),
+			resources: JSON.stringify(validated.resources),
+			labels: JSON.stringify(validated.labels),
+			milestone: validated.milestone ?? null,
 			updated_at: validated.updated_at,
 			started_at: validated.started_at ?? null,
 			completed_at: validated.completed_at ?? null,
@@ -255,7 +259,8 @@ export class SqliteBackend implements StorageBackend {
 
 	// ─── Messages ───────────────────────────────────────────────────────
 
-	async sendMessage(msg: Message): Promise<Message> {
+	async sendMessage(input: MessageCreateInput): Promise<Message> {
+		const msg = MessageSchema.parse(input)
 		await this.db.insert(schema.messages).values({
 			id: msg.id,
 			channel: msg.channel ?? null,
@@ -524,6 +529,8 @@ export class SqliteBackend implements StorageBackend {
 			related: typeof row.related === 'string' ? JSON.parse(row.related) : row.related,
 			context: typeof row.context === 'string' ? JSON.parse(row.context) : row.context,
 			blockers: typeof row.blockers === 'string' ? JSON.parse(row.blockers) : row.blockers,
+			resources: typeof row.resources === 'string' ? JSON.parse(row.resources) : (row.resources ?? []),
+			labels: typeof row.labels === 'string' ? JSON.parse(row.labels) : (row.labels ?? []),
 			history: typeof row.history === 'string' ? JSON.parse(row.history) : row.history,
 			metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {}),
 		})

@@ -256,7 +256,7 @@ export async function updatePin(
 			throw new Error(`Pin not found: ${pinId}`)
 		}
 
-		const row = existing[0]! as PinRow
+		const _row = existing[0]! as PinRow
 		const now = Date.now()
 		const updateValues: Record<string, unknown> = { updated_at: now }
 
