@@ -432,7 +432,7 @@ describe('isReviewSatisfied', () => {
 			review: { reviewers_roles: ['reviewer'], min_approvals: 1, on_reject: 'revise' },
 		}
 		const task = makeTask({ workflow_step: 'code_review' })
-		expect(isReviewSatisfied(step, task)).toBe(false)
+		expect(isReviewSatisfied(step, task, testAgents)).toBe(false)
 	})
 
 	it('returns true when enough approvals in history', () => {
@@ -445,13 +445,13 @@ describe('isReviewSatisfied', () => {
 			history: [
 				{
 					at: '2026-01-01T01:00:00Z',
-					by: 'reviewer',
+					by: 'agent-reviewer',
 					action: 'approved',
 					step: 'code_review',
 				},
 			],
 		})
-		expect(isReviewSatisfied(step, task)).toBe(true)
+		expect(isReviewSatisfied(step, task, testAgents)).toBe(true)
 	})
 })
 

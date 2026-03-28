@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { AgentProvider, AgentSpawnOptions, AgentSessionResult, AgentEvent } from '../provider'
 import { executeTool } from '../tools'
+import { zodToJsonSchema } from '../utils/zod-to-json'
 
 /**
  * Anthropic provider — uses @anthropic-ai/sdk for Claude models.
@@ -112,40 +113,3 @@ export class AnthropicProvider implements AgentProvider {
 	}
 }
 
-// Minimal Zod → JSON Schema converter (same as tools.ts but imported here)
-import { z } from 'zod'
-
-function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
-	return zodTypeToJson(schema)
-}
-
-function zodTypeToJson(schema: z.ZodType): Record<string, unknown> {
-	if (schema instanceof z.ZodOptional) return zodTypeToJson(schema.unwrap())
-	if (schema instanceof z.ZodDefault) return zodTypeToJson(schema._def.innerType)
-	if (schema instanceof z.ZodString) {
-		const r: Record<string, unknown> = { type: 'string' }
-		if (schema.description) r.description = schema.description
-		return r
-	}
-	if (schema instanceof z.ZodNumber) {
-		const r: Record<string, unknown> = { type: 'number' }
-		if (schema.description) r.description = schema.description
-		return r
-	}
-	if (schema instanceof z.ZodEnum) return { type: 'string', enum: schema.options }
-	if (schema instanceof z.ZodArray) return { type: 'array', items: zodTypeToJson(schema.element) }
-	if (schema instanceof z.ZodObject) {
-		const shape = schema.shape as Record<string, z.ZodType>
-		const properties: Record<string, unknown> = {}
-		const required: string[] = []
-		for (const [key, value] of Object.entries(shape)) {
-			properties[key] = zodTypeToJson(value)
-			if (!(value instanceof z.ZodOptional) && !(value instanceof z.ZodDefault)) required.push(key)
-		}
-		const r: Record<string, unknown> = { type: 'object', properties }
-		if (required.length > 0) r.required = required
-		return r
-	}
-	if (schema instanceof z.ZodRecord) return { type: 'object', additionalProperties: zodTypeToJson(schema.valueSchema) }
-	return { type: 'object' }
-}

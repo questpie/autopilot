@@ -25,7 +25,7 @@ export interface DbResult {
  * Returns both the Drizzle ORM instance and the raw bun:sqlite Database
  * so callers (e.g. Better Auth) can share the same underlying connection.
  */
-export async function createDb(companyRoot: string): Promise<DbResult> {
+export async function createDb(companyRoot: string, opts?: { embeddingDimensions?: number }): Promise<DbResult> {
 	const dataDir = join(companyRoot, '.data')
 	await mkdir(dataDir, { recursive: true })
 
@@ -53,11 +53,12 @@ export async function createDb(companyRoot: string): Promise<DbResult> {
 	initSearchFts(sqlite)
 
 	// Create vec0 virtual table (requires sqlite-vec extension)
+	const dims = opts?.embeddingDimensions ?? 768
 	try {
 		sqlite.exec(`
 			CREATE VIRTUAL TABLE IF NOT EXISTS search_vec USING vec0(
 				search_id INTEGER PRIMARY KEY,
-				embedding float[768]
+				embedding float[${dims}]
 			)
 		`)
 	} catch {
@@ -174,8 +175,21 @@ export function initFts(db: AutopilotDb): void {
 export { schema }
 
 import { container, companyRootFactory } from '../container'
+import { loadCompany } from '../fs'
 
 export const dbFactory = container.registerAsync('db', async (c) => {
 	const { companyRoot } = c.resolve([companyRootFactory])
-	return createDb(companyRoot)
+
+	// Read embedding dimensions from company config so the vec0 table matches the provider
+	let embeddingDimensions: number | undefined
+	try {
+		const company = await loadCompany(companyRoot)
+		const settings = company.settings as Record<string, unknown> | undefined
+		const embeddingsConfig = settings?.embeddings as { dimensions?: number } | undefined
+		embeddingDimensions = embeddingsConfig?.dimensions
+	} catch {
+		// Config not available yet — use default
+	}
+
+	return createDb(companyRoot, { embeddingDimensions })
 })

@@ -123,21 +123,21 @@ export function mergeMemory(
 		result.facts = existingFacts
 	}
 
-	// Append decisions
+	// Append decisions (keep last 50)
 	if (Array.isArray(extracted.decisions)) {
-		result.decisions = [...((result.decisions as unknown[]) ?? []), ...extracted.decisions]
+		result.decisions = [...((result.decisions as unknown[]) ?? []), ...extracted.decisions].slice(-50)
 	}
 
-	// Append mistakes
+	// Append mistakes (keep last 20)
 	if (Array.isArray(extracted.mistakes)) {
-		result.mistakes = [...((result.mistakes as unknown[]) ?? []), ...extracted.mistakes]
+		result.mistakes = [...((result.mistakes as unknown[]) ?? []), ...extracted.mistakes].slice(-20)
 	}
 
-	// Append patterns (deduplicate)
+	// Append patterns (deduplicate, keep last 30)
 	if (Array.isArray(extracted.patterns)) {
 		result.patterns = [
 			...new Set([...((result.patterns as string[]) ?? []), ...extracted.patterns]),
-		]
+		].slice(-30)
 	}
 
 	return result

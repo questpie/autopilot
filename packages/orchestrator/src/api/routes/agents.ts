@@ -5,6 +5,8 @@ import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
 import { AgentSchema } from '@questpie/autopilot-spec'
 import { loadAgents } from '../../fs/company'
+import { container } from '../../container'
+import { streamManagerFactory } from '../../session/stream'
 import type { AppEnv } from '../app'
 
 /** Extended agent detail schema with memory stats and recent tasks. */
@@ -115,11 +117,14 @@ const agents = new Hono<AppEnv>()
 				// Tasks may not exist
 			}
 
+			const { streamManager } = container.resolve([streamManagerFactory])
+			const isWorking = streamManager.getActiveStreams().some((s) => s.agentId === id)
+
 			return c.json({
 				...agent,
 				memory,
 				recentTasks,
-				sessionStatus: 'idle' as const,
+				sessionStatus: isWorking ? 'working' as const : 'idle' as const,
 			}, 200)
 		},
 	)

@@ -1,6 +1,5 @@
 import { relative, resolve } from 'node:path'
 import type { AgentProvider, AgentSpawnOptions, AgentSessionResult, AgentEvent } from '../provider'
-import type { ToolDefinition } from '../tools'
 import { executeTool } from '../tools'
 import { isDeniedPath } from '../../auth/deny-patterns'
 import { checkScope } from '../../auth/permissions'
@@ -116,90 +115,113 @@ export class CodexSDKProvider implements AgentProvider {
 				? `${prompt}\n\nAvailable autopilot tools:\n${toolDescriptions}`
 				: prompt
 
-			const { events } = await thread.runStreamed(fullPrompt)
+			// Multi-turn loop: after executing a custom tool, feed the result
+			// back to the LLM by starting a new turn on the same thread.
+			let currentInput = fullPrompt
+			let turns = 0
+			const MAX_TOOL_TURNS = maxTurns
 
-			for await (const event of events) {
-				switch (event.type) {
-					case 'item.completed': {
-						const item = event.item as Record<string, unknown> | undefined
-						if (!item) break
+			while (turns < MAX_TOOL_TURNS) {
+				turns++
+				const pendingToolResults: Array<{ tool: string; result: string }> = []
 
-						// Handle text responses
-						if (item.type === 'message' || item.type === 'text') {
-							const text = (item.content ?? item.text ?? '') as string
-							if (text) {
-								result = text
-								onEvent({ type: 'text', content: text })
+				const { events } = await thread.runStreamed(currentInput)
+
+				for await (const event of events) {
+					switch (event.type) {
+						case 'item.completed': {
+							const item = event.item as Record<string, unknown> | undefined
+							if (!item) break
+
+							// Handle text responses (agent_message is the canonical type from the SDK)
+							if (item.type === 'agent_message' || item.type === 'message' || item.type === 'text') {
+								const text = (item.text ?? item.content ?? '') as string
+								if (text) {
+									result = text
+									onEvent({ type: 'text', content: text })
+								}
 							}
-						}
 
-						// Handle tool calls from Codex
-						if (item.type === 'tool_call' || item.type === 'function_call') {
-							toolCalls++
-							const toolName = (item.name ?? item.tool ?? 'unknown') as string
-							onEvent({
-								type: 'tool_call',
-								tool: toolName,
-								toolCallId: item.id as string | undefined,
-								params: item.arguments as Record<string, unknown> | undefined,
-							})
-
-							// Security: validate built-in Codex file tool calls before execution
-							const args = typeof item.arguments === 'string'
-								? JSON.parse(item.arguments as string)
-								: (item.arguments as Record<string, unknown> | undefined) ?? {}
-							const blockReason = validateCodexToolCall(
-								toolName,
-								args,
-								toolContext.companyRoot,
-								agentActor,
-							)
-							if (blockReason) {
+							// Handle tool calls from Codex
+							if (item.type === 'tool_call' || item.type === 'function_call') {
+								toolCalls++
+								const toolName = (item.name ?? item.tool ?? 'unknown') as string
 								onEvent({
-									type: 'tool_result',
+									type: 'tool_call',
 									tool: toolName,
 									toolCallId: item.id as string | undefined,
-									content: `BLOCKED: ${blockReason}`,
+									params: item.arguments as Record<string, unknown> | undefined,
 								})
-								break
-							}
 
-							// Execute our custom tools if the call matches
-							const matchedTool = tools.find((t) => t.name === toolName)
-							if (matchedTool) {
-								try {
-									const toolResult = await executeTool(tools, toolName, args, toolContext)
+								// Security: validate built-in Codex file tool calls before execution
+								const args = typeof item.arguments === 'string'
+									? JSON.parse(item.arguments as string)
+									: (item.arguments as Record<string, unknown> | undefined) ?? {}
+								const blockReason = validateCodexToolCall(
+									toolName,
+									args,
+									toolContext.companyRoot,
+									agentActor,
+								)
+								if (blockReason) {
 									onEvent({
 										type: 'tool_result',
 										tool: toolName,
 										toolCallId: item.id as string | undefined,
-										content: toolResult.content[0]?.text,
+										content: `BLOCKED: ${blockReason}`,
 									})
-								} catch (toolErr) {
-									const msg = toolErr instanceof Error ? toolErr.message : String(toolErr)
-									onEvent({ type: 'error', content: `Tool error (${toolName}): ${msg}` })
+									pendingToolResults.push({ tool: toolName, result: `BLOCKED: ${blockReason}` })
+									break
+								}
+
+								// Execute our custom tools if the call matches
+								const matchedTool = tools.find((t) => t.name === toolName)
+								if (matchedTool) {
+									try {
+										const toolResult = await executeTool(tools, toolName, args, toolContext)
+										const resultText = toolResult.content[0]?.text ?? ''
+										onEvent({
+											type: 'tool_result',
+											tool: toolName,
+											toolCallId: item.id as string | undefined,
+											content: resultText,
+										})
+										pendingToolResults.push({ tool: toolName, result: resultText })
+									} catch (toolErr) {
+										const msg = toolErr instanceof Error ? toolErr.message : String(toolErr)
+										onEvent({ type: 'error', content: `Tool error (${toolName}): ${msg}` })
+										pendingToolResults.push({ tool: toolName, result: `ERROR: ${msg}` })
+									}
 								}
 							}
+							break
 						}
-						break
+
+						case 'turn.completed': {
+							onEvent({ type: 'status', content: 'turn_completed' })
+							break
+						}
+
+						case 'turn.failed': {
+							const failEvent = event as Record<string, unknown>
+							const failMsg = (failEvent.error ?? 'Turn failed') as string
+							error = typeof failMsg === 'string' ? failMsg : JSON.stringify(failMsg)
+							onEvent({ type: 'error', content: error })
+							break
+						}
 					}
 
-					case 'turn.completed': {
-						onEvent({ type: 'status', content: 'turn_completed' })
-						break
-					}
-
-					case 'turn.failed': {
-						const failEvent = event as Record<string, unknown>
-						const failMsg = (failEvent.error ?? 'Turn failed') as string
-						error = typeof failMsg === 'string' ? failMsg : JSON.stringify(failMsg)
-						onEvent({ type: 'error', content: error })
-						break
-					}
+					// Safety: respect maxTurns
+					if (toolCalls >= MAX_TOOL_TURNS) break
 				}
 
-				// Safety: respect maxTurns
-				if (toolCalls >= maxTurns) break
+				// If no custom tools were called this turn, we're done
+				if (pendingToolResults.length === 0 || toolCalls >= MAX_TOOL_TURNS || error) break
+
+				// Feed tool results back to the LLM as the next turn's input
+				currentInput = pendingToolResults
+					.map((r) => `[Tool result for ${r.tool}]\n${r.result}`)
+					.join('\n\n')
 			}
 		} catch (err) {
 			// Handle missing SDK gracefully

@@ -6,10 +6,12 @@ import { createAutopilotTools } from './tools'
 import type { ToolContext } from './tools'
 import type { AgentProvider, AgentEvent } from './provider'
 import { ClaudeAgentSDKProvider } from './providers/claude-agent-sdk'
+import { AnthropicProvider } from './providers/anthropic'
 import { CodexSDKProvider } from './providers/codex-sdk'
 import { eventBus } from '../events'
 import { container, companyRootFactory } from '../container'
 import { streamManagerFactory } from '../session/stream'
+import { logger } from '../logger'
 
 /** Registry of available agent providers, keyed by name. */
 const providers: Map<string, AgentProvider> = new Map()
@@ -25,6 +27,13 @@ export function registerProvider(provider: AgentProvider): void {
 
 const DEFAULT_PROVIDER = 'claude-agent-sdk'
 
+/** Default model per provider so bare agent configs get a sensible fallback. */
+const DEFAULT_MODELS: Record<string, string> = {
+	'claude-agent-sdk': 'claude-sonnet-4-6',
+	'anthropic': 'claude-sonnet-4-20250514',
+	'codex-sdk': 'gpt-4o',
+}
+
 /**
  * Look up a registered provider by name.
  *
@@ -34,11 +43,10 @@ const DEFAULT_PROVIDER = 'claude-agent-sdk'
 export function getProvider(name: string): AgentProvider {
 	const provider = providers.get(name)
 	if (!provider) {
-		console.warn(
-			`[autopilot] Unknown agent provider: "${name}". ` +
-			`Available: ${[...providers.keys()].join(', ')}. ` +
-			`Falling back to "${DEFAULT_PROVIDER}".`,
-		)
+		logger.warn('agent', `unknown agent provider: "${name}"`, {
+			available: [...providers.keys()].join(', '),
+			fallback: DEFAULT_PROVIDER,
+		})
 		return providers.get(DEFAULT_PROVIDER)!
 	}
 	return provider
@@ -47,6 +55,8 @@ export function getProvider(name: string): AgentProvider {
 // Register built-in providers
 // Claude Agent SDK works with both API key and Max subscription (default)
 registerProvider(new ClaudeAgentSDKProvider())
+// Anthropic SDK for direct Claude API access (claude-sonnet-4-20250514, etc.)
+registerProvider(new AnthropicProvider())
 // OpenAI Codex SDK for GPT models (gpt-4o, gpt-4.1, o3, o4-mini, etc.)
 registerProvider(new CodexSDKProvider())
 
@@ -155,7 +165,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 			{
 				systemPrompt: context.systemPrompt,
 				prompt,
-				model: agent.model || 'claude-sonnet-4-6',
+				model: agent.model || DEFAULT_MODELS[providerName] || 'claude-sonnet-4-6',
 				tools: autopilotTools,
 				toolContext,
 				maxTurns: 50,

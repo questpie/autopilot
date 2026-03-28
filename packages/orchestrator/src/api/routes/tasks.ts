@@ -10,6 +10,18 @@ import {
 } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
+import { container } from '../../container'
+import { indexerFactory } from '../../db/indexer'
+
+/** Best-effort resolve the indexer for real-time index updates. */
+async function getIndexer() {
+	try {
+		const { indexer } = await container.resolveAsync([indexerFactory])
+		return indexer
+	} catch {
+		return null
+	}
+}
 
 const tasks = new Hono<AppEnv>()
 	// GET /tasks — list with query filters
@@ -139,6 +151,12 @@ const tasks = new Hono<AppEnv>()
 				status: result.status,
 				assignedTo: result.assigned_to,
 			})
+			// Re-index on update; remove cancelled tasks from index
+			if (result.status === 'cancelled') {
+				getIndexer().then((idx) => idx?.removeOne('task', id)).catch(() => {})
+			} else {
+				getIndexer().then((idx) => idx?.indexOne('task', id, result.title, `${result.title} ${result.description ?? ''} ${result.status} ${result.type}`)).catch(() => {})
+			}
 
 			return c.json(result, 200)
 		},

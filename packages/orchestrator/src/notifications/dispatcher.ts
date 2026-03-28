@@ -4,6 +4,7 @@
  * and dispatches via configured transports (push, SSE).
  */
 import { eq, and } from 'drizzle-orm'
+import { logger } from '../logger'
 import { join } from 'node:path'
 import { notifications, notificationThrottle } from '../db/schema'
 import { eventBus } from '../events'
@@ -97,6 +98,29 @@ function classify(event: AutopilotEvent): ClassifiedNotification | null {
 					title: `New pin: ${event.pinId}`,
 					message: `A new item was pinned to the dashboard`,
 					url: '/',
+				}
+			}
+			return null
+		}
+		case 'message': {
+			// DM → direct_message notification (normal priority)
+			if (event.channel.startsWith('dm-')) {
+				return {
+					type: 'direct_message',
+					priority: 'normal',
+					title: 'New direct message',
+					message: event.content.slice(0, 200),
+					url: `/chat/${event.channel}`,
+				}
+			}
+			// @mention → mention notification (high priority)
+			if (/@\w+/.test(event.content)) {
+				return {
+					type: 'mention',
+					priority: 'high',
+					title: 'You were mentioned',
+					message: event.content.slice(0, 200),
+					url: `/chat/${event.channel}`,
 				}
 			}
 			return null
@@ -243,21 +267,23 @@ export class NotificationDispatcher {
 				continue
 			}
 
-			// Quiet hours check
-			if (isQuietHours(target, notification.priority)) {
-				continue
-			}
+			// Quiet hours — still store + SSE, but skip push (the disruptive transport)
+			const quiet = isQuietHours(target, notification.priority)
 
 			// Throttle check (15 min default for normal/low priority)
 			const throttleMinutes = notification.priority === 'urgent' || notification.priority === 'high' ? 0 : 15
 			const throttled = await isThrottled(this.db, target.id, notification.type, 'all', throttleMinutes)
 			if (throttled) continue
 
-			await this.deliver(notification, target)
+			await this.deliver(notification, target, { skipPush: quiet })
 		}
 	}
 
-	private async deliver(notification: ClassifiedNotification, target: HumanTarget): Promise<void> {
+	private async deliver(
+		notification: ClassifiedNotification,
+		target: HumanTarget,
+		opts: { skipPush?: boolean } = {},
+	): Promise<void> {
 		const id = crypto.randomUUID()
 		const now = Date.now()
 		const deliveredVia: string[] = []
@@ -289,26 +315,28 @@ export class NotificationDispatcher {
 			url: notification.url,
 		} as never)
 
-		// 3. Send push notification (if configured)
-		try {
-			const sent = await sendPushToUser(this.db, this.companyRoot, target.id, {
-				title: notification.title,
-				body: notification.message,
-				icon: '/icons/icon-192.png',
-				badge: '/icons/badge-72.png',
-				tag: `${notification.type}-${notification.taskId ?? id}`,
-				data: {
-					url: notification.url ?? '/',
-					taskId: notification.taskId,
-					type: notification.type,
-				},
-				actions: notification.type === 'approval_needed'
-					? [{ action: 'approve', title: 'Approve' }, { action: 'view', title: 'View' }]
-					: [{ action: 'view', title: 'View' }],
-			})
-			if (sent) deliveredVia.push('push')
-		} catch (err) {
-			console.error(`[dispatcher] push delivery failed for ${target.id}:`, err instanceof Error ? err.message : err)
+		// 3. Send push notification (if configured) — skipped during quiet hours
+		if (!opts.skipPush) {
+			try {
+				const sent = await sendPushToUser(this.db, this.companyRoot, target.id, {
+					title: notification.title,
+					body: notification.message,
+					icon: '/icons/icon-192.png',
+					badge: '/icons/badge-72.png',
+					tag: `${notification.type}-${notification.taskId ?? id}`,
+					data: {
+						url: notification.url ?? '/',
+						taskId: notification.taskId,
+						type: notification.type,
+					},
+					actions: notification.type === 'approval_needed'
+						? [{ action: 'approve', title: 'Approve' }, { action: 'view', title: 'View' }]
+						: [{ action: 'view', title: 'View' }],
+				})
+				if (sent) deliveredVia.push('push')
+			} catch (err) {
+				logger.error('notifications', `push delivery failed for ${target.id}`, { error: err instanceof Error ? err.message : String(err) })
+			}
 		}
 
 		// 4. Update delivered_via

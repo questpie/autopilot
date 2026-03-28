@@ -8,6 +8,7 @@ import type {
 
 export type { EmbeddingProvider, EmbeddingInput, EmbeddingConfig, EmbeddingProviderName, EmbeddingTaskType }
 export { type EmbeddingModality } from './provider'
+import { logger } from '../logger'
 
 /**
  * Orchestrates embedding generation with primary → fallback → null chain.
@@ -121,7 +122,7 @@ async function createProvider(
 			return new NoneEmbeddingProvider()
 		}
 		default: {
-			console.warn(`[embeddings] unknown provider "${name}", falling back to none`)
+			logger.warn('embeddings', `unknown provider "${name}", falling back to none`)
 			const { NoneEmbeddingProvider } = await import('./none-provider')
 			return new NoneEmbeddingProvider()
 		}
@@ -147,9 +148,9 @@ export async function createEmbeddingService(config?: EmbeddingConfig): Promise<
 	let primary: EmbeddingProvider
 	try {
 		primary = await createProvider(config.provider, primaryOpts)
-		console.log(`[embeddings] primary provider: ${primary.name} (${primary.dimensions}d)`)
+		logger.info('embeddings', `primary provider: ${primary.name} (${primary.dimensions}d)`)
 	} catch (err) {
-		console.error(`[embeddings] failed to create primary provider "${config.provider}":`, err instanceof Error ? err.message : err)
+		logger.error('embeddings', `failed to create primary provider "${config.provider}"`, { error: err instanceof Error ? err.message : String(err) })
 		const { NoneEmbeddingProvider } = await import('./none-provider')
 		return new EmbeddingService(new NoneEmbeddingProvider())
 	}
@@ -158,9 +159,9 @@ export async function createEmbeddingService(config?: EmbeddingConfig): Promise<
 	if (config.fallback && config.fallback !== 'none') {
 		try {
 			fallback = await createProvider(config.fallback)
-			console.log(`[embeddings] fallback provider: ${fallback.name} (${fallback.dimensions}d)`)
+			logger.info('embeddings', `fallback provider: ${fallback.name} (${fallback.dimensions}d)`)
 		} catch (err) {
-			console.error(`[embeddings] failed to create fallback provider "${config.fallback}":`, err instanceof Error ? err.message : err)
+			logger.error('embeddings', `failed to create fallback provider "${config.fallback}"`, { error: err instanceof Error ? err.message : String(err) })
 		}
 	}
 

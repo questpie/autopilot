@@ -29,7 +29,7 @@ export interface ContextOptions {
 	maxTokens?: number
 }
 
-const DEFAULT_MAX_TOKENS = 42_000
+const DEFAULT_MAX_TOKENS = 48_000
 const CHARS_PER_TOKEN = 4
 
 function estimateTokens(text: string): number {
@@ -195,15 +195,17 @@ function buildIdentityPrompt(
 /**
  * Build a multi-layer system prompt for an agent session.
  *
- * Layers (each capped to a token budget):
+ * Layers (each capped to a token budget, ordered by priority):
  * 1. **Identity** (~2K) -- role prompt from `team/roles/{role}.md`.
- * 2. **Company state** (~5K) -- active tasks, messages, pins, team status.
- * 3. **Agent memory** (~20K) -- persistent memory from `memory.yaml`.
+ * 2. **Autopilot MCP Tools** (~2K) -- tool documentation (MUST have).
+ * 3. **Company state** (~5K) -- active tasks, messages, pins, team status.
  * 4. **Task context** (~15K) -- detailed current-task information.
- * 5. **Skills** (~1K) -- available skill catalogue entries.
+ * 5. **Skills** (~2K) -- available skill catalogue entries.
+ * 6. **Agent memory** (~16K) -- persistent memory (expendable, truncated last).
  *
  * The whole prompt is then hard-truncated to {@link ContextOptions.maxTokens}
- * (default 42 000).
+ * (default 48 000). Memory is placed last so that if truncation occurs,
+ * it trims memory rather than tool documentation.
  */
 export async function assembleContext(options: ContextOptions): Promise<AssembledContext> {
 	const { companyRoot, agent, company, task, allAgents, storage, maxTokens = DEFAULT_MAX_TOKENS } = options
@@ -215,7 +217,54 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 	const identityPrompt = buildIdentityPrompt(companyRoot, agent, company, teamRoster)
 	sections.push(identityPrompt)
 
-	// Layer 2: Company State (~5K tokens) — role-scoped snapshot
+	// Layer 2: Autopilot MCP Tools (~2K tokens) — explicit list so agent knows what's available
+	// Placed early so it is NEVER truncated by the final hard-truncation pass.
+	sections.push(`## Autopilot MCP Tools (ALWAYS available)
+
+You have these tools via the "autopilot" MCP server. Use them to interact with the company.
+
+### Task Management
+- **task**({ action: "create", title, type, priority, assigned_to, workflow }) — Create a new task.
+- **task**({ action: "update", task_id, status, note }) — Update a task's status. YOU MUST CALL THIS when done.
+- **task**({ action: "approve", task_id, note }) — Approve a task (moves to done).
+- **task**({ action: "reject", task_id, reason }) — Reject a task (moves to blocked).
+- **task**({ action: "block", task_id, reason, blocker_assigned_to }) — Escalate a blocker to human.
+- **task**({ action: "unblock", task_id, note }) — Mark a blocker as resolved.
+
+### Communication
+- **message**({ channel, content }) — Send to a channel. Conventions:
+  - \`"dm-{agentId}"\` — Direct message (auto-creates DM channel)
+  - \`"task-{id}"\` — Task thread (auto-created)
+  - \`"project-{name}"\` — Project channel (auto-created)
+  - Any other name — standard channel (must exist)
+
+### Dashboard
+- **pin**({ action: "create", group, title, type, content }) — Pin output for human visibility.
+- **pin**({ action: "remove", pin_id }) — Remove a pin.
+
+### Search
+- **search**({ query, type?, scope? }) — Search across all entities (tasks, messages, knowledge, pins, agents, channels, skills).
+
+### Knowledge & Artifacts
+- Use \`write_file("knowledge/...", content)\` to add/update knowledge docs (auto-indexed by watcher).
+- Use \`write_file("artifacts/{name}/...", ...)\` to create artifacts (watcher registers on .artifact.yaml).
+
+### External
+- **http**({ method, url, secret_ref }) — Call an external API with secret injection.
+
+### Web
+- **search_web**({ query, max_results? }) — Search the web. Returns ranked results with title, URL, and snippet. Provider configurable (Brave/Tavily/SerpAPI).
+- **browse**({ url, extract?, screenshot? }) — Browse a web page. Returns page text content, optionally saves a screenshot. Supports JS-rendered pages via headless browser.
+
+### CRITICAL REMINDER
+After finishing ANY task, you MUST:
+1. \`task({ action: "update", task_id: "...", status: "done", note: "..." })\`
+2. \`message({ channel: "dev", content: "Done: ..." })\`
+3. \`pin({ action: "create", group: "recent", title: "...", type: "success" })\`
+
+Without these 3 calls, the workflow pipeline stops.`)
+
+	// Layer 3: Company State (~5K tokens) — role-scoped snapshot
 	let streamManager: import('../session/stream').SessionStreamManager | null = null
 	try {
 		const resolved = container.resolve([streamManagerFactory])
@@ -247,15 +296,6 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 	}
 
 	sections.push(truncateToTokens(stateLines.join('\n\n'), 5_000))
-
-	// Layer 3: Memory (~20K tokens) — agent's memory.yaml
-	const memory = await loadAgentMemory(companyRoot, agent.id)
-	if (memory) {
-		const memoryContent = stringifyYaml(memory, { lineWidth: 120 })
-		sections.push(
-			truncateToTokens(`## Agent Memory\n\`\`\`yaml\n${memoryContent}\`\`\``, 20_000),
-		)
-	}
 
 	// Layer 4: Task Context (~15K tokens) — current task details
 	if (task) {
@@ -343,51 +383,15 @@ export async function assembleContext(options: ContextOptions): Promise<Assemble
 		sections.push(truncateToTokens(skillLines.join('\n'), 2_000))
 	}
 
-	// Layer 6: Autopilot MCP Tools — explicit list so agent knows what's available
-	sections.push(`## Autopilot MCP Tools (ALWAYS available)
-
-You have these tools via the "autopilot" MCP server. Use them to interact with the company.
-
-### Task Management
-- **task**({ action: "create", title, type, priority, assigned_to, workflow }) — Create a new task.
-- **task**({ action: "update", task_id, status, note }) — Update a task's status. YOU MUST CALL THIS when done.
-- **task**({ action: "approve", task_id, note }) — Approve a task (moves to done).
-- **task**({ action: "reject", task_id, reason }) — Reject a task (moves to blocked).
-- **task**({ action: "block", task_id, reason, blocker_assigned_to }) — Escalate a blocker to human.
-- **task**({ action: "unblock", task_id, note }) — Mark a blocker as resolved.
-
-### Communication
-- **message**({ channel, content }) — Send to a channel. Conventions:
-  - \`"dm-{agentId}"\` — Direct message (auto-creates DM channel)
-  - \`"task-{id}"\` — Task thread (auto-created)
-  - \`"project-{name}"\` — Project channel (auto-created)
-  - Any other name — standard channel (must exist)
-
-### Dashboard
-- **pin**({ action: "create", group, title, type, content }) — Pin output for human visibility.
-- **pin**({ action: "remove", pin_id }) — Remove a pin.
-
-### Search
-- **search**({ query, type?, scope? }) — Search across all entities (tasks, messages, knowledge, pins, agents, channels, skills).
-
-### Knowledge & Artifacts
-- Use \`write_file("knowledge/...", content)\` to add/update knowledge docs (auto-indexed by watcher).
-- Use \`write_file("artifacts/{name}/...", ...)\` to create artifacts (watcher registers on .artifact.yaml).
-
-### External
-- **http**({ method, url, secret_ref }) — Call an external API with secret injection.
-
-### Web
-- **search_web**({ query, max_results? }) — Search the web. Returns ranked results with title, URL, and snippet. Provider configurable (Brave/Tavily/SerpAPI).
-- **browse**({ url, extract?, screenshot? }) — Browse a web page. Returns page text content, optionally saves a screenshot. Supports JS-rendered pages via headless browser.
-
-### CRITICAL REMINDER
-After finishing ANY task, you MUST:
-1. \`task({ action: "update", task_id: "...", status: "done", note: "..." })\`
-2. \`message({ channel: "dev", content: "Done: ..." })\`
-3. \`pin({ action: "create", group: "recent", title: "...", type: "success" })\`
-
-Without these 3 calls, the workflow pipeline stops.`)
+	// Layer 6: Agent Memory (~16K tokens) — persistent memory from memory.yaml
+	// Placed LAST so truncation trims memory (expendable) rather than tools or task context.
+	const memory = await loadAgentMemory(companyRoot, agent.id)
+	if (memory) {
+		const memoryContent = stringifyYaml(memory, { lineWidth: 120 })
+		sections.push(
+			truncateToTokens(`## Agent Memory\n\`\`\`yaml\n${memoryContent}\`\`\``, 16_000),
+		)
+	}
 
 	const systemPrompt = sections.join('\n\n---\n\n')
 

@@ -8,6 +8,7 @@ import { indexEntity, removeEntity, type EntityType } from './search-index'
 import { schema } from './index'
 import { container, companyRootFactory } from '../container'
 import { dbFactory } from './index'
+import { logger } from '../logger'
 import { embeddingServiceFactory } from '../embeddings'
 import type { EmbeddingService } from '../embeddings'
 import { loadAgents } from '../fs'
@@ -322,6 +323,11 @@ export const indexerFactory = container.registerAsync('indexer', async (c) => {
 		dbFactory, embeddingServiceFactory, companyRootFactory, storageFactory
 	])
 	const indexer = new Indexer(db.db, companyRoot, embeddingService)
-	await indexer.reindexAll(storage)
+	// Don't await — run in background so server starts immediately
+	indexer.reindexAll(storage).then(() => {
+		logger.info('db', 'startup reindex complete')
+	}).catch((err) => {
+		logger.error('db', 'startup reindex failed', { error: err instanceof Error ? err.message : String(err) })
+	})
 	return indexer
 })

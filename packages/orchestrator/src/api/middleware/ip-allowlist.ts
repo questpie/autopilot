@@ -169,6 +169,13 @@ export function isIpAllowed(
 
 const DEFAULT_TRUSTED_PROXIES = ['127.0.0.1', '::1', '::ffff:127.0.0.1']
 
+// ---------------------------------------------------------------------------
+// Config cache — avoid reading company.yaml on every request
+// ---------------------------------------------------------------------------
+let cachedConfig: { allowlist: string[]; trustedProxies: string[] | undefined } | null = null
+let cacheTimestamp = 0
+const CACHE_TTL = 30_000 // 30 seconds
+
 /**
  * Extract client IP from request headers.
  * X-Forwarded-For is only trusted when the connecting socket IP is in trustedProxies.
@@ -203,20 +210,29 @@ export function getClientIp(
  */
 export function ipAllowlist() {
 	return createMiddleware<AppEnv>(async (c, next) => {
-		const companyRoot = c.get('companyRoot')
-		let allowlist: string[] = []
-		let trustedProxies: string[] | undefined
-		try {
-			const { readYamlUnsafe } = await import('../../fs/yaml')
-			const { join } = await import('node:path')
-			const company = await readYamlUnsafe(join(companyRoot, 'company.yaml')) as {
-				settings?: { auth?: { ip_allowlist?: string[]; trusted_proxies?: string[] } }
+		const now = Date.now()
+		if (!cachedConfig || now - cacheTimestamp > CACHE_TTL) {
+			const companyRoot = c.get('companyRoot')
+			let allowlist: string[] = []
+			let trustedProxies: string[] | undefined
+			try {
+				const { readYamlUnsafe } = await import('../../fs/yaml')
+				const { join } = await import('node:path')
+				const company = await readYamlUnsafe(join(companyRoot, 'company.yaml')) as {
+					settings?: { auth?: { ip_allowlist?: string[]; trusted_proxies?: string[] } }
+				}
+				allowlist = company?.settings?.auth?.ip_allowlist ?? []
+				trustedProxies = company?.settings?.auth?.trusted_proxies
+			} catch {
+				// No company.yaml or no allowlist — allow all
+				allowlist = []
+				trustedProxies = undefined
 			}
-			allowlist = company?.settings?.auth?.ip_allowlist ?? []
-			trustedProxies = company?.settings?.auth?.trusted_proxies
-		} catch {
-			// No company.yaml or no allowlist — allow all
+			cachedConfig = { allowlist, trustedProxies }
+			cacheTimestamp = now
 		}
+
+		const { allowlist, trustedProxies } = cachedConfig
 
 		if (allowlist.length === 0) return next()
 

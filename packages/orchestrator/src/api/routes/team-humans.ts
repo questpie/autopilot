@@ -17,6 +17,8 @@ import { z } from 'zod'
 import { join } from 'node:path'
 import { readYamlUnsafe, fileExists, writeYaml } from '../../fs/yaml'
 import { HUMAN_ROLES } from '@questpie/autopilot-spec'
+import { eq } from 'drizzle-orm'
+import * as authSchema from '../../db/auth-schema'
 import type { AppEnv } from '../app'
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
@@ -255,21 +257,12 @@ const teamHumans = new Hono<AppEnv>()
 			if (denied) return denied
 
 			const root = c.get('companyRoot')
-			const auth = c.get('auth')
+			const db = c.get('db')
 			const { id } = c.req.valid('param')
 			const { role } = c.req.valid('json')
 
-			// Get user email from Better Auth
-			const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
-			const listUsersFn = authApi.listUsers
-			if (!listUsersFn) {
-				return c.json({ error: 'Auth API unavailable' }, 500)
-			}
-
-			const result = await listUsersFn({ query: { limit: 9999 } }) as {
-				users?: Array<{ id: string; email: string }>
-			}
-			const user = result?.users?.find((u) => u.id === id)
+			// Get user email directly from DB
+			const user = db.select({ id: authSchema.user.id, email: authSchema.user.email }).from(authSchema.user).where(eq(authSchema.user.id, id)).get()
 			if (!user) {
 				return c.json({ error: 'User not found' }, 404)
 			}

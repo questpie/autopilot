@@ -156,8 +156,8 @@ describe('workflow edge cases', () => {
 			const task = makeTask({
 				workflow_step: 'review',
 				history: [
-					{ at: '2026-01-01T01:00:00Z', by: 'reviewer', action: 'approved', step: 'review' },
-					{ at: '2026-01-01T02:00:00Z', by: 'developer', action: 'approved', step: 'review' },
+					{ at: '2026-01-01T01:00:00Z', by: 'maria', action: 'approved', step: 'review' },
+					{ at: '2026-01-01T02:00:00Z', by: 'peter', action: 'approved', step: 'review' },
 				],
 			})
 			const result = advanceWorkflow(reviewWorkflow, task, 'rejected', testAgents)
@@ -187,7 +187,7 @@ describe('workflow edge cases', () => {
 				history: [
 					{
 						at: '2026-01-01T01:00:00Z',
-						by: 'reviewer',
+						by: 'maria',
 						action: 'approved',
 						step: 'review',
 					},
@@ -204,13 +204,13 @@ describe('workflow edge cases', () => {
 				history: [
 					{
 						at: '2026-01-01T01:00:00Z',
-						by: 'reviewer',
+						by: 'maria',
 						action: 'approved',
 						step: 'review',
 					},
 					{
 						at: '2026-01-01T02:00:00Z',
-						by: 'developer',
+						by: 'peter',
 						action: 'approved',
 						step: 'review',
 					},
@@ -235,8 +235,8 @@ describe('workflow edge cases', () => {
 			task = makeTask({
 				workflow_step: 'review',
 				history: [
-					{ at: '2026-01-02T01:00:00Z', by: 'reviewer', action: 'approved', step: 'review' },
-					{ at: '2026-01-02T02:00:00Z', by: 'developer', action: 'approved', step: 'review' },
+					{ at: '2026-01-02T01:00:00Z', by: 'maria', action: 'approved', step: 'review' },
+					{ at: '2026-01-02T02:00:00Z', by: 'peter', action: 'approved', step: 'review' },
 				],
 			})
 			result = advanceWorkflow(reviewWorkflow, task, 'approved', testAgents)
@@ -296,7 +296,7 @@ describe('workflow edge cases', () => {
 		it('isReviewSatisfied returns false with 0 approvals', () => {
 			const step = resolveWorkflowStep(reviewWorkflow, 'review')!
 			const task = makeTask({ workflow_step: 'review', history: [] })
-			expect(isReviewSatisfied(step, task)).toBe(false)
+			expect(isReviewSatisfied(step, task, testAgents)).toBe(false)
 		})
 
 		it('isReviewSatisfied returns false with 1 approval', () => {
@@ -304,10 +304,10 @@ describe('workflow edge cases', () => {
 			const task = makeTask({
 				workflow_step: 'review',
 				history: [
-					{ at: '2026-01-01T01:00:00Z', by: 'reviewer', action: 'approved', step: 'review' },
+					{ at: '2026-01-01T01:00:00Z', by: 'maria', action: 'approved', step: 'review' },
 				],
 			})
-			expect(isReviewSatisfied(step, task)).toBe(false)
+			expect(isReviewSatisfied(step, task, testAgents)).toBe(false)
 		})
 
 		it('isReviewSatisfied returns true with 2 approvals', () => {
@@ -315,11 +315,11 @@ describe('workflow edge cases', () => {
 			const task = makeTask({
 				workflow_step: 'review',
 				history: [
-					{ at: '2026-01-01T01:00:00Z', by: 'reviewer', action: 'approved', step: 'review' },
-					{ at: '2026-01-01T02:00:00Z', by: 'developer', action: 'approved', step: 'review' },
+					{ at: '2026-01-01T01:00:00Z', by: 'maria', action: 'approved', step: 'review' },
+					{ at: '2026-01-01T02:00:00Z', by: 'peter', action: 'approved', step: 'review' },
 				],
 			})
-			expect(isReviewSatisfied(step, task)).toBe(true)
+			expect(isReviewSatisfied(step, task, testAgents)).toBe(true)
 		})
 
 		it('isReviewSatisfied ignores approvals from other steps', () => {
@@ -327,11 +327,11 @@ describe('workflow edge cases', () => {
 			const task = makeTask({
 				workflow_step: 'review',
 				history: [
-					{ at: '2026-01-01T01:00:00Z', by: 'reviewer', action: 'approved', step: 'implement' },
-					{ at: '2026-01-01T02:00:00Z', by: 'developer', action: 'approved', step: 'implement' },
+					{ at: '2026-01-01T01:00:00Z', by: 'maria', action: 'approved', step: 'implement' },
+					{ at: '2026-01-01T02:00:00Z', by: 'peter', action: 'approved', step: 'implement' },
 				],
 			})
-			expect(isReviewSatisfied(step, task)).toBe(false)
+			expect(isReviewSatisfied(step, task, testAgents)).toBe(false)
 		})
 
 		it('isReviewSatisfied only counts approvals from allowed roles', () => {
@@ -339,12 +339,12 @@ describe('workflow edge cases', () => {
 			const task = makeTask({
 				workflow_step: 'review',
 				history: [
-					{ at: '2026-01-01T01:00:00Z', by: 'reviewer', action: 'approved', step: 'review' },
-					{ at: '2026-01-01T02:00:00Z', by: 'marketing', action: 'approved', step: 'review' },
+					{ at: '2026-01-01T01:00:00Z', by: 'maria', action: 'approved', step: 'review' },
+					{ at: '2026-01-01T02:00:00Z', by: 'marketing-bot', action: 'approved', step: 'review' },
 				],
 			})
-			// marketing is not in reviewers_roles, so only 1 valid approval
-			expect(isReviewSatisfied(step, task)).toBe(false)
+			// marketing-bot has no matching agent, so only 1 valid approval
+			expect(isReviewSatisfied(step, task, testAgents)).toBe(false)
 		})
 	})
 

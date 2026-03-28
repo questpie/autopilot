@@ -1,5 +1,6 @@
 import { watch, type FSWatcher } from 'chokidar'
 import { join, relative, sep } from 'node:path'
+import { logger } from '../logger'
 
 /** Discriminated union of filesystem events the watcher can emit. */
 export type WatchEvent =
@@ -132,7 +133,7 @@ export class Watcher {
 						try {
 							await this.options.onEvent(event)
 						} catch (err) {
-							console.error('[watcher] error handling event:', err)
+							logger.error('watcher', 'error handling event', { error: err instanceof Error ? err.message : String(err) })
 						}
 					}
 				}, debounceMs),
@@ -141,6 +142,7 @@ export class Watcher {
 
 		this.watcher.on('add', handleFile)
 		this.watcher.on('change', handleFile)
+		this.watcher.on('unlink', handleFile)
 	}
 
 	/** Stop the watcher and clear any pending debounce timers. */

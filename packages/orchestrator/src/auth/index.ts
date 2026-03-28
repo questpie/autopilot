@@ -13,6 +13,7 @@ import * as authSchema from '../db/auth-schema'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { hashPassword, verifyPassword } from 'better-auth/crypto'
+import { eq } from 'drizzle-orm'
 
 const PASSWORD_COMPLEXITY_RE = /^(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/
 
@@ -118,18 +119,14 @@ export async function createAuth(db: AutopilotDb, companyRoot: string) {
 					after: async (session: { userId: string; [key: string]: unknown }) => {
 						// Banned user logout: reject session creation for banned users
 						try {
-							const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
-							const listUsersFn = authApi.listUsers
-							if (listUsersFn) {
-								const result = await listUsersFn({ query: { limit: 9999 } }) as { users?: Array<{ id: string; banned?: boolean }> }
-								const user = result?.users?.find((u) => u.id === session.userId)
-								if (user?.banned === true) {
-									const deleteSessionFn = authApi.revokeSession
-									if (deleteSessionFn) {
-										await deleteSessionFn({ body: { token: (session as { token?: string }).token } }).catch(() => {})
-									}
-									throw new Error('Your account has been banned.')
+							const row = db.select({ banned: authSchema.user.banned }).from(authSchema.user).where(eq(authSchema.user.id, session.userId)).get()
+							if (row?.banned === true) {
+								const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
+								const revokeSessionFn = authApi.revokeSession
+								if (revokeSessionFn) {
+									await revokeSessionFn({ body: { token: (session as { token?: string }).token } }).catch(() => {})
 								}
+								throw new Error('Your account has been banned.')
 							}
 						} catch (err) {
 							// Re-throw ban errors, swallow lookup failures

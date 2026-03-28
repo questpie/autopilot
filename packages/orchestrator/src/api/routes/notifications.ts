@@ -13,7 +13,7 @@ import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import { eq, and, isNull, desc } from 'drizzle-orm'
+import { eq, and, isNull, desc, sql } from 'drizzle-orm'
 import { notifications, pushSubscriptions } from '../../db/schema'
 import { getVapidKeys } from '../../notifications/transports/push'
 import type { AppEnv } from '../app'
@@ -172,12 +172,19 @@ const notificationsRoute = new Hono<AppEnv>()
 			const db = c.get('db')
 			const now = Date.now()
 
+			const countResult = db
+				.select({ count: sql`count(*)` })
+				.from(notifications)
+				.where(and(eq(notifications.user_id, userId), isNull(notifications.read_at)))
+				.get()
+			const count = (countResult as any)?.count ?? 0
+
 			await db
 				.update(notifications)
 				.set({ read_at: now })
 				.where(and(eq(notifications.user_id, userId), isNull(notifications.read_at)))
 
-			return c.json({ ok: true as const, count: 0 }, 200)
+			return c.json({ ok: true as const, count }, 200)
 		},
 	)
 	// ── DELETE /notifications/:id ──────────────────────────────────────

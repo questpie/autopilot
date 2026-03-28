@@ -116,6 +116,7 @@ export function getAssignee(
 export function isReviewSatisfied(
 	step: WorkflowStep,
 	task: Task,
+	agents: Agent[] = [],
 ): boolean {
 	if (!step.review) return true
 
@@ -123,12 +124,14 @@ export function isReviewSatisfied(
 	const reviewerRoles = step.review.reviewers_roles ?? []
 
 	// Count approvals from task history that match this step
-	const approvals = task.history.filter(
-		(h) =>
-			h.action === 'approved' &&
-			h.step === step.id &&
-			(reviewerRoles.length === 0 || reviewerRoles.includes(h.by)),
-	)
+	const approvals = task.history.filter((h) => {
+		if (h.action !== 'approved' || h.step !== step.id) return false
+		// If no reviewer_roles specified, any approval counts
+		if (reviewerRoles.length === 0) return true
+		// Look up the actor's role from the agents list
+		const agent = agents.find((a) => a.id === h.by)
+		return agent?.role ? reviewerRoles.includes(agent.role) : false
+	})
 
 	return approvals.length >= minApprovals
 }
@@ -249,7 +252,7 @@ export function evaluateTransition(
 	}
 
 	// Review gate — if review requirements exist and aren't met, wait
-	if (step.review && !isReviewSatisfied(step, task)) {
+	if (step.review && !isReviewSatisfied(step, task, agents)) {
 		return { action: 'no_action', nextStep: step.id }
 	}
 
@@ -302,7 +305,7 @@ export function advanceWorkflow(
 	}
 
 	// Check review requirements before allowing transition
-	if (step.review && !isReviewSatisfied(step, task)) {
+	if (step.review && !isReviewSatisfied(step, task, agents)) {
 		return {
 			action: 'no_action',
 			nextStep: step.id,

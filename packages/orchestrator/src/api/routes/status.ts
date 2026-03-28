@@ -4,6 +4,8 @@ import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver } from 'hono-openapi'
 import { loadAgents, loadCompany } from '../../fs/company'
+import { container } from '../../container'
+import { streamManagerFactory } from '../../session/stream'
 import type { AppEnv } from '../app'
 
 const status = new Hono<AppEnv>().get(
@@ -49,13 +51,16 @@ const status = new Hono<AppEnv>().get(
 			// Auth tables may not exist yet during early startup
 		}
 
+		const { streamManager } = container.resolve([streamManagerFactory])
+		const runningSessions = streamManager.getActiveStreams().length
+
 		return c.json({
 			company: company.name,
 			userCount,
 			setupCompleted: company.setup_completed ?? false,
 			agentCount: agents.length,
 			activeTasks: activeTasks.length,
-			runningSessions: 0,
+			runningSessions,
 			pendingApprovals: reviewTasks.length + blockedTasks.length,
 		}, 200)
 	},
