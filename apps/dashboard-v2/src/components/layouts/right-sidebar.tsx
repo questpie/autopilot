@@ -1,4 +1,4 @@
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
+import { m, AnimatePresence, useReducedMotion } from "framer-motion"
 import { useAppStore } from "@/stores/app.store"
 import { ChatPanel } from "@/features/chat/chat-panel"
 
@@ -16,7 +16,7 @@ export function RightSidebar() {
   return (
     <AnimatePresence>
       {rightPanel.open && (
-        <motion.aside
+        <m.aside
           initial={{ width: shouldReduce ? SIDEBAR_WIDTH : 0, x: shouldReduce ? 0 : SIDEBAR_WIDTH }}
           animate={{ width: SIDEBAR_WIDTH, x: 0 }}
           exit={{ width: shouldReduce ? SIDEBAR_WIDTH : 0, x: shouldReduce ? 0 : SIDEBAR_WIDTH }}
@@ -27,7 +27,7 @@ export function RightSidebar() {
           className="hidden shrink-0 overflow-hidden border-l border-border bg-background lg:flex lg:flex-col"
         >
           {rightPanel.mode === "chat" && <ChatPanel />}
-        </motion.aside>
+        </m.aside>
       )}
     </AnimatePresence>
   )

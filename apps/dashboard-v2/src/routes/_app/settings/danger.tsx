@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { useState } from "react"
 import { useMutation } from "@tanstack/react-query"
 import {
@@ -29,6 +29,7 @@ export const Route = createFileRoute("/_app/settings/danger")({
 
 function SettingsDangerPage() {
   const { t } = useTranslation()
+  const router = useRouter()
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState("")
@@ -36,7 +37,7 @@ function SettingsDangerPage() {
   const exportMutation = useMutation({
     mutationFn: async () => {
       const res = await api.api.export.$post()
-      if (!res.ok) throw new Error("Export not available")
+      if (!res.ok) throw new Error(t("errors.export_not_available"))
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
@@ -45,14 +46,14 @@ function SettingsDangerPage() {
       a.click()
       URL.revokeObjectURL(url)
     },
-    onSuccess: () => toast.success("Export downloaded"),
+    onSuccess: () => toast.success(t("settings.export_downloaded")),
     onError: (err) => toast.error((err as Error).message),
   })
 
   const resetMutation = useMutation({
     mutationFn: async () => {
       const res = await api.api.reset.$post()
-      if (!res.ok) throw new Error("Reset not available")
+      if (!res.ok) throw new Error(t("errors.reset_not_available"))
     },
     onSuccess: () => {
       toast.success(t("settings.danger_reset_success"))
@@ -64,10 +65,10 @@ function SettingsDangerPage() {
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const res = await api.api["delete-company"].$post()
-      if (!res.ok) throw new Error("Delete not available")
+      if (!res.ok) throw new Error(t("errors.delete_not_available"))
     },
     onSuccess: () => {
-      window.location.href = "/"
+      void router.invalidate().then(() => router.navigate({ to: "/" }))
     },
     onError: (err) => toast.error((err as Error).message),
   })

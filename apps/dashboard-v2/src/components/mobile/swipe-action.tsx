@@ -1,6 +1,6 @@
 import { useRef, type ReactNode } from "react"
 import {
-  motion,
+  m,
   useMotionValue,
   useTransform,
   useReducedMotion,
@@ -96,7 +96,7 @@ export function SwipeAction({
     <div className={["relative overflow-hidden", className].filter(Boolean).join(" ")}>
       {/* Right swipe background (approve - green) */}
       {onSwipeRight && (
-        <motion.div
+        <m.div
           style={{ opacity: rightBgOpacity }}
           className="absolute inset-0 flex items-center justify-start bg-green-600 px-6"
         >
@@ -104,12 +104,12 @@ export function SwipeAction({
           <span className="ml-2 font-heading text-sm font-semibold text-white">
             {rightLabel ?? t("inbox.approve")}
           </span>
-        </motion.div>
+        </m.div>
       )}
 
       {/* Left swipe background (reject - red) */}
       {onSwipeLeft && (
-        <motion.div
+        <m.div
           style={{ opacity: leftBgOpacity }}
           className="absolute inset-0 flex items-center justify-end bg-red-600 px-6"
         >
@@ -117,17 +117,17 @@ export function SwipeAction({
             {leftLabel ?? t("inbox.reject")}
           </span>
           <XCircleIcon size={24} className="text-white" aria-hidden="true" />
-        </motion.div>
+        </m.div>
       )}
 
       {/* Draggable content */}
-      <motion.div
+      <m.div
         ref={dragRef}
         style={{ x, touchAction: "pan-y" }}
         className="relative z-10 bg-background"
       >
         {children}
-      </motion.div>
+      </m.div>
     </div>
   )
 }

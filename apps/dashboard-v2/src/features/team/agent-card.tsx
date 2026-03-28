@@ -1,5 +1,5 @@
 import { CircleIcon } from "@phosphor-icons/react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { Link } from "@tanstack/react-router"
 import { Badge } from "@/components/ui/badge"
 import { useTranslation } from "@/lib/i18n"
@@ -56,7 +56,7 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
   const initial = agent.name.charAt(0).toUpperCase()
 
   return (
-    <motion.div
+    <m.div
       initial={shouldReduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
@@ -111,7 +111,7 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
           {t("team.tasks_count", { count: taskCount })}
         </span>
       </Link>
-    </motion.div>
+    </m.div>
   )
 }
 

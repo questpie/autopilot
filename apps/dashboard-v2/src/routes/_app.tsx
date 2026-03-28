@@ -4,15 +4,16 @@ import { AppShell } from "@/components/layouts/app-shell"
 import { CommandPalette } from "@/components/command-palette"
 import { KeyboardHelpDialog } from "@/components/keyboard-help-dialog"
 import { Toaster } from "sonner"
-import { checkAuth } from "@/lib/auth-guard"
+import { checkAuthServer } from "@/lib/auth.server"
 import { QuestPieSpinner } from "@/components/brand"
+import { PageError } from "@/components/feedback"
 import { useSSE } from "@/hooks/use-sse"
 import { useGlobalShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { useAppStore } from "@/stores/app.store"
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: async ({ location }) => {
-    const result = await checkAuth()
+    const result = await checkAuthServer()
 
     // No users → setup wizard
     if (result.noUsersExist) {
@@ -26,7 +27,7 @@ export const Route = createFileRoute("/_app")({
 
     // Needs 2FA
     if (result.needs2FA) {
-      throw redirect({ to: "/login/2fa" })
+      throw redirect({ to: "/login/2fa", search: {} as any })
     }
 
     // Setup not completed → finish setup
@@ -37,8 +38,10 @@ export const Route = createFileRoute("/_app")({
     // Pass user to context for child routes
     return { user: result.user }
   },
-  shouldReload: true,
   pendingComponent: AuthPending,
+  errorComponent: ({ error, reset }) => (
+    <PageError description={error.message} onRetry={reset} />
+  ),
   component: AppLayout,
 })
 
@@ -75,7 +78,7 @@ function AppLayout() {
     onShowHelp: () => setHelpOpen(true),
     onCreateNew: () => {
       // Context-dependent: navigate to task creation
-      void navigate({ to: "/tasks", search: { create: true } as Record<string, unknown> })
+      void navigate({ to: "/tasks", search: { create: true } as any })
     },
     onNavigate: (path: string) => void navigate({ to: path }),
   })

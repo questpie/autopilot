@@ -9,9 +9,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { PageError } from "@/components/feedback"
 
 export const Route = createFileRoute("/_app/files")({
   component: FilesLayout,
+  errorComponent: ({ error, reset }) => (
+    <PageError description={error.message} onRetry={reset} />
+  ),
 })
 
 /**

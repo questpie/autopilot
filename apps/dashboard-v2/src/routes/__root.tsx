@@ -3,15 +3,16 @@ import {
   HeadContent,
   Outlet,
   Scripts,
-  createRootRoute,
+  createRootRouteWithContext,
 } from "@tanstack/react-router"
+import { LazyMotion, domAnimation } from "framer-motion"
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 import { TanStackDevtools } from "@tanstack/react-devtools"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
-import { createQueryClient } from "@/lib/query-client"
 import { useAppStore } from "@/stores/app.store"
 import { initWebVitals } from "@/lib/web-vitals"
+import type { RouterContext } from "@/router"
 import "@/lib/i18n"
 
 // Initialize web vitals reporting
@@ -21,9 +22,7 @@ if (typeof window !== "undefined") {
 
 import appCss from "../styles.css?url"
 
-const queryClient = createQueryClient()
-
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<RouterContext>()({
   head: () => ({
     meta: [
       {
@@ -99,10 +98,13 @@ function useThemeSync() {
 
 function RootComponent() {
   useThemeSync()
+  const { queryClient } = Route.useRouteContext()
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <LazyMotion features={domAnimation} strict>
+        <Outlet />
+      </LazyMotion>
       <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
     </QueryClientProvider>
   )

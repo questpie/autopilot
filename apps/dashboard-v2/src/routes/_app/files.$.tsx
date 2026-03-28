@@ -11,6 +11,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export const Route = createFileRoute("/_app/files/$")({
   component: FilesCatchAll,
+  loader: async ({ context, params }) => {
+    await context.queryClient.ensureQueryData(directoryQuery(params._splat ?? ""))
+  },
 })
 
 /**

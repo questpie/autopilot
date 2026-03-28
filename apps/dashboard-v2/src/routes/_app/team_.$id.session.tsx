@@ -9,6 +9,9 @@ import { SessionView } from "@/features/team/session-view"
 
 export const Route = createFileRoute("/_app/team_/$id/session")({
   component: LiveSessionPage,
+  loader: async ({ context, params }) => {
+    await context.queryClient.ensureQueryData(agentDetailQuery(params.id))
+  },
 })
 
 /**
@@ -34,6 +37,7 @@ function LiveSessionPage() {
           <Button
             variant="ghost"
             size="icon-sm"
+            aria-label={t("a11y.go_back")}
             onClick={() => void navigate({ to: "/team/$id", params: { id } })}
           >
             <ArrowLeftIcon size={16} />

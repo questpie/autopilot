@@ -1,10 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useState, useEffect, useCallback } from "react"
 import { BellIcon, MoonIcon } from "@phosphor-icons/react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "@/lib/i18n"
+import { queryKeys } from "@/lib/query-keys"
 import { SettingsPageHeader } from "@/features/settings/settings-page-header"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
+import { api } from "@/lib/api"
 import { isPushSubscribed, registerPush, unregisterPush } from "@/lib/push"
 
 export const Route = createFileRoute("/_app/settings/notifications")({
@@ -64,10 +68,63 @@ const DEFAULT_QUIET_HOURS: QuietHours = {
 
 function NotificationSettingsPage() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
+
+  const { data: settingsData, isLoading } = useQuery({
+    queryKey: [...queryKeys.notifications.detail("settings")] as string[],
+    queryFn: async () => {
+      const res = await api.api.settings.$get()
+      if (!res.ok) throw new Error("Failed to load settings")
+      const json = await res.json()
+      return json.settings as Record<string, unknown>
+    },
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 flex-col">
+        <SettingsPageHeader
+          title={t("notifications.settings_title")}
+          description={t("notifications.settings_description")}
+        />
+        <div className="p-6">
+          <div className="flex max-w-2xl flex-col gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-9 w-full" />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const loadedRouting = settingsData?.notification_routing as RoutingMatrix | undefined
+  const loadedQuietHours = settingsData?.quiet_hours as QuietHours | undefined
+
+  return (
+    <NotificationSettingsForm
+      initialRouting={loadedRouting ?? DEFAULT_ROUTING}
+      initialQuietHours={loadedQuietHours ?? DEFAULT_QUIET_HOURS}
+      onSaved={() => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.notifications.root })
+      }}
+    />
+  )
+}
+
+function NotificationSettingsForm({
+  initialRouting,
+  initialQuietHours,
+  onSaved,
+}: {
+  initialRouting: RoutingMatrix
+  initialQuietHours: QuietHours
+  onSaved: () => void
+}) {
+  const { t } = useTranslation()
   const [pushEnabled, setPushEnabled] = useState(false)
-  const [routing, setRouting] = useState<RoutingMatrix>(DEFAULT_ROUTING)
-  const [quietHours, setQuietHours] = useState<QuietHours>(DEFAULT_QUIET_HOURS)
-  const [saving, setSaving] = useState(false)
+  const [routing, setRouting] = useState<RoutingMatrix>(initialRouting)
+  const [quietHours, setQuietHours] = useState<QuietHours>(initialQuietHours)
 
   // Check push status on mount
   useEffect(() => {
@@ -102,30 +159,24 @@ function NotificationSettingsPage() {
     }))
   }, [])
 
-  const handleSave = useCallback(async () => {
-    setSaving(true)
-    try {
-      // Save notification preferences to the settings API
-      const res = await fetch("/api/settings", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.api.settings.$patch({
+        json: {
           notification_routing: routing,
           quiet_hours: quietHours,
-        }),
+        },
       })
-      if (res.ok) {
-        toast.success(t("settings.saved"))
-      } else {
-        toast.error(t("common.error"))
-      }
-    } catch {
+      if (!res.ok) throw new Error("Failed to save notification settings")
+    },
+    onSuccess: () => {
+      toast.success(t("settings.saved"))
+      onSaved()
+    },
+    onError: () => {
       toast.error(t("common.error"))
-    } finally {
-      setSaving(false)
-    }
-  }, [routing, quietHours, t])
+    },
+  })
 
   return (
     <div className="flex flex-1 flex-col">
@@ -268,8 +319,8 @@ function NotificationSettingsPage() {
 
           {/* Save */}
           <div className="flex justify-end">
-            <Button onClick={() => void handleSave()} disabled={saving}>
-              {saving ? t("common.saving") : t("settings.save")}
+            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? t("common.saving") : t("settings.save")}
             </Button>
           </div>
         </div>

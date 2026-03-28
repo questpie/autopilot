@@ -1,5 +1,5 @@
 import { CircleIcon, WifiHighIcon, WifiSlashIcon, ArrowsClockwiseIcon } from "@phosphor-icons/react"
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
+import { m, AnimatePresence, useReducedMotion } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
 
@@ -47,7 +47,7 @@ export function ConnectionStatus({
   return (
     <AnimatePresence mode="wait">
       {sseStatus === "connected" && (
-        <motion.span
+        <m.span
           key="connected"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -57,11 +57,11 @@ export function ConnectionStatus({
         >
           <WifiHighIcon size={12} aria-hidden="true" />
           {t("status_bar.connected")}
-        </motion.span>
+        </m.span>
       )}
 
       {sseStatus === "reconnecting" && (
-        <motion.span
+        <m.span
           key="reconnecting"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -75,11 +75,11 @@ export function ConnectionStatus({
             aria-hidden="true"
           />
           {t("status_bar.reconnecting")}
-        </motion.span>
+        </m.span>
       )}
 
       {sseStatus === "offline" && (
-        <motion.span
+        <m.span
           key="offline"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -98,7 +98,7 @@ export function ConnectionStatus({
               {t("common.retry")}
             </button>
           )}
-        </motion.span>
+        </m.span>
       )}
     </AnimatePresence>
   )

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { useTranslation } from "@/lib/i18n"
 import { useForm, FormProvider } from "react-hook-form"
 import { z } from "zod/v4"
@@ -9,8 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
 import { SquareBuildLogo } from "@/components/brand"
 import { EyeIcon, EyeSlashIcon, WarningCircleIcon } from "@phosphor-icons/react"
-import { useState, useRef, useCallback } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { useReducer, useRef, useCallback } from "react"
+import { m, AnimatePresence } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
@@ -28,16 +28,65 @@ export const Route = createFileRoute("/_auth/login")({
   }),
 })
 
+type LoginState = {
+  showPassword: boolean
+  error: string | null
+  showError: boolean
+  failCount: number
+  rateLimitCountdown: number
+}
+
+type LoginAction =
+  | { type: "TOGGLE_PASSWORD" }
+  | { type: "SUBMIT_START" }
+  | { type: "SUBMIT_FAIL"; error: string; rateLimit: boolean }
+  | { type: "COUNTDOWN_TICK" }
+
+const loginInitialState: LoginState = {
+  showPassword: false,
+  error: null,
+  showError: false,
+  failCount: 0,
+  rateLimitCountdown: 0,
+}
+
+function loginReducer(state: LoginState, action: LoginAction): LoginState {
+  switch (action.type) {
+    case "TOGGLE_PASSWORD":
+      return { ...state, showPassword: !state.showPassword }
+    case "SUBMIT_START":
+      return { ...state, error: null, showError: false }
+    case "SUBMIT_FAIL": {
+      const newCount = state.failCount + 1
+      return {
+        ...state,
+        failCount: newCount,
+        error: action.error,
+        showError: true,
+        rateLimitCountdown: action.rateLimit ? 60 : state.rateLimitCountdown,
+      }
+    }
+    case "COUNTDOWN_TICK": {
+      const next = state.rateLimitCountdown - 1
+      if (next <= 0) {
+        return { ...state, rateLimitCountdown: 0, failCount: 0 }
+      }
+      return { ...state, rateLimitCountdown: next }
+    }
+    default:
+      return state
+  }
+}
+
 function LoginPage() {
   const { t } = useTranslation()
+  const router = useRouter()
   const search = Route.useSearch()
   const redirect = search.redirect
 
-  const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [showError, setShowError] = useState(false)
-  const [failCount, setFailCount] = useState(0)
-  const [rateLimitCountdown, setRateLimitCountdown] = useState(0)
+  const [state, dispatch] = useReducer(loginReducer, loginInitialState)
+
+  const { showPassword, error, showError, failCount, rateLimitCountdown } = state
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const form = useForm<LoginValues>({
@@ -46,25 +95,22 @@ function LoginPage() {
   })
 
   const startRateLimitCountdown = useCallback(() => {
-    setRateLimitCountdown(60)
     if (countdownRef.current) clearInterval(countdownRef.current)
+    let ticks = 60
     countdownRef.current = setInterval(() => {
-      setRateLimitCountdown((prev) => {
-        if (prev <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current)
-          setFailCount(0)
-          return 0
-        }
-        return prev - 1
-      })
+      ticks--
+      dispatch({ type: "COUNTDOWN_TICK" })
+      if (ticks <= 0 && countdownRef.current) {
+        clearInterval(countdownRef.current)
+        countdownRef.current = null
+      }
     }, 1000)
   }, [])
 
   const onSubmit = async (values: LoginValues) => {
     if (rateLimitCountdown > 0) return
 
-    setError(null)
-    setShowError(false)
+    dispatch({ type: "SUBMIT_START" })
 
     const result = await authClient.signIn.email({
       email: values.email,
@@ -72,27 +118,28 @@ function LoginPage() {
     })
 
     if (result.error) {
-      const newCount = failCount + 1
-      setFailCount(newCount)
-
-      if (newCount >= 10) {
-        setError(t("auth.error_too_many_attempts", { seconds: 60 }))
+      const shouldRateLimit = failCount + 1 >= 10
+      dispatch({
+        type: "SUBMIT_FAIL",
+        error: shouldRateLimit
+          ? t("auth.error_too_many_attempts", { seconds: 60 })
+          : (result.error.message ?? t("auth.error_invalid_credentials")),
+        rateLimit: shouldRateLimit,
+      })
+      if (shouldRateLimit) {
         startRateLimitCountdown()
-      } else {
-        setError(result.error.message ?? t("auth.error_invalid_credentials"))
       }
-      setShowError(true)
       return
     }
 
     // Check if 2FA is needed -- Better Auth returns redirect=true for 2FA
     if (result.data?.redirect) {
-      window.location.href = "/login/2fa"
+      void router.invalidate().then(() => router.navigate({ to: "/login/2fa", search: {} as any }))
       return
     }
 
     // Success: redirect
-    window.location.href = redirect ?? "/"
+    void router.invalidate().then(() => router.navigate({ to: redirect ?? "/" }))
   }
 
   const isRateLimited = rateLimitCountdown > 0
@@ -117,7 +164,7 @@ function LoginPage() {
       {/* Error alert */}
       <AnimatePresence>
         {showError && error && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
             exit={{ opacity: 0 }}
@@ -131,7 +178,7 @@ function LoginPage() {
                   : error}
               </AlertDescription>
             </Alert>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
@@ -183,7 +230,7 @@ function LoginPage() {
                 type="button"
                 tabIndex={-1}
                 className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => setShowPassword(!showPassword)}
+                onClick={() => dispatch({ type: "TOGGLE_PASSWORD" })}
                 aria-label={showPassword ? t("a11y.hide_password") : t("a11y.show_password")}
               >
                 {showPassword ? (

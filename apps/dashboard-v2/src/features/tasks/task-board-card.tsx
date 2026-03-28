@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { ClockIcon } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 import { SPRING } from "@/lib/motion"
@@ -44,7 +44,7 @@ export function TaskBoardCard({
   }
 
   return (
-    <motion.div
+    <m.div
       layoutId={isDragOverlay ? undefined : task.id}
       layout={!isDragOverlay}
       transition={SPRING.snappy}
@@ -89,6 +89,6 @@ export function TaskBoardCard({
           {formatTimeAgo(task.updated_at)}
         </span>
       </div>
-    </motion.div>
+    </m.div>
   )
 }

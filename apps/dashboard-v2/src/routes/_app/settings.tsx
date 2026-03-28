@@ -1,8 +1,12 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router"
 import { SettingsNav } from "@/features/settings/settings-nav"
+import { PageError } from "@/components/feedback"
 
 export const Route = createFileRoute("/_app/settings")({
   component: SettingsLayout,
+  errorComponent: ({ error, reset }) => (
+    <PageError description={error.message} onRetry={reset} />
+  ),
 })
 
 /**

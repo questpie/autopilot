@@ -1,4 +1,4 @@
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { EASING, DURATION, SPRING, useMotionPreference } from "@/lib/motion"
@@ -35,16 +35,16 @@ export function EmptyState({
       )}
     >
       {icon && (
-        <motion.div
+        <m.div
           initial={shouldReduce ? false : { scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={shouldReduce ? { duration: 0 } : { ...SPRING.bouncy, duration: 0.5 }}
           className="text-muted-foreground"
         >
           {icon}
-        </motion.div>
+        </m.div>
       )}
-      <motion.div
+      <m.div
         initial={shouldReduce ? false : { opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{
@@ -58,7 +58,7 @@ export function EmptyState({
           {message}
         </p>
         {description && (
-          <motion.p
+          <m.p
             initial={shouldReduce ? false : { opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{
@@ -69,11 +69,11 @@ export function EmptyState({
             className="max-w-sm text-xs text-muted-foreground"
           >
             {description}
-          </motion.p>
+          </m.p>
         )}
-      </motion.div>
+      </m.div>
       {action && (
-        <motion.div
+        <m.div
           initial={shouldReduce ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{
@@ -84,7 +84,7 @@ export function EmptyState({
           <Button variant="outline" size="sm" onClick={action.onClick}>
             {action.label}
           </Button>
-        </motion.div>
+        </m.div>
       )}
     </div>
   )

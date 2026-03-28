@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react"
+import { useState } from "react"
 import { useForm, FormProvider, useFormContext, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   EyeIcon,
   EyeSlashIcon,
@@ -15,9 +15,12 @@ import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { FormSection, FormSelect, FormActions } from "@/components/forms"
+import { FormSection, FormSelect } from "@/components/forms"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+
+type ProviderName = "claude" | "openai" | "gemini"
+type ProviderStatus = { configured: boolean; model?: string }
 
 const providerSchema = z.object({
   claudeApiKey: z.string(),
@@ -55,6 +58,15 @@ const EMBEDDINGS_OPTIONS = [
 export function ProviderForm() {
   const { t } = useTranslation()
 
+  const { data: providerStatus } = useQuery({
+    queryKey: ["settings", "providers"],
+    queryFn: async () => {
+      const res = await api.api.settings.providers.$get()
+      if (!res.ok) throw new Error("Failed to load provider status")
+      return (await res.json()) as Record<ProviderName, ProviderStatus>
+    },
+  })
+
   const methods = useForm<ProviderFormValues>({
     resolver: zodResolver(providerSchema),
     defaultValues: {
@@ -66,39 +78,30 @@ export function ProviderForm() {
     },
   })
 
-  const saveMutation = useMutation({
-    mutationFn: async (values: ProviderFormValues) => {
-      // Save provider config via environment/config endpoint
-      const res = await api.api.files[":path{.+}"].$put({
-        param: { path: ".env" },
-        json: { content: buildEnvContent(values) },
-      })
-      if (!res.ok) throw new Error("Failed to save provider configuration")
-    },
-    onSuccess: () => toast.success(t("settings.saved")),
-    onError: (err) => toast.error((err as Error).message),
-  })
-
   return (
     <FormProvider {...methods}>
       <form
-        onSubmit={methods.handleSubmit((v) => saveMutation.mutate(v))}
+        onSubmit={(e) => e.preventDefault()}
         className="flex max-w-lg flex-col gap-8"
       >
         <ProviderCard
           title={t("settings.provider_claude")}
           description={t("settings.provider_claude_desc")}
+          provider="claude"
           apiKeyName="claudeApiKey"
           modelName="claudeModel"
           modelOptions={CLAUDE_MODELS}
+          configured={providerStatus?.claude?.configured}
         />
 
         <ProviderCard
           title={t("settings.provider_openai")}
           description={t("settings.provider_openai_desc")}
+          provider="openai"
           apiKeyName="openaiApiKey"
           modelName="openaiModel"
           modelOptions={OPENAI_MODELS}
+          configured={providerStatus?.openai?.configured}
         />
 
         <FormSection
@@ -110,18 +113,6 @@ export function ProviderForm() {
             options={EMBEDDINGS_OPTIONS}
           />
         </FormSection>
-
-        <FormActions>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={saveMutation.isPending}
-            className="gap-1.5"
-          >
-            <FloppyDiskIcon size={14} />
-            {t("settings.save")}
-          </Button>
-        </FormActions>
       </form>
     </FormProvider>
   )
@@ -130,36 +121,68 @@ export function ProviderForm() {
 function ProviderCard({
   title,
   description,
+  provider,
   apiKeyName,
   modelName,
   modelOptions,
+  configured,
 }: {
   title: string
   description: string
+  provider: ProviderName
   apiKeyName: string
   modelName: string
   modelOptions: Array<{ value: string; label: string }>
+  configured?: boolean
 }) {
   const { t } = useTranslation()
   const { control, getValues } = useFormContext()
+  const queryClient = useQueryClient()
   const [showKey, setShowKey] = useState(false)
-  const [testStatus, setTestStatus] = useState<"idle" | "testing" | "success" | "failed">("idle")
 
-  const handleTest = useCallback(async () => {
-    const key = getValues(apiKeyName)
-    if (!key) return
-    setTestStatus("testing")
-    try {
-      // Simulate a connection test
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      setTestStatus(key.length > 10 ? "success" : "failed")
-    } catch {
-      setTestStatus("failed")
-    }
-  }, [apiKeyName, getValues])
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const key = getValues(apiKeyName) as string
+      if (!key) throw new Error("API key is required")
+      const res = await api.api.settings.providers[":provider"].$post({
+        param: { provider },
+        json: { apiKey: key },
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(body.error ?? `Failed to save ${provider} key`)
+      }
+    },
+    onSuccess: () => {
+      toast.success(t("settings.saved"))
+      void queryClient.invalidateQueries({ queryKey: ["settings", "providers"] })
+    },
+    onError: (err) => toast.error((err as Error).message),
+  })
+
+  const saveStatus = saveMutation.isSuccess
+    ? "success"
+    : saveMutation.isError
+      ? "failed"
+      : saveMutation.isPending
+        ? "saving"
+        : "idle"
 
   return (
-    <FormSection title={title} description={description}>
+    <FormSection
+      title={
+        <span className="flex items-center gap-2">
+          {title}
+          {configured && saveStatus === "idle" && (
+            <Badge variant="secondary" className="rounded-none text-[10px] text-green-400">
+              <CheckCircleIcon size={10} className="mr-0.5" />
+              {t("settings.provider_configured")}
+            </Badge>
+          )}
+        </span>
+      }
+      description={description}
+    >
       <div className="flex flex-col gap-3">
         {/* API Key with visibility toggle */}
         <Controller
@@ -174,7 +197,11 @@ function ProviderCard({
                 <input
                   {...field}
                   type={showKey ? "text" : "password"}
-                  placeholder={t("settings.provider_api_key_placeholder")}
+                  placeholder={
+                    configured
+                      ? t("settings.provider_api_key_configured")
+                      : t("settings.provider_api_key_placeholder")
+                  }
                   className={cn(
                     "flex h-9 w-full rounded-none border border-input bg-transparent px-3 pr-8 py-1 text-sm transition-colors",
                     "placeholder:text-muted-foreground",
@@ -204,23 +231,24 @@ function ProviderCard({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => void handleTest()}
-            disabled={testStatus === "testing"}
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
             className="gap-1.5 text-xs"
           >
-            {testStatus === "testing" && <CircleNotchIcon size={12} className="animate-spin" />}
-            {testStatus === "success" && <CheckCircleIcon size={12} className="text-green-500" />}
-            {testStatus === "failed" && <XCircleIcon size={12} className="text-red-500" />}
-            {t("settings.provider_test_connection")}
+            {saveStatus === "saving" && <CircleNotchIcon size={12} className="animate-spin" />}
+            {saveStatus === "success" && <CheckCircleIcon size={12} className="text-green-500" />}
+            {saveStatus === "failed" && <XCircleIcon size={12} className="text-red-500" />}
+            {saveStatus === "idle" && <FloppyDiskIcon size={12} />}
+            {t("settings.provider_save_key")}
           </Button>
-          {testStatus === "success" && (
+          {saveStatus === "success" && (
             <Badge variant="secondary" className="rounded-none text-[10px] text-green-400">
               {t("settings.provider_test_success")}
             </Badge>
           )}
-          {testStatus === "failed" && (
+          {saveStatus === "failed" && (
             <Badge variant="secondary" className="rounded-none text-[10px] text-red-400">
-              {t("settings.provider_test_failed")}
+              {saveMutation.error?.message ?? t("settings.provider_test_failed")}
             </Badge>
           )}
         </div>
@@ -229,12 +257,3 @@ function ProviderCard({
   )
 }
 
-function buildEnvContent(values: ProviderFormValues): string {
-  const lines: string[] = []
-  if (values.claudeApiKey) lines.push(`ANTHROPIC_API_KEY=${values.claudeApiKey}`)
-  if (values.claudeModel) lines.push(`CLAUDE_MODEL=${values.claudeModel}`)
-  if (values.openaiApiKey) lines.push(`OPENAI_API_KEY=${values.openaiApiKey}`)
-  if (values.openaiModel) lines.push(`OPENAI_MODEL=${values.openaiModel}`)
-  if (values.embeddingsProvider) lines.push(`EMBEDDINGS_PROVIDER=${values.embeddingsProvider}`)
-  return lines.join("\n") + "\n"
-}

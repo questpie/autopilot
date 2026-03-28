@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, m } from "framer-motion"
 import {
   WarningIcon,
   XCircleIcon,
@@ -56,7 +56,7 @@ function AlertItemCard({ item }: { item: AlertItem }) {
   const isLoading = approveMutation.isPending || rejectMutation.isPending
 
   return (
-    <motion.div
+    <m.div
       layout
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -115,7 +115,7 @@ function AlertItemCard({ item }: { item: AlertItem }) {
           </Button>
         ))}
       </div>
-    </motion.div>
+    </m.div>
   )
 }
 

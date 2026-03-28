@@ -14,6 +14,12 @@ import { useCallback, useState } from 'react'
 
 export const Route = createFileRoute('/_app/activity')({
 	component: ActivityPage,
+	loader: async ({ context }) => {
+		await Promise.all([
+			context.queryClient.ensureQueryData(activityQuery({ limit: 50 })),
+			context.queryClient.ensureQueryData(agentsQuery),
+		])
+	},
 })
 
 const ACTION_TYPES = [
@@ -133,8 +139,8 @@ function ActivityPage() {
 				<>
 					<div className="border border-border">
 						<AnimatePresence mode="popLayout">
-							{filteredEntries.map((entry, i) => (
-								<ActivityItemRow key={`${entry.at}-${entry.agent}-${i}`} entry={entry} showDate />
+							{filteredEntries.map((entry) => (
+								<ActivityItemRow key={`${entry.at}-${entry.agent}-${entry.type}`} entry={entry} showDate />
 							))}
 						</AnimatePresence>
 					</div>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { motion, AnimatePresence } from "framer-motion"
+import { m, AnimatePresence } from "framer-motion"
 import { BellIcon } from "@phosphor-icons/react"
 import { useTranslation } from "@/lib/i18n"
 import { SPRING, useMotionPreference } from "@/lib/motion"
@@ -45,7 +45,7 @@ export function NotificationBell() {
 
   return (
     <div ref={containerRef} className="relative">
-      <motion.button
+      <m.button
         type="button"
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.92 }}
@@ -59,7 +59,7 @@ export function NotificationBell() {
         {/* Unread badge */}
         <AnimatePresence mode="wait">
           {unreadCount > 0 && (
-            <motion.span
+            <m.span
               key={unreadCount}
               initial={shouldReduce ? false : { scale: 0.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -68,15 +68,15 @@ export function NotificationBell() {
               className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center bg-destructive px-0.5 text-[9px] font-bold text-white"
             >
               {unreadCount > 99 ? "99+" : unreadCount}
-            </motion.span>
+            </m.span>
           )}
         </AnimatePresence>
-      </motion.button>
+      </m.button>
 
       {/* Dropdown */}
       <AnimatePresence>
         {open && (
-          <motion.div
+          <m.div
             initial={shouldReduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={shouldReduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.97 }}
@@ -84,7 +84,7 @@ export function NotificationBell() {
             className="absolute right-0 top-full z-50 mt-1"
           >
             <NotificationDropdown onClose={() => setOpen(false)} />
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

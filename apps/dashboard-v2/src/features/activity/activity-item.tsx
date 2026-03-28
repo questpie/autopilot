@@ -14,7 +14,7 @@ import {
 	XCircleIcon,
 } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
-import { motion } from 'framer-motion'
+import { m } from 'framer-motion'
 
 interface ActivityEntry {
 	at: string
@@ -70,7 +70,7 @@ export function ActivityItemRow({
 	const ActionIcon = ACTION_ICONS[entry.type] ?? LightningIcon
 
 	return (
-		<motion.div
+		<m.div
 			layout
 			initial={{ opacity: 0, y: -4 }}
 			animate={{ opacity: 1, y: 0 }}
@@ -112,6 +112,6 @@ export function ActivityItemRow({
 					<ResourceLinker text={entry.summary} />
 				</div>
 			</div>
-		</motion.div>
+		</m.div>
 	)
 }

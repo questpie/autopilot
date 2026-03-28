@@ -18,6 +18,12 @@ import { api } from "@/lib/api"
 
 export const Route = createFileRoute("/_app/settings/git")({
   component: SettingsGitPage,
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData({
+      ...fileContentQuery("company.yaml"),
+      queryKey: [...queryKeys.company.detail("git")] as string[],
+    })
+  },
 })
 
 const gitSchema = z.object({

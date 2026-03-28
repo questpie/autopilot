@@ -18,13 +18,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useTranslation } from "@/lib/i18n"
-import { channelDetailQuery } from "@/features/chat/chat.queries"
+import { channelDetailQuery, messagesQuery } from "@/features/chat/chat.queries"
 import { Conversation } from "@/features/chat/conversation"
 import { MessageInput } from "@/features/chat/message-input"
 import { ChannelMembers } from "@/features/chat/channel-members"
 
 export const Route = createFileRoute("/_app/chat/$channelId")({
   component: ChatConversationPage,
+  loader: async ({ context, params }) => {
+    await Promise.all([
+      context.queryClient.ensureQueryData(channelDetailQuery(params.channelId)),
+      context.queryClient.ensureQueryData(messagesQuery(params.channelId)),
+    ])
+  },
 })
 
 function ChatConversationPage() {
@@ -75,12 +81,12 @@ function ChatConversationPage() {
           >
             <UsersIcon size={14} />
           </Button>
-          <Button variant="ghost" size="icon-sm">
+          <Button variant="ghost" size="icon-sm" aria-label={t("chat.pin")}>
             <PushPinIcon size={14} />
           </Button>
 
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("a11y.more_options")} />}>
                 <DotsThreeIcon size={14} weight="bold" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

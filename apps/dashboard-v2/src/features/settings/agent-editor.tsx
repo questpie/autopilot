@@ -30,12 +30,12 @@ export function AgentEditor() {
   // Load raw YAML
   const loadYaml = useCallback(async () => {
     const res = await api.api.fs[":path{.+}"].$get({ param: { path: "agents.yaml" } })
-    if (!res.ok) throw new Error("Failed to load agents.yaml")
+    if (!res.ok) throw new Error(t("errors.failed_load_agents"))
     const data = await res.text()
     setYamlContent(data)
     setEditing(true)
     setYamlError(null)
-  }, [])
+  }, [t])
 
   // Save YAML
   const saveMutation = useMutation({
@@ -44,7 +44,7 @@ export function AgentEditor() {
         param: { path: "agents.yaml" },
         json: { content },
       })
-      if (!res.ok) throw new Error("Failed to save agents.yaml")
+      if (!res.ok) throw new Error(t("errors.failed_save_agents"))
     },
     onSuccess: () => {
       toast.success(t("settings.saved"))
@@ -60,7 +60,7 @@ export function AgentEditor() {
     // Basic YAML validation — check for obvious issues
     try {
       if (!yamlContent.includes("agents:")) {
-        setYamlError("YAML must contain an 'agents:' key")
+        setYamlError(t("errors.yaml_missing_agents_key"))
         return
       }
       setYamlError(null)

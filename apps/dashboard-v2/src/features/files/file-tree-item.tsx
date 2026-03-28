@@ -2,7 +2,7 @@ import { useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate, useMatches } from "@tanstack/react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
-import { motion, AnimatePresence } from "framer-motion"
+import { m, AnimatePresence } from "framer-motion"
 import {
   FolderSimpleIcon,
   CaretRightIcon,
@@ -129,7 +129,7 @@ export function FileTreeItem({ entry, parentPath, depth }: FileTreeItemProps) {
       {isDir && (
         <AnimatePresence initial={false}>
           {isExpanded && sortedChildren.length > 0 && (
-            <motion.div
+            <m.div
               key="children"
               initial={shouldReduce ? false : { height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
@@ -148,7 +148,7 @@ export function FileTreeItem({ entry, parentPath, depth }: FileTreeItemProps) {
                   depth={depth + 1}
                 />
               ))}
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       )}

@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from "framer-motion"
+import { m, useReducedMotion } from "framer-motion"
 import { t } from "@/lib/i18n"
 
 interface QuestPieSpinnerProps {
@@ -43,7 +43,7 @@ export function QuestPieSpinner({
       />
 
       {/* Orbiting purple square */}
-      <motion.g
+      <m.g
         animate={
           shouldReduceMotion ? undefined : { rotate: 360 }
         }
@@ -61,7 +61,7 @@ export function QuestPieSpinner({
           height={squareSize}
           fill="var(--color-primary)"
         />
-      </motion.g>
+      </m.g>
     </svg>
   )
 }

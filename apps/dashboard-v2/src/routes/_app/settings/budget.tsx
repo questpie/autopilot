@@ -18,6 +18,12 @@ import { api } from "@/lib/api"
 
 export const Route = createFileRoute("/_app/settings/budget")({
   component: SettingsBudgetPage,
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData({
+      ...fileContentQuery("company.yaml"),
+      queryKey: [...queryKeys.company.detail("budget")] as string[],
+    })
+  },
 })
 
 const budgetSchema = z.object({

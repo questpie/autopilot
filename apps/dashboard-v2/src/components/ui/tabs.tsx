@@ -1,6 +1,6 @@
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
 import { cva, type VariantProps } from "class-variance-authority"
-import { motion, LayoutGroup } from "framer-motion"
+import { m, LayoutGroup } from "framer-motion"
 
 import { cn } from "@/lib/utils"
 import { SPRING, useMotionPreference } from "@/lib/motion"
@@ -109,7 +109,7 @@ function TabsIndicator({
   }
 
   return (
-    <motion.div
+    <m.div
       layoutId={layoutId}
       className={cn(
         "absolute inset-x-0 bottom-[-5px] h-0.5 bg-foreground",

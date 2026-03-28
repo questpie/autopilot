@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { CircleIcon, PlayIcon, UsersIcon } from "@phosphor-icons/react"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
@@ -23,7 +23,7 @@ function AgentStatusCard({ agent }: { agent: AgentStatus }) {
   const navigate = useNavigate()
 
   return (
-    <motion.div
+    <m.div
       layout
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
@@ -77,7 +77,7 @@ function AgentStatusCard({ agent }: { agent: AgentStatus }) {
           {t("dashboard.attach")}
         </Button>
       </Link>
-    </motion.div>
+    </m.div>
   )
 }
 

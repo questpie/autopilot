@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react"
-import { motion, useReducedMotion } from "framer-motion"
+import { m, useReducedMotion } from "framer-motion"
 import { useDrag } from "@use-gesture/react"
 import { QuestPieSpinner } from "@/components/brand/questpie-spinner"
 
@@ -70,7 +70,7 @@ export function PullToRefresh({
     <div className={["relative overflow-hidden", className].filter(Boolean).join(" ")}>
       {/* Spinner area */}
       {showSpinner && (
-        <motion.div
+        <m.div
           initial={false}
           animate={{
             height: shouldReduce ? (refreshing ? 48 : 0) : pullDistance,
@@ -80,7 +80,7 @@ export function PullToRefresh({
           className="flex items-center justify-center overflow-hidden"
         >
           <QuestPieSpinner size={24} />
-        </motion.div>
+        </m.div>
       )}
 
       {/* Scrollable content */}

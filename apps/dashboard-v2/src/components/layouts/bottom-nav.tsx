@@ -12,7 +12,7 @@ import {
   PaintBrushIcon,
   GearIcon,
 } from "@phosphor-icons/react"
-import { motion, LayoutGroup } from "framer-motion"
+import { m, LayoutGroup } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { BottomSheet } from "@/components/mobile/bottom-sheet"
 import { SPRING, useMotionPreference } from "@/lib/motion"
@@ -91,7 +91,7 @@ export function BottomNav() {
                 {active && (shouldReduce ? (
                   <div className={indicatorClass} />
                 ) : (
-                  <motion.div
+                  <m.div
                     layoutId="bottom-nav-indicator"
                     className={indicatorClass}
                     transition={SPRING.snappy}
@@ -113,7 +113,7 @@ export function BottomNav() {
             {moreActive && (shouldReduce ? (
               <div className={indicatorClass} />
             ) : (
-              <motion.div
+              <m.div
                 layoutId="bottom-nav-indicator"
                 className={indicatorClass}
                 transition={SPRING.snappy}

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, m } from "framer-motion"
 import {
   TrayIcon,
   FunnelIcon,
@@ -20,6 +20,9 @@ import type { Task, Pin } from "@/features/inbox/inbox-card"
 
 export const Route = createFileRoute("/_app/inbox")({
   component: InboxPage,
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(inboxQuery)
+  },
 })
 
 type FilterType = "all" | "merge" | "approve" | "deploy" | "review"
@@ -117,7 +120,7 @@ function InboxPage() {
           {t("inbox.resolved")}
         </button>
         {resolvedOpen && (
-          <motion.div
+          <m.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -128,7 +131,7 @@ function InboxPage() {
               message={t("inbox.no_resolved")}
               className="py-6"
             />
-          </motion.div>
+          </m.div>
         )}
       </div>
     </PageTransition>

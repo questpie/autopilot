@@ -1,4 +1,4 @@
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
+import { m, AnimatePresence, useReducedMotion } from "framer-motion"
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
@@ -33,7 +33,7 @@ export function AnimatedSheet({
       {open && (
         <>
           {/* Backdrop */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -44,7 +44,7 @@ export function AnimatedSheet({
           />
 
           {/* Sheet panel */}
-          <motion.div
+          <m.div
             initial={{ x: shouldReduce ? 0 : xOffset }}
             animate={{ x: 0 }}
             exit={{ x: shouldReduce ? 0 : xOffset }}
@@ -62,7 +62,7 @@ export function AnimatedSheet({
             aria-modal="true"
           >
             {children}
-          </motion.div>
+          </m.div>
         </>
       )}
     </AnimatePresence>

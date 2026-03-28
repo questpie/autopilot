@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { m, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { t } from "@/lib/i18n"
 import { EASING, DURATION, useMotionPreference } from "@/lib/motion"
@@ -75,23 +75,23 @@ export function ContentTransition({
   return (
     <AnimatePresence mode="wait">
       {isLoading ? (
-        <motion.div
+        <m.div
           key="skeleton"
           initial={shouldReduce ? false : { opacity: 1 }}
           exit={shouldReduce ? undefined : { opacity: 0 }}
           transition={{ duration: DURATION.fast, ease: EASING.enter }}
         >
           {skeleton}
-        </motion.div>
+        </m.div>
       ) : (
-        <motion.div
+        <m.div
           key="content"
           initial={shouldReduce ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: DURATION.normal, ease: EASING.enter }}
         >
           {children}
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   )

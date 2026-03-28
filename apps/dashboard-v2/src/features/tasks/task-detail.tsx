@@ -112,6 +112,7 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
             <Button
               variant="ghost"
               size="icon-sm"
+              aria-label={t("a11y.close")}
               onClick={onClose}
               className="md:hidden"
             >
@@ -147,7 +148,7 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
               </>
             )}
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+              <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("a11y.more_options")} />}>
                   <DotsThreeIcon size={16} weight="bold" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">

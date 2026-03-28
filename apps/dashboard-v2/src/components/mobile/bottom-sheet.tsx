@@ -1,5 +1,5 @@
 import { useRef, useCallback, type ReactNode } from "react"
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
+import { m, AnimatePresence, useReducedMotion } from "framer-motion"
 import { useDrag } from "@use-gesture/react"
 import { MinusIcon } from "@phosphor-icons/react"
 
@@ -89,7 +89,7 @@ export function BottomSheet({
       {open && (
         <>
           {/* Backdrop */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -100,7 +100,7 @@ export function BottomSheet({
           />
 
           {/* Sheet */}
-          <motion.div
+          <m.div
             ref={sheetRef}
             initial={{
               y: shouldReduce ? 0 : "100%",
@@ -143,7 +143,7 @@ export function BottomSheet({
 
             {/* Content */}
             <div className="flex-1 overflow-auto px-4 pb-4">{children}</div>
-          </motion.div>
+          </m.div>
         </>
       )}
     </AnimatePresence>

@@ -1,4 +1,4 @@
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import {
   CheckCircleIcon,
   WarningIcon,
@@ -87,7 +87,7 @@ export function NotificationItem({
   }
 
   return (
-    <motion.button
+    <m.button
       type="button"
       layout
       initial={shouldReduce ? false : { opacity: 0, y: 4 }}
@@ -137,7 +137,7 @@ export function NotificationItem({
       >
         <XIcon size={12} />
       </button>
-    </motion.button>
+    </m.button>
   )
 }
 

@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   KeyIcon,
   TrashIcon,
-  ArrowsClockwiseIcon,
   InfoIcon,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
@@ -44,7 +43,7 @@ function parseSecretYaml(content: string): SecretEntry {
 }
 
 /**
- * Secrets management — list, add, rotate, delete.
+ * Secrets management — list, add, delete.
  * Values are never displayed.
  */
 export function SecretsManagement() {
@@ -121,17 +120,6 @@ export function SecretsManagement() {
                   <span className="font-heading text-sm font-medium">{secret.name}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1 text-[10px] text-muted-foreground"
-                    onClick={() => {
-                      toast.success(t("settings.secret_rotated"))
-                    }}
-                  >
-                    <ArrowsClockwiseIcon size={12} />
-                    {t("settings.secret_rotate")}
-                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

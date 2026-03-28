@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, m } from "framer-motion"
 import { ArrowDownIcon } from "@phosphor-icons/react"
 import { messagesQuery } from "./chat.queries"
 import { MessageBubble } from "./message-bubble"
@@ -143,7 +143,7 @@ export function Conversation({ channelId, compact = false }: ConversationProps) 
               const slideX = msg.external ? -12 : 12
 
               return (
-                <motion.div
+                <m.div
                   key={msg.id}
                   initial={shouldReduce ? false : { opacity: 0, x: slideX }}
                   animate={{ opacity: 1, x: 0 }}
@@ -159,7 +159,7 @@ export function Conversation({ channelId, compact = false }: ConversationProps) 
                     isSending={isSending}
                     compact={compact}
                   />
-                </motion.div>
+                </m.div>
               )
             }
 

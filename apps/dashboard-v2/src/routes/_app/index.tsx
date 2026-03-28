@@ -2,8 +2,17 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useTranslation } from "@/lib/i18n"
 import { DashboardGroups } from "@/features/dashboard/dashboard-groups"
 import { PageTransition } from "@/components/layouts/page-transition"
+import { dashboardGroupsQuery, dashboardWidgetsQuery } from "@/features/dashboard/dashboard.queries"
 
-export const Route = createFileRoute("/_app/")({ component: DashboardHome })
+export const Route = createFileRoute("/_app/")({
+  component: DashboardHome,
+  loader: async ({ context }) => {
+    await Promise.all([
+      context.queryClient.ensureQueryData(dashboardGroupsQuery),
+      context.queryClient.ensureQueryData(dashboardWidgetsQuery),
+    ])
+  },
+})
 
 function DashboardHome() {
   const { t } = useTranslation()

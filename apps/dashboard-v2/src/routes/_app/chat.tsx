@@ -7,9 +7,16 @@ import { ChannelList } from "@/features/chat/channel-list"
 import { ChannelListSkeleton } from "@/features/chat/chat-skeletons"
 import { ChannelListEmpty } from "@/features/chat/chat-empty-states"
 import { ChannelCreateDialog } from "@/features/chat/channel-create-dialog"
+import { PageError } from "@/components/feedback"
 
 export const Route = createFileRoute("/_app/chat")({
   component: ChatLayout,
+  errorComponent: ({ error, reset }) => (
+    <PageError description={error.message} onRetry={reset} />
+  ),
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(channelsQuery)
+  },
 })
 
 interface Channel {

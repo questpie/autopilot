@@ -10,6 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export const Route = createFileRoute("/_app/files/")({
   component: FilesIndex,
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(directoryQuery(""))
+  },
 })
 
 /**

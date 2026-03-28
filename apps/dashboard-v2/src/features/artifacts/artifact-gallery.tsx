@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { RowsIcon, SquaresFourIcon, PaintBrushIcon } from "@phosphor-icons/react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -79,7 +79,7 @@ export function ArtifactGallery() {
       {view === "grid" ? (
         <div className="grid grid-cols-1 gap-3 px-6 pb-6 md:grid-cols-2 lg:grid-cols-3">
           {artifacts.map((artifact, i) => (
-            <motion.div
+            <m.div
               key={artifact.id}
               initial={shouldReduce ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -90,13 +90,13 @@ export function ArtifactGallery() {
               }}
             >
               <ArtifactCard artifact={artifact} view="grid" />
-            </motion.div>
+            </m.div>
           ))}
         </div>
       ) : (
         <div className="flex flex-col">
           {artifacts.map((artifact, i) => (
-            <motion.div
+            <m.div
               key={artifact.id}
               initial={shouldReduce ? false : { opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
@@ -107,7 +107,7 @@ export function ArtifactGallery() {
               }}
             >
               <ArtifactCard artifact={artifact} view="list" />
-            </motion.div>
+            </m.div>
           ))}
         </div>
       )}

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { useTranslation } from "@/lib/i18n"
 import { useForm, FormProvider } from "react-hook-form"
 import { z } from "zod/v4"
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { EyeIcon, EyeSlashIcon, WarningCircleIcon, ShieldWarningIcon } from "@phosphor-icons/react"
 import { useState, useMemo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { m, AnimatePresence } from "framer-motion"
 import { zxcvbnAsync, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPkg from "@zxcvbn-ts/language-common"
 import * as zxcvbnEnPkg from "@zxcvbn-ts/language-en"
@@ -39,15 +39,11 @@ type SignupValues = z.infer<typeof signupSchema>
 
 export const Route = createFileRoute("/_auth/signup")({
   component: SignupPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    token: (search.token as string) || undefined,
+    email: (search.email as string) || undefined,
+  }),
 })
-
-function useSignupSearch() {
-  const searchParams = new URLSearchParams(window.location.search)
-  return {
-    token: searchParams.get("token") ?? undefined,
-    email: searchParams.get("email") ?? undefined,
-  }
-}
 
 function PasswordStrengthMeter({ score }: { score: number }) {
   const { t } = useTranslation()
@@ -73,7 +69,7 @@ function PasswordStrengthMeter({ score }: { score: number }) {
       <div className="flex gap-1">
         {[0, 1, 2, 3].map((i) => (
           <div
-            key={i}
+            key={`strength-${i}`}
             className={`h-1 flex-1 transition-colors ${
               i <= score - 1 ? colors[score] : "bg-muted"
             }`}
@@ -89,7 +85,8 @@ function PasswordStrengthMeter({ score }: { score: number }) {
 
 function SignupPage() {
   const { t } = useTranslation()
-  const { token, email } = useSignupSearch()
+  const router = useRouter()
+  const { token, email } = Route.useSearch()
 
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -131,7 +128,7 @@ function SignupPage() {
       return
     }
 
-    window.location.href = "/"
+    void router.invalidate().then(() => router.navigate({ to: "/" }))
   }
 
   // No invite token -- show invite-only message
@@ -179,7 +176,7 @@ function SignupPage() {
       {/* Error */}
       <AnimatePresence>
         {error && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -188,7 +185,7 @@ function SignupPage() {
               <WarningCircleIcon className="size-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 

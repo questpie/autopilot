@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from "framer-motion"
+import { m, useReducedMotion } from "framer-motion"
 import type { ReactNode } from "react"
 
 interface PageTransitionProps {
@@ -29,7 +29,7 @@ export function PageTransition({ children, className }: PageTransitionProps) {
   const shouldReduce = useReducedMotion()
 
   return (
-    <motion.div
+    <m.div
       variants={shouldReduce ? reducedVariants : variants}
       initial="initial"
       animate="animate"
@@ -41,7 +41,7 @@ export function PageTransition({ children, className }: PageTransitionProps) {
       className={className}
     >
       {children}
-    </motion.div>
+    </m.div>
   )
 }
 
@@ -52,12 +52,12 @@ export function StaggerChild({ children, className }: PageTransitionProps) {
   const shouldReduce = useReducedMotion()
 
   return (
-    <motion.div
+    <m.div
       variants={shouldReduce ? reducedVariants : variants}
       transition={{ duration: shouldReduce ? 0 : 0.2 }}
       className={className}
     >
       {children}
-    </motion.div>
+    </m.div>
   )
 }

@@ -1,4 +1,4 @@
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { ClockIcon } from "@phosphor-icons/react"
 import { cn } from "@/lib/utils"
 
@@ -67,7 +67,7 @@ export function TaskListItem({
   onToggleSelection,
 }: TaskListItemProps) {
   return (
-    <motion.div
+    <m.div
       layout
       layoutId={task.id}
       initial={{ opacity: 0, y: 4 }}
@@ -154,7 +154,7 @@ export function TaskListItem({
         <ClockIcon size={11} />
         {formatTimeAgo(task.updated_at)}
       </span>
-    </motion.div>
+    </m.div>
   )
 }
 

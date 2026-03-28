@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, m } from "framer-motion"
 import { ArrowRightIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { useTranslation } from "@/lib/i18n"
@@ -25,7 +25,7 @@ function formatTime(dateStr: string): string {
 
 function ActivityItem({ entry }: { entry: ActivityEntry }) {
   return (
-    <motion.div
+    <m.div
       layout
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
@@ -45,7 +45,7 @@ function ActivityItem({ entry }: { entry: ActivityEntry }) {
       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
         {entry.summary}
       </span>
-    </motion.div>
+    </m.div>
   )
 }
 

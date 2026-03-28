@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { dashboardGroupsQuery } from "./dashboard.queries"
 import { AlertsSection } from "./alerts-section"
 import { AgentsSection } from "./agents-section"
@@ -30,7 +30,7 @@ function StaggerSection({
   shouldReduce: boolean
 }) {
   return (
-    <motion.div
+    <m.div
       initial={shouldReduce ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
@@ -40,7 +40,7 @@ function StaggerSection({
       }}
     >
       {children}
-    </motion.div>
+    </m.div>
   )
 }
 

@@ -12,7 +12,7 @@ import {
   GearIcon,
   LightningIcon,
 } from "@phosphor-icons/react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import {
   CommandDialog,
   CommandEmpty,
@@ -221,7 +221,7 @@ export function CommandPalette() {
                   {items.map((item) => {
                     const delay = shouldReduce ? 0 : clampedDelay(itemIndex++)
                     return (
-                      <motion.div
+                      <m.div
                         key={item.id}
                         initial={shouldReduce ? false : { opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -238,7 +238,7 @@ export function CommandPalette() {
                           {item.icon}
                           <span>{t(item.labelKey)}</span>
                         </CommandItem>
-                      </motion.div>
+                      </m.div>
                     )
                   })}
                 </CommandGroup>

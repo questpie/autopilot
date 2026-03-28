@@ -1,4 +1,4 @@
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import {
   CheckCircleIcon,
   XCircleIcon,
@@ -84,7 +84,7 @@ function TaskInboxCard({ task }: { task: Task }) {
   const GateIcon = GATE_ICONS[gateType] ?? ShieldCheckIcon
 
   return (
-    <motion.div
+    <m.div
       layout
       initial={shouldReduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -132,7 +132,7 @@ function TaskInboxCard({ task }: { task: Task }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
-        <motion.div whileTap={{ scale: 0.95 }} transition={SPRING.snappy}>
+        <m.div whileTap={{ scale: 0.95 }} transition={SPRING.snappy}>
           <Button
             variant="default"
             size="sm"
@@ -145,8 +145,8 @@ function TaskInboxCard({ task }: { task: Task }) {
             <CheckCircleIcon size={14} aria-hidden="true" />
             {t("inbox.approve")}
           </Button>
-        </motion.div>
-        <motion.div whileTap={{ scale: 0.95 }} transition={SPRING.snappy}>
+        </m.div>
+        <m.div whileTap={{ scale: 0.95 }} transition={SPRING.snappy}>
           <Button
             variant="outline"
             size="sm"
@@ -159,9 +159,9 @@ function TaskInboxCard({ task }: { task: Task }) {
             <XCircleIcon size={14} aria-hidden="true" />
             {t("inbox.reject")}
           </Button>
-        </motion.div>
+        </m.div>
       </div>
-    </motion.div>
+    </m.div>
   )
 }
 
@@ -169,7 +169,7 @@ function PinInboxCard({ pin }: { pin: Pin }) {
   const { shouldReduce } = useMotionPreference()
 
   return (
-    <motion.div
+    <m.div
       layout
       initial={shouldReduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -210,7 +210,7 @@ function PinInboxCard({ pin }: { pin: Pin }) {
           </Button>
         ))}
       </div>
-    </motion.div>
+    </m.div>
   )
 }
 

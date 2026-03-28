@@ -1,6 +1,16 @@
-import { createFileRoute, Outlet, useMatches } from "@tanstack/react-router"
+import { createFileRoute, Outlet, redirect, useMatches } from "@tanstack/react-router"
+import { checkAuthServer } from "@/lib/auth.server"
 
 export const Route = createFileRoute("/_auth")({
+  beforeLoad: async () => {
+    const result = await checkAuthServer()
+
+    // Fully authenticated users with completed setup → redirect to dashboard
+    // Users with pending 2FA or incomplete setup should stay on auth pages
+    if (result.isAuthenticated && !result.needs2FA && result.setupCompleted) {
+      throw redirect({ to: "/" })
+    }
+  },
   component: AuthLayout,
 })
 

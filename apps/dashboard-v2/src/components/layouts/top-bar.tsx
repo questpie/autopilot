@@ -4,7 +4,7 @@ import {
   ChatCircleIcon,
   UserIcon,
 } from "@phosphor-icons/react"
-import { motion } from "framer-motion"
+import { m } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
 import { useHapticPattern } from "@/hooks/use-haptic"
@@ -46,7 +46,7 @@ export function TopBar() {
   return (
     <header className="flex h-12 shrink-0 items-center border-b border-border bg-background px-4 font-heading">
       {/* Hamburger — mobile only (opens SideNav sheet) */}
-      <motion.button
+      <m.button
         type="button"
         onClick={toggleSidebar}
         {...iconMotion}
@@ -54,10 +54,10 @@ export function TopBar() {
         aria-label={t("nav.toggle_sidebar")}
       >
         <ListIcon size={20} weight="bold" aria-hidden="true" />
-      </motion.button>
+      </m.button>
 
       {/* Search trigger — desktop: full bar, mobile: icon only */}
-      <motion.button
+      <m.button
         type="button"
         onClick={() => setCommandPaletteOpen(true)}
         whileTap={{ scale: 0.97 }}
@@ -70,8 +70,8 @@ export function TopBar() {
         <kbd className="rounded-none border border-border px-1.5 py-0.5 text-[10px]">
           {"\u2318"}K
         </kbd>
-      </motion.button>
-      <motion.button
+      </m.button>
+      <m.button
         type="button"
         onClick={() => setCommandPaletteOpen(true)}
         {...iconMotion}
@@ -79,7 +79,7 @@ export function TopBar() {
         aria-label={t("common.search")}
       >
         <MagnifyingGlassIcon size={18} aria-hidden="true" />
-      </motion.button>
+      </m.button>
 
       <div className="flex-1" />
 
@@ -87,7 +87,7 @@ export function TopBar() {
       <NotificationBell />
 
       {/* Chat panel toggle */}
-      <motion.button
+      <m.button
         type="button"
         onClick={handleChatToggle}
         {...iconMotion}
@@ -99,17 +99,17 @@ export function TopBar() {
         aria-pressed={chatOpen}
       >
         <ChatCircleIcon size={18} weight={chatOpen ? "fill" : "regular"} aria-hidden="true" />
-      </motion.button>
+      </m.button>
 
       {/* User menu */}
-      <motion.button
+      <m.button
         type="button"
         {...iconMotion}
         className="relative flex min-h-[44px] min-w-[44px] items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
         aria-label={t("nav.user_menu")}
       >
         <UserIcon size={18} aria-hidden="true" />
-      </motion.button>
+      </m.button>
     </header>
   )
 }

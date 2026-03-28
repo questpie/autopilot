@@ -18,10 +18,17 @@ import { TaskFilters } from "@/features/tasks/task-filters"
 import { useTaskKeyboardNav } from "@/features/tasks/use-task-keyboard-nav"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { PageTransition } from "@/components/layouts/page-transition"
+import { PageError } from "@/components/feedback"
 import type { SortOption, GroupOption } from "@/features/tasks/task-filters"
 
 export const Route = createFileRoute("/_app/tasks")({
   component: TasksPage,
+  errorComponent: ({ error, reset }) => (
+    <PageError description={error.message} onRetry={reset} />
+  ),
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(tasksQuery())
+  },
 })
 
 function TasksPage() {

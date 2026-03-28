@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useRouter } from "@tanstack/react-router"
 import { useTranslation } from "@/lib/i18n"
 import { authClient } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
@@ -8,53 +8,103 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { WarningCircleIcon, ShieldCheckIcon } from "@phosphor-icons/react"
-import { useState, useRef, useCallback } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { useReducer, useRef, useCallback } from "react"
+import { m, AnimatePresence } from "framer-motion"
 
 export const Route = createFileRoute("/_auth/login/2fa")({
   component: TwoFactorPage,
 })
 
+type TwoFactorState = {
+  digits: string[]
+  useBackup: boolean
+  backupCode: string
+  trustDevice: boolean
+  error: string | null
+  isSubmitting: boolean
+  failCount: number
+}
+
+type TwoFactorAction =
+  | { type: "SET_DIGITS"; digits: string[] }
+  | { type: "SET_USE_BACKUP"; useBackup: boolean }
+  | { type: "SET_BACKUP_CODE"; backupCode: string }
+  | { type: "SET_TRUST_DEVICE"; trustDevice: boolean }
+  | { type: "SUBMIT_START" }
+  | { type: "SUBMIT_FAIL"; error: string; resetDigits: boolean }
+  | { type: "CLEAR_ERROR" }
+
+const initialState: TwoFactorState = {
+  digits: ["", "", "", "", "", ""],
+  useBackup: false,
+  backupCode: "",
+  trustDevice: false,
+  error: null,
+  isSubmitting: false,
+  failCount: 0,
+}
+
+function twoFactorReducer(state: TwoFactorState, action: TwoFactorAction): TwoFactorState {
+  switch (action.type) {
+    case "SET_DIGITS":
+      return { ...state, digits: action.digits }
+    case "SET_USE_BACKUP":
+      return { ...state, useBackup: action.useBackup, error: null }
+    case "SET_BACKUP_CODE":
+      return { ...state, backupCode: action.backupCode }
+    case "SET_TRUST_DEVICE":
+      return { ...state, trustDevice: action.trustDevice }
+    case "SUBMIT_START":
+      return { ...state, isSubmitting: true, error: null }
+    case "SUBMIT_FAIL":
+      return {
+        ...state,
+        isSubmitting: false,
+        failCount: state.failCount + 1,
+        error: action.error,
+        digits: action.resetDigits ? ["", "", "", "", "", ""] : state.digits,
+      }
+    case "CLEAR_ERROR":
+      return { ...state, error: null }
+    default:
+      return state
+  }
+}
+
 function TwoFactorPage() {
   const { t } = useTranslation()
+  const router = useRouter()
 
-  const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""])
-  const [useBackup, setUseBackup] = useState(false)
-  const [backupCode, setBackupCode] = useState("")
-  const [trustDevice, setTrustDevice] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [failCount, setFailCount] = useState(0)
+  const [state, dispatch] = useReducer(twoFactorReducer, initialState)
+  const { digits, useBackup, backupCode, trustDevice, error, isSubmitting, failCount } = state
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const submitCode = useCallback(
     async (code: string) => {
-      setIsSubmitting(true)
-      setError(null)
+      dispatch({ type: "SUBMIT_START" })
 
       const result = await authClient.twoFactor.verifyTotp({
         code,
         trustDevice,
       })
 
-      setIsSubmitting(false)
-
       if (result.error) {
-        const newCount = failCount + 1
-        setFailCount(newCount)
-        setError(result.error.message ?? t("auth.error_2fa_invalid"))
+        dispatch({
+          type: "SUBMIT_FAIL",
+          error: result.error.message ?? t("auth.error_2fa_invalid"),
+          resetDigits: !useBackup,
+        })
 
         if (!useBackup) {
-          setDigits(["", "", "", "", "", ""])
           inputRefs.current[0]?.focus()
         }
         return
       }
 
-      window.location.href = "/"
+      void router.invalidate().then(() => router.navigate({ to: "/" }))
     },
-    [failCount, t, trustDevice, useBackup]
+    [router, t, trustDevice, useBackup]
   )
 
   const handleDigitChange = useCallback(
@@ -63,7 +113,7 @@ function TwoFactorPage() {
 
       const newDigits = [...digits]
       newDigits[index] = value.slice(-1)
-      setDigits(newDigits)
+      dispatch({ type: "SET_DIGITS", digits: newDigits })
 
       // Auto-advance
       if (value && index < 5) {
@@ -100,7 +150,7 @@ function TwoFactorPage() {
       for (let i = 0; i < pasted.length; i++) {
         newDigits[i] = pasted[i]
       }
-      setDigits(newDigits)
+      dispatch({ type: "SET_DIGITS", digits: newDigits })
 
       if (pasted.length === 6) {
         void submitCode(pasted)
@@ -138,7 +188,7 @@ function TwoFactorPage() {
       {/* Error */}
       <AnimatePresence>
         {error && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
             exit={{ opacity: 0 }}
@@ -148,7 +198,7 @@ function TwoFactorPage() {
               <WarningCircleIcon className="size-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
@@ -175,7 +225,7 @@ function TwoFactorPage() {
               autoFocus
               placeholder="a1b2-c3d4"
               value={backupCode}
-              onChange={(e) => setBackupCode(e.currentTarget.value)}
+              onChange={(e) => dispatch({ type: "SET_BACKUP_CODE", backupCode: e.currentTarget.value })}
               disabled={isSubmitting}
               autoComplete="one-time-code"
             />
@@ -198,7 +248,7 @@ function TwoFactorPage() {
           <div className="flex justify-center gap-2" onPaste={handleDigitPaste}>
             {digits.map((digit, i) => (
               <input
-                key={i}
+                key={`digit-${i}`}
                 ref={(el) => {
                   inputRefs.current[i] = el
                 }}
@@ -229,7 +279,7 @@ function TwoFactorPage() {
       <div className="flex items-center gap-2">
         <Checkbox
           checked={trustDevice}
-          onCheckedChange={(checked) => setTrustDevice(checked === true)}
+          onCheckedChange={(checked) => dispatch({ type: "SET_TRUST_DEVICE", trustDevice: checked === true })}
           id="trust-device"
         />
         <Label htmlFor="trust-device" className="text-xs text-muted-foreground">
@@ -242,10 +292,7 @@ function TwoFactorPage() {
         <button
           type="button"
           className="text-xs text-primary hover:underline"
-          onClick={() => {
-            setUseBackup(!useBackup)
-            setError(null)
-          }}
+          onClick={() => dispatch({ type: "SET_USE_BACKUP", useBackup: !useBackup })}
         >
           {useBackup
             ? t("auth.two_factor_use_totp")

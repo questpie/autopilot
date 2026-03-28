@@ -1,4 +1,4 @@
-import { motion, LayoutGroup } from "framer-motion"
+import { m, LayoutGroup } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { SPRING, useMotionPreference } from "@/lib/motion"
@@ -60,7 +60,7 @@ export function ChatTabs({ activeTab, onTabChange, context }: ChatTabsProps) {
                 (shouldReduce ? (
                   <div className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
                 ) : (
-                  <motion.div
+                  <m.div
                     layoutId="chat-tab-indicator"
                     className="absolute inset-x-0 bottom-0 h-0.5 bg-primary"
                     transition={SPRING.snappy}
