@@ -4,6 +4,7 @@
  * Provides helpers to send messages via the Telegram Bot API and
  * parse incoming webhook updates.
  */
+import { logger } from '../logger'
 
 /** Configuration needed to interact with the Telegram Bot API. */
 export interface TelegramConfig {
@@ -69,7 +70,7 @@ export async function sendTelegramMessage(
 
 	const json = (await res.json()) as TelegramSendResult
 	if (!json.ok) {
-		console.error('[telegram] sendMessage failed:', json.description)
+		logger.error('telegram', 'sendMessage failed', { description: json.description })
 	}
 	return json
 }

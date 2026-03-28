@@ -6,6 +6,7 @@
  */
 import webpush from 'web-push'
 import { join } from 'node:path'
+import { logger } from '../../logger'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { eq } from 'drizzle-orm'
@@ -74,10 +75,10 @@ export async function getVapidKeys(companyRoot: string): Promise<VapidKeys | nul
 		await writeFile(keysPath, JSON.stringify(keys, null, 2), 'utf-8')
 
 		cachedKeys = keys
-		console.log('[push] VAPID keys generated and saved to .auth/vapid-keys.json')
+		logger.info('push', 'VAPID keys generated and saved to .auth/vapid-keys.json')
 		return cachedKeys
 	} catch (err) {
-		console.error('[push] failed to generate VAPID keys:', err instanceof Error ? err.message : err)
+		logger.error('push', 'failed to generate VAPID keys', { error: err instanceof Error ? err.message : String(err) })
 		return null
 	}
 }
@@ -134,10 +135,10 @@ export async function sendPushToUser(
 			const statusCode = (err as { statusCode?: number }).statusCode
 			if (statusCode === 404 || statusCode === 410) {
 				// Subscription expired — clean up
-				console.log(`[push] removing expired subscription: ${sub.id}`)
+				logger.info('push', `removing expired subscription: ${sub.id}`)
 				await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id))
 			} else {
-				console.error(`[push] send failed for ${sub.id}:`, err instanceof Error ? err.message : err)
+				logger.error('push', `send failed for ${sub.id}`, { error: err instanceof Error ? err.message : String(err) })
 			}
 		}
 	}

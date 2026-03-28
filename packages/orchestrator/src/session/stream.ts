@@ -1,4 +1,5 @@
 import type { StreamChunk } from '@questpie/autopilot-spec'
+import { logger } from '../logger'
 
 /** A live session stream that listeners can subscribe to. */
 export interface SessionStream {
@@ -36,7 +37,7 @@ export class SessionStreamManager {
 			try {
 				listener(chunk)
 			} catch (err) {
-				console.error(`[session-stream] listener error for ${sessionId}:`, err)
+				logger.error('session-stream', `listener error for ${sessionId}`, { error: err instanceof Error ? err.message : String(err) })
 			}
 		}
 	}

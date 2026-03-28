@@ -11,6 +11,7 @@ import {
 	workflowPath,
 } from '@questpie/autopilot-spec'
 import { readYaml } from './yaml'
+import { logger } from '../logger'
 
 function resolvePath(companyRoot: string, relativePath: string): string {
 	return join(companyRoot, relativePath)
@@ -31,9 +32,7 @@ export async function loadAgents(companyRoot: string) {
 
 	let agentsPath = primaryPath
 	if (!existsSync(primaryPath) && existsSync(legacyPath)) {
-		console.warn(
-			'[autopilot] DEPRECATED: agents.yaml found at root level. Move it to team/agents.yaml.',
-		)
+		logger.warn('autopilot', 'DEPRECATED: agents.yaml found at root level. Move it to team/agents.yaml.')
 		agentsPath = legacyPath
 	}
 

@@ -1,4 +1,5 @@
 import simpleGit, { type SimpleGit } from 'simple-git'
+import { logger } from '../logger'
 
 interface CommitEntry {
 	files: string[]
@@ -30,17 +31,17 @@ export class GitManager {
 	/** Check if company directory is a git repo. */
 	async initialize(): Promise<void> {
 		if (!this.options.enabled) {
-			console.log('[git] auto-commit disabled')
+			logger.info('git', 'auto-commit disabled')
 			return
 		}
 		try {
 			await this.git.status()
 			this.isGitRepo = true
-			console.log('[git] initialized — auto-commit enabled')
+			logger.info('git', 'initialized — auto-commit enabled')
 		} catch {
 			this.isGitRepo = false
-			console.warn('[git] company directory is not a git repo — auto-commit disabled')
-			console.warn('[git] run "git init" in company directory to enable')
+			logger.warn('git', 'company directory is not a git repo — auto-commit disabled')
+			logger.warn('git', 'run "git init" in company directory to enable')
 		}
 	}
 
@@ -119,19 +120,19 @@ export class GitManager {
 				'--author': `${author.name} <${author.email}>`,
 			})
 
-			console.log(`[git] committed: ${message} (${allFiles.length} files)`)
+			logger.info('git', `committed: ${message}`, { fileCount: allFiles.length })
 
 			// Auto-push if configured
 			if (this.options.autoPush && this.options.remote) {
 				try {
 					await this.git.push(this.options.remote, this.options.branch)
-					console.log(`[git] pushed to ${this.options.remote}/${this.options.branch}`)
+					logger.info('git', `pushed to ${this.options.remote}/${this.options.branch}`)
 				} catch (err) {
-					console.error('[git] push failed:', err instanceof Error ? err.message : err)
+					logger.error('git', 'push failed', { error: err instanceof Error ? err.message : String(err) })
 				}
 			}
 		} catch (err) {
-			console.error('[git] commit failed:', err instanceof Error ? err.message : err)
+			logger.error('git', 'commit failed', { error: err instanceof Error ? err.message : String(err) })
 		}
 	}
 

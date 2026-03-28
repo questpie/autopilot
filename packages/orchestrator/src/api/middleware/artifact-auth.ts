@@ -11,11 +11,17 @@ import type { AppEnv } from '../app'
 
 export function artifactProxyAuth() {
 	return createMiddleware<AppEnv>(async (c, next) => {
-		const actor = await resolveActor(c.req.raw, {
+		const result = await resolveActor(c.req.raw, {
 			companyRoot: c.get('companyRoot'),
 			auth: c.get('auth'),
 		})
 
+		// Webhook auth can return a Response directly with specific error details
+		if (result instanceof Response) {
+			return result
+		}
+
+		const actor = result
 		c.set('actor', actor)
 
 		if (actor) return next()

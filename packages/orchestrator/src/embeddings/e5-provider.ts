@@ -4,6 +4,7 @@ import type {
 	EmbeddingModality,
 	EmbeddingTaskType,
 } from './provider'
+import { logger } from '../logger'
 
 const MODEL_NAME = 'Xenova/multilingual-e5-small'
 const DIMENSIONS = 384
@@ -43,7 +44,7 @@ export class E5EmbeddingProvider implements EmbeddingProvider {
 
 			return new Float32Array(data)
 		} catch (err) {
-			console.error('[embeddings:e5] embed failed:', err instanceof Error ? err.message : err)
+			logger.error('embeddings:e5', 'embed failed', { error: err instanceof Error ? err.message : String(err) })
 			return null
 		}
 	}
@@ -68,7 +69,7 @@ export class E5EmbeddingProvider implements EmbeddingProvider {
 			this.pipeline = await this.loading
 			return this.pipeline
 		} catch (err) {
-			console.error('[embeddings:e5] failed to load model:', err instanceof Error ? err.message : err)
+			logger.error('embeddings:e5', 'failed to load model', { error: err instanceof Error ? err.message : String(err) })
 			return null
 		} finally {
 			this.loading = null
@@ -76,10 +77,10 @@ export class E5EmbeddingProvider implements EmbeddingProvider {
 	}
 
 	private async loadPipeline(): Promise<unknown> {
-		console.log(`[embeddings:e5] loading model ${MODEL_NAME} (first run downloads ~120MB)...`)
+		logger.info('embeddings:e5', `loading model ${MODEL_NAME} (first run downloads ~120MB)...`)
 		const { pipeline } = await import('@huggingface/transformers')
 		const pipe = await pipeline('feature-extraction', MODEL_NAME)
-		console.log('[embeddings:e5] model loaded')
+		logger.info('embeddings:e5', 'model loaded')
 		return pipe
 	}
 }

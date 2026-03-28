@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import { chmod } from 'node:fs/promises'
 import { readYamlUnsafe, writeYaml, fileExists } from '../fs/yaml'
+import { logger } from '../logger'
 import { ensureMasterKey, loadMasterKey, encryptToBase64, decryptFromBase64, hashApiKey } from './crypto'
 import type { AgentKeyEntry } from './types'
 
@@ -56,11 +57,11 @@ export async function ensureAgentKeys(
 				const rawKey = await decryptFromBase64(existing.encryptedKey, masterKey)
 				keyMap.set(agent.id, rawKey)
 				entries.push(existing)
-				console.log(`[auth] Loaded persisted API key for agent "${agent.id}"`)
+				logger.info('auth', `loaded persisted API key for agent "${agent.id}"`)
 				continue
 			} catch {
 				// Decryption failed (e.g. master key rotated) — fall through to regenerate
-				console.warn(`[auth] Failed to decrypt existing key for agent "${agent.id}", regenerating`)
+				logger.warn('auth', `failed to decrypt existing key for agent "${agent.id}", regenerating`)
 			}
 		}
 
@@ -77,7 +78,7 @@ export async function ensureAgentKeys(
 			createdAt: new Date().toISOString(),
 		})
 
-		console.log(`[auth] Generated API key for agent "${agent.id}"`)
+		logger.info('auth', `generated API key for agent "${agent.id}"`)
 	}
 
 	await writeYaml(keysPath, { keys: entries })

@@ -4,6 +4,7 @@ import type {
 	EmbeddingModality,
 	EmbeddingTaskType,
 } from './provider'
+import { logger } from '../logger'
 
 const MODEL_NAME = 'nomic-ai/nomic-embed-vision-v1.5'
 const DIMENSIONS = 768
@@ -59,7 +60,7 @@ export class NomicEmbeddingProvider implements EmbeddingProvider {
 
 			return vec
 		} catch (err) {
-			console.error('[embeddings:nomic] embed failed:', err instanceof Error ? err.message : err)
+			logger.error('embeddings:nomic', 'embed failed', { error: err instanceof Error ? err.message : String(err) })
 			return null
 		}
 	}
@@ -89,10 +90,10 @@ export class NomicEmbeddingProvider implements EmbeddingProvider {
 	}
 
 	private async loadModel(): Promise<void> {
-		console.log(`[embeddings:nomic] loading model ${MODEL_NAME} (first run downloads ~62MB)...`)
+		logger.info('embeddings:nomic', `loading model ${MODEL_NAME} (first run downloads ~62MB)...`)
 		const { AutoProcessor, AutoModel } = await import('@huggingface/transformers')
 		this.processor = await AutoProcessor.from_pretrained(MODEL_NAME)
 		this.model = await AutoModel.from_pretrained(MODEL_NAME)
-		console.log('[embeddings:nomic] model loaded')
+		logger.info('embeddings:nomic', 'model loaded')
 	}
 }

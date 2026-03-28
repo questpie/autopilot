@@ -1,41 +1,49 @@
 /**
  * API documentation routes — OpenAPI JSON + Scalar UI.
  *
- * Mount on the root app:
- *   app.route('/', docs)
+ * Usage:
+ *   mountDocs(app)   // call after all routes are registered
  */
-import { Hono } from 'hono'
+import type { Hono } from 'hono'
+import { openAPIRouteHandler } from 'hono-openapi'
 import type { AppEnv } from './app'
 
-const docs = new Hono<AppEnv>()
-	/**
-	 * GET /openapi.json — serves the generated OpenAPI 3.1 specification.
-	 *
-	 * The actual spec object will be wired up once route definitions are
-	 * registered (via @hono/zod-openapi or manual spec building). For now
-	 * this returns a minimal skeleton so the Scalar UI has something to load.
-	 */
-	.get('/openapi.json', (c) => {
-		return c.json({
-			openapi: '3.1.0',
-			info: {
-				title: 'QUESTPIE Autopilot API',
-				version: '0.1.0',
-				description:
-					'Orchestrator REST API for the QUESTPIE Autopilot platform.',
-			},
-			servers: [{ url: '/' }],
-			paths: {},
-		})
-	})
-	/**
-	 * GET /docs — interactive API reference powered by Scalar.
-	 *
-	 * Uses the 'purple' theme to match QUESTPIE branding. Loads both the
-	 * main API spec and the Better Auth auto-generated schema.
-	 */
-	.get('/docs', (c) => {
-		const html = `<!DOCTYPE html>
+/**
+ * Mount documentation routes on the given Hono app.
+ *
+ * Must be called **after** all API routes have been registered so that
+ * `openAPIRouteHandler` can introspect every `describeRoute()` decorator.
+ */
+export function mountDocs(app: Hono<AppEnv>) {
+	app
+		/**
+		 * GET /openapi.json — generated OpenAPI 3.1 specification.
+		 *
+		 * `openAPIRouteHandler` walks the router tree, collects every
+		 * `describeRoute()` decorator, and builds the full spec dynamically.
+		 */
+		.get(
+			'/openapi.json',
+			openAPIRouteHandler(app, {
+				documentation: {
+					info: {
+						title: 'QUESTPIE Autopilot API',
+						version: '0.1.0',
+						description:
+							'Orchestrator REST API for the QUESTPIE Autopilot platform.',
+					},
+					servers: [{ url: '/' }],
+				},
+			}),
+		)
+		/**
+		 * GET /docs — interactive API reference powered by Scalar.
+		 *
+		 * Uses the 'purple' theme to match QUESTPIE branding. Loads both the
+		 * main API spec and the Better Auth auto-generated schema.
+		 */
+		.get('/docs', (c) => {
+			const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -57,7 +65,6 @@ const docs = new Hono<AppEnv>()
   <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
 </body>
 </html>`
-		return c.html(html)
-	})
-
-export { docs }
+			return c.html(html)
+		})
+}

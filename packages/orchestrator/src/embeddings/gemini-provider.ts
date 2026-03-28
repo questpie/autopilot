@@ -4,6 +4,7 @@ import type {
 	EmbeddingModality,
 	EmbeddingTaskType,
 } from './provider'
+import { logger } from '../logger'
 
 const GEMINI_MODEL = 'gemini-embedding-2-preview'
 const DEFAULT_DIMENSIONS = 768
@@ -60,7 +61,7 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
 				? this.normalize(embedding)
 				: embedding
 		} catch (err) {
-			console.error('[embeddings:gemini] embed failed:', err instanceof Error ? err.message : err)
+			logger.error('embeddings:gemini', 'embed failed', { error: err instanceof Error ? err.message : String(err) })
 			return null
 		}
 	}
@@ -117,7 +118,7 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
 	private async getClient(): Promise<unknown> {
 		if (this.client) return this.client
 		if (!this.apiKey) {
-			console.warn('[embeddings:gemini] no GEMINI_API_KEY — provider disabled')
+			logger.warn('embeddings:gemini', 'no GEMINI_API_KEY — provider disabled')
 			return null
 		}
 
@@ -126,7 +127,7 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
 			this.client = new GoogleGenAI({ apiKey: this.apiKey })
 			return this.client
 		} catch (err) {
-			console.error('[embeddings:gemini] failed to load @google/genai:', err instanceof Error ? err.message : err)
+			logger.error('embeddings:gemini', 'failed to load @google/genai', { error: err instanceof Error ? err.message : String(err) })
 			return null
 		}
 	}

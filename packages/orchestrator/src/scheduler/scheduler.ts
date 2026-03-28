@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { Schedule } from '@questpie/autopilot-spec'
 import { SchedulesFileSchema } from '@questpie/autopilot-spec'
 import { readYaml } from '../fs/yaml'
+import { logger } from '../logger'
 
 /** Configuration for the cron-based {@link Scheduler}. */
 export interface SchedulerOptions {
@@ -54,7 +55,7 @@ export class Scheduler {
 			if (!schedule.enabled) continue
 
 			if (!cron.validate(schedule.cron)) {
-				console.warn(`[scheduler] invalid cron expression for ${schedule.id}: ${schedule.cron}`)
+				logger.warn('scheduler', `invalid cron expression for ${schedule.id}: ${schedule.cron}`)
 				continue
 			}
 
@@ -62,7 +63,7 @@ export class Scheduler {
 				try {
 					await this.options.onTrigger(schedule)
 				} catch (err) {
-					console.error(`[scheduler] error in job ${schedule.id}:`, err)
+					logger.error('scheduler', `error in job ${schedule.id}`, { error: err instanceof Error ? err.message : String(err) })
 				}
 			})
 

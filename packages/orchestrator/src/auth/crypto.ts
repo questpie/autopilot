@@ -8,6 +8,7 @@
 import { existsSync } from 'node:fs'
 import { readFile, writeFile, mkdir, chmod } from 'node:fs/promises'
 import { join } from 'node:path'
+import { logger } from '../logger'
 
 const IV_LENGTH = 12
 
@@ -25,8 +26,8 @@ export async function ensureMasterKey(companyRoot: string): Promise<void> {
 		await mkdir(join(companyRoot, 'secrets'), { recursive: true })
 		await writeFile(keyPath, Buffer.from(keyBytes).toString('base64'), 'utf-8')
 		await chmod(keyPath, 0o600)
-		console.warn('[secrets] Master key generated at secrets/.master-key')
-		console.warn('[secrets] For production, set AUTOPILOT_MASTER_KEY env variable instead')
+		logger.warn('secrets', 'master key generated at secrets/.master-key')
+		logger.warn('secrets', 'for production, set AUTOPILOT_MASTER_KEY env variable instead')
 	}
 }
 

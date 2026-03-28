@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
+import { logger } from '../logger'
 import type { Auth } from '../auth'
 import { authFactory } from '../auth'
 import type { Actor } from '../auth/types'
@@ -16,7 +17,7 @@ import type { AutopilotDb } from '../db'
 import { dbFactory } from '../db'
 import { storageFactory } from '../fs/sqlite-backend'
 import type { StorageBackend } from '../fs/storage'
-import { docs } from './docs'
+import { mountDocs } from './docs'
 import { artifactProxyAuth } from './middleware/artifact-auth'
 import { authMiddleware } from './middleware/auth'
 import { ipAllowlist } from './middleware/ip-allowlist'
@@ -81,8 +82,10 @@ export interface AppConfig {
  */
 export function createApp(config: AppConfig) {
 	const app = new Hono<AppEnv>()
-	const corsOrigin = config.corsOrigin ??
-		process.env.CORS_ORIGIN ?? ['http://localhost:3000', 'http://localhost:3001']
+	const rawOrigin = config.corsOrigin ?? process.env.CORS_ORIGIN
+	const corsOrigin = rawOrigin
+		? rawOrigin.split(',').map((o) => o.trim())
+		: ['http://localhost:3000', 'http://localhost:3001']
 
 	// ── 1. CORS ──────────────────────────────────────────────────────────
 	app.use(
@@ -118,7 +121,7 @@ export function createApp(config: AppConfig) {
 		if (err instanceof HTTPException) {
 			return c.json({ error: err.message }, err.status)
 		}
-		console.error('[api] unhandled error:', err)
+		logger.error('api', 'unhandled error', { error: err instanceof Error ? err.message : String(err) })
 		return c.json({ error: 'internal server error' }, 500)
 	})
 
@@ -160,7 +163,7 @@ export function createApp(config: AppConfig) {
 	app.use('/api/*', actorRateLimit())
 
 	// ── 6. API routes (chained for RPC type inference) ───────────────────
-	return app
+	const typedApp = app
 		.route('/api/status', status)
 		.route('/api/tasks', tasks)
 		.route('/api/agents', agents)
@@ -182,7 +185,11 @@ export function createApp(config: AppConfig) {
 		.route('/api/sessions', sessions)
 		.route('/api/notifications', notifications)
 		.route('/api/fs', fsBrowser)
-		.route('/', docs)
+
+	// ── 7. Documentation (must come after all routes so the spec is complete) ─
+	mountDocs(typedApp)
+
+	return typedApp
 }
 
 /** App type for SDK / hono client type inference. */

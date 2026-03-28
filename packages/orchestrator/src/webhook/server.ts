@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto'
 import type { Webhook } from '@questpie/autopilot-spec'
 import { WebhooksFileSchema } from '@questpie/autopilot-spec'
 import { readYaml } from '../fs/yaml'
+import { logger } from '../logger'
 
 /**
  * Timing-safe string comparison to prevent timing attacks on secrets.
@@ -89,7 +90,7 @@ export class WebhookServer {
 		try {
 			await this.options.onWebhook(webhook, payload)
 		} catch (err) {
-			console.error(`[webhook] error handling ${webhook.id}:`, err)
+			logger.error('webhook', `error handling ${webhook.id}`, { error: err instanceof Error ? err.message : String(err) })
 			return new Response(JSON.stringify({ error: 'internal error' }), {
 				status: 500,
 				headers: { 'content-type': 'application/json' },
@@ -111,7 +112,7 @@ export class WebhookServer {
 
 			// Fail-secure: reject if no secret_ref configured
 			if (!webhook.secret_ref) {
-				console.warn(`[webhook] bearer_token auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`)
+				logger.warn('webhook', `bearer_token auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`)
 				return false
 			}
 
@@ -135,7 +136,7 @@ export class WebhookServer {
 
 			// Fail-secure: reject if no secret_ref configured
 			if (!webhook.secret_ref) {
-				console.warn(`[webhook] hmac_sha256 auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`)
+				logger.warn('webhook', `hmac_sha256 auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`)
 				return false
 			}
 

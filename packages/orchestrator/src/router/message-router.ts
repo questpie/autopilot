@@ -24,7 +24,7 @@ export interface RouteOptions {
 export async function routeMessage(
 	message: string,
 	agents: Agent[],
-	companyRoot: string,
+	_companyRoot: string,
 	options?: RouteOptions,
 ): Promise<{ agent: Agent; reason: string }> {
 	// 1. Explicit @mention

@@ -1,5 +1,6 @@
 import { container } from './container'
 import { storageFactory } from './fs/sqlite-backend'
+import { logger } from './logger'
 import type { StorageBackend } from './fs/storage'
 import { maskSecret } from './auth/crypto'
 
@@ -57,9 +58,7 @@ export class Notifier {
 		const prefix = notification.priority === 'urgent' ? '!!' : notification.priority === 'high' ? '!' : ''
 		const safeTitle = sanitizeForLog(notification.title)
 		const safeMessage = sanitizeForLog(notification.message)
-		console.log(
-			`[orchestrator] ${prefix}notification [${notification.type}] ${safeTitle}: ${safeMessage}`
-		)
+		logger.info('orchestrator', `${prefix}notification [${notification.type}] ${safeTitle}: ${safeMessage}`)
 
 		try {
 			await this.options.storage.appendActivity({
@@ -75,7 +74,7 @@ export class Notifier {
 				},
 			})
 		} catch (err) {
-			console.error('[orchestrator] failed to log notification to activity feed:', err)
+			logger.error('orchestrator', 'failed to log notification to activity feed', { error: err instanceof Error ? err.message : String(err) })
 		}
 	}
 }

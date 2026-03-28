@@ -16,6 +16,8 @@ export type AutopilotEvent =
 	| { type: 'validation_error'; file: string; error: string }
 	| { type: 'notification_new'; notificationId: string; userId: string; notificationType: string; priority: string; title: string; message: string; url?: string }
 
+import { logger } from '../logger'
+
 export class EventBus {
 	private listeners = new Set<(event: AutopilotEvent) => void>()
 
@@ -31,7 +33,7 @@ export class EventBus {
 			try {
 				listener(event)
 			} catch (err) {
-				console.error('[event-bus] listener error:', err)
+				logger.error('event-bus', 'listener error', { error: err instanceof Error ? err.message : String(err) })
 			}
 		}
 	}

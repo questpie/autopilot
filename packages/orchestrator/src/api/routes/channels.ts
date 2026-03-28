@@ -1,3 +1,4 @@
+import { logger } from '../../logger'
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
@@ -269,11 +270,11 @@ const channels = new Hono<AppEnv>()
 						trigger: { type: 'channel_message', task_id: undefined },
 						message: body.content,
 					}).catch((err) =>
-						console.error('[channels] spawn error:', err),
+						logger.error('api', 'channels spawn error', { error: err instanceof Error ? err.message : String(err) }),
 					)
 				}
 			} catch (err) {
-				console.error('[channels] routing error:', err)
+				logger.error('api', 'channels routing error', { error: err instanceof Error ? err.message : String(err) })
 			}
 
 			return c.json(

@@ -17,6 +17,7 @@ import { spawnAgent } from '../../agent'
 import { container } from '../../container'
 import { storageFactory } from '../../fs/sqlite-backend'
 import type { WebhookHandler, WebhookContext, WebhookResult } from '../handler'
+import { logger } from '../../logger'
 
 /**
  * Read the Telegram bot token from the secrets directory.
@@ -60,12 +61,12 @@ export const telegramWebhookHandler: WebhookHandler = {
 		const chatId = update.message.chat.id
 		const fromUser = update.message.from?.username ?? update.message.from?.first_name ?? 'unknown'
 
-		console.log(`[telegram] message from ${fromUser} in chat ${chatId}: ${text.slice(0, 100)}`)
+		logger.info('telegram', `message from ${fromUser} in chat ${chatId}: ${text.slice(0, 100)}`)
 
 		// 2. Read bot token
 		const botToken = await readBotToken(companyRoot)
 		if (!botToken) {
-			console.error('[telegram] no bot token found — add one via: autopilot secrets add telegram --value "YOUR_TOKEN"')
+			logger.error('telegram', 'no bot token found — add one via: autopilot secrets add telegram --value "YOUR_TOKEN"')
 			return { handled: false, error: 'no bot token configured' }
 		}
 
@@ -87,11 +88,11 @@ export const telegramWebhookHandler: WebhookHandler = {
 
 		const agent = agents.find((a) => a.id === targetAgentId)
 		if (!agent) {
-			console.error(`[telegram] agent not found: ${targetAgentId}`)
+			logger.error('telegram', `agent not found: ${targetAgentId}`)
 			return { handled: false, error: `agent not found: ${targetAgentId}` }
 		}
 
-		console.log(`[telegram] routing to agent: ${agent.id} (${agent.name})`)
+		logger.info('telegram', `routing to agent: ${agent.id} (${agent.name})`)
 
 		// 5. Send a "thinking" indicator
 		await sendTelegramMessage(
@@ -121,7 +122,7 @@ export const telegramWebhookHandler: WebhookHandler = {
 			return { handled: true, agentId: agent.id }
 		} catch (err) {
 			const errorMsg = err instanceof Error ? err.message : String(err)
-			console.error(`[telegram] agent ${agent.id} failed:`, errorMsg)
+			logger.error('telegram', `agent ${agent.id} failed`, { error: errorMsg })
 
 			await sendTelegramMessage(
 				{ botToken, chatId },

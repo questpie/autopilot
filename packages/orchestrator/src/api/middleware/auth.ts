@@ -28,11 +28,17 @@ export function authMiddleware() {
 		}
 
 		// Resolve actor
-		const actor = await resolveActor(c.req.raw, {
+		const result = await resolveActor(c.req.raw, {
 			companyRoot: c.get('companyRoot'),
 			auth: c.get('auth'),
 		})
 
+		// Webhook auth can return a Response directly with specific error details
+		if (result instanceof Response) {
+			return result
+		}
+
+		const actor = result
 		c.set('actor', actor)
 
 		// /api/status is a public health-check — allow even without an actor

@@ -7,6 +7,7 @@
 import { appendFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { AuditEvent } from './types'
+import { logger } from '../logger'
 
 /**
  * Write an audit event to the daily JSONL log file.
@@ -24,7 +25,7 @@ export async function logAudit(
 		const line = JSON.stringify(event) + '\n'
 		await appendFile(filePath, line, 'utf-8')
 	} catch (err) {
-		console.error('[audit] Failed to write audit event:', err instanceof Error ? err.message : err)
+		logger.error('audit', 'failed to write audit event', { error: err instanceof Error ? err.message : String(err) })
 	}
 }
 
