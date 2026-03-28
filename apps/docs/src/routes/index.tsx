@@ -1,35 +1,27 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { useEffect, useRef, useState } from 'react'
 
-import { AgentCard } from '@/components/landing/AgentCard'
 import { CodeBlock } from '@/components/landing/CodeBlock'
-import { ComparisonTable } from '@/components/landing/ComparisonTable'
-import { DashboardMock } from '@/components/landing/DashboardMock'
 import { Header } from '@/components/landing/Header'
-import { NumberStat } from '@/components/landing/NumberStat'
-import { PainCard } from '@/components/landing/PainCard'
 import { QSymbol } from '@/components/landing/QSymbol'
-import { Section, SectionHeader } from '@/components/landing/Section'
-import { Tag } from '@/components/landing/Tag'
-import { ToolCard } from '@/components/landing/ToolCard'
-import { UseCaseCard } from '@/components/landing/UseCaseCard'
 
 export const Route = createFileRoute('/')({
 	head: () => ({
 		meta: [
-			{ title: 'QuestPie Autopilot — AI-Native Company Operating System' },
+			{ title: 'QuestPie Autopilot — Your company runs on files. Now it runs itself.' },
 			{
 				name: 'description',
 				content:
-					'Run your company with configurable AI agents defined in YAML. Tasks, code review, deployments, marketing — all automated. Open source, self-hosted, zero infrastructure. MIT license.',
+					'Define AI agents in YAML. They write code, ship features, review PRs. You approve. Open source, self-hosted, MIT license.',
 			},
 			{
 				property: 'og:title',
-				content: 'QuestPie Autopilot — AI-Native Company Operating System',
+				content: 'QuestPie Autopilot — Your company runs on files. Now it runs itself.',
 			},
 			{
 				property: 'og:description',
 				content:
-					'Run your company with configurable AI agents defined in YAML. Tasks, code review, deployments, marketing — all automated. Open source, self-hosted, zero infrastructure. MIT license.',
+					'Define AI agents in YAML. They write code, ship features, review PRs. You approve. Open source, self-hosted, MIT license.',
 			},
 			{ property: 'og:type', content: 'website' },
 			{ property: 'og:url', content: 'https://autopilot.questpie.com' },
@@ -37,7 +29,7 @@ export const Route = createFileRoute('/')({
 			{ name: 'twitter:card', content: 'summary_large_image' },
 			{
 				name: 'twitter:title',
-				content: 'QuestPie Autopilot — AI-Native Company Operating System',
+				content: 'QuestPie Autopilot — Your company runs on files. Now it runs itself.',
 			},
 		],
 		links: [{ rel: 'canonical', href: 'https://autopilot.questpie.com' }],
@@ -45,1107 +37,630 @@ export const Route = createFileRoute('/')({
 	component: LandingPage,
 })
 
+/* ── Scroll reveal hook ── */
+function useReveal() {
+	const ref = useRef<HTMLDivElement>(null)
+	useEffect(() => {
+		const el = ref.current
+		if (!el) return
+		const io = new IntersectionObserver(
+			([entry]) => {
+				if (entry.isIntersecting) {
+					el.classList.add('lp-visible')
+					io.unobserve(el)
+				}
+			},
+			{ threshold: 0.12 },
+		)
+		io.observe(el)
+		return () => io.disconnect()
+	}, [])
+	return ref
+}
+
+function RevealSection({
+	children,
+	className = '',
+}: { children: React.ReactNode; className?: string }) {
+	const ref = useReveal()
+	return (
+		<div
+			ref={ref}
+			className={`lp-reveal ${className}`}
+			style={{
+				opacity: 0,
+				transform: 'translateY(24px)',
+				transition: 'opacity 0.5s ease, transform 0.5s ease',
+			}}
+		>
+			{children}
+		</div>
+	)
+}
+
+/* ── Terminal typing animation ── */
+function TerminalTyping() {
+	const lines = [
+		{ type: 'cmd', text: '$ autopilot init my-company' },
+		{ type: 'out', text: '\u2713 Created company.yaml' },
+		{ type: 'out', text: '\u2713 Created team/agents.yaml (6 agents)' },
+		{ type: 'out', text: '\u2713 Created team/workflows/development.yaml' },
+		{ type: 'blank', text: '' },
+		{ type: 'cmd', text: '$ autopilot start' },
+		{ type: 'out', text: '\u25CF Orchestrator running on :7778' },
+		{ type: 'out', text: '\u25CF Dashboard at http://localhost:3000' },
+		{ type: 'blank', text: '' },
+		{ type: 'cmd', text: '$ autopilot chat ceo "Build a pricing page"' },
+		{ type: 'out', text: '\u2192 CEO decomposing intent...' },
+		{ type: 'out', text: '\u2192 Alex (planner) creating task tree' },
+		{ type: 'out', text: '\u2192 Max (developer) writing components' },
+	]
+
+	return (
+		<div className="bg-lp-card border border-lp-border overflow-hidden w-full">
+			<div className="px-4 py-2 border-b border-lp-border flex items-center gap-2">
+				<div className="flex gap-1">
+					<div className="w-2 h-2 bg-lp-accent-green" />
+					<div className="w-2 h-2 bg-lp-accent-green opacity-60" />
+					<div className="w-2 h-2 bg-lp-accent-green opacity-30" />
+				</div>
+				<span className="font-mono text-[11px] text-lp-ghost">terminal</span>
+			</div>
+			<div className="p-4 font-mono text-xs leading-relaxed">
+				{lines.map((line, i) => {
+					if (line.type === 'blank') return <div key={i} className="h-3" />
+					const delay = `${i * 0.3}s`
+					const isCmd = line.type === 'cmd'
+					return (
+						<div
+							key={i}
+							className="lp-type-line whitespace-pre overflow-hidden"
+							style={{
+								animationDelay: delay,
+								color: isCmd ? '#E5E5E5' : line.text.startsWith('\u2713') ? '#00E676' : '#B700FF',
+							}}
+						>
+							{line.text}
+						</div>
+					)
+				})}
+			</div>
+		</div>
+	)
+}
+
+/* ── YAML=Company file viewer ── */
+const companyFiles: Record<string, { lang: string; content: string }> = {
+	'company.yaml': {
+		lang: 'yaml',
+		content: `name: "my-startup"
+description: "SaaS for team productivity"
+domain: "myapp.dev"
+stack:
+  runtime: bun
+  framework: tanstack-start
+  database: sqlite
+  styling: tailwindcss`,
+	},
+	'team/agents.yaml': {
+		lang: 'yaml',
+		content: `agents:
+  - id: alex
+    role: planner
+    tools: [task, message]
+
+  - id: max
+    role: developer
+    tools: [fs, terminal, task, message]
+    fs_scope:
+      write: ["src/**", "tests/**"]
+
+  - id: riley
+    role: reviewer
+    tools: [fs, terminal, task, message]`,
+	},
+	'team/roles/developer.md': {
+		lang: 'yaml',
+		content: `# Developer Role
+
+You write production code.
+You follow the project conventions.
+You write tests for every feature.
+You never push directly to main.
+
+## Tools
+- fs: read/write project files
+- terminal: run commands
+- task: update task status
+- message: communicate with team`,
+	},
+	'knowledge/conventions.md': {
+		lang: 'yaml',
+		content: `# Coding Conventions
+
+- TypeScript strict mode
+- Functional components only
+- Server functions for data fetching
+- No "any" types
+- Tests co-located with source
+- Imports sorted alphabetically`,
+	},
+}
+
+function FileTree() {
+	const [active, setActive] = useState('company.yaml')
+	const files = [
+		{ name: 'company.yaml', indent: 0, label: '\u2190 identity' },
+		{ name: 'team/agents.yaml', indent: 1, label: '\u2190 your AI team' },
+		{ name: 'team/roles/developer.md', indent: 2, label: '\u2190 role prompts' },
+		{ name: 'knowledge/conventions.md', indent: 1, label: '\u2190 coding standards' },
+	]
+
+	const treeDisplay = `my-company/
+\u251C\u2500\u2500 company.yaml
+\u251C\u2500\u2500 team/
+\u2502   \u251C\u2500\u2500 agents.yaml
+\u2502   \u251C\u2500\u2500 roles/
+\u2502   \u2502   \u251C\u2500\u2500 developer.md
+\u2502   \u2502   \u2514\u2500\u2500 reviewer.md
+\u2502   \u2514\u2500\u2500 workflows/
+\u2502       \u2514\u2500\u2500 development.yaml
+\u251C\u2500\u2500 knowledge/
+\u2502   \u251C\u2500\u2500 conventions.md
+\u2502   \u2514\u2500\u2500 architecture.md
+\u251C\u2500\u2500 secrets/
+\u2502   \u2514\u2500\u2500 github.yaml          \u2190 encrypted
+\u2514\u2500\u2500 .data/
+    \u2514\u2500\u2500 autopilot.db         \u2190 SQLite (everything)`
+
+	return (
+		<div className="flex flex-col lg:flex-row gap-0 border border-lp-border">
+			{/* Tree side */}
+			<div className="lg:w-[45%] border-b lg:border-b-0 lg:border-r border-lp-border">
+				<div className="px-4 py-2 border-b border-lp-border flex items-center gap-2">
+					<span className="font-mono text-[11px] text-lp-ghost uppercase tracking-[0.05em]">
+						Explorer
+					</span>
+				</div>
+				<div className="p-4">
+					{/* Clickable file list */}
+					<div className="flex flex-col gap-1 mb-4">
+						{files.map((f) => (
+							<button
+								key={f.name}
+								type="button"
+								onClick={() => setActive(f.name)}
+								className={`text-left font-mono text-xs py-1 px-2 border transition-colors cursor-pointer ${
+									active === f.name
+										? 'border-lp-purple text-lp-fg bg-lp-purple-faint'
+										: 'border-transparent text-lp-muted hover:text-lp-fg hover:border-lp-border'
+								}`}
+								style={{ paddingLeft: `${f.indent * 16 + 8}px` }}
+							>
+								{f.name.split('/').pop()}
+								<span className="text-lp-ghost ml-3">{f.label}</span>
+							</button>
+						))}
+					</div>
+					{/* Full tree display */}
+					<pre className="font-mono text-[11px] text-lp-ghost leading-relaxed whitespace-pre overflow-x-auto lp-scrollbar">
+						{treeDisplay}
+					</pre>
+				</div>
+			</div>
+			{/* File content side */}
+			<div className="lg:w-[55%] flex flex-col">
+				<div className="px-4 py-2 border-b border-lp-border flex items-center gap-2">
+					<div className="flex gap-1">
+						<div className="w-2 h-2 bg-lp-accent-red" />
+						<div className="w-2 h-2 bg-lp-accent-yellow" />
+						<div className="w-2 h-2 bg-lp-accent-green" />
+					</div>
+					<span className="font-mono text-[11px] text-lp-ghost">{active}</span>
+				</div>
+				<pre className="font-mono text-xs text-lp-fg p-4 m-0 overflow-x-auto leading-relaxed flex-1 lp-scrollbar whitespace-pre">
+					{companyFiles[active]?.content ?? ''}
+				</pre>
+			</div>
+		</div>
+	)
+}
+
+/* ── Main page ── */
 function LandingPage() {
 	return (
-		<div className="landing-page">
+		<div className="landing-page min-h-screen">
+			<style>{`
+				.lp-reveal.lp-visible {
+					opacity: 1 !important;
+					transform: translateY(0) !important;
+				}
+				@keyframes lp-type {
+					from { width: 0; opacity: 1; }
+					to { width: 100%; opacity: 1; }
+				}
+				.lp-type-line {
+					width: 0;
+					opacity: 0;
+					animation: lp-type 0.6s steps(40, end) forwards;
+				}
+			`}</style>
+
 			<Header />
-			<main className="border-lp-border mx-auto max-w-[1200px] border-x lp-grid-bg">
-				{/* ========== 1. HERO ========== */}
-				<section className="px-4 py-24 md:px-8 md:py-32">
-					<div className="flex justify-center mb-8">
-						<QSymbol size={48} />
-					</div>
-					<h1 className="font-mono text-[36px] sm:text-[56px] font-bold text-white m-0 leading-tight tracking-[-0.03em] text-center">
-						Your AI-Native
-						<br />
-						Company OS
-					</h1>
-					<p className="font-sans text-base sm:text-[18px] text-lp-muted mt-5 leading-relaxed max-w-[640px] mx-auto text-center">
-						AI agents that don't chat — they act. Define your team in YAML.
-						Give them roles, tools, memory, and workflows. They create tasks,
-						write code, deploy services, review PRs, and build dashboards.
-						You approve the results.
-					</p>
-					<div className="mt-6 max-w-[480px] mx-auto">
-						<CodeBlock title="terminal">
-							{`bun add -g @questpie/autopilot
-autopilot init
-autopilot start`}
-						</CodeBlock>
-					</div>
-					<p className="font-sans text-[13px] text-lp-muted mt-4 text-center">
-						Run your entire company from a single CLI command. Your company
-						is a directory. Your agents are YAML. Fork it, version it,
-						customize it.
-					</p>
-					<div className="mt-6 flex gap-2 flex-wrap justify-center">
-						<Tag>OPEN SOURCE</Tag>
-						<Tag>MIT LICENSE</Tag>
-						<Tag>SELF-HOSTED</Tag>
-						<Tag>ZERO INFRA</Tag>
-					</div>
-					<div className="mt-8 flex gap-3 flex-wrap justify-center">
-						<a
-							href="/docs/getting-started"
-							className="font-mono text-xs text-white bg-lp-purple px-6 py-2.5 no-underline hover:bg-lp-purple-light transition-colors"
-						>
-							Get Started
-						</a>
-						<a
-							href="https://github.com/questpie/autopilot"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="font-mono text-xs text-lp-purple border border-lp-border px-6 py-2.5 no-underline hover:border-lp-purple transition-colors"
-						>
-							View on GitHub
-						</a>
-					</div>
-				</section>
 
-				{/* ========== 2. THE PROBLEM ========== */}
-				<Section id="problem">
-					<SectionHeader
-						num="01"
-						sub="One person. 168 hours a week. Six roles to fill. Something always drops."
-					>
-						You Can't Afford a Team. You Still Need One.
-					</SectionHeader>
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-						<PainCard
-							title="Strategy"
-							description="You ship features but nobody is steering the roadmap. You are building, but you are not sure you are building the right thing. There is no one to challenge your assumptions or define next quarter."
-						/>
-						<PainCard
-							title="Development"
-							description="You write code all day and still have a backlog that grows faster than you can clear it. Every task spawns two more. Evenings bleed into nights and weekends become sprints."
-						/>
-						<PainCard
-							title="Code Review"
-							description="Nobody reviews your code. Bugs ship straight to production. You find them when a user emails you at 2AM. The last time someone audited your code for security issues was never."
-						/>
-						<PainCard
-							title="DevOps"
-							description="Deployments are manual, scary, and happen at midnight. Your CI/CD pipeline is a bash script you wrote six months ago and forgot. Staging does not exist because you do not have time to set it up."
-						/>
-						<PainCard
-							title="Marketing"
-							description="Your product is invisible because marketing is always the thing you will do next week. Your competitors with worse products are outranking you because they actually write blog posts."
-						/>
-						<PainCard
-							title="Design"
-							description="Your UI looks like it was built by a backend engineer — because it was. Users judge your product in 3 seconds. You lose most of them."
-						/>
-					</div>
-					<div className="mt-6 bg-lp-card border border-lp-border p-6 text-center">
-						<div className="font-mono text-[14px] text-lp-fg">
-							One founder. 168 hours. Six roles. Zero code reviews.
-						</div>
-					</div>
-				</Section>
-
-				{/* ========== 3. DEFINE YOUR AI TEAM ========== */}
-				<Section id="team">
-					<SectionHeader
-						num="02"
-						sub="Each agent has its own identity, skills, memory, and tools — all configured in YAML. They don't just respond — they own their work. The Solo Dev template ships with agents for strategy, development, review, DevOps, marketing, and design. Customize them or create your own."
-					>
-						Define Your AI Team
-					</SectionHeader>
-					<div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-						<AgentCard
-							name="CEO"
-							role="ORCHESTRATOR"
-							desc="Decomposes intent, assigns work, monitors progress"
-							status="schd"
-						/>
-						<AgentCard
-							name="Sam"
-							role="STRATEGIST"
-							desc="Analyzes markets, defines roadmap priorities"
-							status="idle"
-						/>
-						<AgentCard
-							name="Alex"
-							role="PLANNER"
-							desc="Breaks strategy into task trees with dependencies"
-							status="idle"
-						/>
-						<AgentCard
-							name="Max"
-							role="DEVELOPER"
-							desc="Writes code, runs tests, creates PRs"
-							status="run"
-						/>
-						<AgentCard
-							name="Riley"
-							role="REVIEWER"
-							desc="Reviews every line for bugs and security"
-							status="idle"
-						/>
-						<AgentCard
-							name="Ops"
-							role="DEVOPS"
-							desc="Manages deployments, CI/CD, health checks"
-							status="schd"
-						/>
-						<AgentCard
-							name="Morgan"
-							role="MARKETER"
-							desc="Blog posts, social content, SEO copy"
-							status="idle"
-						/>
-						<AgentCard
-							name="Jordan"
-							role="DESIGNER"
-							desc="UI components, design systems, landing pages"
-							status="idle"
-						/>
-					</div>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<CodeBlock title="team/agents.yaml">
-							{`agents:
-  ceo:
-    name: CEO
-    role: Company Orchestrator
-    provider: claude-agent-sdk
-    model: claude-sonnet-4-20250514
-    tools: [task, message, pin, search, http]
-
-  max:
-    name: Max
-    role: Senior Full-Stack Developer
-    provider: claude-agent-sdk
-    model: claude-sonnet-4-20250514
-    tools: [task, message, pin, search, http]
-    skills: [typescript, react, bun, testing]
-    fs_scope:
-      read: ["projects/**", "knowledge/**"]
-      write: ["projects/**"]
-
-  riley:
-    name: Riley
-    role: Code Reviewer
-    provider: claude-agent-sdk
-    model: claude-sonnet-4-20250514
-    tools: [task, message, search]
-
-  # Add, remove, or customize any agent.
-  # This is YOUR team. Not ours.`}
-						</CodeBlock>
-						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									CONFIGURABLE, NOT FIXED
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-									The Solo Dev template ships with 8 agents as an
-									example. Start with 2-3, add as you need. You choose
-									the names, the roles, the tools, and the models.
-									Same kernel, different team.
-								</div>
-							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									3 PROVIDER BACKENDS
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-									Claude Agent SDK, Codex SDK, and Anthropic direct.
-									Mix models per agent role. Each agent gets its own
-									persistent identity, memory, and filesystem scope.
-								</div>
-							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-									<strong className="text-lp-fg">Persistent memory:</strong>{' '}
-									Agents learn from past work. Facts, decisions, mistakes,
-									and patterns are extracted after every session. Memory
-									survives across sessions and gets better over time.
-								</div>
-							</div>
-						</div>
-					</div>
-					<div className="mt-4 text-center">
-						<a
-							href="/features/agents"
-							className="font-mono text-xs text-lp-purple no-underline hover:text-lp-purple-light transition-colors"
-						>
-							See how agents work →
-						</a>
-					</div>
-				</Section>
-
-				{/* ========== 4. HOW IT WORKS ========== */}
-				<Section id="how">
-					<SectionHeader
-						num="03"
-						sub="Human at decision points. Automation everywhere else."
-					>
-						Intent In. Results Out.
-					</SectionHeader>
-					<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-						<div className="bg-lp-card border border-lp-border p-6">
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-3">
-								STEP 1
-							</div>
-							<div className="font-mono text-[14px] text-lp-fg font-semibold mb-2">
-								Give Intent
-							</div>
-							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-								Tell Autopilot what you want in plain language. Use the
-								CLI, the dashboard, or chat. No configuration, no task
-								decomposition, no assignment. Just say what you need.
-							</div>
-						</div>
-						<div className="bg-lp-card border border-lp-border p-6">
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-3">
-								STEP 2
-							</div>
-							<div className="font-mono text-[14px] text-lp-fg font-semibold mb-2">
-								Agents Execute
-							</div>
-							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-								CEO decomposes the request. Sam strategizes. Alex plans.
-								Max writes code. Riley reviews it. You watch the entire
-								process in real time through the dashboard or terminal.
-							</div>
-						</div>
-						<div className="bg-lp-card border border-lp-border p-6">
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-3">
-								STEP 3
-							</div>
-							<div className="font-mono text-[14px] text-lp-fg font-semibold mb-2">
-								You Approve
-							</div>
-							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-								Critical decisions pause for your review. Approve a merge.
-								Reject a deploy. Redirect a strategy. The workflow resumes
-								when you say go. Everything else runs autonomously.
-							</div>
-						</div>
-					</div>
-					<CodeBlock title="terminal — giving intent">
-						{`$ autopilot chat ceo "Build a pricing page with 3 tiers"
-
-CEO Agent decomposing intent...
-
-Created 4 tasks:
-
-  task-050: Scope pricing page requirements
-   -> Assigned to: sam (strategist)
-
-  task-051: Design pricing page UI
-   -> Waiting for: task-050
-   -> Will assign to: jordan (designer)
-
-  task-052: Implement pricing page with Stripe
-   -> Waiting for: task-050, task-051
-   -> Will assign to: max (developer)
-
-  task-053: Write pricing page copy and announce
-   -> Waiting for: task-050
-   -> Workflow: marketing
-
-Sam is starting on task-050 now.
-You'll be notified when approvals are needed.`}
-					</CodeBlock>
-					<div className="mt-4 bg-lp-card border border-lp-border p-6 text-center">
-						<div className="font-sans text-[13px] text-lp-muted">
-							Two human decisions. Ten automated steps. One intent.
-						</div>
-					</div>
-					<div className="mt-4 text-center">
-						<a
-							href="/docs/getting-started"
-							className="font-mono text-xs text-lp-purple no-underline hover:text-lp-purple-light transition-colors"
-						>
-							Try it now →
-						</a>
-					</div>
-				</Section>
-
-				{/* ========== 5. TOOLS ========== */}
-				<Section id="tools">
-					<SectionHeader
-						num="04"
-						sub="7 custom tools that produce auditable effects + built-in filesystem and terminal access from the SDK — not paragraphs of text you have to copy-paste."
-					>
-						Agents Act. They Don't Chat.
-					</SectionHeader>
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-						<ToolCard
-							name="task"
-							description="Create, update, approve, reject, block, and unblock tasks with full lifecycle tracking. Every task state transition is enforced and logged."
-						/>
-						<ToolCard
-							name="message"
-							description="Send messages to channels, DMs, and auto-created task threads. Agents coordinate through persistent, searchable communication."
-						/>
-						<ToolCard
-							name="pin"
-							description="Surface important information on the dashboard as info, warning, error, or progress indicators. Agents tell you what matters without you asking."
-						/>
-						<ToolCard
-							name="search"
-							description="Query all company knowledge across 7 entity types using FTS5 full-text search. Agents find information before every task."
-						/>
-						<ToolCard
-							name="http"
-							description="Make HTTP requests to external APIs with SSRF protection and automatic secret injection. Agents integrate with any service without exposing credentials."
-						/>
-						<ToolCard
-							name="search_web"
-							description="Research the web via Brave, Tavily, or SerpAPI without leaving the workflow. Agents gather information as part of their work."
-						/>
-						<ToolCard
-							name="browse"
-							description="Read web pages, extract structured content, and take screenshots for visual analysis. Agents can read documentation, check competitors, and verify deployed UIs."
-						/>
-						<ToolCard
-							name="filesystem"
-							description="Read, write, and edit files. Full filesystem access through the Claude Agent SDK. Agents write production code, not suggestions."
-							variant="builtin"
-						/>
-						<ToolCard
-							name="terminal"
-							description="Execute bash commands. Run tests, build projects, manage git. Built into the SDK — agents operate like a developer at a terminal."
-							variant="builtin"
-						/>
-					</div>
-					<div className="bg-lp-card border border-lp-border p-6">
-						<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-							A chatbot generates text you copy-paste into your editor.
-							Autopilot agents call tools that create tasks, send messages,
-							write files, and hit APIs. Every action is logged, auditable,
-							and reversible.
-						</div>
-					</div>
-					<div className="mt-4 text-center">
-						<a
-							href="/features/agents"
-							className="font-mono text-xs text-lp-purple no-underline hover:text-lp-purple-light transition-colors"
-						>
-							Explore the tool system →
-						</a>
-					</div>
-				</Section>
-
-				{/* ========== 6. LIVING DASHBOARD ========== */}
-				<Section id="dashboard">
-					<SectionHeader
-						num="05"
-						sub="A real-time dashboard that shows what your AI team is doing, thinking, and waiting on."
-					>
-						26 Pages. Zero Guesswork.
-					</SectionHeader>
-					<DashboardMock />
-					<div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-						{[
-							{
-								label: 'AGENT MONITORING',
-								desc: 'See who is working, who is idle, and what each agent is doing right now. Live status updates stream through Server-Sent Events — no refresh needed.',
-							},
-							{
-								label: 'KANBAN BOARD',
-								desc: 'Drag tasks across backlog, in-progress, review, and done. Approve or reject tasks directly from the board.',
-							},
-							{
-								label: 'AGENT CHAT',
-								desc: 'Chat with agents in persistent channels. @mention any agent by name. They respond in context, with memory of past conversations.',
-							},
-							{
-								label: 'FILE BROWSER',
-								desc: 'Navigate the filesystem, view markdown and code with syntax highlighting, upload new knowledge. What you upload, agents can find.',
-							},
-							{
-								label: 'SESSION REPLAY',
-								desc: 'Scrub through the timeline of tool calls, messages, and file changes. Debug unexpected behavior by tracing the exact sequence of decisions.',
-							},
-							{
-								label: 'CMD+K',
-								desc: 'Hit Cmd+K from any page. Navigate anywhere, search everything, or prefix with > to create a new intent and send work to your AI team.',
-							},
-						].map((item) => (
-							<div
-								key={item.label}
-								className="bg-lp-card border border-lp-border p-6"
+			{/* ── 1. HERO ── */}
+			<section className="border-b border-lp-border">
+				<div className="mx-auto max-w-[1200px] border-x border-lp-border px-4 md:px-8 py-16 md:py-24">
+					<div className="flex flex-col lg:flex-row gap-12 lg:gap-16 items-start">
+						{/* Left */}
+						<div className="lg:w-[58%] flex flex-col gap-6">
+							<span className="font-mono text-[10px] uppercase tracking-[0.15em] text-lp-muted">
+								Open Source &middot; MIT License
+							</span>
+							<h1
+								className="font-mono font-bold text-lp-fg leading-[1.1] tracking-[-0.03em]"
+								style={{ fontSize: 'clamp(32px, 5vw, 64px)' }}
 							>
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
-									{item.label}
-								</div>
-								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-									{item.desc}
-								</div>
-							</div>
-						))}
-					</div>
-					<div className="mt-4 text-center">
-						<a
-							href="/features/dashboard"
-							className="font-mono text-xs text-lp-purple no-underline hover:text-lp-purple-light transition-colors"
-						>
-							See the full dashboard →
-						</a>
-					</div>
-				</Section>
-
-				{/* ========== 7. WORKFLOWS ========== */}
-				<Section id="workflows">
-					<SectionHeader
-						num="06"
-						sub="Define any process as a state machine. Agents execute the steps. Humans approve at critical points."
-					>
-						YAML Workflows. Human Gates.
-					</SectionHeader>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<CodeBlock title="team/workflows/development.yaml">
-							{`steps:
-  implement:
-    agent: max
-    auto: true
-    transitions:
-      - to: code_review
-        condition: implementation_complete
-  code_review:
-    agent: riley
-    auto: true
-    transitions:
-      - to: approve_merge
-        condition: review_passed
-  approve_merge:
-    type: human_gate
-    transitions:
-      - to: deploy
-        condition: approved
-      - to: implement
-        condition: rejected`}
-						</CodeBlock>
-						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									HUMAN GATES
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-									Review steps enforce minimum approvals and match
-									reviewers by role. Riley reviews code automatically.
-									You approve merges manually. Both are required.
-								</div>
-							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									3 BUILT-IN WORKFLOWS
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-									Development (12 steps), Marketing (7 steps), and
-									Incident Response (8 steps). Customize them or write
-									your own from scratch.
-								</div>
-							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									GRAPH VALIDATION
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-									Every workflow is validated before execution. The
-									engine checks graph connectivity — unreachable steps
-									and invalid transitions are caught before a single
-									agent starts working.
-								</div>
-							</div>
-						</div>
-					</div>
-					<div className="mt-4 text-center">
-						<a
-							href="/features/workflows"
-							className="font-mono text-xs text-lp-purple no-underline hover:text-lp-purple-light transition-colors"
-						>
-							Build custom workflows →
-						</a>
-					</div>
-				</Section>
-
-				{/* ========== 8. SECURITY ========== */}
-				<Section id="security">
-					<SectionHeader
-						num="07"
-						sub="Enterprise-grade security built from day one. Self-hosted. Encrypted. GDPR-native."
-					>
-						14 Security Layers. Not an Afterthought.
-					</SectionHeader>
-					<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-						{[
-							{
-								label: 'AUTHENTICATION',
-								desc: 'Better Auth with email/password and minimum 12-character password policy. 30-day session expiry. Invite-only registration.',
-							},
-							{
-								label: '2FA',
-								desc: 'TOTP-based with 10 backup codes and 30-day device trust. Mandatory for owner and admin roles. Cannot be disabled.',
-							},
-							{
-								label: 'RBAC',
-								desc: '4 roles — owner, admin, member, viewer — with granular resource.action permissions. Agent API keys (ap_*) with scoped access.',
-							},
-							{
-								label: 'ENCRYPTION',
-								desc: 'AES-256-GCM encrypted secrets with master key isolation. Per-agent secret scoping. Secrets injected at runtime, never stored in plain text.',
-							},
-							{
-								label: 'RATE LIMITING',
-								desc: '3-layer: auth endpoints (10/5min), IP-based (20/min), actor-based (300/min humans, 600/min agents).',
-							},
-							{
-								label: 'NETWORK',
-								desc: 'IP allowlist with IPv4/IPv6 CIDR. SSRF protection with DNS resolution and private IP blocking on every agent HTTP call.',
-							},
-							{
-								label: 'FILESYSTEM SANDBOX',
-								desc: 'Per-agent read/write globs. Hardcoded deny patterns for .auth/, .data/, and .git/. Agents cannot touch what they should not see.',
-							},
-							{
-								label: 'AUDIT LOGS',
-								desc: 'Append-only with daily rotation, protected from agent access. Every tool call, message, and auth event logged in parseable JSONL.',
-							},
-						].map((item) => (
-							<div
-								key={item.label}
-								className="bg-lp-card border border-lp-border p-6"
-							>
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
-									{item.label}
-								</div>
-								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-									{item.desc}
-								</div>
-							</div>
-						))}
-					</div>
-					<div className="mt-4 flex gap-2 flex-wrap justify-center">
-						<Tag>MIT LICENSE</Tag>
-						<Tag>SELF-HOSTED</Tag>
-						<Tag>AES-256-GCM</Tag>
-						<Tag>GDPR-NATIVE</Tag>
-					</div>
-					<div className="mt-4 text-center">
-						<a
-							href="/features/security"
-							className="font-mono text-xs text-lp-purple no-underline hover:text-lp-purple-light transition-colors"
-						>
-							Review our security model →
-						</a>
-					</div>
-				</Section>
-
-				{/* ========== 9. ZERO INFRASTRUCTURE ========== */}
-				<Section id="infra">
-					<SectionHeader
-						num="08"
-						sub="No Postgres. No Redis. No Kafka. No vector database. Just Bun and SQLite."
-					>
-						One Process. One File. Done.
-					</SectionHeader>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									WHAT YOU NEED
-								</div>
-								<CodeBlock title="install">
-									{`bun add -g @questpie/autopilot && autopilot init && autopilot start`}
-								</CodeBlock>
-							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-									Single Bun process, single SQLite file, approximately
-									100MB RAM footprint (typical, varies by workload).
-									Everything lives in one directory — back up your
-									company by copying a folder.
-								</div>
-							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									API COSTS
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-									Varies by model choice, task complexity, and number of
-									agents. You bring your own API keys — zero markup from
-									us.
-								</div>
-							</div>
-						</div>
-						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-accent-red tracking-[0.15em] mb-2.5">
-									WHAT THEY REQUIRE
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-									Docker + Postgres + Redis + vector DB + Kafka + S3 +
-									load balancer
-								</div>
-							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-accent-green tracking-[0.15em] mb-2.5">
-									WHAT AUTOPILOT NEEDS
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-2">
-									<div>
-										<strong className="text-lp-fg">Runtime:</strong>{' '}
-										Bun
-									</div>
-									<div>
-										<strong className="text-lp-fg">Database:</strong>{' '}
-										SQLite (embedded)
-									</div>
-									<div>
-										<strong className="text-lp-fg">Search:</strong>{' '}
-										FTS5 + sqlite-vec (embedded)
-									</div>
-									<div>
-										<strong className="text-lp-fg">Process:</strong>{' '}
-										1
-									</div>
-									<div>
-										<strong className="text-lp-fg">
-											Docker option:
-										</strong>{' '}
-										Single container, one volume mount
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-					<div className="mt-4 text-center">
-						<a
-							href="/docs/getting-started"
-							className="font-mono text-xs text-lp-purple no-underline hover:text-lp-purple-light transition-colors"
-						>
-							Install in 60 seconds →
-						</a>
-					</div>
-				</Section>
-
-				{/* ========== 10. USE CASES ========== */}
-				<Section id="usecases">
-					<SectionHeader
-						num="09"
-						sub="Same core platform. Different skills, knowledge, and workflows. Configure it for your business."
-					>
-						Same Engine. Different Company.
-					</SectionHeader>
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-						<UseCaseCard
-							number="01"
-							title="SOLO DEV SHOP"
-							fields={[
-								{
-									label: 'WHAT',
-									value: 'Run a full development company with AI agents.',
-								},
-								{
-									label: 'TEMPLATE',
-									value: 'Solo Dev — strategy, development, review, DevOps, and marketing.',
-								},
-							]}
-							outcome="Roles you never had before, working while you sleep"
-							codeTitle="terminal — solo dev"
-							code={`$ autopilot chat ceo "Build a pricing page with Stripe"
-
-CEO decomposing...
-  task-050: Scope requirements    -> sam
-  task-051: Design UI             -> jordan
-  task-052: Implement + Stripe    -> max
-  task-053: Write copy            -> morgan`}
-						/>
-						<UseCaseCard
-							number="02"
-							title="MARKETING AGENCY"
-							fields={[
-								{
-									label: 'WHAT',
-									value: 'Scale content output without scaling headcount.',
-								},
-								{
-									label: 'HOW',
-									value: 'Per-client knowledge bases and brand voice enforcement.',
-								},
-							]}
-							outcome="Content production that scales with YAML, not payroll"
-							codeTitle="terminal — agency"
-							code={`$ autopilot chat morgan "Write a blog post
-  about our Q2 product launch"
-
-Morgan researching topic...
-Morgan writing draft...
-Morgan posting to review channel...`}
-						/>
-						<UseCaseCard
-							number="03"
-							title="STARTUP TEAM"
-							fields={[
-								{
-									label: 'WHAT',
-									value: 'Augment your 2-5 person team with AI agents.',
-								},
-								{
-									label: 'HOW',
-									value: 'Code review, DevOps, and QA. Human gates at every critical decision.',
-								},
-							]}
-							outcome="Ship faster without hiring"
-							codeTitle="terminal — startup"
-							code={`$ autopilot chat ceo "Set up staging env
-  with automated deploys from develop branch"
-
-CEO decomposing...
-  task-060: Define infra requirements -> ops
-  task-061: Write CI/CD pipeline      -> ops`}
-						/>
-						<UseCaseCard
-							number="04"
-							title="E-COMMERCE OPS"
-							fields={[
-								{
-									label: 'WHAT',
-									value: 'Automate product listings, pricing, inventory monitoring.',
-								},
-								{
-									label: 'HOW',
-									value: 'Custom agents for catalog management and customer support.',
-								},
-							]}
-							outcome="Operations that run 24/7 without manual intervention"
-							codeTitle="terminal — ecommerce"
-							code={`$ autopilot chat ceo "Update all product
-  descriptions for the spring collection"
-
-CEO decomposing...
-  task-070: Audit current listings    -> sam
-  task-071: Write new descriptions    -> morgan`}
-						/>
-						<UseCaseCard
-							number="05"
-							title="DEVOPS / INFRA"
-							fields={[
-								{
-									label: 'WHAT',
-									value: '5-minute incident triage, automated runbook execution.',
-								},
-								{
-									label: 'HOW',
-									value: 'Incident response workflow. Post-mortem knowledge capture.',
-								},
-							]}
-							outcome="Agents learn from every incident"
-							codeTitle="terminal — incident"
-							code={`$ autopilot chat ops "Production API
-  latency is above 500ms"
-
-Ops triaging incident...
-Ops checking health endpoints...
-Ops running diagnostic playbook...`}
-						/>
-						<UseCaseCard
-							number="06"
-							title="INTERNAL TOOLS"
-							fields={[
-								{
-									label: 'WHAT',
-									value: 'Invoicing, reporting, contracts, HR onboarding.',
-								},
-								{
-									label: 'HOW',
-									value: 'All defined as YAML workflows with human approval gates.',
-								},
-							]}
-							outcome="Business processes automated, not just code"
-							codeTitle="terminal — internal"
-							code={`$ autopilot chat ceo "Generate Q1 invoice
-  report for all active clients"
-
-CEO decomposing...
-  task-080: Pull billing data     -> ops
-  task-081: Generate report       -> max`}
-						/>
-					</div>
-				</Section>
-
-				{/* ========== 11. COMPETITIVE COMPARISON ========== */}
-				<Section id="compare">
-					<SectionHeader
-						num="10"
-						sub="An honest look at where we fit in the landscape."
-					>
-						How Autopilot Compares
-					</SectionHeader>
-					<ComparisonTable />
-					<div className="mt-4 flex gap-3 flex-wrap justify-center">
-						{[
-							{ label: 'vs CrewAI', href: '/compare/crewai' },
-							{ label: 'vs Devin', href: '/compare/devin' },
-							{ label: 'vs n8n', href: '/compare/n8n' },
-							{ label: 'vs Dust', href: '/compare/dust' },
-						].map((link) => (
-							<a
-								key={link.label}
-								href={link.href}
-								className="font-mono text-xs text-lp-purple no-underline hover:text-lp-purple-light transition-colors"
-							>
-								{link.label} →
-							</a>
-						))}
-					</div>
-				</Section>
-
-				{/* ========== 12. NUMBERS ========== */}
-				<Section id="numbers">
-					<SectionHeader
-						num="11"
-						sub="Production-grade numbers from a system running in production today."
-					>
-						This Is Not a Prototype.
-					</SectionHeader>
-					<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-						<NumberStat
-							value="80+"
-							label="API endpoints across 22 route files"
-						/>
-						<NumberStat
-							value="7"
-							label="Custom agent tools + built-in SDK access"
-						/>
-						<NumberStat
-							value="3"
-							label="Agent providers — Claude, OpenAI, Anthropic"
-						/>
-						<NumberStat
-							value="26"
-							label="Dashboard pages — live, real-time"
-						/>
-						<NumberStat
-							value="60+"
-							label="CLI subcommands — full control"
-						/>
-						<NumberStat
-							value="14"
-							label="Security layers — enterprise-grade"
-						/>
-						<NumberStat
-							value="3"
-							label="Built-in workflows — dev, marketing, incident"
-						/>
-						<NumberStat
-							value="0"
-							label="External dependencies — no Postgres, no Redis"
-						/>
-						<NumberStat
-							value="~100MB"
-							label="RAM footprint (typical, varies by workload)"
-						/>
-						<NumberStat
-							value="BYOK"
-							label="Bring your own keys — zero markup"
-						/>
-					</div>
-				</Section>
-
-				{/* ========== 13. GETTING STARTED ========== */}
-				<Section id="start">
-					<SectionHeader
-						num="12"
-						sub="From zero to running AI company in under five minutes."
-					>
-						Three Commands. Five Minutes.
-					</SectionHeader>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div className="flex flex-col gap-4">
-							<CodeBlock title="install & start">
-								{`# Install
-bun add -g @questpie/autopilot
-
-# Initialize your company
-autopilot init
-
-# Start your AI team
-autopilot start`}
-							</CodeBlock>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-									The init wizard walks you through company setup, agent
-									provider configuration, and team template selection.
-									Open{' '}
-									<code className="font-mono text-[11px] text-lp-purple">
-										localhost:3000
-									</code>{' '}
-									to see your dashboard with live agent activity.
-								</div>
-							</div>
-						</div>
-						<div className="flex flex-col gap-4">
-							<CodeBlock title="your first intent">
-								{`# Give your first intent via CLI
-autopilot chat ceo "Create a project roadmap"
-
-# Or open the dashboard, hit Cmd+K, and type:
-# >Create a project roadmap`}
-							</CodeBlock>
-							<div className="flex gap-3 flex-col sm:flex-row">
+								Define agents in YAML.
+								<br />
+								They write code, ship features, and review PRs.
+								<br />
+								<span className="text-lp-purple">You approve.</span>
+							</h1>
+							<p className="font-sans text-base md:text-lg text-lp-muted max-w-[480px] leading-relaxed">
+								Your company as a git repo. AI agents that actually work. One CLI to run it all.
+							</p>
+							<div className="flex flex-wrap gap-3 mt-2">
 								<a
 									href="/docs/getting-started"
-									className="font-mono text-xs text-white bg-lp-purple px-6 py-2.5 no-underline hover:bg-lp-purple-light transition-colors text-center flex-1"
+									className="font-mono text-sm font-semibold bg-lp-purple text-white px-6 py-3 border border-lp-purple hover:bg-[#9200CC] transition-colors no-underline inline-block"
 								>
-									Read the Docs
+									Get Started
 								</a>
 								<a
 									href="https://github.com/questpie/autopilot"
 									target="_blank"
 									rel="noopener noreferrer"
-									className="font-mono text-xs text-lp-purple border border-lp-border px-6 py-2.5 no-underline hover:border-lp-purple transition-colors text-center flex-1"
+									className="font-mono text-sm font-semibold text-lp-fg px-6 py-3 border border-lp-border hover:border-lp-purple transition-colors no-underline inline-block"
 								>
-									Star on GitHub
+									View on GitHub
 								</a>
 							</div>
 						</div>
+						{/* Right */}
+						<div className="lg:w-[42%] w-full">
+							<TerminalTyping />
+						</div>
 					</div>
-				</Section>
+				</div>
+			</section>
 
-				{/* ========== FOOTER ========== */}
-				<section className="border-t border-lp-border px-4 py-16 md:px-8 md:py-24">
-					<div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-12">
-						<div>
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-4">
-								PRODUCT
-							</div>
-							<div className="flex flex-col gap-2">
-								{[
-									{ label: 'Features', href: '/features' },
-									{ label: 'Dashboard', href: '/features/dashboard' },
-									{ label: 'Workflows', href: '/features/workflows' },
-									{ label: 'Security', href: '/features/security' },
-									{ label: 'Pricing', href: '/pricing' },
-								].map((link) => (
-									<a
-										key={link.label}
-										href={link.href}
-										className="font-sans text-[13px] text-lp-ghost no-underline hover:text-lp-fg transition-colors"
-									>
-										{link.label}
-									</a>
-								))}
-							</div>
-						</div>
-						<div>
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-4">
-								USE CASES
-							</div>
-							<div className="flex flex-col gap-2">
-								{[
-									{ label: 'Solo Dev', href: '/use-cases/solo-dev' },
-									{ label: 'Agency', href: '/use-cases/agency' },
-									{ label: 'Startup', href: '/use-cases/startup' },
-									{ label: 'E-commerce', href: '/use-cases/ecommerce' },
-									{ label: 'DevOps', href: '/use-cases/devops' },
-									{
-										label: 'Internal Tools',
-										href: '/use-cases/internal-tools',
-									},
-								].map((link) => (
-									<a
-										key={link.label}
-										href={link.href}
-										className="font-sans text-[13px] text-lp-ghost no-underline hover:text-lp-fg transition-colors"
-									>
-										{link.label}
-									</a>
-								))}
-							</div>
-						</div>
-						<div>
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-4">
-								COMPARE
-							</div>
-							<div className="flex flex-col gap-2">
-								{[
-									{ label: 'vs CrewAI', href: '/compare/crewai' },
-									{ label: 'vs Devin', href: '/compare/devin' },
-									{ label: 'vs n8n', href: '/compare/n8n' },
-									{ label: 'vs Dust', href: '/compare/dust' },
-									{ label: 'vs OpenClaw', href: '/compare/openclaw' },
-								].map((link) => (
-									<a
-										key={link.label}
-										href={link.href}
-										className="font-sans text-[13px] text-lp-ghost no-underline hover:text-lp-fg transition-colors"
-									>
-										{link.label}
-									</a>
-								))}
-							</div>
-						</div>
-						<div>
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-4">
-								RESOURCES
-							</div>
-							<div className="flex flex-col gap-2">
-								{[
-									{
-										label: 'Documentation',
-										href: '/docs',
-									},
-									{
-										label: 'Getting Started',
-										href: '/docs/getting-started',
-									},
-									{
-										label: 'GitHub',
-										href: 'https://github.com/questpie/autopilot',
-										external: true,
-									},
-									{
-										label: 'CLI Reference',
-										href: '/docs/cli',
-									},
-								].map((link) => (
-									<a
-										key={link.label}
-										href={link.href}
-										{...('external' in link
-											? {
-													target: '_blank',
-													rel: 'noopener noreferrer',
-												}
-											: {})}
-										className="font-sans text-[13px] text-lp-ghost no-underline hover:text-lp-fg transition-colors"
-									>
-										{link.label}
-									</a>
-								))}
-							</div>
-						</div>
-					</div>
-					<div className="border-t border-lp-border pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-						<div className="flex items-center gap-3">
-							<QSymbol size={20} />
-							<span className="font-mono text-[11px] text-lp-dim">
-								Built by{' '}
-								<a
-									href="https://questpie.com"
-									target="_blank"
-									rel="noopener noreferrer"
-									className="text-lp-ghost hover:text-lp-fg transition-colors no-underline"
-								>
-									QUESTPIE s.r.o.
-								</a>
-								{' '} · MIT License
-							</span>
-						</div>
-						<a
-							href="/docs/getting-started"
-							className="font-mono text-xs text-white bg-lp-purple px-6 py-2.5 no-underline hover:bg-lp-purple-light transition-colors"
+			{/* ── 2. PROBLEM ── */}
+			<section className="border-b border-lp-border">
+				<RevealSection>
+					<div className="mx-auto max-w-[1200px] border-x border-lp-border px-4 md:px-8 py-16 md:py-24">
+						<p
+							className="font-mono font-bold text-lp-fg leading-snug tracking-[-0.03em] max-w-[720px] mb-12"
+							style={{ fontSize: 'clamp(20px, 3vw, 36px)' }}
 						>
-							Get Started
-						</a>
+							You're the founder. You're also the developer, the reviewer, the ops engineer,
+							the marketer, and the designer. Something always drops.
+						</p>
+						<div className="bg-lp-card border border-lp-border p-4 md:p-6 overflow-x-auto lp-scrollbar">
+							<pre className="font-mono text-xs md:text-sm text-lp-muted leading-loose whitespace-pre m-0">
+{`06:00  wake up, check production
+07:00  fix critical bug from last night
+09:00  sprint planning (with yourself)
+10:00  implement feature #47
+12:00  lunch = debugging in your head
+13:00  code review (reviewing your own code)
+14:00  deployment (manual, scary)
+15:00  marketing? tomorrow.
+16:00  design? next week.
+17:00  strategy? next month.
+22:00  push to prod, pray`}
+							</pre>
+						</div>
 					</div>
-				</section>
-			</main>
+				</RevealSection>
+			</section>
+
+			{/* ── 3. SOLUTION ── */}
+			<section className="border-b border-lp-border">
+				<RevealSection>
+					<div className="mx-auto max-w-[1200px] border-x border-lp-border px-4 md:px-8 py-16 md:py-24">
+						<div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
+							{/* Left labels */}
+							<div className="lg:w-[28%] flex flex-row lg:flex-col gap-6 lg:gap-0">
+								{[
+									{ label: 'DEFINE', desc: 'Agents, roles, and workflows in YAML' },
+									{ label: 'EXECUTE', desc: 'Agents work autonomously on tasks' },
+									{ label: 'APPROVE', desc: 'You review and merge from your inbox' },
+								].map((step, i) => (
+									<div key={step.label} className="flex-1 lg:flex-initial relative">
+										{/* Vertical connector line (desktop) */}
+										{i < 2 && (
+											<div className="hidden lg:block absolute left-[5px] top-8 bottom-0 w-px bg-lp-border" />
+										)}
+										<div className="flex lg:flex-row items-start gap-3 lg:pb-12">
+											<div className="hidden lg:block w-[11px] h-[11px] border border-lp-purple bg-lp-bg mt-1 shrink-0" />
+											<div>
+												<span className="font-mono text-[10px] uppercase tracking-[0.15em] text-lp-purple font-semibold">
+													{step.label}
+												</span>
+												<p className="font-sans text-sm text-lp-muted mt-1">{step.desc}</p>
+											</div>
+										</div>
+									</div>
+								))}
+							</div>
+							{/* Right code blocks */}
+							<div className="lg:w-[72%] flex flex-col gap-4">
+								<CodeBlock title="team/agents.yaml">
+{`agents:
+  - id: max
+    role: developer
+    tools: [fs, terminal, task, message]
+    fs_scope:
+      write: ["src/**", "tests/**"]`}
+								</CodeBlock>
+								<CodeBlock title="terminal — agents working">
+{`[max] Writing src/components/PricingTable.tsx
+[max] Running bun test -- 47 passed
+[riley] Reviewing PR #23 — 2 issues found
+[max] Fixing: unused import, missing error boundary
+[riley] Approved \u2713`}
+								</CodeBlock>
+								<div className="bg-lp-bg border border-lp-border overflow-hidden">
+									<div className="px-4 py-2 border-b border-lp-border">
+										<span className="font-mono text-[11px] text-lp-ghost">inbox</span>
+									</div>
+									<div className="p-4 font-mono text-xs text-lp-fg leading-relaxed">
+										<pre className="m-0 whitespace-pre overflow-x-auto lp-scrollbar">
+{`\u250C\u2500 INBOX \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510
+\u2502                                \u2502
+\u2502  \u25CF Merge PR #23 \u2014 PricingTable  \u2502
+\u2502    Max completed, Riley approved \u2502
+\u2502    [Approve] [Reject] [View Diff]\u2502
+\u2502                                \u2502
+\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518`}
+										</pre>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</RevealSection>
+			</section>
+
+			{/* ── 4. DASHBOARD ── */}
+			<section className="border-b border-lp-border">
+				<RevealSection>
+					<div className="mx-auto max-w-[1200px] border-x border-lp-border px-4 md:px-8 py-16 md:py-24">
+						<span className="font-mono text-[10px] uppercase tracking-[0.15em] text-lp-muted block mb-4">
+							Dashboard
+						</span>
+						<h2
+							className="font-mono font-bold text-lp-fg tracking-[-0.03em] mb-10"
+							style={{ fontSize: 'clamp(22px, 3vw, 36px)' }}
+						>
+							Yes, it has a UI.
+						</h2>
+						{/* Screenshot area */}
+						<div className="bg-lp-card border border-lp-border w-full aspect-[16/9] flex items-center justify-center overflow-hidden">
+							<div className="p-6 md:p-10 w-full h-full flex flex-col">
+								{/* Mock dashboard layout */}
+								<div className="flex-1 flex gap-0 border border-lp-border">
+									{/* Sidebar */}
+									<div className="hidden md:flex flex-col w-[180px] border-r border-lp-border p-3 gap-2">
+										<div className="font-mono text-[10px] text-lp-purple font-semibold uppercase tracking-[0.1em] mb-2">
+											Navigation
+										</div>
+										{['Dashboard', 'Tasks', 'Agents', 'Sessions', 'Inbox', 'Settings'].map(
+											(item) => (
+												<div
+													key={item}
+													className="font-mono text-[11px] text-lp-muted py-1 px-2 hover:text-lp-fg"
+												>
+													{item}
+												</div>
+											),
+										)}
+									</div>
+									{/* Main area — kanban */}
+									<div className="flex-1 p-3 flex flex-col">
+										<div className="font-mono text-[10px] text-lp-ghost uppercase tracking-[0.1em] mb-3">
+											Task Board
+										</div>
+										<div className="flex-1 flex gap-2 overflow-x-auto">
+											{[
+												{
+													col: 'Backlog',
+													tasks: ['Setup CI/CD', 'Write docs'],
+												},
+												{
+													col: 'In Progress',
+													tasks: ['Pricing page', 'Auth flow'],
+												},
+												{ col: 'Review', tasks: ['Landing redesign'] },
+												{ col: 'Done', tasks: ['API routes', 'DB schema'] },
+											].map((column) => (
+												<div
+													key={column.col}
+													className="flex-1 min-w-[120px] flex flex-col"
+												>
+													<div className="font-mono text-[9px] text-lp-muted uppercase tracking-wider mb-2">
+														{column.col}
+													</div>
+													{column.tasks.map((t) => (
+														<div
+															key={t}
+															className="bg-lp-surface border border-lp-border p-2 mb-1 font-mono text-[10px] text-lp-fg"
+														>
+															{t}
+														</div>
+													))}
+												</div>
+											))}
+										</div>
+									</div>
+									{/* Right panel — agent stream */}
+									<div className="hidden lg:flex flex-col w-[200px] border-l border-lp-border p-3">
+										<div className="font-mono text-[10px] text-lp-ghost uppercase tracking-[0.1em] mb-3">
+											Agent Session
+										</div>
+										<div className="font-mono text-[10px] text-lp-accent-green leading-relaxed">
+											[max] writing PricingTable...
+										</div>
+										<div className="font-mono text-[10px] text-lp-muted leading-relaxed mt-1">
+											[max] running tests...
+										</div>
+										<div className="font-mono text-[10px] text-lp-purple leading-relaxed mt-1">
+											[riley] reviewing PR #23
+										</div>
+									</div>
+								</div>
+								{/* Status bar */}
+								<div className="border border-t-0 border-lp-border px-3 py-1 flex items-center justify-between">
+									<span className="font-mono text-[9px] text-lp-accent-green">
+										● 3 agents online
+									</span>
+									<span className="font-mono text-[9px] text-lp-ghost">
+										localhost:3000
+									</span>
+								</div>
+							</div>
+						</div>
+						{/* Callouts */}
+						<div className="grid grid-cols-1 md:grid-cols-3 gap-0 mt-8">
+							{[
+								'26 pages, all live, all real-time via SSE',
+								'Cmd+K command palette with intent mode',
+								'Mobile responsive \u2014 approve from your phone',
+							].map((text) => (
+								<div
+									key={text}
+									className="border-l-2 border-lp-purple pl-4 py-3 md:pr-4"
+								>
+									<p className="font-sans text-sm text-lp-muted m-0">{text}</p>
+								</div>
+							))}
+						</div>
+					</div>
+				</RevealSection>
+			</section>
+
+			{/* ── 5. YAML = COMPANY ── */}
+			<section className="border-b border-lp-border">
+				<RevealSection>
+					<div className="mx-auto max-w-[1200px] border-x border-lp-border px-4 md:px-8 py-16 md:py-24">
+						<span className="font-mono text-[10px] uppercase tracking-[0.15em] text-lp-muted block mb-4">
+							Configuration
+						</span>
+						<h2
+							className="font-mono font-bold text-lp-fg tracking-[-0.03em] mb-3"
+							style={{ fontSize: 'clamp(22px, 3vw, 36px)' }}
+						>
+							Your company is a git repo.
+						</h2>
+						<p className="font-sans text-base text-lp-muted mb-10 max-w-[560px]">
+							Fork it, version it, back it up with <code className="font-mono text-xs text-lp-fg">cp</code>.
+							Every agent, role, workflow, and secret is a file you control.
+						</p>
+						<FileTree />
+					</div>
+				</RevealSection>
+			</section>
+
+			{/* ── 6. SECURITY ── */}
+			<section className="border-b border-lp-border">
+				<RevealSection>
+					<div className="mx-auto max-w-[1200px] border-x border-lp-border px-4 md:px-8 py-16 md:py-24">
+						<div className="border-l-2 border-lp-accent-green bg-lp-card border-y border-r border-lp-border p-6 md:p-8">
+							<span className="font-mono text-[10px] uppercase tracking-[0.15em] text-lp-accent-green font-semibold block mb-4">
+								Security
+							</span>
+							<pre className="font-mono text-xs md:text-sm text-lp-fg leading-loose whitespace-pre-wrap m-0">
+{`Better Auth \u00B7 2FA/TOTP \u00B7 RBAC (4 roles) \u00B7 AES-256-GCM secrets
+IP allowlist \u00B7 Rate limiting \u00B7 SSRF protection \u00B7 Agent sandbox
+Audit logs \u00B7 Webhook HMAC \u00B7 API keys \u00B7 Deny patterns`}
+							</pre>
+							<p className="font-sans text-sm text-lp-muted mt-4 mb-0">
+								MIT license. Self-hosted. Your data stays on your machine.
+							</p>
+						</div>
+					</div>
+				</RevealSection>
+			</section>
+
+			{/* ── 7. INSTALL ── */}
+			<section className="border-b border-lp-border">
+				<RevealSection>
+					<div className="mx-auto max-w-[1200px] border-x border-lp-border px-4 md:px-8 py-20 md:py-32 flex flex-col items-center text-center">
+						<div className="bg-lp-card border border-lp-border p-6 md:p-8 mb-8 w-full max-w-[520px]">
+							<pre className="font-mono text-sm md:text-base text-lp-fg leading-loose whitespace-pre m-0">
+{`$ bun add -g @questpie/autopilot
+$ autopilot init my-company
+$ autopilot start`}
+							</pre>
+							<div className="mt-4 pt-4 border-t border-lp-border">
+								<span className="font-mono text-xs text-lp-accent-green">
+									→ Dashboard at http://localhost:3000
+								</span>
+							</div>
+						</div>
+						<div className="flex flex-wrap gap-3 justify-center">
+							<a
+								href="/docs/getting-started"
+								className="font-mono text-sm font-semibold bg-lp-purple text-white px-6 py-3 border border-lp-purple hover:bg-[#9200CC] transition-colors no-underline inline-block"
+							>
+								Read the Docs
+							</a>
+							<a
+								href="https://github.com/questpie/autopilot"
+								target="_blank"
+								rel="noopener noreferrer"
+								className="font-mono text-sm font-semibold text-lp-fg px-6 py-3 border border-lp-border hover:border-lp-purple transition-colors no-underline inline-block"
+							>
+								Star on GitHub
+							</a>
+						</div>
+					</div>
+				</RevealSection>
+			</section>
+
+			{/* ── 8. FOOTER ── */}
+			<footer className="border-b border-lp-border">
+				<div className="mx-auto max-w-[1200px] border-x border-lp-border px-4 md:px-8 py-6">
+					<div className="flex flex-col md:flex-row items-center justify-between gap-4">
+						<div className="flex items-center gap-2 text-lp-ghost">
+							<QSymbol size={16} />
+							<span className="font-mono text-[11px]">QUESTPIE s.r.o.</span>
+						</div>
+						<nav className="flex items-center gap-4 md:gap-6">
+							{[
+								{ label: 'Docs', href: '/docs' },
+								{ label: 'GitHub', href: 'https://github.com/questpie/autopilot' },
+								{ label: 'Features', href: '/docs/features' },
+							].map((link) => (
+								<a
+									key={link.label}
+									href={link.href}
+									className="font-mono text-[11px] text-lp-ghost hover:text-lp-fg transition-colors no-underline"
+									{...(link.href.startsWith('http')
+										? { target: '_blank', rel: 'noopener noreferrer' }
+										: {})}
+								>
+									{link.label}
+								</a>
+							))}
+						</nav>
+						<span className="font-mono text-[11px] text-lp-ghost">
+							MIT License &middot; Open Source
+						</span>
+					</div>
+				</div>
+			</footer>
 		</div>
 	)
 }
