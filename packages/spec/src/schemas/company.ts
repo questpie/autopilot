@@ -36,6 +36,15 @@ export const CompanySettingsSchema = z.object({
 		.nullable()
 		.default({})
 		.transform((v) => v ?? { ip_allowlist: [], trusted_proxies: ['127.0.0.1', '::1', '::ffff:127.0.0.1'] }),
+	micro_agents: z
+		.object({
+			enabled: z.boolean().default(true),
+			provider: z.enum(['auto', 'gemini', 'haiku', 'none']).default('auto'),
+			model: z.string().optional(),
+			cache_ttl: z.number().default(300),
+			escalation_threshold: z.number().default(30),
+		})
+		.default({}),
 	embeddings: z
 		.object({
 			provider: z.enum(['gemini', 'multilingual-e5', 'nomic', 'none']).default('none'),

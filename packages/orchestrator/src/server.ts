@@ -845,8 +845,15 @@ export class Orchestrator {
 		const blockedAt = new Date(blockedSince.at)
 		const blockedMinutes = (Date.now() - blockedAt.getTime()) / 60_000
 
-		// Don't escalate if blocked less than 30 minutes
-		if (blockedMinutes < 30) return
+		// Read escalation threshold from company config (default 30 minutes)
+		let threshold = 30
+		try {
+			const company = await loadCompany(this.options.companyRoot)
+			threshold = company.settings.micro_agents.escalation_threshold
+		} catch {
+			// use default
+		}
+		if (blockedMinutes < threshold) return
 
 		try {
 			const runner = await getMicroAgent(this.options.companyRoot)

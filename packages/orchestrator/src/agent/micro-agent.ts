@@ -21,7 +21,7 @@ type ProviderChoice = 'auto' | 'gemini' | 'haiku' | 'none'
 // Cache (5-minute TTL)
 // ---------------------------------------------------------------------------
 
-const CACHE_TTL_MS = 5 * 60 * 1000
+let CACHE_TTL_MS = 5 * 60 * 1000
 
 interface CacheEntry {
 	value: unknown
@@ -227,12 +227,15 @@ export async function getMicroAgent(companyRoot: string): Promise<MicroAgentRunn
 	let providerChoice: ProviderChoice = 'auto'
 	try {
 		const company = await loadCompany(companyRoot)
-		const raw = (company.settings as Record<string, unknown>)?.micro_agents as
-			| { provider?: string }
-			| undefined
-		if (raw?.provider && ['auto', 'gemini', 'haiku', 'none'].includes(raw.provider)) {
-			providerChoice = raw.provider as ProviderChoice
+		const config = company.settings.micro_agents
+
+		if (!config.enabled) {
+			providerChoice = 'none'
+		} else {
+			providerChoice = config.provider
 		}
+
+		CACHE_TTL_MS = config.cache_ttl * 1000
 	} catch {
 		// No company config or missing field — default to auto
 	}

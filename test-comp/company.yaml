@@ -21,6 +21,9 @@ settings:
     alert_at: 80
   auth:
     cors_origin: "http://localhost:3000,http://localhost:3001"
+  micro_agents:
+    enabled: true
+    provider: auto
   embeddings:
     provider: none            # 'gemini' | 'multilingual-e5' | 'nomic' | 'none'
     # fallback: multilingual-e5  # local fallback when primary unavailable
