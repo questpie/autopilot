@@ -3,6 +3,7 @@ import type { Agent } from '@questpie/autopilot-spec'
 import type { Message, StorageBackend } from '../fs/storage'
 import { container } from '../container'
 import { storageFactory } from '../fs/sqlite-backend'
+import { getMicroAgent, MESSAGE_ROUTER } from '../agent/micro-agent'
 
 export interface RouteOptions {
 	channelId?: string
@@ -18,7 +19,8 @@ export interface RouteOptions {
  * 2. Task reference (task-xxx) → agent assigned to that task
  * 3. LLM-based routing (Claude Haiku) → considers agent roles, descriptions,
  *    recent conversation context, and conversation continuity
- * 4. Keyword fallback → if LLM call fails
+ * 4. Micro-agent routing (Gemini Flash) → fast, cheap message→agent mapping
+ * 4b. Keyword fallback → if both LLM and micro-agent unavailable
  * 5. Default → CEO agent (meta role, can delegate)
  */
 export async function routeMessage(
@@ -59,7 +61,21 @@ export async function routeMessage(
 		// LLM call failed — fall through to keyword matching
 	}
 
-	// 4. Keyword fallback
+	// 4. Micro-agent routing (Gemini Flash — fast, cheap, simple message→agent mapping)
+	try {
+		const runner = await getMicroAgent(_companyRoot)
+		const agentContext = agents.map(a => `- id="${a.id}" role="${a.role}" description="${a.description ?? 'N/A'}"`).join('\n')
+		const input = `Available agents:\n${agentContext}\n\nChannel: ${options?.channelId ?? 'default'}\nMessage: ${message}`
+		const result = await runner.classify(MESSAGE_ROUTER, input)
+		if (result) {
+			const agent = agents.find(a => a.id === result.agent_id)
+			if (agent) return { agent, reason: `AI routing: ${result.reason}` }
+		}
+	} catch {
+		// fall through to keyword fallback
+	}
+
+	// 4b. Keyword fallback (when micro-agent unavailable)
 	const keywordResult = routeByKeyword(message, agents)
 	if (keywordResult) return keywordResult
 
