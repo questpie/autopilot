@@ -12,6 +12,7 @@ import type { AutopilotEvent } from '../events'
 import type { AutopilotDb } from '../db'
 import { readYamlUnsafe, fileExists } from '../fs/yaml'
 import { sendPushToUser } from './transports/push'
+import { getMicroAgent, NOTIFICATION_CLASSIFIER } from '../agent/micro-agent'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -250,8 +251,42 @@ export class NotificationDispatcher {
 		private db: AutopilotDb,
 	) {}
 
+	private async classifyWithAI(event: AutopilotEvent): Promise<ClassifiedNotification | null> {
+		// Always run hardcoded classification first — it determines type, url, taskId
+		const base = classify(event)
+		if (!base) return null
+
+		// Try AI enhancement for priority + summary
+		try {
+			const runner = await getMicroAgent(this.companyRoot)
+			const input = JSON.stringify({ eventType: event.type, ...event })
+			const result = await runner.classify(NOTIFICATION_CLASSIFIER, input)
+			if (result) {
+				// Map AI priority ('critical' → 'urgent') to our NotificationPriority
+				const priorityMap: Record<string, NotificationPriority> = {
+					critical: 'urgent',
+					high: 'high',
+					normal: 'normal',
+					low: 'low',
+				}
+				return {
+					...base,
+					priority: priorityMap[result.priority] ?? base.priority,
+					message: result.summary || base.message,
+				}
+			}
+		} catch (err) {
+			logger.debug('notifications', 'AI classification unavailable, using hardcoded', {
+				error: err instanceof Error ? err.message : String(err),
+			})
+		}
+
+		// Fallback: hardcoded result as-is
+		return base
+	}
+
 	async handle(event: AutopilotEvent): Promise<void> {
-		const notification = classify(event)
+		const notification = await this.classifyWithAI(event)
 		if (!notification) return
 
 		const targets = await findTargets(this.companyRoot)
