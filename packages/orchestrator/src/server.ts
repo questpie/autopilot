@@ -18,6 +18,7 @@ import { telegramWebhookHandler } from './webhook'
 import { advanceWorkflow, evaluateTransition } from './workflow'
 import { WorkflowLoader } from './workflow'
 
+import { getMicroAgent, BLOCKED_TASK_CLASSIFIER } from './agent/micro-agent'
 import { logger } from './logger'
 import { authFactory } from './auth'
 import { configureContainer, container } from './container'
@@ -263,12 +264,18 @@ export class Orchestrator {
 			const { storage } = await container.resolveAsync([storageFactory])
 			const activeTasks = await storage.listTasks({ status: 'in_progress' })
 			const backlogTasks = await storage.listTasks({ status: 'backlog' })
+			const blockedTasks = await storage.listTasks({ status: 'blocked' })
 			const allTasks = [...activeTasks, ...backlogTasks]
 			for (const task of allTasks) {
 				await this.handleTaskChange(task.id)
 			}
-			if (allTasks.length > 0) {
-				logger.info('orchestrator', `startup scan: processed ${allTasks.length} existing tasks`)
+			// Check escalation for blocked tasks at startup
+			for (const task of blockedTasks) {
+				await this.checkEscalation(task)
+			}
+			const totalProcessed = allTasks.length + blockedTasks.length
+			if (totalProcessed > 0) {
+				logger.info('orchestrator', `startup scan: processed ${allTasks.length} active tasks, ${blockedTasks.length} blocked tasks`)
 			}
 		} catch {
 			// storage might not be ready
@@ -735,8 +742,8 @@ export class Orchestrator {
 						return
 					}
 				} else if (task.status === 'blocked') {
-					// Don't respawn blocked tasks
-					logger.info('orchestrator', `task ${taskId} is blocked — waiting for human`)
+					// Check if task has been blocked long enough to escalate
+					await this.checkEscalation(task)
 					return
 				} else if (task.status === 'assigned' || task.status === 'in_progress') {
 					result = evaluateTransition(workflow, task, agents)
@@ -820,6 +827,63 @@ export class Orchestrator {
 
 		} finally {
 			this.processingTasks.delete(taskId)
+		}
+	}
+
+	/**
+	 * Check if a blocked task should be escalated, reassigned, or left alone.
+	 * Uses a lightweight micro-agent classifier. Safe default: do nothing if
+	 * the classifier is unavailable.
+	 */
+	private async checkEscalation(task: import('./fs/storage').Task): Promise<void> {
+		// Find the most recent status_change to 'blocked' in history
+		const blockedSince = [...(task.history ?? [])].reverse().find(
+			(h: { action: string; to?: string }) => h.action === 'status_change' && h.to === 'blocked',
+		)
+		if (!blockedSince) return
+
+		const blockedAt = new Date(blockedSince.at)
+		const blockedMinutes = (Date.now() - blockedAt.getTime()) / 60_000
+
+		// Don't escalate if blocked less than 30 minutes
+		if (blockedMinutes < 30) return
+
+		try {
+			const runner = await getMicroAgent(this.options.companyRoot)
+			const result = await runner.classify(BLOCKED_TASK_CLASSIFIER, JSON.stringify({
+				taskId: task.id,
+				title: task.title,
+				status: task.status,
+				blockedMinutes: Math.round(blockedMinutes),
+				blockers: task.blockers,
+				assignedTo: task.assigned_to,
+			}))
+
+			if (!result) return // AI unavailable — do nothing
+
+			if (result.action === 'escalate') {
+				// Notify owner/admins about the stuck task
+				eventBus.emit({
+					type: 'task_changed',
+					taskId: task.id,
+					status: 'blocked',
+				})
+				logger.info('orchestrator', `escalation: task ${task.id} blocked ${Math.round(blockedMinutes)}min`, {
+					recommendation: result.action,
+					reason: result.reason,
+				})
+			} else if (result.action === 'reassign' && result.reassign_to) {
+				// Auto-reassign to a different agent
+				const { storage } = await container.resolveAsync([storageFactory])
+				await storage.updateTask(task.id, { assigned_to: result.reassign_to }, 'system')
+				logger.info('orchestrator', `escalation: reassigned ${task.id} to ${result.reassign_to}`, {
+					reason: result.reason,
+				})
+			}
+			// 'wait' action = do nothing, check again next time
+		} catch {
+			// Micro-agent failed — no escalation, just log
+			logger.warn('orchestrator', `escalation check failed for ${task.id}`)
 		}
 	}
 }

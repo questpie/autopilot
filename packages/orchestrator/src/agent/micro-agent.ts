@@ -310,3 +310,29 @@ Return JSON: {"should_escalate": true/false, "reason": "...", "escalate_to": "hu
 	}),
 	maxTokens: 256,
 }
+
+export const BLOCKED_TASK_CLASSIFIER: MicroAgentConfig<{
+	action: 'escalate' | 'reassign' | 'wait'
+	reason: string
+	reassign_to?: string
+}> = {
+	id: 'blocked-task-classifier',
+	description: 'Determines the best action for a task that has been blocked for an extended period',
+	systemPrompt: `You are a blocked-task escalation classifier for an AI development team.
+Given a blocked task with details about how long it's been blocked, its blockers, and who it's assigned to, decide the best course of action:
+- "escalate": notify the owner/admins that the task is stuck and needs attention
+- "reassign": suggest reassigning the task to a different agent (provide reassign_to)
+- "wait": the task is reasonably blocked and should be left alone for now
+
+Escalate when: the task has been blocked for a long time with no resolution, blockers seem stale, or the assigned agent cannot resolve the blocker.
+Reassign when: a different agent is better suited to handle the blocker or the current assignee seems stuck.
+Wait when: the blocker is legitimate and recent, or human input is genuinely pending.
+
+Return JSON: {"action": "escalate"|"reassign"|"wait", "reason": "brief explanation", "reassign_to": "agent_id or omit"}`,
+	outputSchema: z.object({
+		action: z.enum(['escalate', 'reassign', 'wait']),
+		reason: z.string(),
+		reassign_to: z.string().optional(),
+	}),
+	maxTokens: 256,
+}
