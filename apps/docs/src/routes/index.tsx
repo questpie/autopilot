@@ -107,7 +107,7 @@ autopilot start
 open http://localhost:3000
 
 # Send your first task
-autopilot ask "Build me a landing page"
+autopilot chat ceo "Build me a landing page"
 
 # Watch agents work in real-time
 autopilot attach max`}
@@ -147,7 +147,7 @@ autopilot attach max`}
 						What is Autopilot?
 					</SectionHeader>
 					<CodeBlock title="terminal -- giving intent">
-						{`$ autopilot ask "Build a pricing page for QUESTPIE Studio
+						{`$ autopilot chat ceo "Build a pricing page for QUESTPIE Studio
   with monthly/annual toggle, 3 tiers, and Stripe integration"
 
 CEO Agent decomposing intent...
@@ -408,7 +408,7 @@ $ autopilot replay max`}
 						]}
 						outcome="Feature shipped without micromanaging a single step"
 						codeTitle="terminal -- solo dev flow"
-						code={`$ autopilot ask "Build a pricing page with Stripe"
+						code={`$ autopilot chat ceo "Build a pricing page with Stripe"
 
 CEO Agent decomposing...
   task-050: Scope requirements    -> sam
