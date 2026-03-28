@@ -55,7 +55,7 @@ ${sections.join('\n')}
 - Company is a filesystem. YAML for data, Markdown for docs, SQLite for indexes.
 - Orchestrator is a single Bun process: watcher, workflow engine, agent spawner, scheduler, webhook server.
 - Agents are ephemeral Claude sessions with persistent memory.
-- 4-layer context assembly: identity, company state, memory, task context.
+- 6-layer context assembly: identity, company state, memory, task context, skills discovery, tool list.
 - Workflows are YAML state machines, not code.
 `
 }

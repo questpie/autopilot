@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: Single Bun process. One SQLite file. Zero external infrastructure. Four-layer stack, orchestrator internals, and filesystem-native state.
+description: Single Bun process. One SQLite file. Zero external infrastructure. Six-layer stack, orchestrator internals, and filesystem-native state.
 ---
 
 Single process. Zero infrastructure. Filesystem-native state. SDK-first.
@@ -16,7 +16,7 @@ That's it. No Docker. No Postgres. No Redis. No Pinecone. No Kubernetes. No mess
 
 What competitors require: Docker + Postgres + Redis + vector DB + message queue + monitoring stack + deployment pipeline. Autopilot's zero-infra story is a real adoption advantage.
 
-## 4-Layer Stack
+## System Stack
 
 ```text title="system overview"
 +-----------------------------------------------------------+
@@ -32,7 +32,7 @@ What competitors require: Docker + Postgres + Redis + vector DB + message queue 
 |                                                            |
 |  Watcher -> detects FS changes (new tasks, status moves)   |
 |  Workflow -> state machine routing (YAML-defined steps)    |
-|  Context -> 4-layer prompt assembly (identity+state+mem)   |
+|  Context -> 6-layer prompt assembly (identity+state+mem)   |
 |  Spawner -> creates Claude Agent SDK sessions              |
 |  Scheduler -> cron-based recurring agent jobs              |
 |  Webhook -> HTTP event receiver (port 7777)                |
@@ -110,7 +110,7 @@ The Claude Agent SDK provider gives agents built-in infrastructure -- file I/O, 
 |--------|----------------|
 | fs/ | YAML CRUD with write queue. File-level async mutex prevents concurrent write corruption. |
 | workflow/ | State machine engine. Reads YAML workflows, checks transitions, handles reviews and human gates. |
-| context/ | Builds role-scoped system prompts from 4 layers: identity, company state, memory, and task context. |
+| context/ | Builds role-scoped system prompts from 6 layers: identity, company state, memory, task context, skills discovery, and tool list. |
 | agent/ | Creates Claude Agent SDK sessions. Injects context, configures tools/MCP, streams output. |
 | scheduler/ | Cron-based recurring agent tasks from schedules.yaml. |
 | watcher/ | Monitors company filesystem via chokidar. Detects new tasks, status changes, messages. |
@@ -127,18 +127,20 @@ The Claude Agent SDK provider gives agents built-in infrastructure -- file I/O, 
 Human: "Build a pricing page"
   |
   v
-CLI: autopilot chat "Build a pricing page"
+CLI: autopilot chat ceo "Build a pricing page"
   | Router decides which agent responds
   v
 Watcher: detects new task file
   |
   v
 Orchestrator: routes to CEO agent
-  | Context assembler builds 4-layer prompt:
+  | Context assembler builds 6-layer prompt:
   |   Layer 1: Agent identity (role, personality, tools)
   |   Layer 2: Company state (knowledge, team, projects)
   |   Layer 3: Agent memory (facts, decisions, past sessions)
   |   Layer 4: Task context (description, dependencies, history)
+  |   Layer 5: Skills discovery (role-matched skills)
+  |   Layer 6: Tool list (available tool definitions)
   v
 CEO Agent Session:
   | Reads company knowledge, evaluates scope

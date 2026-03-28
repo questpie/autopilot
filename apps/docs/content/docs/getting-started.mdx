@@ -34,7 +34,7 @@ export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
 autopilot start
 
 # Open dashboard
-open http://localhost:3001
+open http://localhost:3000
 
 # Send your first task
 autopilot ask "Build me a landing page"
@@ -175,7 +175,7 @@ This starts the filesystem watcher, scheduler, webhook server (port 7777), REST 
 autopilot dashboard
 
 # Or open directly
-open http://localhost:3001
+open http://localhost:3000
 ```
 
 The Living Dashboard shows agent activity, task status, board pins, and approval gates. It updates in realtime via SSE. Agents can create custom widgets and pages that appear automatically.
@@ -220,14 +220,14 @@ autopilot inbox
 autopilot approve TASK-001
 
 # Reject with feedback -- agent will rework
-autopilot reject TASK-001 --reason "Needs error handling for edge cases"
+autopilot reject TASK-001 "Needs error handling for edge cases"
 ```
 
 ## Next Steps
 
 - [Tools](/docs/primitives) -- the 7 unified tools agents use (the core differentiator)
 - [Living Dashboard](/docs/living-dashboard) -- custom widgets, theme overrides, agent-created pages
-- [Architecture](/docs/architecture) -- four-layer stack, zero-infra design, orchestrator internals
+- [Architecture](/docs/architecture) -- six-layer stack, zero-infra design, orchestrator internals
 - [Workflows](/docs/workflows) -- how tasks flow through development, marketing, and incident pipelines
 - [Skills](/docs/skills) -- teach agents new capabilities via SKILL.md files
 - [CLI Reference](/docs/cli) -- all available commands and options

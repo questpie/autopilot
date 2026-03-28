@@ -1,6 +1,6 @@
 ---
 title: Agents
-description: AI agents with persistent identity — role templates, filesystem scope, memory isolation, 4-layer context assembly, and the default 8-agent team.
+description: AI agents with persistent identity — role templates, filesystem scope, memory isolation, 6-layer context assembly, and the default 8-agent team.
 ---
 
 Claude sessions with persistent identity. Each agent has a name, role template, filesystem sandbox, tool access, and private memory that carries across sessions.
@@ -190,7 +190,7 @@ memories:
 Every agent session follows the same 8-step lifecycle:
 
 1. **Trigger fires** -- task assigned, schedule fires, webhook received, agent mentioned, message received
-2. **Context Assembler runs** -- builds role-scoped system prompt from 4 layers
+2. **Context Assembler runs** -- builds role-scoped system prompt from 6 layers
 3. **Agent spawns** -- Claude Agent SDK session created with tools, MCP servers, hooks, and FS sandbox
 4. **Agent works** -- reads files, writes code, calls primitives, communicates with other agents
 5. **Session streams** -- all tool calls captured as JSONL for `autopilot attach` and replay
@@ -198,14 +198,16 @@ Every agent session follows the same 8-step lifecycle:
 7. **Memory Extractor** -- Haiku extracts facts, decisions, learnings, session summary
 8. **Workflow routes** -- engine checks transitions, spawns next agent if needed
 
-## Context Assembly (4 Layers)
+## Context Assembly (6 Layers)
 
-Before every session, the Context Assembler builds a system prompt from four sources. Each layer has a different purpose, update frequency, and token budget.
+Before every session, the Context Assembler builds a system prompt from six sources. Each layer has a different purpose, update frequency, and token budget.
 
 - **L1 Identity (~2K tokens)** — Role definition, behavioral rules, team roster, available tools, company conventions. Loaded from agents.yaml and company.yaml. Never changes within a session. Never truncated.
 - **L2 Company State (~5K tokens)** — Real-time, role-scoped snapshot generated fresh before each session. Developer sees active tasks, branches, review queue. CEO sees all projects, team status, human inbox.
 - **L3 Memory Store (~20K tokens)** — Persistent agent memory from past sessions. Facts about the codebase, architecture decisions, known mistakes to avoid, patterns noticed. Ranked by relevance before loading.
 - **L4 Task Context (~15K tokens)** — Everything about the current task: YAML definition, spec and plan documents, task history, dependencies, related messages, code context.
+- **L5 Skills Discovery** — Available skills from the filesystem, matched to the agent's role and current task.
+- **L6 Tool List** — Complete tool definitions and usage instructions for all tools available to the agent.
 
 ## Managing Agents
 

@@ -1,9 +1,9 @@
 ---
 title: Context & Memory
-description: 4-layer context assembly, persistent agent memory, memory extraction after sessions, and cross-session knowledge retention.
+description: 6-layer context assembly, persistent agent memory, memory extraction after sessions, and cross-session knowledge retention.
 ---
 
-How agents remember, learn, and maintain awareness across sessions. 4-layer context assembly. Persistent memory extraction. Role-scoped isolation.
+How agents remember, learn, and maintain awareness across sessions. 6-layer context assembly. Persistent memory extraction. Role-scoped isolation.
 
 ## The Problem
 
@@ -11,9 +11,9 @@ AI agents are stateless. Every Claude session starts blank. But a real employee 
 
 The filesystem already stores everything. The challenge is **what to load into each agent's context window** at session start, and **what to persist** when the session ends.
 
-## 4-Layer Context System
+## 6-Layer Context System
 
-Before every agent session, the Context Assembler builds a system prompt from four sources.
+Before every agent session, the Context Assembler builds a system prompt from six sources.
 
 ### Layer 1: Identity (~2K tokens)
 
