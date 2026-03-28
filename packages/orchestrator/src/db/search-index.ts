@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { Database } from 'bun:sqlite'
 import { searchIndex } from './schema'
 import type { AutopilotDb } from './index'
@@ -74,6 +74,25 @@ export async function removeEntity(
 	type: EntityType,
 	id: string,
 ): Promise<void> {
+	// Delete orphaned vectors BEFORE removing the search_index row (need the row id)
+	try {
+		const row = db
+			.select({ id: searchIndex.id })
+			.from(searchIndex)
+			.where(and(eq(searchIndex.entityType, type), eq(searchIndex.entityId, id)))
+			.get()
+		if (row) {
+			const raw = getRawDb(db)
+			try {
+				raw.prepare('DELETE FROM search_vec WHERE search_id = ?').run(row.id)
+			} catch {
+				// search_vec may not exist
+			}
+		}
+	} catch {
+		// best-effort vector cleanup
+	}
+
 	db.delete(searchIndex)
 		.where(and(eq(searchIndex.entityType, type), eq(searchIndex.entityId, id)))
 		.run()
@@ -91,9 +110,13 @@ export async function searchFts(
 	const limit = opts?.limit ?? 20
 
 	try {
-		const typeFilter = opts?.type
-			? `AND si.entity_type = '${opts.type}'`
-			: ''
+		const params: (string | number | Buffer)[] = [query]
+		let typeFilter = ''
+		if (opts?.type) {
+			typeFilter = 'AND si.entity_type = ?'
+			params.push(opts.type)
+		}
+		params.push(limit)
 
 		const rows = raw.prepare(`
 			SELECT
@@ -108,7 +131,7 @@ export async function searchFts(
 			${typeFilter}
 			ORDER BY search_fts.rank
 			LIMIT ?
-		`).all(query, limit) as Array<{
+		`).all(...params) as Array<{
 			entity_type: string
 			entity_id: string
 			title: string | null
@@ -142,9 +165,12 @@ export async function searchVec(
 	try {
 		const embeddingBuffer = Buffer.from(embedding.buffer)
 
-		const typeFilter = opts?.type
-			? `AND si.entity_type = '${opts.type}'`
-			: ''
+		const params: (string | number | Buffer)[] = [embeddingBuffer, limit]
+		let typeFilter = ''
+		if (opts?.type) {
+			typeFilter = 'AND si.entity_type = ?'
+			params.push(opts.type)
+		}
 
 		const rows = raw.prepare(`
 			SELECT
@@ -158,7 +184,7 @@ export async function searchVec(
 			WHERE sv.embedding MATCH ? AND sv.k = ?
 			${typeFilter}
 			ORDER BY sv.distance
-		`).all(embeddingBuffer, limit) as Array<{
+		`).all(...params) as Array<{
 			entity_type: string
 			entity_id: string
 			title: string | null

@@ -5,6 +5,7 @@ export const HUMAN_ROLES = ['owner', 'admin', 'member', 'viewer'] as const
 export const PERMISSION_RESOURCES = [
 	'tasks', 'agents', 'secrets', 'knowledge', 'dashboard',
 	'workflows', 'company', 'chat', 'integrations', 'team', 'audit', 'sessions',
+	'settings', 'danger', 'notifications', 'channels', 'search', 'files', 'events',
 ] as const
 
 /** Actions per resource. */
@@ -21,6 +22,13 @@ export const PERMISSION_ACTIONS = {
 	team: ['read', 'invite', 'remove', 'change_role'],
 	audit: ['read'],
 	sessions: ['read', 'revoke'],
+	settings: ['read', 'write'],
+	danger: ['export', 'reset', 'delete'],
+	notifications: ['read', 'write'],
+	channels: ['read', 'write'],
+	search: ['read'],
+	files: ['read', 'write'],
+	events: ['read'],
 } as const
 
 /** Available roles that an agent can be assigned in the autopilot system. */

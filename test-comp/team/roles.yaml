@@ -17,6 +17,14 @@ roles:
       - integrations.*
       - workflows.read
       - audit.read
+      - settings.read
+      - settings.write
+      - danger.export
+      - notifications.*
+      - channels.*
+      - search.read
+      - files.*
+      - events.read
 
   member:
     description: "Work on tasks, chat, read knowledge"
@@ -31,6 +39,11 @@ roles:
       - dashboard.read
       - integrations.read
       - team.read
+      - notifications.*
+      - channels.*
+      - search.read
+      - files.*
+      - events.read
 
   viewer:
     description: "Read-only access"
@@ -40,3 +53,8 @@ roles:
       - dashboard.read
       - knowledge.read
       - team.read
+      - notifications.read
+      - channels.read
+      - search.read
+      - files.read
+      - events.read

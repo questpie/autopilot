@@ -13,6 +13,12 @@ import type { Auth } from './index'
 import { resolveRolePermissions } from './roles'
 import type { Actor } from './types'
 
+/** Limited permissions for webhook actors — only task/channel writes. */
+const WEBHOOK_PERMISSIONS: Record<string, string[]> = {
+	tasks: ['create', 'update'],
+	channels: ['write'],
+}
+
 export interface ResolveActorConfig {
 	companyRoot: string
 	auth: Auth
@@ -20,24 +26,17 @@ export interface ResolveActorConfig {
 
 /**
  * Resolve the identity of an incoming request into an Actor.
+ * Returns a Response directly for webhook auth failures (with specific error messages).
  */
 export async function resolveActor(
 	request: Request,
 	config: ResolveActorConfig,
-): Promise<Actor | null> {
+): Promise<Actor | Response | null> {
 	const path = new URL(request.url).pathname
 
 	// 1. Webhook HMAC auth (/hooks/*)
 	if (path.startsWith('/hooks/')) {
-		return {
-			id: 'webhook',
-			type: 'api',
-			name: 'webhook',
-			role: 'member',
-			permissions: resolveRolePermissions('member'),
-			source: 'webhook',
-			ip: request.headers.get('x-forwarded-for') ?? undefined,
-		}
+		return verifyWebhookRequest(request, path, config)
 	}
 
 	// 2. X-API-Key header (agent or API client)
@@ -191,6 +190,143 @@ async function resolveHumanActor(
 	}
 }
 
+/**
+ * Verify an incoming webhook request using per-webhook or global HMAC secret.
+ *
+ * Resolution:
+ * 1. Load webhooks.yaml and match by path — use webhook-specific secret_ref / signature_header
+ * 2. Fall back to WEBHOOK_SECRET env var with common signature headers
+ * 3. If auth is 'none' in webhook config, allow without verification
+ * 4. Reject if no secret configured, signature missing, or signature invalid
+ */
+async function verifyWebhookRequest(
+	request: Request,
+	path: string,
+	config: ResolveActorConfig,
+): Promise<Actor | Response> {
+	const { join } = await import('node:path')
+	const { timingSafeEqual, createHmac } = await import('node:crypto')
+	const ip = request.headers.get('x-forwarded-for') ?? undefined
+
+	// Try to load webhook config for this path
+	let webhookConfig: {
+		auth: 'hmac_sha256' | 'bearer_token' | 'none'
+		secret_ref?: string
+		signature_header?: string
+	} | null = null
+
+	try {
+		const { readYamlUnsafe } = await import('../fs/yaml')
+		const webhooksData = (await readYamlUnsafe(
+			join(config.companyRoot, 'team', 'webhooks.yaml'),
+		)) as {
+			webhooks?: Array<{
+				path: string
+				auth?: string
+				secret_ref?: string
+				signature_header?: string
+				enabled?: boolean
+			}>
+		}
+
+		const matched = webhooksData.webhooks?.find(
+			(w) =>
+				w.enabled !== false &&
+				(path === w.path || path === `/${w.path}` || `/${path}` === w.path),
+		)
+		if (matched) {
+			webhookConfig = {
+				auth: (matched.auth as 'hmac_sha256' | 'bearer_token' | 'none') ?? 'hmac_sha256',
+				secret_ref: matched.secret_ref,
+				signature_header: matched.signature_header,
+			}
+		}
+	} catch {
+		// webhooks.yaml not found or invalid — fall through to global secret
+	}
+
+	// If webhook is configured with auth: none, allow without verification
+	if (webhookConfig?.auth === 'none') {
+		return makeWebhookActor(ip)
+	}
+
+	// Resolve the secret: per-webhook secret_ref → global WEBHOOK_SECRET env
+	let secret: string | null = null
+
+	if (webhookConfig?.secret_ref) {
+		try {
+			const secretPath = join(
+				config.companyRoot,
+				'secrets',
+				`${webhookConfig.secret_ref}.yaml`,
+			)
+			const secretFile = await Bun.file(secretPath).text()
+			const { parse } = await import('yaml')
+			const parsed = parse(secretFile)
+			secret = parsed?.value ?? null
+		} catch {
+			// Secret file not readable
+		}
+	}
+
+	if (!secret) {
+		secret = process.env.WEBHOOK_SECRET ?? null
+	}
+
+	if (!secret) {
+		return new Response(JSON.stringify({ error: 'No webhook secret configured' }), {
+			status: 401,
+			headers: { 'content-type': 'application/json' },
+		})
+	}
+
+	// Determine which header contains the signature
+	const signatureHeader = webhookConfig?.signature_header ?? null
+	const signature =
+		(signatureHeader ? request.headers.get(signatureHeader) : null) ??
+		request.headers.get('x-hub-signature-256') ??
+		request.headers.get('x-webhook-signature') ??
+		request.headers.get('stripe-signature')
+
+	if (!signature) {
+		return new Response(JSON.stringify({ error: 'Missing webhook signature' }), {
+			status: 401,
+			headers: { 'content-type': 'application/json' },
+		})
+	}
+
+	// Compute expected HMAC and compare using timing-safe comparison
+	const body = await request.clone().text()
+	const hmac = createHmac('sha256', secret).update(body).digest('hex')
+	// Support both raw hex and sha256=hex prefix formats
+	const expected = signature.startsWith('sha256=') ? `sha256=${hmac}` : hmac
+
+	const sigBuffer = Buffer.from(signature)
+	const expectedBuffer = Buffer.from(expected)
+
+	if (sigBuffer.length !== expectedBuffer.length || !timingSafeEqual(sigBuffer, expectedBuffer)) {
+		return new Response(JSON.stringify({ error: 'Invalid webhook signature' }), {
+			status: 403,
+			headers: { 'content-type': 'application/json' },
+		})
+	}
+
+	return makeWebhookActor(ip)
+}
+
+/** Create a webhook actor with limited permissions. */
+function makeWebhookActor(ip?: string): Actor {
+	return {
+		id: 'webhook',
+		type: 'api',
+		name: 'webhook',
+		role: 'viewer',
+		permissions: WEBHOOK_PERMISSIONS,
+		source: 'webhook',
+		ip,
+	}
+}
+
 function detectSource(request: Request): Actor['source'] {
 	const userAgent = request.headers.get('user-agent') ?? ''
 	if (userAgent.includes('autopilot-cli')) return 'cli'
@@ -272,6 +408,46 @@ export function getRequiredPermission(
 	) {
 		return { resource: 'dashboard', action: 'read' }
 	}
+
+	// Settings
+	if (path.startsWith('/api/settings')) {
+		if (path.startsWith('/api/settings/providers')) {
+			if (method === 'GET') return { resource: 'settings', action: 'read' }
+			return { resource: 'settings', action: 'write' }
+		}
+		if (method === 'GET') return { resource: 'settings', action: 'read' }
+		return { resource: 'settings', action: 'write' }
+	}
+
+	// Danger zone
+	if (path === '/api/export' && method === 'POST') return { resource: 'danger', action: 'export' }
+	if (path === '/api/reset' && method === 'POST') return { resource: 'danger', action: 'reset' }
+	if (path === '/api/delete-company' && method === 'POST') return { resource: 'danger', action: 'delete' }
+
+	// Notifications
+	if (path.startsWith('/api/notifications')) {
+		if (method === 'GET') return { resource: 'notifications', action: 'read' }
+		return { resource: 'notifications', action: 'write' }
+	}
+
+	// Channels
+	if (path.startsWith('/api/channels')) {
+		if (method === 'GET') return { resource: 'channels', action: 'read' }
+		return { resource: 'channels', action: 'write' }
+	}
+
+	// Search
+	if (path.startsWith('/api/search')) return { resource: 'search', action: 'read' }
+
+	// Files & Upload
+	if (path.startsWith('/api/files')) {
+		if (method === 'GET') return { resource: 'files', action: 'read' }
+		return { resource: 'files', action: 'write' }
+	}
+	if (path.startsWith('/api/upload')) return { resource: 'files', action: 'write' }
+
+	// Events (SSE)
+	if (path.startsWith('/api/events')) return { resource: 'events', action: 'read' }
 
 	// FS browser
 	if (path.startsWith('/fs/')) return { resource: 'knowledge', action: 'read' }
