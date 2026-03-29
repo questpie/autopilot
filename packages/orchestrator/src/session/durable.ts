@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execSync, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { logger } from '../logger'
@@ -45,7 +45,10 @@ export async function startDurableStreamServer(companyRoot: string): Promise<voi
 		'durable-streams-server', // system PATH
 	].filter(Boolean) as string[]
 
-	const binPath = binPaths.find((p) => p === 'durable-streams-server' || existsSync(p))
+	const isInPath = (name: string): boolean => {
+		try { execSync(`which ${name}`, { stdio: 'ignore' }); return true } catch { return false }
+	}
+	const binPath = binPaths.find((p) => p === 'durable-streams-server' ? isInPath(p) : existsSync(p))
 
 	if (!binPath) {
 		logger.warn('durable-streams', 'binary not found — sessions use in-memory only. Run: autopilot init --install-streams')

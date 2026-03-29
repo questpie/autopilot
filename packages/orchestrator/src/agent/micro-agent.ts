@@ -72,7 +72,6 @@ export async function classify<T>(
 		if (cached !== undefined) return cached
 
 		if (!process.env.OPENROUTER_API_KEY) {
-			logger.warn('classify', 'OPENROUTER_API_KEY not set')
 			return null
 		}
 

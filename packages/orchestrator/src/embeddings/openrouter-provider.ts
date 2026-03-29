@@ -17,6 +17,7 @@ export class OpenRouterEmbeddingProvider implements EmbeddingProvider {
 	readonly name = 'openrouter'
 	readonly dimensions: number
 	private model: string
+	private warnedNoKey = false
 
 	constructor(opts?: { dimensions?: number; model?: string }) {
 		this.dimensions = opts?.dimensions ?? DEFAULT_DIMENSIONS
@@ -35,7 +36,10 @@ export class OpenRouterEmbeddingProvider implements EmbeddingProvider {
 	async embed(input: EmbeddingInput, _taskType?: EmbeddingTaskType): Promise<Float32Array | null> {
 		const apiKey = process.env.OPENROUTER_API_KEY
 		if (!apiKey) {
-			logger.warn('embeddings', 'OPENROUTER_API_KEY not set')
+			if (!this.warnedNoKey) {
+				logger.warn('embeddings', 'OPENROUTER_API_KEY not set — embeddings disabled')
+				this.warnedNoKey = true
+			}
 			return null
 		}
 
