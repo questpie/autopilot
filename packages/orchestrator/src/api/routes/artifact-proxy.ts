@@ -48,7 +48,7 @@ function buildResponseHeaders(upstream: Headers, artifactId: string): Headers {
 }
 
 async function proxyHandler(c: import('hono').Context<AppEnv>) {
-	const id = c.req.param('id')
+	const id = c.req.param('id') ?? ''
 	const root = c.get('companyRoot')
 	const router = getRouter(root)
 

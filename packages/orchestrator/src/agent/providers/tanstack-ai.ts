@@ -45,7 +45,7 @@ export class TanStackAIProvider implements AgentProvider {
 		const bridgeMiddleware: ChatMiddleware = {
 			name: 'autopilot-bridge',
 
-			onChunk(ctx, chunk) {
+			onChunk(_ctx, chunk) {
 				// D8: Emit text_delta for each streaming chunk (not aggregated text)
 				if (chunk.type === 'TEXT_MESSAGE_CONTENT' && 'delta' in chunk) {
 					onEvent({

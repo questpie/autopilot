@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { zodToJsonSchema } from './utils/zod-to-json'
 import type { StorageBackend } from '../fs/storage'
 import type { EventBus } from '../events/event-bus'
 import { createTaskTool } from './tools/task'

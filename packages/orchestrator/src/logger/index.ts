@@ -1,4 +1,4 @@
-import type { LogLevel, LogEntry } from './types'
+import type { LogLevel } from './types'
 
 const LOG_LEVELS: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 }
 
@@ -11,14 +11,6 @@ class Logger {
 
   private log(level: LogLevel, module: string, message: string, data?: Record<string, unknown>) {
     if (LOG_LEVELS[level] < LOG_LEVELS[this.minLevel]) return
-
-    const entry: LogEntry = {
-      ts: new Date().toISOString(),
-      level,
-      module,
-      message,
-      ...(data && { data }),
-    }
 
     // Console transport (always active)
     const prefix = `[${module}]`

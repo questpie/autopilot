@@ -3,10 +3,10 @@ import type { StorageBackend } from '../../fs/storage'
 import { createPin } from '../../fs/pins'
 import { container } from '../../container'
 import { dbFactory } from '../../db'
-import type { ToolDefinition, ToolContext, ToolResult } from '../tools'
+import type { ToolDefinition } from '../tools'
 import { getIndexer } from './shared'
 
-export function createMessageTool(storage: StorageBackend, companyRoot: string): ToolDefinition {
+export function createMessageTool(storage: StorageBackend, _companyRoot: string): ToolDefinition {
 	return {
 		name: 'message',
 		description: 'Send a message. Channel conventions: "dm-{agentId}" for DMs, "task-{id}" for task threads, "project-{name}" for project channels, or any existing channel name.',

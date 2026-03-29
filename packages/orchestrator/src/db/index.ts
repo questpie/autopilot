@@ -23,7 +23,7 @@ export interface DbResult {
  * Returns both the Drizzle ORM instance and the raw libSQL Client
  * so callers (e.g. Better Auth) can share the same underlying connection.
  */
-export async function createDb(companyRoot: string, opts?: { embeddingDimensions?: number }): Promise<DbResult> {
+export async function createDb(companyRoot: string, _opts?: { embeddingDimensions?: number }): Promise<DbResult> {
 	const dataDir = join(companyRoot, '.data')
 	await mkdir(dataDir, { recursive: true })
 

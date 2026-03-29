@@ -1,49 +1,13 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { join } from 'node:path'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { Watcher, parseWatchEvent } from '../src/watcher/watcher'
 import type { WatchEvent } from '../src/watcher/watcher'
 import { createTestCompany } from './helpers'
 import { writeYaml } from '../src/fs/yaml'
 
 describe('parseWatchEvent', () => {
-	test('parses task file path', () => {
-		const event = parseWatchEvent('/company', '/company/tasks/active/TASK-001.yaml')
-		expect(event).toEqual({
-			type: 'task_changed',
-			taskId: 'TASK-001',
-			path: '/company/tasks/active/TASK-001.yaml',
-		})
-	})
-
-	test('parses task in different status dirs', () => {
-		const backlog = parseWatchEvent('/company', '/company/tasks/backlog/TASK-002.yaml')
-		expect(backlog?.type).toBe('task_changed')
-		expect(backlog?.type === 'task_changed' && backlog.taskId).toBe('TASK-002')
-
-		const done = parseWatchEvent('/company', '/company/tasks/done/TASK-003.yaml')
-		expect(done?.type).toBe('task_changed')
-	})
-
-	test('parses comms channel message path', () => {
-		const event = parseWatchEvent('/company', '/company/comms/channels/general/msg-001.yaml')
-		expect(event).toEqual({
-			type: 'message_received',
-			channel: 'general',
-			path: '/company/comms/channels/general/msg-001.yaml',
-		})
-	})
-
-	test('parses pin path', () => {
-		const event = parseWatchEvent('/company', '/company/dashboard/pins/pin-001.yaml')
-		expect(event).toEqual({
-			type: 'pin_changed',
-			pinId: 'pin-001',
-			path: '/company/dashboard/pins/pin-001.yaml',
-		})
-	})
-
-	test('parses team config path', () => {
+	test('parses team config path (agents.yaml)', () => {
 		const event = parseWatchEvent('/company', '/company/team/agents.yaml')
 		expect(event).toEqual({
 			type: 'config_changed',
@@ -52,7 +16,7 @@ describe('parseWatchEvent', () => {
 		})
 	})
 
-	test('parses nested team config path', () => {
+	test('parses nested team config path (workflows)', () => {
 		const event = parseWatchEvent('/company', '/company/team/workflows/deploy.yaml')
 		expect(event).toEqual({
 			type: 'config_changed',
@@ -61,13 +25,68 @@ describe('parseWatchEvent', () => {
 		})
 	})
 
-	test('returns null for unknown paths', () => {
-		const event = parseWatchEvent('/company', '/company/random/unknown-file.txt')
+	test('parses role prompt file', () => {
+		const event = parseWatchEvent('/company', '/company/team/roles/developer.md')
+		expect(event).toEqual({
+			type: 'config_changed',
+			file: 'roles/developer.md',
+			path: '/company/team/roles/developer.md',
+		})
+	})
+
+	test('parses company.yaml', () => {
+		const event = parseWatchEvent('/company', '/company/company.yaml')
+		expect(event).toEqual({
+			type: 'config_changed',
+			file: 'company.yaml',
+			path: '/company/company.yaml',
+		})
+	})
+
+	test('parses knowledge file', () => {
+		const event = parseWatchEvent('/company', '/company/knowledge/guide.md')
+		expect(event).toEqual({
+			type: 'knowledge_changed',
+			file: 'guide.md',
+			path: '/company/knowledge/guide.md',
+		})
+	})
+
+	test('parses artifact config', () => {
+		const event = parseWatchEvent('/company', '/company/artifacts/web-app/.artifact.yaml')
+		expect(event).toEqual({
+			type: 'artifact_changed',
+			artifactId: 'web-app',
+			path: '/company/artifacts/web-app/.artifact.yaml',
+		})
+	})
+
+	test('parses dashboard layout file', () => {
+		const event = parseWatchEvent('/company', '/company/dashboard/layout.yaml')
+		expect(event).toEqual({
+			type: 'dashboard_changed',
+			file: 'layout.yaml',
+			path: '/company/dashboard/layout.yaml',
+		})
+	})
+
+	test('ignores dashboard/pins/ (pins are DB-only)', () => {
+		const event = parseWatchEvent('/company', '/company/dashboard/pins/pin-001.yaml')
 		expect(event).toBeNull()
 	})
 
-	test('returns null for non-yaml files', () => {
-		const event = parseWatchEvent('/company', '/company/tasks/active/notes.txt')
+	test('ignores tasks/ (tasks are DB-only)', () => {
+		const event = parseWatchEvent('/company', '/company/tasks/active/TASK-001.yaml')
+		expect(event).toBeNull()
+	})
+
+	test('ignores comms/ (messages are DB-only)', () => {
+		const event = parseWatchEvent('/company', '/company/comms/channels/general/msg-001.yaml')
+		expect(event).toBeNull()
+	})
+
+	test('returns null for unknown paths', () => {
+		const event = parseWatchEvent('/company', '/company/random/unknown-file.txt')
 		expect(event).toBeNull()
 	})
 })
@@ -86,7 +105,7 @@ describe('Watcher', () => {
 		await cleanup()
 	})
 
-	test('triggers task_changed when file is created in tasks/', async () => {
+	test('triggers config_changed when agents.yaml is modified', async () => {
 		const events: WatchEvent[] = []
 
 		const watcher = new Watcher({
@@ -98,32 +117,23 @@ describe('Watcher', () => {
 		})
 
 		await watcher.start()
-
-		// Wait for watcher to be ready
 		await new Promise((r) => setTimeout(r, 300))
 
-		// Write a task file
-		await writeYaml(join(companyRoot, 'tasks', 'active', 'TASK-100.yaml'), {
-			id: 'TASK-100',
-			title: 'Test task',
-			status: 'active',
+		await writeYaml(join(companyRoot, 'team', 'agents.yaml'), {
+			agents: [{ id: 'dev', name: 'Developer' }],
 		})
 
-		// Wait for debounce + processing
 		await new Promise((r) => setTimeout(r, 1000))
-
 		await watcher.stop()
 
 		expect(events.length).toBeGreaterThanOrEqual(1)
-		const taskEvent = events.find((e) => e.type === 'task_changed')
-		expect(taskEvent).toBeDefined()
-		if (taskEvent?.type === 'task_changed') {
-			expect(taskEvent.taskId).toBe('TASK-100')
-		}
+		const configEvent = events.find((e) => e.type === 'config_changed')
+		expect(configEvent).toBeDefined()
 	})
 
-	test('triggers message_received when file is created in comms/', async () => {
+	test('triggers knowledge_changed when knowledge file created', async () => {
 		const events: WatchEvent[] = []
+		await mkdir(join(companyRoot, 'knowledge'), { recursive: true })
 
 		const watcher = new Watcher({
 			companyRoot,
@@ -136,21 +146,13 @@ describe('Watcher', () => {
 		await watcher.start()
 		await new Promise((r) => setTimeout(r, 300))
 
-		await writeYaml(join(companyRoot, 'comms', 'channels', 'general', 'msg-001.yaml'), {
-			id: 'msg-001',
-			from: 'dev',
-			content: 'Hello',
-		})
+		await writeFile(join(companyRoot, 'knowledge', 'guide.md'), '# Guide\n\nContent here.')
 
 		await new Promise((r) => setTimeout(r, 1000))
 		await watcher.stop()
 
-		expect(events.length).toBeGreaterThanOrEqual(1)
-		const msgEvent = events.find((e) => e.type === 'message_received')
-		expect(msgEvent).toBeDefined()
-		if (msgEvent?.type === 'message_received') {
-			expect(msgEvent.channel).toBe('general')
-		}
+		const knowledgeEvent = events.find((e) => e.type === 'knowledge_changed')
+		expect(knowledgeEvent).toBeDefined()
 	})
 
 	test('stop closes watcher cleanly', async () => {

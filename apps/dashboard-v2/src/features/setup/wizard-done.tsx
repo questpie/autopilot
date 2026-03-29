@@ -35,9 +35,7 @@ export function WizardDone({ onFinish }: WizardDoneProps) {
     {
       label: "Provider",
       value: providerChoice
-        ? providerChoice === "claude"
-          ? "Claude (API key)"
-          : "OpenAI (API key)"
+        ? "OpenRouter"
         : "Not configured",
     },
     {

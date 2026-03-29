@@ -2,11 +2,13 @@ import { watch, type FSWatcher } from 'chokidar'
 import { join, relative, sep } from 'node:path'
 import { logger } from '../logger'
 
-/** Discriminated union of filesystem events the watcher can emit. */
+/**
+ * Discriminated union of filesystem events the watcher can emit.
+ *
+ * Only config/content files that are human-edited YAML or knowledge files.
+ * Tasks, messages, and pins are DB-only — no YAML watching needed.
+ */
 export type WatchEvent =
-	| { type: 'task_changed'; taskId: string; path: string }
-	| { type: 'message_received'; channel: string; path: string }
-	| { type: 'pin_changed'; pinId: string; path: string }
 	| { type: 'config_changed'; file: string; path: string }
 	| { type: 'dashboard_changed'; file: string; path: string }
 	| { type: 'knowledge_changed'; file: string; path: string }
@@ -27,41 +29,22 @@ export interface WatcherOptions {
 export function parseWatchEvent(companyRoot: string, filePath: string): WatchEvent | null {
 	const rel = relative(companyRoot, filePath).split(sep).join('/')
 
-	// tasks/{status}/{id}.yaml
-	const taskMatch = rel.match(/^tasks\/[^/]+\/([^/]+)\.yaml$/)
-	if (taskMatch?.[1]) {
-		return { type: 'task_changed', taskId: taskMatch[1], path: filePath }
-	}
-
-	// comms/channels/{channel}/{id}.yaml
-	const commsMatch = rel.match(/^comms\/channels\/([^/]+)\/[^/]+\.yaml$/)
-	if (commsMatch?.[1]) {
-		return { type: 'message_received', channel: commsMatch[1], path: filePath }
-	}
-
-	// dashboard/pins/{id}.yaml
-	const pinMatch = rel.match(/^dashboard\/pins\/([^/]+)\.yaml$/)
-	if (pinMatch?.[1]) {
-		return { type: 'pin_changed', pinId: pinMatch[1], path: filePath }
-	}
-
-	// dashboard/ changes (excluding pins/ and groups.yaml)
+	// dashboard/ changes (layout, widgets — not pins which are DB-only)
 	const dashboardMatch = rel.match(/^dashboard\/(.+)$/)
 	if (dashboardMatch?.[1]) {
 		const dashFile = dashboardMatch[1]
-		// Skip pins/ and groups.yaml — those are data, not dashboard customization
 		if (!dashFile.startsWith('pins/') && dashFile !== 'groups.yaml') {
 			return { type: 'dashboard_changed', file: dashFile, path: filePath }
 		}
 	}
 
-	// TM-005: knowledge/{path} — any file change triggers reindex
+	// knowledge/{path} — any file change triggers reindex
 	const knowledgeMatch = rel.match(/^knowledge\/(.+)$/)
 	if (knowledgeMatch?.[1]) {
 		return { type: 'knowledge_changed', file: knowledgeMatch[1], path: filePath }
 	}
 
-	// TM-006: artifacts/{name}/.artifact.yaml — artifact registration
+	// artifacts/{name}/.artifact.yaml — artifact registration
 	const artifactMatch = rel.match(/^artifacts\/([^/]+)\/.artifact\.yaml$/)
 	if (artifactMatch?.[1]) {
 		return { type: 'artifact_changed', artifactId: artifactMatch[1], path: filePath }
@@ -73,10 +56,15 @@ export function parseWatchEvent(companyRoot: string, filePath: string): WatchEve
 		return { type: 'config_changed', file: `roles/${roleMatch[1]}`, path: filePath }
 	}
 
-	// team/*.yaml
+	// team/*.yaml (agents.yaml, humans.yaml, roles.yaml, workflows)
 	const teamMatch = rel.match(/^team\/(.+\.yaml)$/)
 	if (teamMatch?.[1]) {
 		return { type: 'config_changed', file: teamMatch[1], path: filePath }
+	}
+
+	// company.yaml
+	if (rel === 'company.yaml') {
+		return { type: 'config_changed', file: 'company.yaml', path: filePath }
 	}
 
 	return null
@@ -94,18 +82,17 @@ export class Watcher {
 
 	constructor(private options: WatcherOptions) {}
 
-	/** Start watching `tasks/`, `comms/`, `dashboard/`, `team/`, `knowledge/`, and `artifacts/`. */
+	/** Start watching config, dashboard, knowledge, team, and artifacts. */
 	async start(): Promise<void> {
 		const root = this.options.companyRoot
 		const debounceMs = this.options.debounceMs ?? 500
 
 		const watchPaths = [
-			join(root, 'tasks'),
-			join(root, 'comms'),
 			join(root, 'dashboard'),
 			join(root, 'team'),
 			join(root, 'knowledge'),
 			join(root, 'artifacts'),
+			join(root, 'company.yaml'),
 		]
 
 		this.watcher = watch(watchPaths, {
@@ -119,7 +106,8 @@ export class Watcher {
 			const isRoleFile = rel.startsWith('team/roles/') && filePath.endsWith('.md')
 			const isKnowledgeFile = rel.startsWith('knowledge/')
 			const isArtifactConfig = rel.match(/^artifacts\/[^/]+\/.artifact\.yaml$/)
-			if (!filePath.endsWith('.yaml') && !isDashboardFile && !isRoleFile && !isKnowledgeFile && !isArtifactConfig) return
+			const isCompanyYaml = rel === 'company.yaml'
+			if (!filePath.endsWith('.yaml') && !isDashboardFile && !isRoleFile && !isKnowledgeFile && !isArtifactConfig && !isCompanyYaml) return
 
 			const existing = this.debounceTimers.get(filePath)
 			if (existing) clearTimeout(existing)

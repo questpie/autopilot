@@ -52,7 +52,7 @@ function SettingsDangerPage() {
 
   const resetMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.api.reset.$post()
+      const res = await api.api.reset.$post({ json: { confirm: true } })
       if (!res.ok) throw new Error(t("errors.reset_not_available"))
     },
     onSuccess: () => {
@@ -64,7 +64,7 @@ function SettingsDangerPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.api["delete-company"].$post()
+      const res = await api.api["delete-company"].$post({ json: { confirm: "DELETE" as const } })
       if (!res.ok) throw new Error(t("errors.delete_not_available"))
     },
     onSuccess: () => {

@@ -2,10 +2,10 @@ import { z } from 'zod'
 import { createPin, removePin } from '../../fs/pins'
 import { container } from '../../container'
 import { dbFactory } from '../../db'
-import type { ToolDefinition, ToolContext, ToolResult } from '../tools'
+import type { ToolDefinition } from '../tools'
 import { getIndexer } from './shared'
 
-export function createPinTool(companyRoot: string): ToolDefinition {
+export function createPinTool(_companyRoot: string): ToolDefinition {
 	return {
 		name: 'pin',
 		description: 'Pin or unpin items on the dashboard. Use action "create" to pin, "remove" to unpin.',

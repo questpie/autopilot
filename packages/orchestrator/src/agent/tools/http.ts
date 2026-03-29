@@ -2,7 +2,7 @@ import { join } from 'path'
 import { z } from 'zod'
 import { PATHS } from '@questpie/autopilot-spec'
 import { readYamlUnsafe } from '../../fs/yaml'
-import type { ToolDefinition, ToolContext, ToolResult, AutopilotToolOptions } from '../tools'
+import type { ToolDefinition, AutopilotToolOptions } from '../tools'
 import { checkSsrf } from './shared'
 
 /** Zod schema for secret YAML files used by the fetch tool. */

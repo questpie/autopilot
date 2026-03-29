@@ -6,7 +6,7 @@
  */
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
-import { resolver, validator as zValidator } from 'hono-openapi'
+import { validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
 import { getDurableStreamBaseUrl, steerSession } from '../../session/durable'
 import type { AppEnv } from '../app'

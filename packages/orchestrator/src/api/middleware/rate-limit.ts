@@ -49,7 +49,7 @@ export async function checkRateLimit(
 			sql: `SELECT id, count FROM rate_limit_entries WHERE key = ? AND window_start = ?`,
 			args: [key, windowStart],
 		})
-		const existing = existingResult.rows[0] as { id: number; count: number } | undefined
+		const existing = existingResult.rows[0] as unknown as { id: number; count: number } | undefined
 
 		let currentCount: number
 		if (existing) {

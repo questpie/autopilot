@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { ToolDefinition, ToolContext, ToolResult } from '../tools'
+import type { ToolDefinition } from '../tools'
 
 /**
  * Web search tool using OpenRouter's `:online` web search plugin.

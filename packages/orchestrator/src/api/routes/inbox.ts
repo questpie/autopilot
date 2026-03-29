@@ -18,7 +18,6 @@ const inbox = new Hono<AppEnv>().get(
 		},
 	}),
 	async (c) => {
-		const root = c.get('companyRoot')
 		const storage = c.get('storage')
 
 		const db = c.get('db')

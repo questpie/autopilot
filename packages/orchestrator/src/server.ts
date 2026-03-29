@@ -164,6 +164,7 @@ export class Orchestrator {
 					created_by: 'system',
 					created_at: now,
 					updated_at: now,
+					metadata: {},
 				})
 				await storage.createChannel({
 					id: 'dev',
@@ -173,6 +174,7 @@ export class Orchestrator {
 					created_by: 'system',
 					created_at: now,
 					updated_at: now,
+					metadata: {},
 				})
 				// Add all agents as members of default channels
 				const agents = await loadAgents(root)
@@ -415,17 +417,6 @@ export class Orchestrator {
 	private async handleWatchEvent(event: WatchEvent): Promise<void> {
 		try {
 			switch (event.type) {
-				case 'task_changed':
-					logger.info('orchestrator', `task changed: ${event.taskId}`)
-					await this.handleTaskChange(event.taskId)
-					break
-				case 'message_received':
-					logger.info('orchestrator', `message received in channel: ${event.channel}`)
-					await this.handleMessage(event.channel, event.path)
-					break
-				case 'pin_changed':
-					logger.info('orchestrator', `pin changed: ${event.pinId}`)
-					break
 				case 'dashboard_changed':
 					logger.info('orchestrator', `dashboard files changed: ${event.file}`)
 					await this.handleDashboardChange()

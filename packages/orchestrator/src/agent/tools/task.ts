@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { StorageBackend, Task } from '../../fs/storage'
-import type { ToolDefinition, ToolContext, ToolResult } from '../tools'
+import type { ToolDefinition } from '../tools'
 import { getIndexer } from './shared'
 
 export function createTaskTool(storage: StorageBackend): ToolDefinition {

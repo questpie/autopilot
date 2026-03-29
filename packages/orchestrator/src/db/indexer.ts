@@ -196,8 +196,9 @@ export class Indexer {
 					// D27: Binary document formats (PDF, DOCX, PPTX, XLSX) via officeparser
 					else if (Indexer.OFFICE_EXTENSIONS.has(ext)) {
 						try {
-							const { parseOfficeAsync } = await import('officeparser')
+							const officeparser = await import('officeparser') as any
 							const relPath = relative(knowledgeDir, fullPath)
+							const parseOfficeAsync = officeparser.parseOfficeAsync ?? officeparser.default?.parseOfficeAsync
 							const content = await parseOfficeAsync(fullPath)
 							if (content && content.trim().length > 0) {
 								const title = entry.name.replace(/\.[^.]+$/, '')

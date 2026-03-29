@@ -119,7 +119,7 @@ export async function createAuth(db: AutopilotDb, companyRoot: string) {
 					after: async (session: { userId: string; [key: string]: unknown }) => {
 						// Banned user logout: reject session creation for banned users
 						try {
-							const row = db.select({ banned: authSchema.user.banned }).from(authSchema.user).where(eq(authSchema.user.id, session.userId)).get()
+							const row = await db.select({ banned: authSchema.user.banned }).from(authSchema.user).where(eq(authSchema.user.id, session.userId)).get()
 							if (row?.banned === true) {
 								const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
 								const revokeSessionFn = authApi.revokeSession

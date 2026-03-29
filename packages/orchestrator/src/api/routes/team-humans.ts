@@ -262,7 +262,7 @@ const teamHumans = new Hono<AppEnv>()
 			const { role } = c.req.valid('json')
 
 			// Get user email directly from DB
-			const user = db.select({ id: authSchema.user.id, email: authSchema.user.email }).from(authSchema.user).where(eq(authSchema.user.id, id)).get()
+			const user = await db.select({ id: authSchema.user.id, email: authSchema.user.email }).from(authSchema.user).where(eq(authSchema.user.id, id)).get()
 			if (!user) {
 				return c.json({ error: 'User not found' }, 404)
 			}
