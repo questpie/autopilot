@@ -101,4 +101,51 @@ describe('crypto', () => {
 			await cleanup()
 		}
 	})
+
+	test('handles empty string encryption', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			await mkdir(join(root, 'secrets'), { recursive: true })
+			await ensureMasterKey(root)
+			const key = await loadMasterKey(root)
+
+			const encrypted = await encrypt('', key)
+			const decrypted = await decrypt(encrypted, key)
+			expect(decrypted).toBe('')
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test('handles unicode content', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			await mkdir(join(root, 'secrets'), { recursive: true })
+			await ensureMasterKey(root)
+			const key = await loadMasterKey(root)
+
+			const plaintext = '🔐 Tajný kľúč with ščťžýáíé'
+			const encrypted = await encrypt(plaintext, key)
+			const decrypted = await decrypt(encrypted, key)
+			expect(decrypted).toBe(plaintext)
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test('handles long content', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			await mkdir(join(root, 'secrets'), { recursive: true })
+			await ensureMasterKey(root)
+			const key = await loadMasterKey(root)
+
+			const plaintext = 'x'.repeat(10_000)
+			const encrypted = await encrypt(plaintext, key)
+			const decrypted = await decrypt(encrypted, key)
+			expect(decrypted).toBe(plaintext)
+		} finally {
+			await cleanup()
+		}
+	})
 })
