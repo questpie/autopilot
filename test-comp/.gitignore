@@ -1,9 +1,0 @@
-# SQLite operational databases
-.data/
-
-# Secrets (encryption key MUST NOT be in git)
-secrets/.master-key
-
-# OS files
-.DS_Store
-Thumbs.db
