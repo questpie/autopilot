@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useTranslation } from "@/lib/i18n"
 import { SettingsPageHeader } from "@/features/settings/settings-page-header"
 import { CompanyProfileForm } from "@/features/settings/company-profile-form"
+import { CompanySettingsForm } from "@/features/settings/company-settings-form"
 
 export const Route = createFileRoute("/_app/settings/general")({
   component: SettingsGeneralPage,
@@ -16,8 +17,10 @@ function SettingsGeneralPage() {
         title={t("settings.general")}
         description={t("settings.general_description")}
       />
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 space-y-8 overflow-y-auto p-6">
         <CompanyProfileForm />
+        {/* D45 + D48: Company settings (agents, models, allowlist) */}
+        <CompanySettingsForm />
       </div>
     </div>
   )
