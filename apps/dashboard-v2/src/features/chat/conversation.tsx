@@ -5,10 +5,12 @@ import { ArrowDownIcon } from "@phosphor-icons/react"
 import { messagesQuery } from "./chat.queries"
 import { MessageBubble } from "./message-bubble"
 import { DayDivider } from "./day-divider"
+import { StreamingMessage } from "./streaming-message"
 import { ConversationSkeleton } from "./chat-skeletons"
 import { ConversationEmpty } from "./chat-empty-states"
 import { cn } from "@/lib/utils"
 import { EASING, DURATION, useMotionPreference } from "@/lib/motion"
+import type { StreamingState } from "./use-streaming-chat"
 
 interface Message {
   id: string
@@ -73,9 +75,11 @@ function groupMessages(messages: Message[]): MessageGroup[] {
 interface ConversationProps {
   channelId: string
   compact?: boolean
+  /** D13: Live streaming state from useStreamingChat — renders live agent response below messages. */
+  streaming?: StreamingState & { agentId: string }
 }
 
-export function Conversation({ channelId, compact = false }: ConversationProps) {
+export function Conversation({ channelId, compact = false, streaming }: ConversationProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -87,13 +91,20 @@ export function Conversation({ channelId, compact = false }: ConversationProps) 
   const messages = useMemo(() => (data ?? []) as Message[], [data])
   const grouped = useMemo(() => groupMessages(messages), [messages])
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages or streaming content
   useEffect(() => {
     if (autoScroll && messages.length > prevMessageCountRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" })
     }
     prevMessageCountRef.current = messages.length
   }, [messages.length, autoScroll])
+
+  // D13: Auto-scroll on streaming text delta
+  useEffect(() => {
+    if (autoScroll && streaming?.isStreaming) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [streaming?.streamedText, streaming?.isStreaming, autoScroll])
 
   // Initial scroll to bottom
   useEffect(() => {
@@ -166,6 +177,16 @@ export function Conversation({ channelId, compact = false }: ConversationProps) 
             return null
           })}
         </AnimatePresence>
+
+        {/* D13: Live streaming agent response */}
+        {streaming && (streaming.isStreaming || streaming.streamedText || streaming.error) && (
+          <StreamingMessage
+            agentId={streaming.agentId}
+            state={streaming}
+            compact={compact}
+          />
+        )}
+
         <div ref={bottomRef} />
       </div>
 
