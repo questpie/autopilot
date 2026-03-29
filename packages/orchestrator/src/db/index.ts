@@ -23,7 +23,7 @@ export interface DbResult {
  * Returns both the Drizzle ORM instance and the raw libSQL Client
  * so callers (e.g. Better Auth) can share the same underlying connection.
  */
-export async function createDb(companyRoot: string, opts?: { embeddingDimensions?: number }): Promise<DbResult> {
+export async function createDb(companyRoot: string, opts?: { embeddingDimensions?: number; useDiskAnn?: boolean }): Promise<DbResult> {
 	const dataDir = join(companyRoot, '.data')
 	await mkdir(dataDir, { recursive: true })
 
@@ -48,21 +48,36 @@ export async function createDb(companyRoot: string, opts?: { embeddingDimensions
 	// (must be raw SQL — drizzle migrator cannot handle trigger semicolons)
 	await initSearchFts(client)
 
-	// Create vec0 virtual table for search_index (requires native vector support)
+	// D44: Detect if running on Turso (libSQL native vectors) or local (sqlite-vec)
 	const dims = opts?.embeddingDimensions ?? 768
-	try {
-		await client.execute(`
-			CREATE VIRTUAL TABLE IF NOT EXISTS search_vec USING vec0(
-				search_id INTEGER PRIMARY KEY,
-				embedding float[${dims}]
-			)
-		`)
-	} catch {
-		// vec0 not available — vector search will be unavailable
+	const isTurso = !!(process.env.TURSO_SYNC_URL || process.env.DATABASE_URL?.startsWith('libsql://'))
+
+	if (isTurso) {
+		// ── libSQL native: F32_BLOB columns + DiskANN index via libsql_vector_idx ──
+		// Embeddings stored directly in the regular tables as F32_BLOB columns.
+		// search_index already has content; we add an embedding column if missing.
+		try {
+			await client.execute(`ALTER TABLE search_index ADD COLUMN embedding F32_BLOB(${dims})`)
+		} catch { /* column already exists */ }
+		try {
+			await client.execute(`CREATE INDEX IF NOT EXISTS search_vec_idx ON search_index (libsql_vector_idx(embedding))`)
+		} catch { /* index already exists or not supported */ }
+	} else {
+		// ── Local: sqlite-vec vec0 virtual table ──
+		try {
+			await client.execute(`
+				CREATE VIRTUAL TABLE IF NOT EXISTS search_vec USING vec0(
+					search_id INTEGER PRIMARY KEY,
+					embedding float[${dims}]
+				)
+			`)
+		} catch {
+			// vec0 not available — vector search will be unavailable
+		}
 	}
 
-	// D25: FTS5 + vec0 virtual tables for chunks
-	await initChunksFts(client, dims)
+	// D25: FTS5 + vec0/DiskANN virtual tables for chunks
+	await initChunksFts(client, dims, isTurso)
 
 	// Cleanup expired rate limit entries on startup and every 5 minutes
 	try { await client.execute(`DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()`) } catch { /* table may not exist yet */ }
@@ -127,9 +142,10 @@ async function initSearchFts(client: Client): Promise<void> {
 }
 
 /**
- * D25: Initialize FTS5 + vec0 virtual tables for chunks table.
+ * D25: Initialize FTS5 virtual tables for chunks table.
+ * D44: Use libSQL native DiskANN on Turso, vec0 locally.
  */
-async function initChunksFts(client: Client, dims: number): Promise<void> {
+async function initChunksFts(client: Client, dims: number, isTurso: boolean): Promise<void> {
 	try {
 		await client.execute(`
 			CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
@@ -160,14 +176,25 @@ async function initChunksFts(client: Client, dims: number): Promise<void> {
 		`)
 	} catch { /* triggers exist */ }
 
-	try {
-		await client.execute(`
-			CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(
-				chunk_id INTEGER PRIMARY KEY,
-				embedding float[${dims}]
-			)
-		`)
-	} catch { /* vec0 not available */ }
+	if (isTurso) {
+		// D44: libSQL native — add F32_BLOB column + DiskANN index to chunks table
+		try {
+			await client.execute(`ALTER TABLE chunks ADD COLUMN embedding F32_BLOB(${dims})`)
+		} catch { /* column already exists */ }
+		try {
+			await client.execute(`CREATE INDEX IF NOT EXISTS chunks_vec_idx ON chunks (libsql_vector_idx(embedding))`)
+		} catch { /* index exists or not supported */ }
+	} else {
+		// Local: sqlite-vec vec0 virtual table
+		try {
+			await client.execute(`
+				CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(
+					chunk_id INTEGER PRIMARY KEY,
+					embedding float[${dims}]
+				)
+			`)
+		} catch { /* vec0 not available */ }
+	}
 }
 
 /**

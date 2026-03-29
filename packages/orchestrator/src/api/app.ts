@@ -17,6 +17,9 @@ import type { AutopilotDb } from '../db'
 import { dbFactory } from '../db'
 import { storageFactory } from '../fs/sqlite-backend'
 import type { StorageBackend } from '../fs/storage'
+import { existsSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { getDurableStreamBaseUrl } from '../session/durable'
 import { mountDocs } from './docs'
 import { artifactProxyAuth } from './middleware/artifact-auth'
 import { authMiddleware } from './middleware/auth'
@@ -193,7 +196,73 @@ export function createApp(config: AppConfig) {
 	// ── 7. Documentation (must come after all routes so the spec is complete) ─
 	mountDocs(typedApp)
 
+	// ── D42: Single-port proxy — /streams/* reverse proxy to durable-streams ──
+	typedApp.all('/streams/*', async (c) => {
+		const url = new URL(c.req.url)
+		const targetPath = url.pathname.replace(/^\/streams/, '')
+		const targetUrl = `${getDurableStreamBaseUrl()}/v1/stream${targetPath}${url.search}`
+		try {
+			const resp = await fetch(targetUrl, {
+				method: c.req.method,
+				headers: c.req.raw.headers,
+				body: c.req.method !== 'GET' && c.req.method !== 'HEAD' ? c.req.raw.body : undefined,
+				// @ts-expect-error — duplex needed for streaming request bodies
+				duplex: 'half',
+			})
+			return new Response(resp.body, {
+				status: resp.status,
+				headers: Object.fromEntries(resp.headers.entries()),
+			})
+		} catch {
+			return c.json({ error: 'Durable Streams server unavailable' }, 502)
+		}
+	})
+
+	// ── D42: Single-port proxy — /* serve static dashboard ──
+	const dashboardDir = resolveDashboardDir()
+	if (dashboardDir) {
+		typedApp.get('/*', async (c) => {
+			const url = new URL(c.req.url)
+			const filePath = join(dashboardDir, url.pathname === '/' ? 'index.html' : url.pathname)
+
+			try {
+				const file = Bun.file(filePath)
+				if (await file.exists()) {
+					return new Response(file.stream(), {
+						headers: { 'Content-Type': file.type || 'application/octet-stream' },
+					})
+				}
+				// SPA fallback — serve index.html for client-side routes
+				const indexFile = Bun.file(join(dashboardDir, 'index.html'))
+				if (await indexFile.exists()) {
+					return new Response(indexFile.stream(), {
+						headers: { 'Content-Type': 'text/html' },
+					})
+				}
+			} catch {
+				// Fall through
+			}
+			return c.text('Not Found', 404)
+		})
+	}
+
 	return typedApp
+}
+
+/**
+ * D42: Resolve the dashboard static build directory.
+ * Looks for Nitro output (.output/public) or Vite build (dist).
+ */
+function resolveDashboardDir(): string | null {
+	const candidates = [
+		resolve(__dirname, '..', '..', '..', '..', 'apps', 'dashboard-v2', '.output', 'public'),
+		resolve(__dirname, '..', '..', '..', '..', 'apps', 'dashboard-v2', 'dist'),
+		'/app/apps/dashboard-v2/.output/public',
+	]
+	for (const dir of candidates) {
+		if (existsSync(dir)) return dir
+	}
+	return null
 }
 
 /** App type for SDK / hono client type inference. */

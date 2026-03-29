@@ -374,8 +374,15 @@ export class Indexer {
 		}
 	}
 
+	/** D44: Detect Turso mode. */
+	private static isTurso(): boolean {
+		return !!(process.env.TURSO_SYNC_URL || process.env.DATABASE_URL?.startsWith('libsql://'))
+	}
+
 	/**
-	 * D26: Generate and store embeddings for each chunk in chunks_vec.
+	 * D26+D44: Generate and store embeddings for each chunk.
+	 * Turso: UPDATE chunks SET embedding = ? WHERE id = ?
+	 * Local: INSERT INTO chunks_vec (chunk_id, embedding)
 	 */
 	private async storeChunkEmbeddings(
 		type: EntityType,
@@ -384,8 +391,8 @@ export class Indexer {
 	): Promise<void> {
 		try {
 			const raw = (this.db as unknown as { $client: Client }).$client
+			const turso = Indexer.isTurso()
 
-			// Get chunk IDs
 			const chunkRows = await this.db
 				.select({ id: schema.chunks.id })
 				.from(schema.chunks)
@@ -399,21 +406,26 @@ export class Indexer {
 				const chunkId = chunkRows[i]!.id
 				const embeddingBuffer = Buffer.from(embedding.buffer)
 
-				try {
-					await raw.execute({ sql: 'DELETE FROM chunks_vec WHERE chunk_id = ?', args: [chunkId] })
-				} catch { /* chunks_vec might not exist */ }
-				try {
-					await raw.execute({ sql: 'INSERT INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)', args: [chunkId, embeddingBuffer] })
-				} catch { /* chunks_vec not available */ }
+				if (turso) {
+					// D44: libSQL native — write F32_BLOB directly to chunks.embedding column
+					try {
+						await raw.execute({ sql: 'UPDATE chunks SET embedding = vector(?) WHERE id = ?', args: [embeddingBuffer, chunkId] })
+					} catch { /* embedding column may not exist */ }
+				} else {
+					// Local: sqlite-vec vec0
+					try { await raw.execute({ sql: 'DELETE FROM chunks_vec WHERE chunk_id = ?', args: [chunkId] }) } catch {}
+					try { await raw.execute({ sql: 'INSERT INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)', args: [chunkId, embeddingBuffer] }) } catch {}
+				}
 			}
 		} catch {
-			// Embedding storage failed — chunks are still searchable via FTS
+			// Embedding storage failed — chunks still searchable via FTS
 		}
 	}
 
 	/**
-	 * Generate an embedding for the entity content and store it in search_vec.
-	 * Failures are silently ignored — the entity remains searchable via FTS.
+	 * D44: Generate and store embedding for a search_index entity.
+	 * Turso: UPDATE search_index SET embedding = ? WHERE id = ?
+	 * Local: INSERT INTO search_vec (search_id, embedding)
 	 */
 	private async storeEmbedding(
 		type: EntityType,
@@ -426,7 +438,6 @@ export class Indexer {
 			const embedding = await this.embeddingService!.embedText(text)
 			if (!embedding) return
 
-			// Get the search_index row id for this entity
 			const row = await this.db
 				.select({ id: schema.searchIndex.id })
 				.from(schema.searchIndex)
@@ -438,19 +449,18 @@ export class Indexer {
 			const raw = (this.db as unknown as { $client: Client }).$client
 			const embeddingBuffer = Buffer.from(embedding.buffer)
 
-			// Delete existing vector for this search_id, then insert
-			try {
-				await raw.execute({ sql: 'DELETE FROM search_vec WHERE search_id = ?', args: [row.id] })
-			} catch {
-				// search_vec might not exist
-			}
-			try {
-				await raw.execute({ sql: 'INSERT INTO search_vec (search_id, embedding) VALUES (?, ?)', args: [row.id, embeddingBuffer] })
-			} catch {
-				// search_vec not available — skip silently
+			if (Indexer.isTurso()) {
+				// D44: libSQL native — write F32_BLOB directly to search_index.embedding column
+				try {
+					await raw.execute({ sql: 'UPDATE search_index SET embedding = vector(?) WHERE id = ?', args: [embeddingBuffer, row.id] })
+				} catch { /* embedding column may not exist */ }
+			} else {
+				// Local: sqlite-vec vec0
+				try { await raw.execute({ sql: 'DELETE FROM search_vec WHERE search_id = ?', args: [row.id] }) } catch {}
+				try { await raw.execute({ sql: 'INSERT INTO search_vec (search_id, embedding) VALUES (?, ?)', args: [row.id, embeddingBuffer] }) } catch {}
 			}
 		} catch {
-			// Embedding storage failed — entity is still indexed for FTS
+			// Embedding storage failed — entity still indexed for FTS
 		}
 	}
 
