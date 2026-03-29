@@ -113,4 +113,66 @@ describe('routeMessage', () => {
 		expect(result.agent.id).toBe('ceo')
 		expect(result.reason).toContain('CEO')
 	})
+
+	// ── Keyword routing for other roles ──────────────────────────────────
+
+	it('routes devops keywords to devops agent', async () => {
+		const result = await routeMessage('We need to deploy to kubernetes and check the docker containers', agents, '/tmp/fake')
+		expect(result.agent.id).toBe('devops')
+	})
+
+	it('routes marketing keywords to marketer agent', async () => {
+		const result = await routeMessage('Write a blog post for the launch campaign', agents, '/tmp/fake')
+		expect(result.agent.id).toBe('marketer')
+	})
+
+	// ── Priority: @mention > task ref > keyword ─────────────────────────
+
+	it('@mention wins over keyword match', async () => {
+		// "deploy" is a devops keyword, but @dev is an explicit mention
+		const result = await routeMessage('@dev deploy the new version', agents, '/tmp/fake')
+		expect(result.agent.id).toBe('dev')
+		expect(result.reason).toContain('@dev')
+	})
+
+	it('task reference wins over keyword', async () => {
+		const tasksWithAssignment = [
+			{ id: 'task-xyz', assigned_to: 'marketer', title: 'Campaign', status: 'in_progress' },
+		]
+		mockStorage = createMockStorage(tasksWithAssignment)
+		resolveAsyncSpy.mockResolvedValue({ storage: mockStorage } as any)
+
+		// "deploy" matches devops keywords, but task-xyz is assigned to marketer
+		const result = await routeMessage('Check task-xyz about the deploy', agents, '/tmp/fake')
+		expect(result.agent.id).toBe('marketer')
+	})
+
+	// ── D47: Custom agent keywords ──────────────────────────────────────
+
+	it('uses custom agent.keywords when defined', async () => {
+		const customAgents: Agent[] = [
+			makeAgent({ id: 'specialist', role: 'custom', keywords: ['quantum', 'physics'] } as any),
+			makeAgent({ id: 'dev', role: 'developer' }),
+		]
+		const result = await routeMessage('Tell me about quantum computing', customAgents, '/tmp/fake')
+		expect(result.agent.id).toBe('specialist')
+	})
+
+	it('falls back to role defaults when no custom keywords', async () => {
+		const result = await routeMessage('Fix the bug in the API endpoint', agents, '/tmp/fake')
+		expect(result.agent.id).toBe('dev') // developer role defaults
+	})
+
+	// ── Edge cases ──────────────────────────────────────────────────────
+
+	it('@mention for non-existent agent falls through to keywords', async () => {
+		const result = await routeMessage('@ghost please help with the code bug', agents, '/tmp/fake')
+		// @ghost doesn't match any agent, so falls to keyword 'code' + 'bug' → dev
+		expect(result.agent.id).toBe('dev')
+	})
+
+	it('case-insensitive keyword matching', async () => {
+		const result = await routeMessage('DEPLOY the DOCKER containers NOW', agents, '/tmp/fake')
+		expect(result.agent.id).toBe('devops')
+	})
 })
