@@ -191,4 +191,61 @@ describe('2FA enforcement in resolveActor', () => {
 			await cleanup()
 		}
 	})
+
+	test('returns null when no auth headers provided', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			const request = new Request('http://localhost:7778/api/tasks')
+			const actor = await resolveActor(request, {
+				companyRoot: root,
+				auth: { api: { getSession: async () => null } } as any,
+			})
+			expect(actor).toBeNull()
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test('returns null when session returns null', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			const request = new Request('http://localhost:7778/api/tasks', {
+				headers: { Authorization: 'Bearer expired-token' },
+			})
+			const actor = await resolveActor(request, {
+				companyRoot: root,
+				auth: { api: { getSession: async () => null } } as any,
+			})
+			expect(actor).toBeNull()
+		} finally {
+			await cleanup()
+		}
+	})
+
+	test('admin without 2FA is blocked on non-auth paths (same as owner)', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			await writeFile(
+				join(root, 'team', 'humans.yaml'),
+				stringify({ humans: [{ email: 'admin@test.com', role: 'admin' }] }),
+			)
+
+			const request = new Request('http://localhost:7778/api/tasks', {
+				headers: { Authorization: 'Bearer valid-token' },
+			})
+			const actor = await resolveActor(request, {
+				companyRoot: root,
+				auth: {
+					api: {
+						getSession: async () => ({
+							user: { id: 'admin-1', email: 'admin@test.com', name: 'Admin' },
+						}),
+					},
+				} as any,
+			})
+			expect(actor).toBeNull()
+		} finally {
+			await cleanup()
+		}
+	})
 })
