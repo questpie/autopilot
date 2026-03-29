@@ -47,12 +47,34 @@ describe('DB consolidation (ADR-019)', () => {
 		await setup()
 		const { db, raw } = await createDb(root)
 
-		// Auth uses the Drizzle instance (same underlying connection)
 		const auth = await createAuth(db)
 		expect(auth).toBeDefined()
 
-		// Verify both operate on the same file
 		const dbPath = join(root, '.data', 'autopilot.db')
 		expect(existsSync(dbPath)).toBe(true)
+	})
+
+	it('DB uses WAL journal mode', async () => {
+		await setup()
+		const { raw } = await createDb(root)
+		const result = await raw.execute('PRAGMA journal_mode')
+		expect(result.rows[0]?.journal_mode).toBe('wal')
+	})
+
+	it('foreign_keys is enabled', async () => {
+		await setup()
+		const { raw } = await createDb(root)
+		const result = await raw.execute('PRAGMA foreign_keys')
+		expect(Number(result.rows[0]?.foreign_keys)).toBe(1)
+	})
+
+	it('Better Auth tables exist (user, session, account)', async () => {
+		await setup()
+		const { db, raw } = await createDb(root)
+		await createAuth(db)
+		for (const table of ['user', 'session', 'account']) {
+			const result = await raw.execute(`SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`)
+			expect(result.rows.length).toBe(1)
+		}
 	})
 })
