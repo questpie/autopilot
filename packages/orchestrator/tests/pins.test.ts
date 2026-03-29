@@ -1,21 +1,28 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import { createPin, removePin, listPins, updatePin } from '../src/fs/pins'
+import { createDb } from '../src/db'
+import type { AutopilotDb } from '../src/db'
 import { createTestCompany } from './helpers'
 
 describe('pins', () => {
 	let cleanup: () => Promise<void>
-	let root: string
+	let db: AutopilotDb
 
 	afterEach(async () => {
 		if (cleanup) await cleanup()
 	})
 
-	it('should create a pin', async () => {
+	async function setup() {
 		const ctx = await createTestCompany()
-		root = ctx.root
 		cleanup = ctx.cleanup
+		const result = await createDb(ctx.root)
+		db = result.db
+	}
 
-		const pin = await createPin(root, {
+	it('should create a pin', async () => {
+		await setup()
+
+		const pin = await createPin(db, {
 			group: 'status',
 			title: 'Deploy ready',
 			content: 'Version 1.2.0 ready for deploy',
@@ -31,18 +38,16 @@ describe('pins', () => {
 	})
 
 	it('should list all pins', async () => {
-		const ctx = await createTestCompany()
-		root = ctx.root
-		cleanup = ctx.cleanup
+		await setup()
 
-		await createPin(root, {
+		await createPin(db, {
 			id: 'pin-1',
 			group: 'status',
 			title: 'Pin 1',
 			type: 'info',
 			created_by: 'dev',
 		})
-		await createPin(root, {
+		await createPin(db, {
 			id: 'pin-2',
 			group: 'alerts',
 			title: 'Pin 2',
@@ -50,23 +55,21 @@ describe('pins', () => {
 			created_by: 'dev',
 		})
 
-		const all = await listPins(root)
+		const all = await listPins(db)
 		expect(all).toHaveLength(2)
 	})
 
 	it('should filter pins by group', async () => {
-		const ctx = await createTestCompany()
-		root = ctx.root
-		cleanup = ctx.cleanup
+		await setup()
 
-		await createPin(root, {
+		await createPin(db, {
 			id: 'pin-g1',
 			group: 'status',
 			title: 'Status pin',
 			type: 'info',
 			created_by: 'dev',
 		})
-		await createPin(root, {
+		await createPin(db, {
 			id: 'pin-g2',
 			group: 'alerts',
 			title: 'Alert pin',
@@ -74,17 +77,15 @@ describe('pins', () => {
 			created_by: 'dev',
 		})
 
-		const statusPins = await listPins(root, 'status')
+		const statusPins = await listPins(db, 'status')
 		expect(statusPins).toHaveLength(1)
 		expect(statusPins[0]?.title).toBe('Status pin')
 	})
 
 	it('should remove a pin', async () => {
-		const ctx = await createTestCompany()
-		root = ctx.root
-		cleanup = ctx.cleanup
+		await setup()
 
-		await createPin(root, {
+		await createPin(db, {
 			id: 'pin-rm',
 			group: 'status',
 			title: 'To remove',
@@ -92,27 +93,22 @@ describe('pins', () => {
 			created_by: 'dev',
 		})
 
-		await removePin(root, 'pin-rm')
+		await removePin(db, 'pin-rm')
 
-		const pins = await listPins(root)
+		const pins = await listPins(db)
 		expect(pins).toHaveLength(0)
 	})
 
 	it('should not throw when removing non-existent pin', async () => {
-		const ctx = await createTestCompany()
-		root = ctx.root
-		cleanup = ctx.cleanup
-
-		await removePin(root, 'pin-nope')
+		await setup()
+		await removePin(db, 'pin-nope')
 		// no throw = pass
 	})
 
 	it('should update a pin', async () => {
-		const ctx = await createTestCompany()
-		root = ctx.root
-		cleanup = ctx.cleanup
+		await setup()
 
-		await createPin(root, {
+		await createPin(db, {
 			id: 'pin-upd',
 			group: 'status',
 			title: 'Original',
@@ -121,7 +117,7 @@ describe('pins', () => {
 			created_by: 'dev',
 		})
 
-		const updated = await updatePin(root, 'pin-upd', {
+		const updated = await updatePin(db, 'pin-upd', {
 			title: 'Updated',
 			content: 'New content',
 			type: 'success',
@@ -134,10 +130,7 @@ describe('pins', () => {
 	})
 
 	it('should throw when updating non-existent pin', async () => {
-		const ctx = await createTestCompany()
-		root = ctx.root
-		cleanup = ctx.cleanup
-
-		expect(updatePin(root, 'pin-ghost', { title: 'x' })).rejects.toThrow('Pin not found')
+		await setup()
+		expect(updatePin(db, 'pin-ghost', { title: 'x' })).rejects.toThrow('Pin not found')
 	})
 })
