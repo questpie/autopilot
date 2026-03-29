@@ -56,7 +56,7 @@ interface HumanTarget {
 
 // ── Classification ──────────────────────────────────────────────────────────
 
-function classify(event: AutopilotEvent): ClassifiedNotification | null {
+export function classify(event: AutopilotEvent): ClassifiedNotification | null {
 	switch (event.type) {
 		case 'task_changed': {
 			if (event.status === 'review' || event.status === 'blocked') {
