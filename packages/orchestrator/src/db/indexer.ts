@@ -131,8 +131,28 @@ export class Indexer {
 		return count
 	}
 
+	/** D30: Image extensions for multimodal embedding. */
+	private static IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'])
+
+	/** D27: Supported file extensions for knowledge indexing. */
+	private static INDEXABLE_EXTENSIONS = new Set([
+		// Text
+		'md', 'txt', 'rst', 'adoc',
+		// Data
+		'json', 'csv', 'yaml', 'yml', 'toml',
+		// Markup
+		'html', 'htm', 'xml', 'svg',
+		// Code
+		'ts', 'tsx', 'js', 'jsx', 'mts', 'mjs', 'py', 'go', 'rs', 'java', 'kt',
+		'rb', 'php', 'c', 'cpp', 'h', 'hpp', 'cs', 'swift', 'sh', 'bash', 'zsh',
+		'sql', 'graphql', 'proto', 'lua', 'r', 'scala', 'zig', 'asm',
+		// Config
+		'env', 'ini', 'cfg', 'conf', 'dockerfile',
+	])
+
 	/**
-	 * Index all markdown files from the knowledge directory.
+	 * D27: Index all supported files from the knowledge directory.
+	 * Supports md, txt, html, json, csv, yaml, code, and more.
 	 */
 	async indexKnowledge(): Promise<number> {
 		const knowledgeDir = join(this.companyRoot, PATHS.KNOWLEDGE_DIR.replace(/^\/company/, ''))
@@ -150,15 +170,38 @@ export class Indexer {
 				const fullPath = join(dir, entry.name)
 				if (entry.isDirectory()) {
 					await indexDir(fullPath)
-				} else if (entry.name.endsWith('.md')) {
-					try {
-						const content = await Bun.file(fullPath).text()
-						const relPath = relative(knowledgeDir, fullPath)
-						const title = this.extractTitle(content, entry.name)
-						const changed = await this.indexEntitySafe('knowledge', relPath, title, content)
-						if (changed) count++
-					} catch {
-						// Skip unreadable files
+				} else {
+					const ext = entry.name.split('.').pop()?.toLowerCase() ?? ''
+					const baseName = entry.name.toLowerCase()
+
+					// D30: Image files — embed via multimodal model
+					if (Indexer.IMAGE_EXTENSIONS.has(ext) && this.embeddingService) {
+						try {
+							const relPath = relative(knowledgeDir, fullPath)
+							const data = Buffer.from(await Bun.file(fullPath).arrayBuffer())
+							const mimeType = ext === 'svg' ? 'image/svg+xml' : `image/${ext === 'jpg' ? 'jpeg' : ext}`
+							const embedding = await this.embeddingService.embedImage(data, mimeType)
+							if (embedding) {
+								// Index with minimal text content (filename) + store embedding in chunks_vec
+								const changed = await this.indexEntitySafe('knowledge', relPath, entry.name, `[Image: ${entry.name}]`)
+								if (changed) count++
+							}
+						} catch {
+							// Skip unreadable images
+						}
+					}
+					// D27: Index all supported text formats
+					else if (Indexer.INDEXABLE_EXTENSIONS.has(ext) || baseName === 'dockerfile' || baseName === 'makefile') {
+						try {
+							const raw = await Bun.file(fullPath).text()
+							const relPath = relative(knowledgeDir, fullPath)
+							const content = this.extractContent(raw, ext)
+							const title = this.extractTitle(raw, entry.name)
+							const changed = await this.indexEntitySafe('knowledge', relPath, title, content)
+							if (changed) count++
+						} catch {
+							// Skip unreadable / binary files
+						}
 					}
 				}
 			}
@@ -408,6 +451,42 @@ export class Indexer {
 			}
 		} catch {
 			// Embedding storage failed — entity is still indexed for FTS
+		}
+	}
+
+	/**
+	 * D27: Extract searchable text content from various file formats.
+	 */
+	private extractContent(raw: string, ext: string): string {
+		switch (ext) {
+			case 'html':
+			case 'htm':
+				// Strip HTML tags for indexing
+				return raw.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+					.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+					.replace(/<[^>]+>/g, ' ')
+					.replace(/\s+/g, ' ')
+					.trim()
+
+			case 'json':
+				// Pretty-print JSON for better search
+				try {
+					return JSON.stringify(JSON.parse(raw), null, 2)
+				} catch {
+					return raw
+				}
+
+			case 'csv':
+				// CSV is already text — keep as-is
+				return raw
+
+			case 'xml':
+			case 'svg':
+				// Strip XML tags
+				return raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+
+			default:
+				return raw
 		}
 	}
 
