@@ -220,6 +220,24 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		})
 		eventBus.emit({ type: 'agent_session', agentId: agent.id, status: 'ended', sessionId })
 
+		// D12: Save final text as DM message on chat session end
+		if (mode === 'chat' && channelId && sessionResult!.result) {
+			try {
+				await storage.sendMessage({
+					id: `msg-${Date.now().toString(36)}-${agent.id}`,
+					channel: channelId,
+					from: agent.id,
+					content: sessionResult!.result,
+					at: new Date().toISOString(),
+					references: [sessionId],
+				})
+			} catch (err) {
+				logger.warn('agent', `failed to save chat response for ${agent.id}/${sessionId}`, {
+					error: err instanceof Error ? err.message : String(err),
+				})
+			}
+		}
+
 		// Extract and persist memory from this session (best-effort, 1 retry)
 		try {
 			await extractMemory(companyRoot, agent.id, sessionId, storage)
