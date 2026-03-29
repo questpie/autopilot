@@ -134,7 +134,7 @@ function LoginPage() {
 
     // Check if 2FA is needed -- Better Auth returns redirect=true for 2FA
     if (result.data?.redirect) {
-      void router.invalidate().then(() => router.navigate({ to: "/login/2fa", search: {} as any }))
+      void router.invalidate().then(() => router.navigate({ to: "/login/2fa" }))
       return
     }
 

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { EyeIcon, EyeSlashIcon, WarningCircleIcon, ShieldWarningIcon } from "@phosphor-icons/react"
-import { useState, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { m, AnimatePresence } from "framer-motion"
 import { zxcvbnAsync, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPkg from "@zxcvbn-ts/language-common"
@@ -102,7 +102,7 @@ function SignupPage() {
   const watchedPassword = form.watch("password")
 
   // Update password strength when password changes
-  useMemo(() => {
+  useEffect(() => {
     if (!watchedPassword) {
       setPasswordScore(0)
       return

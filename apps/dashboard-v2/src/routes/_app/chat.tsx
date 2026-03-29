@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { useTranslation } from "@/lib/i18n"
 import { channelsQuery } from "@/features/chat/chat.queries"
-import { ChannelList } from "@/features/chat/channel-list"
+import { ChannelSidebar } from "@/features/chat/channel-sidebar"
 import { ChannelListSkeleton } from "@/features/chat/chat-skeletons"
 import { ChannelListEmpty } from "@/features/chat/chat-empty-states"
 import { ChannelCreateDialog } from "@/features/chat/channel-create-dialog"
@@ -47,7 +47,7 @@ function ChatLayout() {
         ) : channels.length === 0 ? (
           <ChannelListEmpty />
         ) : (
-          <ChannelList
+          <ChannelSidebar
             channels={channels}
             activeChannelId={activeChannelId}
             onCreateChannel={() => setCreateOpen(true)}

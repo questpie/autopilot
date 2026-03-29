@@ -11,7 +11,13 @@ const config = defineConfig({
     nitro() as any,
     tailwindcss(),
     tanstackStart(),
-    viteReact(),
+    viteReact({
+      babel: {
+        plugins: [
+          ['babel-plugin-react-compiler', {}],
+        ],
+      },
+    }),
   ],
   resolve: {
     tsconfigPaths: true,

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   Select,
@@ -15,6 +15,7 @@ import { MessageInput } from "./message-input"
 import { ChatTabs, type ChatTab } from "./chat-tabs"
 import { useChatContext } from "./use-chat-context"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
+import { DropZoneOverlay } from "./drop-zone-overlay"
 
 interface Channel {
   id: string
@@ -116,6 +117,12 @@ export function ChatPanel() {
   )
   useKeyboardShortcuts(shortcuts)
 
+  const uploadRef = useRef<((files: File[]) => void) | null>(null)
+
+  const handleFileDrop = useCallback((files: File[]) => {
+    uploadRef.current?.(files)
+  }, [])
+
   if (!rightPanel.open || rightPanel.mode !== "chat") return null
 
   return (
@@ -176,10 +183,10 @@ export function ChatPanel() {
 
         {/* Conversation — fills remaining space */}
         {activeChannelId ? (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <DropZoneOverlay onDrop={handleFileDrop}>
             <Conversation channelId={activeChannelId} compact />
-            <MessageInput channelId={activeChannelId} compact />
-          </div>
+            <MessageInput channelId={activeChannelId} compact uploadRef={uploadRef} />
+          </DropZoneOverlay>
         ) : (
           <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
             {t("chat.no_channels_description")}

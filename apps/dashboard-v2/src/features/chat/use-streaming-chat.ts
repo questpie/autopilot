@@ -20,9 +20,9 @@ export interface StreamingState {
   /** Accumulated text from text_delta chunks. */
   streamedText: string
   /** Currently active tool calls (pending result). */
-  activeToolCalls: Array<{ tool: string; toolCallId?: string; params?: Record<string, unknown> }>
+  activeToolCalls: Array<{ id: string; tool: string; toolCallId?: string; params?: Record<string, unknown> }>
   /** Completed tool results for display. */
-  toolResults: Array<{ tool: string; content: string }>
+  toolResults: Array<{ id: string; tool: string; content: string }>
   /** Error message if the stream failed. */
   error: string | null
 }
@@ -154,6 +154,8 @@ export function useStreamingChat(agentId: string | null) {
   return { ...state, send: wrappedSend, cancel, retry }
 }
 
+let _toolIdCounter = 0
+
 function handleEvent(
   event: string,
   data: Record<string, unknown>,
@@ -188,7 +190,7 @@ function handleEvent(
             ...s,
             activeToolCalls: [
               ...s.activeToolCalls,
-              { tool: chunk.tool ?? "unknown", params: chunk.params },
+              { id: `tc-${++_toolIdCounter}`, tool: chunk.tool ?? "unknown", params: chunk.params },
             ],
           }))
           break
@@ -198,7 +200,7 @@ function handleEvent(
             activeToolCalls: s.activeToolCalls.filter((tc) => tc.tool !== chunk.tool),
             toolResults: [
               ...s.toolResults,
-              { tool: chunk.tool ?? "unknown", content: chunk.content ?? "" },
+              { id: `tr-${++_toolIdCounter}`, tool: chunk.tool ?? "unknown", content: chunk.content ?? "" },
             ],
           }))
           break

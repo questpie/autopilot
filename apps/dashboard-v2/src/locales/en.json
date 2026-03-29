@@ -206,10 +206,12 @@
   "chat": {
     "title": "Chat",
     "channels": "Channels",
+    "agents": "Agents",
     "direct_messages": "Direct Messages",
-    "task_threads": "Task Threads",
+    "task_threads": "Tasks",
     "context": "Context",
     "new_channel": "New channel",
+    "search_channels": "Search channels...",
     "no_channels": "No channels",
     "no_channels_description": "Start a conversation with your team",
     "no_messages": "No messages yet",
@@ -713,7 +715,8 @@
     "server_error_description": "An unexpected error occurred. Please try again.",
     "or": "or",
     "optional": "optional",
-    "link": "Link"
+    "link": "Link",
+    "none": "None"
   },
   "command_palette": {
     "placeholder": "Type a command or search...",

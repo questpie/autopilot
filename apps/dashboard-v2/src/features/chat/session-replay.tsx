@@ -123,8 +123,8 @@ export function SessionReplay({ sessionId }: SessionReplayProps) {
           )}
           {!loading && events.length > 0 && (
             <div className="max-h-64 overflow-y-auto px-2 py-1.5">
-              {events.map((evt, i) => (
-                <ReplayEventRow key={`${evt.at}-${i}`} event={evt} />
+              {events.map((evt) => (
+                <ReplayEventRow key={`${evt.at}-${evt.type}-${evt.tool ?? ''}`} event={evt} />
               ))}
             </div>
           )}

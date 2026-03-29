@@ -84,8 +84,8 @@ export function InlineSessionPreview({ sessionId, onClose, compact = false }: In
             Waiting for tool calls...
           </div>
         )}
-        {events.map((evt, i) => (
-          <SessionEventRow key={`${evt.at}-${i}`} event={evt} />
+        {events.map((evt) => (
+          <SessionEventRow key={`${evt.at}-${evt.type}-${evt.tool ?? ''}`} event={evt} />
         ))}
       </div>
     </div>

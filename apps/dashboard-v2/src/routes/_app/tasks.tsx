@@ -23,6 +23,9 @@ import type { SortOption, GroupOption } from "@/features/tasks/task-filters"
 
 export const Route = createFileRoute("/_app/tasks")({
   component: TasksPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    create: search.create === true || undefined,
+  }),
   errorComponent: ({ error, reset }) => (
     <PageError description={error.message} onRetry={reset} />
   ),

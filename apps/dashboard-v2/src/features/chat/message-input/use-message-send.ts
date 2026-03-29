@@ -2,6 +2,7 @@ import { useState, useCallback, type RefObject } from "react"
 import { useUpload } from "@/hooks/use-upload"
 import { useHapticPattern } from "@/hooks/use-haptic"
 import { useSendMessage } from "../chat.mutations"
+import { useChatUIStore } from "../chat-ui.store"
 
 export function useMessageSend(
   channelId: string,
@@ -13,6 +14,9 @@ export function useMessageSend(
   const sendMessage = useSendMessage(channelId)
   const { trigger: haptic } = useHapticPattern()
   const [attachedFiles, setAttachedFiles] = useState<string[]>([])
+
+  const replyingTo = useChatUIStore((s) => s.replyingTo)
+  const clearReplyingTo = useChatUIStore((s) => s.clearReplyingTo)
 
   const { upload, fileProgress, isUploading } = useUpload({
     targetPath: `/uploads/chat/${new Date().toISOString().slice(0, 10)}/`,
@@ -41,11 +45,13 @@ export function useMessageSend(
       content: fullContent,
       mentions,
       references: attachedFiles,
+      thread_id: replyingTo?.messageId,
     })
 
     clearDraft(channelId)
     setAttachedFiles([])
     dismissAutocomplete()
+    clearReplyingTo()
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto"
@@ -59,6 +65,8 @@ export function useMessageSend(
     haptic,
     textareaRef,
     dismissAutocomplete,
+    replyingTo,
+    clearReplyingTo,
   ])
 
   const handleDrop = useCallback(

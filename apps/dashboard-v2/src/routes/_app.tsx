@@ -22,12 +22,12 @@ export const Route = createFileRoute("/_app")({
 
     // Not authenticated → login
     if (!result.isAuthenticated) {
-      throw redirect({ to: "/login", search: { redirect: location.href } as any })
+      throw redirect({ to: "/login", search: { redirect: location.href } })
     }
 
     // Needs 2FA
     if (result.needs2FA) {
-      throw redirect({ to: "/login/2fa", search: {} as any })
+      throw redirect({ to: "/login/2fa" })
     }
 
     // Setup not completed → finish setup
@@ -78,7 +78,7 @@ function AppLayout() {
     onShowHelp: () => setHelpOpen(true),
     onCreateNew: () => {
       // Context-dependent: navigate to task creation
-      void navigate({ to: "/tasks", search: { create: true } as any })
+      void navigate({ to: "/tasks", search: { create: true } })
     },
     onNavigate: (path: string) => void navigate({ to: path }),
   })

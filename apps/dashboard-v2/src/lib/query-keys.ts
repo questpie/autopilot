@@ -31,4 +31,5 @@ export const queryKeys = {
   company: createKeys("company"),
   userSessions: createKeys("userSessions"),
   notifications: createKeys("notifications"),
+  reactions: createKeys("reactions"),
 } as const

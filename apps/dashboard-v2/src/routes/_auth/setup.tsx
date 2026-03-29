@@ -27,7 +27,7 @@ export const Route = createFileRoute("/_auth/setup")({
 
     // Users exist but no session → redirect to login
     if (!result.noUsersExist && !result.isAuthenticated) {
-      throw redirect({ to: "/login", search: {} as any })
+      throw redirect({ to: "/login" })
     }
 
     return { authResult: result }
