@@ -5,57 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1774343323722,
-      "tag": "0000_initial_tables",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1774929600000,
-      "tag": "0001_rate_limit",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1774934400000,
-      "tag": "0002_auth_tables",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1774566089970,
-      "tag": "0003_flippant_mimic",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1774940000000,
-      "tag": "0004_file_locks_and_pins",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1774950000000,
-      "tag": "0005_notifications",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1774802748401,
-      "tag": "0006_warm_marrow",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1774807691514,
-      "tag": "0007_swift_white_queen",
+      "when": 1774808351518,
+      "tag": "0000_unique_shatterstar",
       "breakpoints": true
     }
   ]
