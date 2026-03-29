@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { resolve, join } from 'node:path'
-import { writeFile, mkdir } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { z } from 'zod'
 import { describeRoute } from 'hono-openapi'
 import { resolver } from 'hono-openapi'
@@ -36,8 +36,8 @@ const upload = new Hono<AppEnv>().post(
 
 		await mkdir(fullDir, { recursive: true })
 		const fullPath = join(fullDir, file.name)
-		const buffer = await file.arrayBuffer()
-		await writeFile(fullPath, Buffer.from(buffer))
+		// Stream to disk — avoids buffering entire file in RAM
+		await Bun.write(fullPath, file.stream())
 		return c.json({ ok: true as const, path: join(targetDir, file.name) }, 200)
 	},
 )
