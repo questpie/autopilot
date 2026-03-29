@@ -28,20 +28,18 @@ cp .env.example .env
 docker compose up
 ```
 
-> **Authentication** (choose one per provider):
-> - **Subscription login** (recommended): `autopilot provider login claude` / `autopilot provider login codex`
->   Works on VPS too — prints a link to open on any device (phone/laptop).
-> - **API key** (alternative): set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `.env`
+> **Authentication:**
+> Set your OpenRouter API key in `.env` (`OPENROUTER_API_KEY=sk-or-...`)
+> or run `autopilot provider set openrouter --api-key <key>`.
+> One key gives you access to all models (Anthropic, OpenAI, Google, etc.).
 
 ### bunx (local dev)
 ```bash
 bunx @questpie/autopilot init my-company
 cd my-company
 
-# Authenticate (choose one)
-autopilot provider login claude    # Use Claude subscription (recommended)
-# OR
-export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
+# Set your OpenRouter API key
+autopilot provider set openrouter --api-key sk-or-...
 
 bunx @questpie/autopilot start
 ```
@@ -96,9 +94,9 @@ agents:
 ```
 Human         CLI · Dashboard · Telegram · Webhooks
   │
-Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · SSE
+Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · Durable Streams
   │
-Agents        Claude Agent SDK · 7 Tools · Sandboxed FS · Memory
+Agents        TanStack AI + OpenRouter · Per-Agent Model Picker · 7 Tools · Sandboxed FS · Memory
   │
 Storage       SQLite + Drizzle · YAML/MD/JSON · FTS5 + sqlite-vec · Git
 ```
@@ -106,6 +104,9 @@ Storage       SQLite + Drizzle · YAML/MD/JSON · FTS5 + sqlite-vec · Git
 - **Config is files** — YAML, Markdown, JSON. `ls` your company config.
 - **Runtime is SQLite** — tasks, messages, sessions, search. Zero external deps.
 - **Git is the audit trail** — every agent action = commit.
+- **MCP server** — expose Autopilot to Claude Desktop/Code via tasks, agents, search, sessions.
+- **Durable Streams** — persistent session streams with live tailing and replay.
+- **Per-agent model picker** — assign different models to different agents via OpenRouter.
 - **One Bun process** — orchestrator + API + dashboard. ~100MB RAM.
 
 ---
@@ -142,7 +143,7 @@ autopilot chat <agent>       # Direct chat with agent
 autopilot dashboard          # Open web dashboard
 autopilot secrets            # Manage API keys
 autopilot auth               # Manage authentication
-autopilot provider login <p> # Authenticate with subscription (claude/codex)
+autopilot provider set <p>   # Configure AI provider (openrouter)
 ```
 
 ---
