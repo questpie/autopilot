@@ -13,9 +13,21 @@ import { UploadPreviewBar, FileAttachButton } from "./upload-controls"
 interface MessageInputProps {
   channelId: string
   compact?: boolean
+  /** D16: Whether an active streaming session is in progress. */
+  isStreaming?: boolean
+  /** D16: Session ID of the active streaming session (for steering). */
+  activeSessionId?: string | null
+  /** D16: Callback to send a chat message via streaming (instead of channel message). */
+  onStreamingSend?: (message: string) => void
 }
 
-export function MessageInput({ channelId, compact = false }: MessageInputProps) {
+export function MessageInput({
+  channelId,
+  compact = false,
+  isStreaming,
+  activeSessionId,
+  onStreamingSend,
+}: MessageInputProps) {
   const { t } = useTranslation()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -68,6 +80,26 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
     [channelId, setDraft, detectAutocomplete],
   )
 
+  // D16: Handle send or steer depending on streaming state
+  const handleSendOrSteer = useCallback(() => {
+    if (!draft.trim()) return
+    if (isStreaming && activeSessionId) {
+      // Steer the active session via the agent-sessions steer endpoint
+      fetch(`${import.meta.env.VITE_API_URL ?? "http://localhost:7778"}/api/agent-sessions/${encodeURIComponent(activeSessionId)}/steer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message: draft.trim() }),
+      }).catch(() => {})
+      clearDraft(channelId)
+    } else if (onStreamingSend) {
+      onStreamingSend(draft.trim())
+      clearDraft(channelId)
+    } else {
+      handleSend()
+    }
+  }, [draft, isStreaming, activeSessionId, onStreamingSend, clearDraft, channelId, handleSend])
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (autocompleteMode !== "none") {
@@ -94,7 +126,7 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
 
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
-        handleSend()
+        handleSendOrSteer()
       }
     },
     [autocompleteMode, handleSend, setAutocompleteIndex, dismissAutocomplete],
@@ -106,6 +138,14 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
 
   return (
     <div className="border-t border-border">
+      {/* D16: Steering indicator */}
+      {isStreaming && activeSessionId && (
+        <div className="flex items-center gap-1.5 border-b border-border bg-primary/5 px-3 py-1 text-[10px] text-primary/70">
+          <span className="inline-block size-1.5 animate-pulse rounded-full bg-primary/60" />
+          Steering active session...
+        </div>
+      )}
+
       {/* Upload previews */}
       <UploadPreviewBar
         fileProgress={fileProgress}
@@ -161,7 +201,7 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
           onPaste={handlePaste}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          placeholder={t("chat.type_message")}
+          placeholder={isStreaming && activeSessionId ? "Steer the conversation..." : t("chat.type_message")}
           rows={1}
           className={cn(
             "flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/50",
@@ -172,7 +212,7 @@ export function MessageInput({ channelId, compact = false }: MessageInputProps) 
         {/* Send button */}
         <Button
           size="icon-sm"
-          onClick={handleSend}
+          onClick={handleSendOrSteer}
           disabled={
             (!draft.trim() && attachedFiles.length === 0) ||
             sendMessage.isPending
