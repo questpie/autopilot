@@ -160,17 +160,15 @@ autopilot board clear                      Remove all pins
 
 ### autopilot provider
 
-Manage AI provider authentication (Claude, Codex). Supports interactive login flows, direct API key configuration, and status checks.
+Manage AI provider authentication. Supports direct API key configuration and status checks.
 
 ```text title="syntax"
-autopilot provider login <provider>       Interactive login flow
 autopilot provider set <provider> [opts]  Set an API key directly
 autopilot provider status                 Show which providers are configured
 autopilot provider logout <provider>      Clear provider credentials
 
 Providers:
-  claude                  Claude (Anthropic) — uses OPENROUTER_API_KEY
-  codex                   Codex (OpenAI) — uses OPENROUTER_API_KEY
+  openrouter              OpenRouter — one key, 300+ models
 
 Options for set:
   --api-key <key>         API key for the provider (required)
@@ -180,14 +178,11 @@ Options for set:
 # Check which providers are configured
 autopilot provider status
 
-# Login to Claude via interactive flow
+# Set your OpenRouter API key
 autopilot provider set openrouter --api-key sk-or-...
 
-# Set an API key directly
-autopilot provider set codex --api-key sk-...
-
 # Remove credentials for a provider
-autopilot provider logout claude
+autopilot provider logout openrouter
 ```
 
 ## Communication

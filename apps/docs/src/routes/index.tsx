@@ -221,7 +221,7 @@ search({
 								AUTOPILOT AGENTS
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-								Call 7 unified tools: <code className="font-mono text-[11px] text-lp-purple">task</code>, <code className="font-mono text-[11px] text-lp-purple">message</code>, <code className="font-mono text-[11px] text-lp-purple">pin</code>, <code className="font-mono text-[11px] text-lp-purple">search</code>, <code className="font-mono text-[11px] text-lp-purple">http</code>, <code className="font-mono text-[11px] text-lp-purple">search_web</code>, <code className="font-mono text-[11px] text-lp-purple">browse</code>.
+								Call 12 unified tools: <code className="font-mono text-[11px] text-lp-purple">task</code>, <code className="font-mono text-[11px] text-lp-purple">message</code>, <code className="font-mono text-[11px] text-lp-purple">pin</code>, <code className="font-mono text-[11px] text-lp-purple">search_index</code>, <code className="font-mono text-[11px] text-lp-purple">fetch</code>, <code className="font-mono text-[11px] text-lp-purple">web_search</code>.
 								Every call produces a visible, auditable effect.
 							</div>
 						</div>
@@ -572,7 +572,7 @@ pin({
 
 				{/* ========== 11. FILESYSTEM + SEARCH ========== */}
 				<Section id="fs">
-					<SectionHeader num="10" sub="YAML for config and knowledge. SQLite for tasks, messages, sessions, and search. FTS5 + sqlite-vec for unified search. Everything git-tracked except the database.">
+					<SectionHeader num="10" sub="YAML for config and knowledge. SQLite for tasks, messages, sessions, and search. FTS5 + libSQL native vectors for unified search. Everything git-tracked except the database.">
 						Filesystem + SQLite Hybrid
 					</SectionHeader>
 					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -612,7 +612,7 @@ dashboard/                   # Living dashboard
 .data/autopilot.db           # SQLite database
 # DB tables: tasks, messages, activity,
 # agent_sessions, search_index
-# FTS5 + sqlite-vec for unified search`}
+# FTS5 + libSQL native vectors for unified search`}
 						</CodeBlock>
 						<div className="flex flex-col gap-4">
 							<div className="bg-lp-card border border-lp-border p-6">
@@ -660,7 +660,7 @@ dashboard/                   # Living dashboard
 										desc: 'Exact keywords, task IDs, file paths',
 									},
 									{
-										label: 'sqlite-vec',
+										label: 'libSQL native vectors',
 										desc: 'Semantic similarity, natural language',
 									},
 								].map((s) => (

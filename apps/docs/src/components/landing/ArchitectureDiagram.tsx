@@ -67,13 +67,13 @@ export function ArchitectureDiagram() {
 			<ArchLayer
 				label="03"
 				name="AGENTS"
-				items={['Claude Agent SDK', 'Codex SDK', 'Role Templates', '7 Tools', 'MCP', 'Sandboxed FS']}
+				items={['TanStack AI', 'OpenRouter', 'Role Templates', '12 Tools', 'MCP', 'Sandboxed FS']}
 			/>
 			<Connector />
 			<ArchLayer
 				label="04"
 				name="STORAGE"
-				items={['SQLite + Drizzle', 'YAML / Markdown', 'FTS5 + sqlite-vec', 'Git Auto-Commit', 'Better Auth']}
+				items={['SQLite + Drizzle', 'YAML / Markdown', 'FTS5 + libSQL vectors', 'Git Auto-Commit', 'Better Auth']}
 			/>
 		</div>
 	)

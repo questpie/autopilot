@@ -33,7 +33,7 @@ What competitors require: Docker + Postgres + Redis + vector DB + message queue 
 |  Watcher -> detects FS changes (new tasks, status moves)   |
 |  Workflow -> state machine routing (YAML-defined steps)    |
 |  Context -> 6-layer prompt assembly (identity+state+mem)   |
-|  Spawner -> creates Claude Agent SDK sessions              |
+|  Spawner -> creates TanStack AI sessions              |
 |  Scheduler -> cron-based recurring agent jobs              |
 |  Webhook -> HTTP event receiver (port 7777)                |
 |  API -> REST + SSE realtime streaming (port 7778)          |
@@ -45,7 +45,7 @@ What competitors require: Docker + Postgres + Redis + vector DB + message queue 
                            v
 +-----------------------------------------------------------+
 |  LAYER 3 -- AGENTS                                         |
-|  Claude Agent SDK sessions with 7 tools + MCP              |
+|  TanStack AI sessions with 12 tools + MCP              |
 |  Role-scoped FS access, sandboxed shell, deny patterns     |
 |  Human gates at explicit workflow steps                     |
 +-----------------------------------------------------------+
@@ -54,7 +54,7 @@ What competitors require: Docker + Postgres + Redis + vector DB + message queue 
 +-----------------------------------------------------------+
 |  LAYER 4 -- STORAGE                                        |
 |  Hybrid: YAML/Markdown/JSON files + SQLite (Drizzle ORM)  |
-|  FTS5 full-text search + sqlite-vec embeddings             |
+|  FTS5 full-text search + libSQL native vectors (DiskANN)             |
 |  Better Auth for security . Git auto-commit audit trail    |
 |  Write queue (file-level async mutex)                      |
 +-----------------------------------------------------------+
@@ -86,7 +86,7 @@ YAML and Markdown files remain the source of truth -- human-readable, git-versio
 | Tasks | YAML files | Task state, history, assignments, dependencies |
 | Indexes | SQLite + Drizzle ORM | Fast queries, status counts, agent lookups |
 | Search | FTS5 | Full-text keyword search across all content |
-| Embeddings | sqlite-vec | Vector similarity search, semantic queries |
+| Embeddings | libSQL native vectors | Vector similarity search, semantic queries |
 | Auth | Better Auth | Dashboard and API authentication |
 | Audit | Git auto-commit | 5-second batch, every agent action is a commit |
 
@@ -109,7 +109,7 @@ The TanStack AI provider gives agents built-in file tools (read, write, edit, ba
 | fs/ | YAML CRUD with write queue. File-level async mutex prevents concurrent write corruption. |
 | workflow/ | State machine engine. Reads YAML workflows, checks transitions, handles reviews and human gates. |
 | context/ | Builds role-scoped system prompts from 6 layers: identity, company state, memory, task context, skills discovery, and tool list. |
-| agent/ | Creates Claude Agent SDK sessions. Injects context, configures tools/MCP, streams output. |
+| agent/ | Creates TanStack AI sessions. Injects context, configures tools/MCP, streams output. |
 | scheduler/ | Cron-based recurring agent tasks from schedules.yaml. |
 | watcher/ | Monitors company filesystem via chokidar. Detects new tasks, status changes, messages. |
 | webhook/ | HTTP event receiver on port 7777. HMAC-SHA256 verification. |

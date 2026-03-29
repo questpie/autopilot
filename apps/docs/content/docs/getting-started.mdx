@@ -12,7 +12,7 @@ Install Autopilot, scaffold a company, and give your first intent. One Bun proce
   curl -fsSL https://bun.sh/install | bash
   ```
 - **Authentication** (choose one):
-  - `autopilot provider set openrouter --api-key sk-or-...` -- use your Claude Max/Pro subscription (recommended)
+  - `autopilot provider set openrouter --api-key sk-or-...` -- use your OpenRouter API key (recommended)
   - `OPENROUTER_API_KEY` -- API key from [openrouter.ai/keys](https://openrouter.ai/keys) (alternative)
 - **Git** -- required for versioning company state and code operations
 
@@ -26,7 +26,7 @@ autopilot init my-company
 cd my-company
 
 # Authenticate (choose one)
-autopilot provider set openrouter --api-key sk-or-...    # Use Claude subscription (recommended)
+autopilot provider set openrouter --api-key sk-or-...    # Set your OpenRouter API key
 # OR
 export OPENROUTER_API_KEY=sk-or-...  # Use API key
 
@@ -138,7 +138,7 @@ agents:
     fs_scope:
       read: ["/**"]
       write: ["/team/**", "/dashboard/**"]
-    tools: ["task", "message", "pin", "search", "search_web", "browse"]
+    tools: ["task", "message", "pin", "search_index", "web_search"]
 
   - id: max
     name: "Max"
@@ -147,7 +147,7 @@ agents:
     fs_scope:
       read: ["/knowledge/technical/**", "/projects/**"]
       write: ["/projects/*/code/**"]
-    tools: ["task", "message", "pin", "search", "http", "search_web", "browse"]
+    tools: ["task", "message", "pin", "search_index", "fetch", "web_search"]
 ```
 
 Start with 2-3 agents, add as you need. You choose the names, the roles, and the tools.
@@ -160,7 +160,7 @@ Start with 2-3 agents, add as you need. You choose the names, the roles, and the
 cd my-company
 
 # Authenticate (choose one)
-autopilot provider set openrouter --api-key sk-or-...    # Use Claude subscription (recommended)
+autopilot provider set openrouter --api-key sk-or-...    # Set your OpenRouter API key
 # OR
 export OPENROUTER_API_KEY=sk-or-...  # Use API key
 
@@ -225,7 +225,7 @@ autopilot reject TASK-001 "Needs error handling for edge cases"
 
 ## Next Steps
 
-- [Tools](/docs/primitives) -- the 7 unified tools agents use (the core differentiator)
+- [Tools](/docs/primitives) -- the 12 unified tools agents use (the core differentiator)
 - [Living Dashboard](/docs/living-dashboard) -- custom widgets, theme overrides, agent-created pages
 - [Architecture](/docs/architecture) -- six-layer stack, zero-infra design, orchestrator internals
 - [Workflows](/docs/workflows) -- how tasks flow through development, marketing, and incident pipelines

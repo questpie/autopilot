@@ -9,7 +9,7 @@ Everything QUESTPIE Autopilot can do today. Organized by what matters most.
 
 ### Tools-First Agent Model
 
-Agents don't generate text. They call 7 unified tools that produce visible, auditable effects: `task`, `message`, `pin`, `search`, `http`, `search_web`, `browse`. Agent thinking is private. Only effects are visible. This is the core architectural differentiator. See [Tools](/docs/primitives).
+Agents don't generate text. They call 12 unified tools that produce visible, auditable effects: `task`, `message`, `pin`, `search_index`, `fetch`, `web_search`, and more. Agent thinking is private. Only effects are visible. This is the core architectural differentiator. See [Tools](/docs/primitives).
 
 ### Living Dashboard
 
@@ -46,7 +46,7 @@ Search across tasks, knowledge docs, channels, and agent memory with a single qu
 | Engine | Technology | Best For |
 |--------|-----------|----------|
 | Full-text | SQLite FTS5 | Exact keyword matches, task IDs, agent names, file paths |
-| Semantic | sqlite-vec embeddings | Conceptual similarity, natural language queries, related content |
+| Semantic | libSQL native vectors (DiskANN) | Conceptual similarity, natural language queries, related content |
 
 Results from both engines are merged and ranked using Reciprocal Rank Fusion (RRF, k=60).
 
@@ -66,9 +66,7 @@ Configurable via `settings.embeddings.model` in `company.yaml`. Uses the same `O
 
 | Provider | Config Value | Features |
 |----------|-------------|----------|
-| Claude Agent SDK | `tanstack-ai` | Primary. File tools, MCP, sandboxing, hooks, sub-agents. Works with Claude Max. |
-| Anthropic SDK | `anthropic` | Raw SDK with agentic tool-use loop. |
-| Codex SDK | `tanstack-ai` | OpenAI Codex runtime for GPT models. |
+| TanStack AI + OpenRouter | `tanstack-ai` | Primary. 300+ models (Claude, GPT, Gemini, Llama). File tools, MCP, sandboxing, hooks, sub-agents. |
 
 ### Persistent Memory
 

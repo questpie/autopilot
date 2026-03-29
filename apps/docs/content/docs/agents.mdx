@@ -3,13 +3,13 @@ title: Agents
 description: AI agents with persistent identity — role templates, filesystem scope, memory isolation, 6-layer context assembly, and the default 8-agent team.
 ---
 
-Claude sessions with persistent identity. Each agent has a name, role template, filesystem sandbox, tool access, and private memory that carries across sessions.
+TanStack AI sessions with persistent identity. Each agent has a name, role template, filesystem sandbox, tool access, and private memory that carries across sessions.
 
 ## What Agents Are
 
-An agent is a Claude session wrapped with a persistent identity. Between sessions, the orchestrator preserves everything the agent learned -- architecture decisions, mistakes to avoid, codebase patterns -- in a private memory store. When the agent is spawned again, that memory is injected into the system prompt so it picks up exactly where it left off.
+An agent is a TanStack AI session wrapped with a persistent identity. Between sessions, the orchestrator preserves everything the agent learned -- architecture decisions, mistakes to avoid, codebase patterns -- in a private memory store. When the agent is spawned again, that memory is injected into the system prompt so it picks up exactly where it left off.
 
-Agents do not chat. They call unified tools: `task`, `message`, `pin`, `search`, `http`, `search_web`, `browse`. Thinking is private. Only tool calls produce visible effects.
+Agents do not chat. They call unified tools: `task`, `message`, `pin`, `search_index`, `fetch`, `web_search`. Thinking is private. Only tool calls produce visible effects.
 
 ## The Default Team
 
@@ -34,14 +34,14 @@ A role defines the default system prompt, behavior rules, tool access, and files
 
 | Role | Purpose | Default Tools |
 |------|---------|--------------|
-| `meta` | Decomposes intent, manages team, owns workflows | fs, terminal, task, message, pin, search, search_web, browse |
-| `strategist` | Scopes features, writes specs, defines requirements | fs, terminal, task, message, pin, search, search_web, browse |
-| `planner` | Creates implementation plans from specs | fs, terminal, task, message, pin, search, search_web, browse |
-| `developer` | Writes code, creates branches and PRs | fs, terminal, task, message, pin, search, git, search_web, browse |
-| `reviewer` | Reviews code quality, approves or rejects PRs | fs, terminal, task, message, pin, search, git, search_web, browse |
-| `devops` | Deploys, monitors infrastructure, incidents | fs, terminal, task, message, pin, search, http, search_web, browse |
-| `marketing` | Copy, social media, campaigns, announcements | fs, terminal, task, message, pin, search, http, search_web, browse |
-| `design` | UI/UX design, design system, mockups | fs, terminal, task, message, pin, search, search_web, browse |
+| `meta` | Decomposes intent, manages team, owns workflows | fs, terminal, task, message, pin, search_index, web_search |
+| `strategist` | Scopes features, writes specs, defines requirements | fs, terminal, task, message, pin, search_index, web_search |
+| `planner` | Creates implementation plans from specs | fs, terminal, task, message, pin, search_index, web_search |
+| `developer` | Writes code, creates branches and PRs | fs, terminal, task, message, pin, search_index, git, web_search |
+| `reviewer` | Reviews code quality, approves or rejects PRs | fs, terminal, task, message, pin, search_index, git, web_search |
+| `devops` | Deploys, monitors infrastructure, incidents | fs, terminal, task, message, pin, search_index, fetch, web_search |
+| `marketing` | Copy, social media, campaigns, announcements | fs, terminal, task, message, pin, search_index, fetch, web_search |
+| `design` | UI/UX design, design system, mockups | fs, terminal, task, message, pin, search_index, web_search |
 
 Custom roles go in `/company/team/roles/`. Any agent assigned to the custom role inherits its prompt, tools, and default FS scope.
 
@@ -81,7 +81,7 @@ agents:
     fs_scope:
       read: ["/**"]
       write: ["/team/**", "/dashboard/**"]
-    tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search_index", "web_search"]
 
   - id: sam
     name: "Sam"
@@ -90,7 +90,7 @@ agents:
     fs_scope:
       read: ["/knowledge/**", "/projects/*/docs/**"]
       write: ["/projects/*/docs/**"]
-    tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search_index", "web_search"]
 
   - id: max
     name: "Max"
@@ -99,7 +99,7 @@ agents:
     fs_scope:
       read: ["/knowledge/technical/**", "/projects/**"]
       write: ["/projects/*/code/**"]
-    tools: ["fs", "terminal", "task", "message", "pin", "search", "git", "search_web", "browse"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search_index", "git", "web_search"]
 
   - id: riley
     name: "Riley"
@@ -108,7 +108,7 @@ agents:
     fs_scope:
       read: ["/knowledge/technical/**", "/projects/**"]
       write: []
-    tools: ["fs", "terminal", "task", "message", "pin", "search", "git", "search_web", "browse"]
+    tools: ["fs", "terminal", "task", "message", "pin", "search_index", "git", "web_search"]
 ```
 
 ## Per-Agent Model Selection
@@ -191,7 +191,7 @@ Every agent session follows the same 8-step lifecycle:
 
 1. **Trigger fires** -- task assigned, schedule fires, webhook received, agent mentioned, message received
 2. **Context Assembler runs** -- builds role-scoped system prompt from 6 layers
-3. **Agent spawns** -- Claude Agent SDK session created with tools, MCP servers, hooks, and FS sandbox
+3. **Agent spawns** -- TanStack AI session created with tools, MCP servers, hooks, and FS sandbox
 4. **Agent works** -- reads files, writes code, calls primitives, communicates with other agents
 5. **Session streams** -- all tool calls captured as JSONL for `autopilot attach` and replay
 6. **Session ends** -- work completed or timeout reached
@@ -234,17 +234,16 @@ $ vim team/agents.yaml
 
 ## Agent Tools
 
-Agents interact with the system through 7 unified tools. Each tool is a multipurpose function with validated input and output.
+Agents interact with the system through 12 unified tools. Each tool is a multipurpose function with validated input and output.
 
 | Tool | Purpose | Used By |
 |------|---------|---------|
 | `task` | Create, update, approve, reject, block, unblock tasks | All agents |
 | `message` | Send DMs, post to task threads and project channels | All agents |
 | `pin` | Create and remove dashboard pins | All agents |
-| `search` | Universal search across all entity types | All agents |
-| `http` | External API calls with SSRF protection | Developer, DevOps, Marketing |
-| `search_web` | Web search via Brave/Tavily/SerpAPI | All agents |
-| `browse` | Headless browser for web interaction | Developer, DevOps |
+| `search_index` | Universal search across all entity types | All agents |
+| `fetch` | External API calls with SSRF protection | Developer, DevOps, Marketing |
+| `web_search` | Web search via OpenRouter :online | All agents |
 
 Agents also use native `read_file`/`write_file` from their LLM SDK for filesystem operations (knowledge, artifacts, config, skills).
 

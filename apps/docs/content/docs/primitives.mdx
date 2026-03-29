@@ -1,6 +1,6 @@
 ---
 title: Tools, Not Chat
-description: The core differentiator. Agents call 7 unified tools that produce visible, auditable effects. No text generation. No chat. Structured execution.
+description: The core differentiator. Agents call 12 unified tools that produce visible, auditable effects. No text generation. No chat. Structured execution.
 ---
 
 The single most important architectural idea in Autopilot. Agents don't generate text for you to read. They call unified tools that produce visible effects in the company.
@@ -16,7 +16,7 @@ Chatbot agent:    "Here's the code for your pricing page..." → you copy-paste
 Autopilot agent:  task({ action: "create", title: "Build pricing page" }) → task appears, agent starts working
 ```
 
-## The 7 Unified Tools
+## The 12 Unified Tools
 
 ### task
 
@@ -134,44 +134,44 @@ pin({
 
 **Actions:** `create`, `remove`
 
-### search
+### search_index
 
-Universal search across all entity types. Supports both keyword (FTS5) and semantic (sqlite-vec) search.
+Universal search across all entity types. Supports both keyword (FTS5) and semantic (libSQL native vectors) search.
 
-```ts title="tools/search"
+```ts title="tools/search_index"
 // Search tasks
-search({
+search_index({
   query: "authentication flow",
   type: "task",
   scope: "active"
 })
 
 // Search knowledge
-search({
+search_index({
   query: "Stripe webhook patterns",
   type: "knowledge"
 })
 
 // Search messages
-search({
+search_index({
   query: "deployment failure",
   type: "message"
 })
 
 // Search everything
-search({
+search_index({
   query: "pricing page"
 })
 ```
 
 **Types:** `task`, `message`, `knowledge`, `pin`, `agent`, `channel`, `skill` (or omit for all)
 
-### http
+### fetch
 
 External API calls with SSRF protection and secret injection.
 
-```ts title="tools/http"
-http({
+```ts title="tools/fetch"
+fetch({
   method: "POST",
   url: "https://api.stripe.com/v1/products",
   headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -182,23 +182,13 @@ http({
 
 Secret references are resolved at runtime from encrypted storage. SSRF protection blocks requests to private IP ranges.
 
-### search_web
+### web_search
 
-Web search via configurable provider (Brave, Tavily, or SerpAPI).
+Web search via configurable provider (OpenRouter :online web search).
 
-```ts title="tools/search_web"
-search_web({
+```ts title="tools/web_search"
+web_search({
   query: "best practices for Stripe checkout integration 2026"
-})
-```
-
-### browse
-
-Headless browser for web interaction via agent-browser.
-
-```ts title="tools/browse"
-browse({
-  url: "https://docs.stripe.com/payments/checkout",
 })
 ```
 
@@ -240,10 +230,9 @@ These gates are defined in workflow YAML as `type: human_gate` steps -- not bolt
 | `task` | Create, update, approve, reject, block, unblock tasks | All agents |
 | `message` | Send DMs, post to task threads and project channels | All agents |
 | `pin` | Create and remove dashboard pins | All agents |
-| `search` | Universal search across all entity types | All agents |
-| `http` | External API calls with SSRF protection | Developer, DevOps, Marketing |
-| `search_web` | Web search via Brave/Tavily/SerpAPI | All agents |
-| `browse` | Headless browser for web interaction | Developer, DevOps |
+| `search_index` | Universal search across all entity types | All agents |
+| `fetch` | External API calls with SSRF protection | Developer, DevOps, Marketing |
+| `web_search` | Web search via OpenRouter :online | All agents |
 
 ## The Key Insight
 
