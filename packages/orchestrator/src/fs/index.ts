@@ -11,7 +11,7 @@ export {
 	loadWebhooks,
 } from './company'
 
-// Pins (YAML — to be migrated to StorageBackend)
+// Pins (SQLite — db required for all operations)
 export { createPin, removePin, listPins, updatePin } from './pins'
 export type { PinOutput } from './pins'
 

@@ -1,7 +1,7 @@
 export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema, IntegrationConfigSchema, NotificationChannelSchema } from './company'
 export { AgentSchema, AgentsFileSchema, FsScopeSchema, AgentTriggerSchema, AGENT_PROVIDERS } from './agent'
 export { TaskSchema, TaskHistoryEntrySchema, BlockerSchema, TaskContextSchema } from './task'
-export { MessageSchema } from './message'
+export { MessageSchema, AttachmentSchema, ReactionSchema, PinnedMessageSchema, BookmarkSchema } from './message'
 export { ChannelSchema, ChannelMemberSchema, CreateChannelRequestSchema, ChannelMessagesQuerySchema, SendChannelMessageRequestSchema, ManageMembersRequestSchema } from './channel'
 export { WorkflowSchema, WorkflowStepSchema, WorkflowOutputSchema, WorkflowReviewSchema, WorkflowTransitionsSchema, WorkflowChangelogEntrySchema, WorkflowChangePolicySchema } from './workflow'
 export { ScheduleSchema, SchedulesFileSchema } from './schedule'

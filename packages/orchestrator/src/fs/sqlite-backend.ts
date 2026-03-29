@@ -4,7 +4,7 @@ import type { Client } from '@libsql/client'
 import { TaskSchema, MessageSchema } from '@questpie/autopilot-spec'
 import { createDb, initFts, type AutopilotDb } from '../db'
 import { schema } from '../db'
-import type { StorageBackend, Task, Message, Channel, ChannelMember, TaskFilter, MessageFilter, ActivityEntry, ActivityFilter, ChannelFilter, TaskCreateInput, MessageCreateInput } from './storage'
+import type { StorageBackend, Task, Message, Channel, ChannelMember, Reaction, PinnedMessage, Bookmark, TaskFilter, MessageFilter, ActivityEntry, ActivityFilter, ChannelFilter, TaskCreateInput, MessageCreateInput } from './storage'
 
 /**
  * Convert all `null` values in an object to `undefined`.
@@ -17,6 +17,16 @@ function nullsToUndefined(obj: Record<string, unknown>): Record<string, unknown>
 		result[key] = value === null ? undefined : value
 	}
 	return result
+}
+
+/** Generate a prefixed unique ID (e.g. "reaction-m3k7x1-a4bc"). */
+function generateId(prefix: string): string {
+	return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+}
+
+/** Parse a JSON string column, returning `fallback` if not a string. */
+function parseJsonColumn<T>(value: unknown, fallback: T): T {
+	return typeof value === 'string' ? JSON.parse(value) : (value ?? fallback) as T
 }
 
 /**
@@ -205,6 +215,7 @@ export class SqliteBackend implements StorageBackend {
 		})
 
 		await this.appendActivity({
+			at: new Date().toISOString(),
 			agent: movedBy,
 			type: 'task_status_changed',
 			summary: `Task "${validated.title}" moved from ${validated.status} to ${newStatus}`,
@@ -282,6 +293,10 @@ export class SqliteBackend implements StorageBackend {
 			thread: msg.thread ?? null,
 			transport: msg.transport ?? null,
 			external: msg.external,
+			metadata: JSON.stringify(msg.metadata ?? {}),
+			attachments: JSON.stringify(msg.attachments ?? []),
+			thread_id: msg.thread_id ?? null,
+			edited_at: msg.edited_at ?? null,
 		})
 
 		return msg
@@ -294,6 +309,7 @@ export class SqliteBackend implements StorageBackend {
 		if (filter.from_id) conditions.push(eq(schema.messages.from_id, filter.from_id))
 		if (filter.to_id) conditions.push(eq(schema.messages.to_id, filter.to_id))
 		if (filter.thread) conditions.push(eq(schema.messages.thread, filter.thread))
+		if (filter.thread_id) conditions.push(eq(schema.messages.thread_id, filter.thread_id))
 
 		const rows = await this.db
 			.select()
@@ -304,6 +320,33 @@ export class SqliteBackend implements StorageBackend {
 			.offset(filter.offset ?? 0)
 
 		return rows.map((row) => this.rowToMessage(row))
+	}
+
+	async readMessage(id: string): Promise<Message | null> {
+		const rows = await this.db
+			.select()
+			.from(schema.messages)
+			.where(eq(schema.messages.id, id))
+			.limit(1)
+
+		if (rows.length === 0) return null
+		return this.rowToMessage(rows[0]!)
+	}
+
+	async updateMessage(id: string, content: string): Promise<Message> {
+		const editedAt = new Date().toISOString()
+		await this.db
+			.update(schema.messages)
+			.set({ content, edited_at: editedAt })
+			.where(eq(schema.messages.id, id))
+
+		const msg = await this.readMessage(id)
+		if (!msg) throw new Error(`Message ${id} not found after update`)
+		return msg
+	}
+
+	async deleteMessage(id: string): Promise<void> {
+		await this.db.delete(schema.messages).where(eq(schema.messages.id, id))
 	}
 
 	async searchMessages(query: string, limit = 50): Promise<Message[]> {
@@ -402,7 +445,7 @@ export class SqliteBackend implements StorageBackend {
 			created_by: row.created_by,
 			created_at: row.created_at,
 			updated_at: row.updated_at,
-			metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {}),
+			metadata: parseJsonColumn(row.metadata, {}),
 			members,
 		}
 	}
@@ -529,21 +572,148 @@ export class SqliteBackend implements StorageBackend {
 		return channel
 	}
 
+	// ─── Reactions ──────────────────────────────────────────────────────
+
+	async addReaction(messageId: string, emoji: string, userId: string): Promise<Reaction> {
+		const id = generateId('reaction')
+		const created_at = new Date().toISOString()
+
+		await this.db.insert(schema.messageReactions).values({
+			id,
+			message_id: messageId,
+			emoji,
+			user_id: userId,
+			created_at,
+		}).onConflictDoNothing()
+
+		return { id, message_id: messageId, emoji, user_id: userId, created_at }
+	}
+
+	async removeReaction(messageId: string, emoji: string, userId: string): Promise<void> {
+		await this.db.delete(schema.messageReactions).where(
+			and(
+				eq(schema.messageReactions.message_id, messageId),
+				eq(schema.messageReactions.emoji, emoji),
+				eq(schema.messageReactions.user_id, userId),
+			),
+		)
+	}
+
+	async getReactions(messageId: string): Promise<Reaction[]> {
+		const rows = await this.db
+			.select()
+			.from(schema.messageReactions)
+			.where(eq(schema.messageReactions.message_id, messageId))
+			.orderBy(asc(schema.messageReactions.created_at))
+
+		return rows.map((row) => ({
+			id: row.id,
+			message_id: row.message_id,
+			emoji: row.emoji,
+			user_id: row.user_id,
+			created_at: row.created_at,
+		}))
+	}
+
+	// ─── Pinned Messages ────────────────────────────────────────────────
+
+	async pinMessage(channelId: string, messageId: string, pinnedBy: string): Promise<PinnedMessage> {
+		const id = generateId('pin')
+		const pinned_at = new Date().toISOString()
+
+		await this.db.insert(schema.pinnedMessages).values({
+			id,
+			channel_id: channelId,
+			message_id: messageId,
+			pinned_by: pinnedBy,
+			pinned_at,
+		})
+
+		return { id, channel_id: channelId, message_id: messageId, pinned_by: pinnedBy, pinned_at }
+	}
+
+	async unpinMessage(channelId: string, messageId: string): Promise<void> {
+		await this.db.delete(schema.pinnedMessages).where(
+			and(
+				eq(schema.pinnedMessages.channel_id, channelId),
+				eq(schema.pinnedMessages.message_id, messageId),
+			),
+		)
+	}
+
+	async getPinnedMessages(channelId: string): Promise<PinnedMessage[]> {
+		const rows = await this.db
+			.select()
+			.from(schema.pinnedMessages)
+			.where(eq(schema.pinnedMessages.channel_id, channelId))
+			.orderBy(desc(schema.pinnedMessages.pinned_at))
+
+		return rows.map((row) => ({
+			id: row.id,
+			channel_id: row.channel_id,
+			message_id: row.message_id,
+			pinned_by: row.pinned_by,
+			pinned_at: row.pinned_at,
+		}))
+	}
+
+	// ─── Bookmarks ──────────────────────────────────────────────────────
+
+	async addBookmark(userId: string, messageId: string, channelId: string): Promise<Bookmark> {
+		const id = generateId('bookmark')
+		const created_at = new Date().toISOString()
+
+		await this.db.insert(schema.bookmarks).values({
+			id,
+			user_id: userId,
+			message_id: messageId,
+			channel_id: channelId,
+			created_at,
+		})
+
+		return { id, user_id: userId, message_id: messageId, channel_id: channelId, created_at }
+	}
+
+	async removeBookmark(userId: string, messageId: string): Promise<void> {
+		await this.db.delete(schema.bookmarks).where(
+			and(
+				eq(schema.bookmarks.user_id, userId),
+				eq(schema.bookmarks.message_id, messageId),
+			),
+		)
+	}
+
+	async getBookmarks(userId: string): Promise<Bookmark[]> {
+		const rows = await this.db
+			.select()
+			.from(schema.bookmarks)
+			.where(eq(schema.bookmarks.user_id, userId))
+			.orderBy(desc(schema.bookmarks.created_at))
+
+		return rows.map((row) => ({
+			id: row.id,
+			user_id: row.user_id,
+			message_id: row.message_id,
+			channel_id: row.channel_id,
+			created_at: row.created_at,
+		}))
+	}
+
 	// ─── Helpers ─────────────────────────────────────────────────────────
 
 	private rowToTask(row: Record<string, unknown>): Task {
 		return TaskSchema.parse({
 			...nullsToUndefined(row),
-			reviewers: typeof row.reviewers === 'string' ? JSON.parse(row.reviewers) : row.reviewers,
-			depends_on: typeof row.depends_on === 'string' ? JSON.parse(row.depends_on) : row.depends_on,
-			blocks: typeof row.blocks === 'string' ? JSON.parse(row.blocks) : row.blocks,
-			related: typeof row.related === 'string' ? JSON.parse(row.related) : row.related,
-			context: typeof row.context === 'string' ? JSON.parse(row.context) : row.context,
-			blockers: typeof row.blockers === 'string' ? JSON.parse(row.blockers) : row.blockers,
-			resources: typeof row.resources === 'string' ? JSON.parse(row.resources) : (row.resources ?? []),
-			labels: typeof row.labels === 'string' ? JSON.parse(row.labels) : (row.labels ?? []),
-			history: typeof row.history === 'string' ? JSON.parse(row.history) : row.history,
-			metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {}),
+			reviewers: parseJsonColumn(row.reviewers, []),
+			depends_on: parseJsonColumn(row.depends_on, []),
+			blocks: parseJsonColumn(row.blocks, []),
+			related: parseJsonColumn(row.related, []),
+			context: parseJsonColumn(row.context, []),
+			blockers: parseJsonColumn(row.blockers, []),
+			resources: parseJsonColumn(row.resources, []),
+			labels: parseJsonColumn(row.labels, []),
+			history: parseJsonColumn(row.history, []),
+			metadata: parseJsonColumn(row.metadata, {}),
 		})
 	}
 
@@ -556,7 +726,7 @@ export class SqliteBackend implements StorageBackend {
 			created_by: row.created_by as string,
 			created_at: row.created_at as string,
 			updated_at: row.updated_at as string,
-			metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {}),
+			metadata: parseJsonColumn(row.metadata, {}),
 		}
 	}
 
@@ -569,12 +739,16 @@ export class SqliteBackend implements StorageBackend {
 			channel: clean.channel,
 			at: clean.created_at,
 			content: clean.content,
-			mentions: typeof row.mentions === 'string' ? JSON.parse(row.mentions as string) : (row.mentions ?? []),
-			references: typeof row.references_ids === 'string' ? JSON.parse(row.references_ids as string) : (row.references_ids ?? []),
-			reactions: typeof row.reactions === 'string' ? JSON.parse(row.reactions as string) : (row.reactions ?? []),
+			mentions: parseJsonColumn(row.mentions, []),
+			references: parseJsonColumn(row.references_ids, []),
+			reactions: parseJsonColumn(row.reactions, []),
 			thread: clean.thread,
 			transport: clean.transport,
 			external: row.external === 1 || row.external === true,
+			metadata: parseJsonColumn(row.metadata, {}),
+			attachments: parseJsonColumn(row.attachments, []),
+			thread_id: clean.thread_id,
+			edited_at: clean.edited_at,
 		})
 	}
 }

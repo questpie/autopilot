@@ -12,12 +12,25 @@ import {
 	ChannelMessagesQuerySchema,
 	SendChannelMessageRequestSchema,
 	ManageMembersRequestSchema,
+	ReactionSchema,
+	PinnedMessageSchema,
 } from '@questpie/autopilot-spec'
 import { eventBus } from '../../events/event-bus'
 import { loadAgents, loadCompany } from '../../fs/company'
 import { routeMessage } from '../../router'
 import { spawnAgent } from '../../agent/spawner'
 import type { AppEnv } from '../app'
+import type { Context } from 'hono'
+
+// ─── Shared param validators ────────────────────────────────────────────────
+
+const ChannelIdParam = z.object({ id: z.string() })
+const MessageParam = z.object({ id: z.string(), msgId: z.string() })
+
+/** Resolve actor ID from context, falling back to 'anonymous'. */
+function getActorId(c: Context<AppEnv>): string {
+	return c.get('actor')?.id ?? 'anonymous'
+}
 
 const channels = new Hono<AppEnv>()
 	// GET /channels — list channels
@@ -116,7 +129,7 @@ const channels = new Hono<AppEnv>()
 				404: { description: 'Channel not found' },
 			},
 		}),
-		zValidator('param', z.object({ id: z.string() })),
+		zValidator('param', ChannelIdParam),
 		async (c) => {
 			const storage = c.get('storage')
 			const { id } = c.req.valid('param')
@@ -139,7 +152,7 @@ const channels = new Hono<AppEnv>()
 				404: { description: 'Channel not found' },
 			},
 		}),
-		zValidator('param', z.object({ id: z.string() })),
+		zValidator('param', ChannelIdParam),
 		async (c) => {
 			const storage = c.get('storage')
 			const { id } = c.req.valid('param')
@@ -165,16 +178,17 @@ const channels = new Hono<AppEnv>()
 				},
 			},
 		}),
-		zValidator('param', z.object({ id: z.string() })),
+		zValidator('param', ChannelIdParam),
 		zValidator('query', ChannelMessagesQuerySchema),
 		async (c) => {
 			const storage = c.get('storage')
 			const { id } = c.req.valid('param')
-			const { limit } = c.req.valid('query')
+			const { limit, thread_id } = c.req.valid('query')
 
 			const messages = await storage.readMessages({
 				channel: id,
 				limit,
+				thread_id,
 			})
 
 			return c.json(messages)
@@ -203,11 +217,10 @@ const channels = new Hono<AppEnv>()
 				404: { description: 'Channel not found' },
 			},
 		}),
-		zValidator('param', z.object({ id: z.string() })),
+		zValidator('param', ChannelIdParam),
 		zValidator('json', SendChannelMessageRequestSchema),
 		async (c) => {
 			const storage = c.get('storage')
-			const actor = c.get('actor')
 			const root = c.get('companyRoot')
 			const { id: channelId } = c.req.valid('param')
 			const body = c.req.valid('json')
@@ -216,7 +229,7 @@ const channels = new Hono<AppEnv>()
 			if (!channel) return c.json({ error: 'channel not found' }, 404)
 
 			const now = new Date().toISOString()
-			const fromId = actor?.id ?? 'anonymous'
+			const fromId = getActorId(c)
 
 			const message = await storage.sendMessage({
 				id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -225,6 +238,7 @@ const channels = new Hono<AppEnv>()
 				at: now,
 				content: body.content,
 				thread: body.thread ?? null,
+				thread_id: body.thread_id ?? undefined,
 				mentions: body.mentions ?? [],
 				references: body.references ?? [],
 				reactions: [],
@@ -297,7 +311,7 @@ const channels = new Hono<AppEnv>()
 				404: { description: 'Channel not found' },
 			},
 		}),
-		zValidator('param', z.object({ id: z.string() })),
+		zValidator('param', ChannelIdParam),
 		zValidator('json', ManageMembersRequestSchema),
 		async (c) => {
 			const storage = c.get('storage')
@@ -339,12 +353,241 @@ const channels = new Hono<AppEnv>()
 				},
 			},
 		}),
-		zValidator('param', z.object({ id: z.string() })),
+		zValidator('param', ChannelIdParam),
 		async (c) => {
 			const storage = c.get('storage')
 			const { id } = c.req.valid('param')
 			const members = await storage.getChannelMembers(id)
 			return c.json(members)
+		},
+	)
+	// PATCH /channels/:id/messages/:msgId — edit message
+	.patch(
+		'/:id/messages/:msgId',
+		describeRoute({
+			tags: ['channels'],
+			description: 'Edit a message (only by the original sender)',
+			responses: {
+				200: {
+					description: 'Updated message',
+					content: { 'application/json': { schema: resolver(MessageSchema) } },
+				},
+				403: { description: 'Not the message author' },
+				404: { description: 'Message not found' },
+			},
+		}),
+		zValidator('param', MessageParam),
+		zValidator('json', z.object({ content: z.string().min(1) })),
+		async (c) => {
+			const storage = c.get('storage')
+			const { msgId } = c.req.valid('param')
+			const { content } = c.req.valid('json')
+
+			const existing = await storage.readMessage(msgId)
+			if (!existing) return c.json({ error: 'message not found' }, 404)
+
+			const actorId = getActorId(c)
+			if (existing.from !== actorId) {
+				return c.json({ error: 'cannot edit messages from other users' }, 403)
+			}
+
+			const updated = await storage.updateMessage(msgId, content)
+			return c.json(updated)
+		},
+	)
+	// DELETE /channels/:id/messages/:msgId — delete message
+	.delete(
+		'/:id/messages/:msgId',
+		describeRoute({
+			tags: ['channels'],
+			description: 'Delete a message (only by the original sender)',
+			responses: {
+				200: {
+					description: 'Deletion result',
+					content: { 'application/json': { schema: resolver(OkResponseSchema) } },
+				},
+				403: { description: 'Not the message author' },
+				404: { description: 'Message not found' },
+			},
+		}),
+		zValidator('param', MessageParam),
+		async (c) => {
+			const storage = c.get('storage')
+			const { msgId } = c.req.valid('param')
+
+			const existing = await storage.readMessage(msgId)
+			if (!existing) return c.json({ error: 'message not found' }, 404)
+
+			const actorId = getActorId(c)
+			if (existing.from !== actorId) {
+				return c.json({ error: 'cannot delete messages from other users' }, 403)
+			}
+
+			await storage.deleteMessage(msgId)
+			return c.json({ ok: true as const })
+		},
+	)
+	// POST /channels/:id/messages/:msgId/pin — pin message
+	.post(
+		'/:id/messages/:msgId/pin',
+		describeRoute({
+			tags: ['channels'],
+			description: 'Pin a message in the channel',
+			responses: {
+				201: {
+					description: 'Pinned message',
+					content: { 'application/json': { schema: resolver(PinnedMessageSchema) } },
+				},
+			},
+		}),
+		zValidator('param', MessageParam),
+		async (c) => {
+			const storage = c.get('storage')
+			const { id: channelId, msgId } = c.req.valid('param')
+
+			const pin = await storage.pinMessage(channelId, msgId, getActorId(c))
+			return c.json(pin, 201)
+		},
+	)
+	// DELETE /channels/:id/messages/:msgId/pin — unpin message
+	.delete(
+		'/:id/messages/:msgId/pin',
+		describeRoute({
+			tags: ['channels'],
+			description: 'Unpin a message from the channel',
+			responses: {
+				200: {
+					description: 'Unpinned',
+					content: { 'application/json': { schema: resolver(OkResponseSchema) } },
+				},
+			},
+		}),
+		zValidator('param', MessageParam),
+		async (c) => {
+			const storage = c.get('storage')
+			const { id: channelId, msgId } = c.req.valid('param')
+
+			await storage.unpinMessage(channelId, msgId)
+			return c.json({ ok: true as const })
+		},
+	)
+	// GET /channels/:id/pins — get pinned messages
+	.get(
+		'/:id/pins',
+		describeRoute({
+			tags: ['channels'],
+			description: 'Get all pinned messages in a channel',
+			responses: {
+				200: {
+					description: 'Array of pinned messages',
+					content: { 'application/json': { schema: resolver(z.array(PinnedMessageSchema)) } },
+				},
+			},
+		}),
+		zValidator('param', ChannelIdParam),
+		async (c) => {
+			const storage = c.get('storage')
+			const { id: channelId } = c.req.valid('param')
+
+			const pins = await storage.getPinnedMessages(channelId)
+			return c.json(pins)
+		},
+	)
+	// POST /channels/:id/messages/:msgId/reactions — add reaction
+	.post(
+		'/:id/messages/:msgId/reactions',
+		describeRoute({
+			tags: ['channels'],
+			description: 'Add an emoji reaction to a message',
+			responses: {
+				201: {
+					description: 'Created reaction',
+					content: { 'application/json': { schema: resolver(ReactionSchema) } },
+				},
+			},
+		}),
+		zValidator('param', MessageParam),
+		zValidator('json', z.object({ emoji: z.string() })),
+		async (c) => {
+			const storage = c.get('storage')
+			const { msgId } = c.req.valid('param')
+			const { emoji } = c.req.valid('json')
+
+			const reaction = await storage.addReaction(msgId, emoji, getActorId(c))
+			return c.json(reaction, 201)
+		},
+	)
+	// DELETE /channels/:id/messages/:msgId/reactions — remove reaction
+	.delete(
+		'/:id/messages/:msgId/reactions',
+		describeRoute({
+			tags: ['channels'],
+			description: 'Remove an emoji reaction from a message',
+			responses: {
+				200: {
+					description: 'Reaction removed',
+					content: { 'application/json': { schema: resolver(OkResponseSchema) } },
+				},
+			},
+		}),
+		zValidator('param', MessageParam),
+		zValidator('json', z.object({ emoji: z.string() })),
+		async (c) => {
+			const storage = c.get('storage')
+			const { msgId } = c.req.valid('param')
+			const { emoji } = c.req.valid('json')
+
+			await storage.removeReaction(msgId, emoji, getActorId(c))
+			return c.json({ ok: true as const })
+		},
+	)
+	// POST /channels/:id/typing — broadcast typing event
+	.post(
+		'/:id/typing',
+		describeRoute({
+			tags: ['channels'],
+			description: 'Broadcast a user typing event for the channel (debounce client-side, TTL ~3s)',
+			responses: {
+				200: {
+					description: 'Typing event broadcast',
+					content: { 'application/json': { schema: resolver(OkResponseSchema) } },
+				},
+			},
+		}),
+		zValidator('param', ChannelIdParam),
+		async (c) => {
+			const { id: channelId } = c.req.valid('param')
+
+			eventBus.emit({
+				type: 'user_typing',
+				channelId,
+				userId: getActorId(c),
+				actorType: 'human',
+			})
+
+			return c.json({ ok: true as const })
+		},
+	)
+	// GET /channels/:id/messages/:msgId/reactions — list reactions
+	.get(
+		'/:id/messages/:msgId/reactions',
+		describeRoute({
+			tags: ['channels'],
+			description: 'Get all reactions for a message',
+			responses: {
+				200: {
+					description: 'Array of reactions',
+					content: { 'application/json': { schema: resolver(z.array(ReactionSchema)) } },
+				},
+			},
+		}),
+		zValidator('param', MessageParam),
+		async (c) => {
+			const storage = c.get('storage')
+			const { msgId } = c.req.valid('param')
+
+			const reactions = await storage.getReactions(msgId)
+			return c.json(reactions)
 		},
 	)
 

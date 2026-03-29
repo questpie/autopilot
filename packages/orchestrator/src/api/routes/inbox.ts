@@ -21,10 +21,11 @@ const inbox = new Hono<AppEnv>().get(
 		const root = c.get('companyRoot')
 		const storage = c.get('storage')
 
+		const db = c.get('db')
 		const [reviewTasks, blockedTasks, allPins] = await Promise.all([
 			storage.listTasks({ status: 'review' }).catch(() => []),
 			storage.listTasks({ status: 'blocked' }).catch(() => []),
-			listPins(root),
+			listPins(db).catch(() => []),
 		])
 
 		const actionPins = allPins.filter(

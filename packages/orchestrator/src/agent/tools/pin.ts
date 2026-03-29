@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { createPin, removePin } from '../../fs/pins'
+import { container } from '../../container'
+import { dbFactory } from '../../db'
 import type { ToolDefinition, ToolContext, ToolResult } from '../tools'
 import { getIndexer } from './shared'
 
@@ -17,12 +19,14 @@ export function createPinTool(companyRoot: string): ToolDefinition {
 			metadata: z.record(z.unknown()).optional().describe('For create'),
 		}),
 		execute: async (args, ctx) => {
+			const { db } = await container.resolveAsync([dbFactory])
+
 			if (args.action === 'create') {
 				if (!args.title || !args.type) {
 					return { content: [{ type: 'text' as const, text: 'Error: title and type are required for pin create' }], isError: true }
 				}
 				const pinId = `pin-${Date.now().toString(36)}`
-				await createPin(companyRoot, {
+				await createPin(db.db, {
 					id: pinId,
 					group: args.group ?? 'recent',
 					title: args.title,
@@ -32,7 +36,6 @@ export function createPinTool(companyRoot: string): ToolDefinition {
 					created_at: new Date().toISOString(),
 					metadata: args.metadata ?? {},
 				})
-				ctx.eventBus.emit({ type: 'pin_changed', pinId, action: 'created' })
 				// Real-time index
 				getIndexer().then((idx) => idx?.indexOne('pin', pinId, args.title!, `${args.title} ${args.content ?? ''}`)).catch(() => {})
 				return { content: [{ type: 'text' as const, text: `Pinned: ${args.title}` }] }
@@ -42,8 +45,7 @@ export function createPinTool(companyRoot: string): ToolDefinition {
 			if (!args.pin_id) {
 				return { content: [{ type: 'text' as const, text: 'Error: pin_id is required for remove' }], isError: true }
 			}
-			await removePin(companyRoot, args.pin_id)
-			ctx.eventBus.emit({ type: 'pin_changed', pinId: args.pin_id, action: 'removed' })
+			await removePin(db.db, args.pin_id)
 			return { content: [{ type: 'text' as const, text: `Unpinned: ${args.pin_id}` }] }
 		},
 	}

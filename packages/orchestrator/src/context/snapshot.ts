@@ -2,6 +2,8 @@ import type { Agent } from '@questpie/autopilot-spec'
 import { listPins, loadAgents } from '../fs'
 import type { StorageBackend } from '../fs/storage'
 import type { SessionStreamManager } from '../session/stream'
+import { container } from '../container'
+import { dbFactory } from '../db'
 
 /** A point-in-time snapshot of company state scoped to a single agent. */
 export interface CompanySnapshot {
@@ -64,8 +66,14 @@ export async function buildCompanySnapshot(
 		}
 	}
 
-	// Load dashboard pins (still YAML-based)
-	const allPins = await listPins(companyRoot)
+	// Load dashboard pins from DB
+	let allPins: Awaited<ReturnType<typeof listPins>> = []
+	try {
+		const { db } = await container.resolveAsync([dbFactory])
+		allPins = await listPins(db.db)
+	} catch {
+		// DB not available yet — empty pins
+	}
 	const dashboardPins = allPins.map((p) => ({
 		title: p.title,
 		type: p.type,
