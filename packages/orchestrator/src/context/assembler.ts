@@ -110,6 +110,18 @@ function parseFrontmatter(raw: string): { frontmatter: Record<string, unknown>; 
  * 2. Doesn't exist -> use agent.description as minimal prompt
  * 3. Neither -> generic fallback
  */
+/** D46: In-memory role prompt cache, keyed by role name. */
+const roleCache = new Map<string, { prompt: string; defaults: RoleDefaults; raw: string }>()
+
+/** D46: Invalidate cache for a specific role (called from file watcher). */
+export function invalidateRoleCache(role?: string): void {
+	if (role) {
+		roleCache.delete(role)
+	} else {
+		roleCache.clear()
+	}
+}
+
 export function loadRolePrompt(
 	companyRoot: string,
 	role: string,
@@ -121,22 +133,33 @@ export function loadRolePrompt(
 		return { prompt: '', defaults: {} }
 	}
 
+	// D46: Check cache
 	const raw = readFileSync(rolePath, 'utf-8')
+	const cached = roleCache.get(role)
+	if (cached && cached.raw === raw) {
+		// Re-apply variables to cached content (variables may change between calls)
+		const prompt = cached.prompt
+			.replace(/\{\{companyName\}\}/g, variables.companyName)
+			.replace(/\{\{teamRoster\}\}/g, variables.teamRoster)
+		return { prompt, defaults: cached.defaults }
+	}
+
 	const { frontmatter, content } = parseFrontmatter(raw)
 
-	// Replace template variables in the prompt body
+	const defaults: RoleDefaults = {
+		tools: frontmatter.default_tools as string[] | undefined,
+		fs_scope: frontmatter.default_fs_scope as RoleDefaults['fs_scope'],
+		description: frontmatter.description as string | undefined,
+	}
+
+	// Cache the raw content (before variable substitution)
+	roleCache.set(role, { prompt: content, defaults, raw })
+
 	const prompt = content
 		.replace(/\{\{companyName\}\}/g, variables.companyName)
 		.replace(/\{\{teamRoster\}\}/g, variables.teamRoster)
 
-	return {
-		prompt,
-		defaults: {
-			tools: frontmatter.default_tools as string[] | undefined,
-			fs_scope: frontmatter.default_fs_scope as RoleDefaults['fs_scope'],
-			description: frontmatter.description as string | undefined,
-		},
-	}
+	return { prompt, defaults }
 }
 
 /**

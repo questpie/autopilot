@@ -71,12 +71,20 @@ export async function startDurableStreamServer(companyRoot: string): Promise<voi
 		serverProcess.on('exit', (code) => {
 			if (code !== 0 && code !== null) {
 				logger.error('durable-streams', `server exited with code ${code}`)
+				// D43: Auto-restart on crash
+				serverProcess = null
+				setTimeout(() => {
+					logger.info('durable-streams', 'auto-restarting after crash...')
+					startDurableStreamServer(companyRoot).catch(() => {})
+				}, 2000)
+			} else {
+				serverProcess = null
 			}
-			serverProcess = null
 		})
 
-		// Wait briefly for server to start
-		await new Promise((resolve) => setTimeout(resolve, 500))
+		// Wait for server to start (configurable timeout)
+		const startupTimeout = Number(process.env.DURABLE_STREAMS_STARTUP_TIMEOUT ?? 2000)
+		await new Promise((resolve) => setTimeout(resolve, startupTimeout))
 
 		logger.info('durable-streams', `server started on port ${port} (data: ${dataDir})`)
 	} catch (err) {
@@ -94,6 +102,19 @@ export function stopDurableStreamServer(): void {
 		serverProcess.kill('SIGTERM')
 		serverProcess = null
 		logger.info('durable-streams', 'server stopped')
+	}
+}
+
+/**
+ * D43: Health check for durable streams server.
+ */
+export async function checkDurableStreamHealth(): Promise<{ ok: boolean; latencyMs?: number }> {
+	const start = Date.now()
+	try {
+		const resp = await fetch(`${DURABLE_STREAMS_URL}/health`, { signal: AbortSignal.timeout(5000) })
+		return { ok: resp.ok, latencyMs: Date.now() - start }
+	} catch {
+		return { ok: false, latencyMs: Date.now() - start }
 	}
 }
 

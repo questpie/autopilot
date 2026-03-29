@@ -79,38 +79,45 @@ export async function routeMessage(
 	return { agent: ceo!, reason: 'default → CEO' }
 }
 
+/** D47: Default keyword mappings (fallback when agent has no keywords field). */
+const DEFAULT_ROLE_KEYWORDS: Record<string, string[]> = {
+	developer: ['code', 'implement', 'build', 'fix', 'bug', 'feature', 'component', 'function', 'api', 'endpoint', 'test', 'pr', 'branch'],
+	strategist: ['spec', 'scope', 'requirement', 'feature request', 'business', 'strategy', 'priority'],
+	planner: ['plan', 'estimate', 'breakdown', 'architecture', 'design doc', 'implementation plan'],
+	reviewer: ['review', 'approve', 'reject', 'quality', 'standards', 'feedback'],
+	devops: ['deploy', 'infrastructure', 'server', 'docker', 'k8s', 'kubernetes', 'ci', 'cd', 'monitor', 'health', 'uptime', 'ssl', 'dns'],
+	marketing: ['marketing', 'copy', 'social', 'campaign', 'announce', 'blog', 'content', 'seo', 'launch'],
+	design: ['design', 'ui', 'ux', 'mockup', 'wireframe', 'figma', 'layout', 'responsive', 'css', 'style'],
+}
+
 /**
- * Fallback keyword-based routing when micro-agent is unavailable.
+ * D47: Keyword-based routing — configurable from agent definitions.
+ * Agents can define a `keywords` array in agents.yaml; falls back to role defaults.
  */
 function routeByKeyword(
 	message: string,
 	agents: Agent[],
 ): { agent: Agent; reason: string } | null {
-	const roleKeywords: Record<string, string[]> = {
-		developer: ['code', 'implement', 'build', 'fix', 'bug', 'feature', 'component', 'function', 'api', 'endpoint', 'test', 'pr', 'branch'],
-		strategist: ['spec', 'scope', 'requirement', 'feature request', 'business', 'strategy', 'priority'],
-		planner: ['plan', 'estimate', 'breakdown', 'architecture', 'design doc', 'implementation plan'],
-		reviewer: ['review', 'approve', 'reject', 'quality', 'standards', 'feedback'],
-		devops: ['deploy', 'infrastructure', 'server', 'docker', 'k8s', 'kubernetes', 'ci', 'cd', 'monitor', 'health', 'uptime', 'ssl', 'dns'],
-		marketing: ['marketing', 'copy', 'social', 'campaign', 'announce', 'blog', 'content', 'seo', 'launch'],
-		design: ['design', 'ui', 'ux', 'mockup', 'wireframe', 'figma', 'layout', 'responsive', 'css', 'style'],
-	}
-
 	const lower = message.toLowerCase()
-	let bestRole: string | undefined
+	let bestAgent: Agent | undefined
 	let bestScore = 0
 
-	for (const [role, keywords] of Object.entries(roleKeywords)) {
+	for (const agent of agents) {
+		// D47: Use agent-level keywords if defined, else fall back to role defaults
+		const agentRecord = agent as Record<string, unknown>
+		const keywords = (agentRecord.keywords as string[] | undefined)
+			?? DEFAULT_ROLE_KEYWORDS[agent.role]
+			?? []
+
 		const score = keywords.filter(kw => lower.includes(kw)).length
 		if (score > bestScore) {
 			bestScore = score
-			bestRole = role
+			bestAgent = agent
 		}
 	}
 
-	if (bestRole && bestScore > 0) {
-		const agent = agents.find(a => a.role === bestRole)
-		if (agent) return { agent, reason: `keyword match → ${bestRole}` }
+	if (bestAgent && bestScore > 0) {
+		return { agent: bestAgent, reason: `keyword match → ${bestAgent.role}` }
 	}
 
 	return null
