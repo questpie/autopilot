@@ -122,10 +122,87 @@ describe('buildCompanySnapshot', () => {
 		cleanup = ctx.cleanup
 		storage = new SqliteBackend(root)
 		await storage.initialize()
-		// Don't write agents.yaml
 
 		const snap = await buildCompanySnapshot(root, testAgent as any, storage)
-		// Should not throw, just have empty agent statuses
 		expect(Array.isArray(snap.agentStatuses)).toBe(true)
+	})
+
+	it('excludes cancelled tasks', async () => {
+		await setup()
+		const now = new Date().toISOString()
+
+		await storage.createTask({
+			id: 'task-cancelled',
+			title: 'Cancelled task',
+			type: 'implementation',
+			status: 'cancelled',
+			priority: 'low',
+			created_by: 'user',
+			created_at: now,
+			updated_at: now,
+			history: [],
+		} as any)
+
+		const snap = await buildCompanySnapshot(root, testAgent as any, storage)
+		expect(snap.activeTasks.length).toBe(0)
+	})
+
+	it('includes multiple active statuses (backlog, in_progress, review, blocked)', async () => {
+		await setup()
+		const now = new Date().toISOString()
+
+		for (const [i, status] of ['backlog', 'in_progress', 'review', 'blocked'].entries()) {
+			await storage.createTask({
+				id: `task-${status}-${i}`,
+				title: `${status} task`,
+				type: 'implementation',
+				status,
+				priority: 'medium',
+				created_by: 'user',
+				created_at: now,
+				updated_at: now,
+				history: [],
+			} as any)
+		}
+
+		const snap = await buildCompanySnapshot(root, testAgent as any, storage)
+		expect(snap.activeTasks.length).toBe(4)
+	})
+
+	it('task entries include id, title, status, assigned_to', async () => {
+		await setup()
+		const now = new Date().toISOString()
+
+		await storage.createTask({
+			id: 'task-shape',
+			title: 'Shape test',
+			type: 'implementation',
+			status: 'in_progress',
+			priority: 'high',
+			created_by: 'user',
+			assigned_to: 'dev',
+			created_at: now,
+			updated_at: now,
+			history: [],
+		} as any)
+
+		const snap = await buildCompanySnapshot(root, testAgent as any, storage)
+		const task = snap.activeTasks[0]!
+		expect(task.id).toBe('task-shape')
+		expect(task.title).toBe('Shape test')
+		expect(task.status).toBe('in_progress')
+		expect(task.assigned_to).toBe('dev')
+	})
+
+	it('agentStatuses includes role and name for each agent', async () => {
+		await setup()
+		const snap = await buildCompanySnapshot(root, testAgent as any, storage)
+
+		for (const a of snap.agentStatuses) {
+			expect(a).toHaveProperty('id')
+			expect(a).toHaveProperty('name')
+			expect(a).toHaveProperty('role')
+			expect(a).toHaveProperty('status')
+		}
 	})
 })
