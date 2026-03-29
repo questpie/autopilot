@@ -29,10 +29,6 @@ function getRawDb(db: AutopilotDb): Client {
 	return (db as unknown as { $client: Client }).$client
 }
 
-/** D44: Detect if using Turso (libSQL native vectors) or local (sqlite-vec). */
-function isTursoMode(): boolean {
-	return !!(process.env.TURSO_SYNC_URL || process.env.DATABASE_URL?.startsWith('libsql://'))
-}
 
 /**
  * Index or update an entity in the unified search index.
@@ -80,31 +76,13 @@ export async function indexEntity(
 
 /**
  * Remove an entity from the search index.
+ * Embedding is stored in the row's F32_BLOB column — deleted with the row.
  */
 export async function removeEntity(
 	db: AutopilotDb,
 	type: EntityType,
 	id: string,
 ): Promise<void> {
-	// Delete orphaned vectors BEFORE removing the search_index row (need the row id)
-	try {
-		const row = await db
-			.select({ id: searchIndex.id })
-			.from(searchIndex)
-			.where(and(eq(searchIndex.entityType, type), eq(searchIndex.entityId, id)))
-			.get()
-		if (row) {
-			const raw = getRawDb(db)
-			try {
-				await raw.execute({ sql: 'DELETE FROM search_vec WHERE search_id = ?', args: [row.id] })
-			} catch {
-				// search_vec may not exist
-			}
-		}
-	} catch {
-		// best-effort vector cleanup
-	}
-
 	await db.delete(searchIndex)
 		.where(and(eq(searchIndex.entityType, type), eq(searchIndex.entityId, id)))
 		.run()
@@ -161,7 +139,7 @@ export async function searchFts(
 }
 
 /**
- * Vector similarity search. D44: Uses vector_top_k on Turso, vec0 MATCH locally.
+ * Vector similarity search using libSQL native DiskANN via vector_top_k.
  */
 export async function searchVec(
 	db: AutopilotDb,
@@ -173,53 +151,21 @@ export async function searchVec(
 
 	try {
 		const embeddingBuffer = Buffer.from(embedding.buffer)
-
-		if (isTursoMode()) {
-			// D44: libSQL native — vector_top_k with DiskANN index
-			const args: (string | number | Uint8Array)[] = [embeddingBuffer, limit]
-			let typeFilter = ''
-			if (opts?.type) {
-				typeFilter = 'WHERE si.entity_type = ?'
-				args.push(opts.type)
-			}
-			const result = await raw.execute({
-				sql: `
-					SELECT si.entity_type, si.entity_id, si.title,
-						substr(si.content, 1, 200) as snippet, 0 as score
-					FROM vector_top_k('search_vec_idx', ?, ?) vtk
-					JOIN search_index si ON si.rowid = vtk.id
-					${typeFilter}
-				`,
-				args,
-			})
-			return result.rows.map((r) => ({
-				entityType: r.entity_type as EntityType,
-				entityId: r.entity_id as string,
-				title: r.title as string | null,
-				snippet: r.snippet as string,
-				score: r.score as number,
-			}))
-		}
-
-		// Local: sqlite-vec vec0
 		const args: (string | number | Uint8Array)[] = [embeddingBuffer, limit]
 		let typeFilter = ''
 		if (opts?.type) {
-			typeFilter = 'AND si.entity_type = ?'
+			typeFilter = 'WHERE si.entity_type = ?'
 			args.push(opts.type)
 		}
 
 		const result = await raw.execute({
 			sql: `
-				SELECT
-					si.entity_type, si.entity_id, si.title,
+				SELECT si.entity_type, si.entity_id, si.title,
 					substr(si.content, 1, 200) as snippet,
-					sv.distance as score
-				FROM search_vec sv
-				JOIN search_index si ON si.id = sv.search_id
-				WHERE sv.embedding MATCH ? AND sv.k = ?
+					vtk.distance as score
+				FROM vector_top_k('search_vec_idx', ?, ?) vtk
+				JOIN search_index si ON si.rowid = vtk.id
 				${typeFilter}
-				ORDER BY sv.distance
 			`,
 			args,
 		})
@@ -347,7 +293,7 @@ export async function searchChunksFts(
 }
 
 /**
- * D29: Vector similarity search across chunks. D44: Turso or local backend.
+ * D29: Vector similarity search across chunks using libSQL native DiskANN.
  */
 export async function searchChunksVec(
 	db: AutopilotDb,
@@ -359,43 +305,10 @@ export async function searchChunksVec(
 
 	try {
 		const embeddingBuffer = Buffer.from(embedding.buffer)
-
-		if (isTursoMode()) {
-			// D44: libSQL native — vector_top_k with DiskANN index on chunks
-			const args: (string | number | Uint8Array)[] = [embeddingBuffer, limit]
-			let typeFilter = ''
-			if (opts?.type) {
-				typeFilter = 'WHERE c.entity_type = ?'
-				args.push(opts.type)
-			}
-			const result = await raw.execute({
-				sql: `
-					SELECT c.entity_type, c.entity_id, c.chunk_index,
-						c.content as chunk_content, c.metadata,
-						substr(c.content, 1, 200) as snippet, 0 as score
-					FROM vector_top_k('chunks_vec_idx', ?, ?) vtk
-					JOIN chunks c ON c.rowid = vtk.id
-					${typeFilter}
-				`,
-				args,
-			})
-			return result.rows.map((r) => ({
-				entityType: r.entity_type as EntityType,
-				entityId: r.entity_id as string,
-				title: null,
-				snippet: r.snippet as string,
-				score: r.score as number,
-				chunkIndex: r.chunk_index as number,
-				chunkContent: r.chunk_content as string,
-				metadata: r.metadata ? JSON.parse(r.metadata as string) : undefined,
-			}))
-		}
-
-		// Local: sqlite-vec vec0
 		const args: (string | number | Uint8Array)[] = [embeddingBuffer, limit]
 		let typeFilter = ''
 		if (opts?.type) {
-			typeFilter = 'AND c.entity_type = ?'
+			typeFilter = 'WHERE c.entity_type = ?'
 			args.push(opts.type)
 		}
 
@@ -404,12 +317,10 @@ export async function searchChunksVec(
 				SELECT c.entity_type, c.entity_id, c.chunk_index,
 					c.content as chunk_content, c.metadata,
 					substr(c.content, 1, 200) as snippet,
-					cv.distance as score
-				FROM chunks_vec cv
-				JOIN chunks c ON c.id = cv.chunk_id
-				WHERE cv.embedding MATCH ? AND cv.k = ?
+					vtk.distance as score
+				FROM vector_top_k('chunks_vec_idx', ?, ?) vtk
+				JOIN chunks c ON c.rowid = vtk.id
 				${typeFilter}
-				ORDER BY cv.distance
 			`,
 			args,
 		})

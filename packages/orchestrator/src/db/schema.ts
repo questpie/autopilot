@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, blob, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // Re-export Better Auth tables so they're included in the Drizzle schema
 export {
@@ -72,12 +72,17 @@ export const messages = sqliteTable('messages', {
 	thread: text('thread'),
 	transport: text('transport'),
 	external: integer('external', { mode: 'boolean' }).default(false),
+	metadata: text('metadata').default('{}'),
+	attachments: text('attachments').default('[]'),
+	thread_id: text('thread_id'),
+	edited_at: text('edited_at'),
 }, (table) => [
 	index('idx_messages_channel').on(table.channel),
 	index('idx_messages_from').on(table.from_id),
 	index('idx_messages_to').on(table.to_id),
 	index('idx_messages_thread').on(table.thread),
 	index('idx_messages_created').on(table.created_at),
+	index('idx_messages_thread_id').on(table.thread_id),
 ])
 
 // ─── Activity ───────────────────────────────────────────────────────────────
@@ -126,6 +131,8 @@ export const searchIndex = sqliteTable('search_index', {
 	content: text('content').notNull(),
 	contentHash: text('content_hash').notNull(),
 	indexedAt: text('indexed_at').notNull(),
+	/** libSQL native F32_BLOB — embedding vector for DiskANN search. */
+	embedding: blob('embedding'),
 }, (table) => [
 	index('idx_search_entity_type').on(table.entityType),
 	index('idx_search_entity_id').on(table.entityId),
@@ -204,6 +211,8 @@ export const chunks = sqliteTable('chunks', {
 	contentHash: text('content_hash').notNull(),
 	metadata: text('metadata').default('{}'),
 	indexedAt: text('indexed_at').notNull(),
+	/** libSQL native F32_BLOB — embedding vector for DiskANN search. */
+	embedding: blob('embedding'),
 }, (table) => [
 	index('idx_chunks_entity').on(table.entityType, table.entityId),
 	index('idx_chunks_entity_chunk').on(table.entityType, table.entityId, table.chunkIndex),
@@ -270,4 +279,41 @@ export const rateLimitEntries = sqliteTable('rate_limit_entries', {
 }, (table) => [
 	index('idx_rate_limit_key_window').on(table.key, table.window_start),
 	index('idx_rate_limit_expires').on(table.expires_at),
+])
+
+// ─── Message Reactions ────────────────────────────────────────────────────
+
+export const messageReactions = sqliteTable('message_reactions', {
+	id: text('id').primaryKey(),
+	message_id: text('message_id').notNull(),
+	emoji: text('emoji').notNull(),
+	user_id: text('user_id').notNull(),
+	created_at: text('created_at').notNull(),
+}, (table) => [
+	index('idx_reactions_message').on(table.message_id),
+	uniqueIndex('uq_reaction').on(table.message_id, table.emoji, table.user_id),
+])
+
+// ─── Pinned Messages ──────────────────────────────────────────────────────
+
+export const pinnedMessages = sqliteTable('pinned_messages', {
+	id: text('id').primaryKey(),
+	channel_id: text('channel_id').notNull(),
+	message_id: text('message_id').notNull(),
+	pinned_by: text('pinned_by').notNull(),
+	pinned_at: text('pinned_at').notNull(),
+}, (table) => [
+	index('idx_pinned_channel').on(table.channel_id),
+])
+
+// ─── Bookmarks ────────────────────────────────────────────────────────────
+
+export const bookmarks = sqliteTable('bookmarks', {
+	id: text('id').primaryKey(),
+	user_id: text('user_id').notNull(),
+	message_id: text('message_id').notNull(),
+	channel_id: text('channel_id').notNull(),
+	created_at: text('created_at').notNull(),
+}, (table) => [
+	index('idx_bookmarks_user').on(table.user_id),
 ])

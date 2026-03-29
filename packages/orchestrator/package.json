@@ -40,7 +40,6 @@
 		"node-cron": "^3.0.0",
 		"picomatch": "^4.0.3",
 		"simple-git": "^3.27.0",
-		"sqlite-vec": "^0.1.7",
 		"web-push": "^3.6.7",
 		"yaml": "^2.7.0",
 		"zod": "^3.24.0",

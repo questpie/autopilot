@@ -270,15 +270,14 @@ describe('D44: DiskANN dual-backend', () => {
 		delete process.env.DATABASE_URL
 	})
 
-	test('isTursoMode detects TURSO_SYNC_URL', async () => {
+	test('db/index.ts supports Turso via TURSO_SYNC_URL', async () => {
 		const { readFileSync } = await import('node:fs')
 		const { join } = await import('node:path')
-		const source = readFileSync(join(import.meta.dir, '..', 'src', 'db', 'search-index.ts'), 'utf-8')
+		const source = readFileSync(join(import.meta.dir, '..', 'src', 'db', 'index.ts'), 'utf-8')
 		expect(source).toContain('TURSO_SYNC_URL')
-		expect(source).toContain("libsql://")
 	})
 
-	test('search-index has vector_top_k for Turso mode', async () => {
+	test('search-index uses vector_top_k for DiskANN queries', async () => {
 		const { readFileSync } = await import('node:fs')
 		const { join } = await import('node:path')
 		const source = readFileSync(join(import.meta.dir, '..', 'src', 'db', 'search-index.ts'), 'utf-8')
@@ -286,46 +285,11 @@ describe('D44: DiskANN dual-backend', () => {
 		expect(source).toContain('search_vec_idx')
 	})
 
-	test('search-index has vec0 MATCH for local mode', async () => {
+	test('search-index uses DiskANN for chunks queries', async () => {
 		const { readFileSync } = await import('node:fs')
 		const { join } = await import('node:path')
 		const source = readFileSync(join(import.meta.dir, '..', 'src', 'db', 'search-index.ts'), 'utf-8')
-		expect(source).toContain('sv.embedding MATCH')
-		expect(source).toContain('search_vec sv')
-	})
-
-	test('db/index.ts creates F32_BLOB column on Turso', async () => {
-		const { readFileSync } = await import('node:fs')
-		const { join } = await import('node:path')
-		const source = readFileSync(join(import.meta.dir, '..', 'src', 'db', 'index.ts'), 'utf-8')
-		expect(source).toContain('F32_BLOB')
-		expect(source).toContain('libsql_vector_idx')
-	})
-
-	test('db/index.ts creates vec0 virtual table for local', async () => {
-		const { readFileSync } = await import('node:fs')
-		const { join } = await import('node:path')
-		const source = readFileSync(join(import.meta.dir, '..', 'src', 'db', 'index.ts'), 'utf-8')
-		expect(source).toContain('vec0')
-		expect(source).toContain('search_vec')
-		expect(source).toContain('chunks_vec')
-	})
-
-	test('indexer uses correct backend for embeddings', async () => {
-		const { readFileSync } = await import('node:fs')
-		const { join } = await import('node:path')
-		const source = readFileSync(join(import.meta.dir, '..', 'src', 'db', 'indexer.ts'), 'utf-8')
-		expect(source).toContain('Indexer.isTurso()')
-		expect(source).toContain("UPDATE search_index SET embedding = vector(?)")
-		expect(source).toContain("INSERT INTO search_vec")
-	})
-
-	test('chunks use DiskANN index on Turso', async () => {
-		const { readFileSync } = await import('node:fs')
-		const { join } = await import('node:path')
-		const source = readFileSync(join(import.meta.dir, '..', 'src', 'db', 'index.ts'), 'utf-8')
 		expect(source).toContain('chunks_vec_idx')
-		expect(source).toContain("ALTER TABLE chunks ADD COLUMN embedding F32_BLOB")
 	})
 })
 
