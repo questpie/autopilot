@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { resolve, relative, dirname } from 'node:path'
+import { realpath } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import type { ToolDefinition, ToolResult } from '../tools'
 import { isDeniedPath } from '../../auth/deny-patterns'
@@ -37,18 +38,30 @@ function buildActor(ctx: FileToolContext): Actor {
 	}
 }
 
-function validatePath(
+async function validatePath(
 	companyRoot: string,
 	relativePath: string,
 	mode: 'read' | 'write',
 	scope?: FileToolContext['scope'],
-): PathValidation {
+): Promise<PathValidation> {
 	const resolved = resolve(companyRoot, relativePath)
 	const rel = relative(companyRoot, resolved)
 
-	// Prevent traversal
+	// Prevent traversal (pre-realpath check for obvious cases)
 	if (rel.startsWith('..') || resolve(resolved) === resolve(companyRoot, '..')) {
 		return { ok: false, error: 'Path outside company root' }
+	}
+
+	// D3: Resolve symlinks to prevent symlink-based traversal
+	try {
+		const realResolved = await realpath(resolved)
+		const realRoot = await realpath(companyRoot)
+		const realRel = relative(realRoot, realResolved)
+		if (realRel.startsWith('..')) {
+			return { ok: false, error: 'Path outside company root (symlink)' }
+		}
+	} catch {
+		// File doesn't exist yet (write) — fall through to logical check only
 	}
 
 	// Hardcoded deny
@@ -86,7 +99,7 @@ export function createFileTools(ctx: FileToolContext): ToolDefinition[] {
 			limit: z.number().int().min(1).optional().describe('Max lines to return'),
 		}),
 		execute: async (args) => {
-			const v = validatePath(companyRoot, args.path, 'read', scope)
+			const v = await validatePath(companyRoot, args.path, 'read', scope)
 			if (!v.ok) return textResult(v.error!, true)
 
 			try {
@@ -119,7 +132,7 @@ export function createFileTools(ctx: FileToolContext): ToolDefinition[] {
 			content: z.string().describe('File content to write'),
 		}),
 		execute: async (args) => {
-			const v = validatePath(companyRoot, args.path, 'write', scope)
+			const v = await validatePath(companyRoot, args.path, 'write', scope)
 			if (!v.ok) return textResult(v.error!, true)
 
 			try {
@@ -147,7 +160,7 @@ export function createFileTools(ctx: FileToolContext): ToolDefinition[] {
 			replace_all: z.boolean().optional().describe('Replace all occurrences (default: false)'),
 		}),
 		execute: async (args) => {
-			const v = validatePath(companyRoot, args.path, 'write', scope)
+			const v = await validatePath(companyRoot, args.path, 'write', scope)
 			if (!v.ok) return textResult(v.error!, true)
 
 			try {
@@ -184,23 +197,42 @@ export function createFileTools(ctx: FileToolContext): ToolDefinition[] {
 	}
 
 	// ── bash ──────────────────────────────────────────────────────────────
+
+	// D1: Only these env vars are passed to bash subprocesses
+	const ALLOWED_ENV_VARS = ['PATH', 'HOME', 'USER', 'LANG', 'TERM', 'SHELL'] as const
+	const bashEnv: Record<string, string> = {}
+	for (const key of ALLOWED_ENV_VARS) {
+		if (process.env[key]) bashEnv[key] = process.env[key]!
+	}
+
+	// D2: Block network commands to prevent SSRF / data exfiltration
+	const BLOCKED_NETWORK_CMDS = /\b(curl|wget|nc|ncat|netcat|socat|ssh|scp|sftp|telnet|ftp|rsync)\b/
+
 	const bash: ToolDefinition = {
 		name: 'bash',
 		description:
-			'Execute a shell command in the project root. Returns stdout + stderr. Default timeout 120s, output capped at 50k chars.',
+			'Execute a shell command in the project root. Returns stdout + stderr. Default timeout 120s, output capped at 50k chars. Network commands (curl, wget, nc, ssh, etc.) are blocked.',
 		schema: z.object({
 			command: z.string().describe('Shell command to execute'),
 			timeout: z.number().int().min(1000).optional().describe('Timeout in ms (default 120000)'),
 		}),
 		execute: async (args) => {
+			// D2: Block network commands
+			if (BLOCKED_NETWORK_CMDS.test(args.command)) {
+				return textResult(
+					'Blocked: network commands (curl, wget, nc, ssh, etc.) are not allowed in bash tool',
+					true,
+				)
+			}
+
 			const timeoutMs = args.timeout ?? 120_000
 			const maxOutput = 50_000
 
 			return new Promise<ToolResult>((res) => {
-				const proc = spawn('bash', ['-c', args.command], {
+				const proc = spawn('bash', ['--norc', '--noprofile', '-c', args.command], {
 					cwd: companyRoot,
 					timeout: timeoutMs,
-					env: { ...process.env, HOME: process.env.HOME },
+					env: bashEnv,
 				})
 
 				let stdout = ''
@@ -241,7 +273,7 @@ export function createFileTools(ctx: FileToolContext): ToolDefinition[] {
 		}),
 		execute: async (args) => {
 			const basePath = args.path ?? '.'
-			const v = validatePath(companyRoot, basePath, 'read', scope)
+			const v = await validatePath(companyRoot, basePath, 'read', scope)
 			if (!v.ok) return textResult(v.error!, true)
 
 			try {
@@ -275,7 +307,7 @@ export function createFileTools(ctx: FileToolContext): ToolDefinition[] {
 		}),
 		execute: async (args) => {
 			const basePath = args.path ?? '.'
-			const v = validatePath(companyRoot, basePath, 'read', scope)
+			const v = await validatePath(companyRoot, basePath, 'read', scope)
 			if (!v.ok) return textResult(v.error!, true)
 
 			const maxResults = args.max_results ?? 100
