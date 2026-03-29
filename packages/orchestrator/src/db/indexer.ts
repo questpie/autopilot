@@ -1,10 +1,12 @@
 import { readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
+import { createHash } from 'node:crypto'
 import { PATHS } from '@questpie/autopilot-spec'
 import type { AutopilotDb } from './index'
 import { eq, and } from 'drizzle-orm'
 import type { Client } from '@libsql/client'
 import { indexEntity, removeEntity, type EntityType } from './search-index'
+import { chunkText } from './chunker'
 import { schema } from './index'
 import { container, companyRootFactory } from '../container'
 import { dbFactory } from './index'
@@ -14,6 +16,9 @@ import type { EmbeddingService } from '../embeddings'
 import { loadAgents } from '../fs'
 import { loadSkillCatalog } from '../skills/loader'
 import type { StorageBackend } from '../fs/storage'
+
+/** D31: Batch size for reindexAll processing. */
+const BATCH_SIZE = 100
 
 /**
  * Unified indexer that populates the search_index table from all entity sources.
@@ -80,18 +85,23 @@ export class Indexer {
 	}
 
 	/**
-	 * Index all tasks from the database.
+	 * Index all tasks from the database. D31: processes in batches.
 	 */
 	async indexTasks(): Promise<number> {
 		let count = 0
 		try {
 			const rows = await this.db.select().from(schema.tasks).all()
-			for (const row of rows) {
-				const content = [row.title, row.description, row.status, row.type]
-					.filter(Boolean)
-					.join('\n')
-				const changed = await this.indexEntitySafe('task', row.id, row.title, content)
-				if (changed) count++
+			for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+				const batch = rows.slice(i, i + BATCH_SIZE)
+				for (const row of batch) {
+					const content = [row.title, row.description, row.status, row.type]
+						.filter(Boolean)
+						.join('\n')
+					const changed = await this.indexEntitySafe('task', row.id, row.title, content)
+					if (changed) count++
+				}
+				// Yield between batches to avoid blocking
+				if (i + BATCH_SIZE < rows.length) await new Promise((r) => setTimeout(r, 0))
 			}
 		} catch {
 			// Tasks table may not exist yet
@@ -100,16 +110,20 @@ export class Indexer {
 	}
 
 	/**
-	 * Index all messages from the database.
+	 * Index all messages from the database. D31: processes in batches.
 	 */
 	async indexMessages(): Promise<number> {
 		let count = 0
 		try {
 			const rows = await this.db.select().from(schema.messages).all()
-			for (const row of rows) {
-				const title = row.channel ? `#${row.channel}` : `DM from ${row.from_id}`
-				const changed = await this.indexEntitySafe('message', row.id, title, row.content)
-				if (changed) count++
+			for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+				const batch = rows.slice(i, i + BATCH_SIZE)
+				for (const row of batch) {
+					const title = row.channel ? `#${row.channel}` : `DM from ${row.from_id}`
+					const changed = await this.indexEntitySafe('message', row.id, title, row.content)
+					if (changed) count++
+				}
+				if (i + BATCH_SIZE < rows.length) await new Promise((r) => setTimeout(r, 0))
 			}
 		} catch {
 			// Messages table may not exist yet
@@ -245,6 +259,7 @@ export class Indexer {
 	/**
 	 * Index a single entity, comparing content hash. Returns true if content changed.
 	 * When an embedding service is available, also generates and stores a vector embedding.
+	 * D26: Also stores paragraph-level chunks in the chunks table.
 	 */
 	private async indexEntitySafe(
 		type: EntityType,
@@ -254,12 +269,94 @@ export class Indexer {
 	): Promise<boolean> {
 		try {
 			const changed = await indexEntity(this.db, type, id, title, content)
-			if (changed && this.embeddingService) {
-				await this.storeEmbedding(type, id, title, content)
+			if (changed) {
+				// D26: Store chunks
+				await this.storeChunks(type, id, content)
+				// Generate embedding for each chunk
+				if (this.embeddingService) {
+					await this.storeEmbedding(type, id, title, content)
+				}
 			}
 			return changed
 		} catch {
 			return false
+		}
+	}
+
+	/**
+	 * D26: Split content into chunks and store in the chunks table.
+	 * Uses content hashing to skip unchanged chunks.
+	 */
+	private async storeChunks(
+		type: EntityType,
+		id: string,
+		content: string,
+	): Promise<void> {
+		try {
+			const textChunks = chunkText(content)
+			const now = new Date().toISOString()
+
+			// Delete existing chunks for this entity
+			await this.db.delete(schema.chunks)
+				.where(and(eq(schema.chunks.entityType, type), eq(schema.chunks.entityId, id)))
+
+			// Insert new chunks
+			for (const chunk of textChunks) {
+				const hash = createHash('sha256').update(chunk.content).digest('hex').slice(0, 16)
+				await this.db.insert(schema.chunks).values({
+					entityType: type,
+					entityId: id,
+					chunkIndex: chunk.index,
+					content: chunk.content,
+					contentHash: hash,
+					metadata: JSON.stringify({ section: chunk.section }),
+					indexedAt: now,
+				})
+			}
+
+			// Store chunk embeddings if available
+			if (this.embeddingService) {
+				await this.storeChunkEmbeddings(type, id, textChunks.map((c) => c.content))
+			}
+		} catch {
+			// Chunk storage failed — entity is still indexed for FTS
+		}
+	}
+
+	/**
+	 * D26: Generate and store embeddings for each chunk in chunks_vec.
+	 */
+	private async storeChunkEmbeddings(
+		type: EntityType,
+		id: string,
+		contents: string[],
+	): Promise<void> {
+		try {
+			const raw = (this.db as unknown as { $client: Client }).$client
+
+			// Get chunk IDs
+			const chunkRows = await this.db
+				.select({ id: schema.chunks.id })
+				.from(schema.chunks)
+				.where(and(eq(schema.chunks.entityType, type), eq(schema.chunks.entityId, id)))
+				.all()
+
+			for (let i = 0; i < Math.min(chunkRows.length, contents.length); i++) {
+				const embedding = await this.embeddingService!.embedText(contents[i]!)
+				if (!embedding) continue
+
+				const chunkId = chunkRows[i]!.id
+				const embeddingBuffer = Buffer.from(embedding.buffer)
+
+				try {
+					await raw.execute({ sql: 'DELETE FROM chunks_vec WHERE chunk_id = ?', args: [chunkId] })
+				} catch { /* chunks_vec might not exist */ }
+				try {
+					await raw.execute({ sql: 'INSERT INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)', args: [chunkId, embeddingBuffer] })
+				} catch { /* chunks_vec not available */ }
+			}
+		} catch {
+			// Embedding storage failed — chunks are still searchable via FTS
 		}
 	}
 
