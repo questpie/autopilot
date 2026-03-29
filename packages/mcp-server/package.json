@@ -1,0 +1,22 @@
+{
+	"name": "@questpie/autopilot-mcp",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "MCP server for QuestPie Autopilot — expose tasks, agents, search, sessions to Claude Desktop/Code",
+	"main": "src/index.ts",
+	"bin": {
+		"autopilot-mcp": "./src/index.ts"
+	},
+	"scripts": {
+		"start": "bun run src/index.ts",
+		"dev": "bun run --watch src/index.ts"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.12.1",
+		"zod": "^3.25.0"
+	},
+	"devDependencies": {
+		"@types/node": "^25.5.0"
+	}
+}
