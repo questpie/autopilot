@@ -196,11 +196,20 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		})
 		eventBus.emit({ type: 'agent_session', agentId: agent.id, status: 'ended', sessionId })
 
-		// Extract and persist memory from this session (best-effort)
+		// Extract and persist memory from this session (best-effort, 1 retry)
 		try {
 			await extractMemory(companyRoot, agent.id, sessionId, storage)
-		} catch {
-			// Memory extraction failure must not crash the session
+		} catch (firstErr) {
+			logger.warn('agent', `memory extraction failed for ${agent.id}/${sessionId}, retrying`, {
+				error: firstErr instanceof Error ? firstErr.message : String(firstErr),
+			})
+			try {
+				await extractMemory(companyRoot, agent.id, sessionId, storage)
+			} catch (retryErr) {
+				logger.error('agent', `memory extraction failed after retry for ${agent.id}/${sessionId}`, {
+					error: retryErr instanceof Error ? retryErr.message : String(retryErr),
+				})
+			}
 		}
 	}
 

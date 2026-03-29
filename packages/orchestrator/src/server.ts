@@ -61,6 +61,21 @@ export class Orchestrator {
 	constructor(private options: OrchestratorOptions) {}
 
 	/**
+	 * D4: Guarded agent spawn — enforces maxConcurrentAgents limit.
+	 * Returns the spawn promise, or logs a warning and returns null if at capacity.
+	 */
+	private guardedSpawn(opts: Parameters<typeof spawnAgent>[0]): Promise<Awaited<ReturnType<typeof spawnAgent>>> | null {
+		if (this.activeAgentCount >= this.maxConcurrentAgents) {
+			logger.warn('orchestrator', `max concurrent agents (${this.maxConcurrentAgents}) reached — skipping spawn for ${opts.agent.id}`)
+			return null
+		}
+		this.activeAgentCount++
+		return spawnAgent(opts).finally(() => {
+			this.activeAgentCount--
+		})
+	}
+
+	/**
 	 * Boot every subsystem (watcher, scheduler, webhook server, API server).
 	 *
 	 * The method is idempotent — calling it on an already-running orchestrator
@@ -544,14 +559,14 @@ export class Orchestrator {
 				if (agent.id === from) continue // don't spawn agent that sent the message
 
 				logger.info('orchestrator', `@${mentionedId} mentioned in #${channel} by ${from} — spawning`)
-				spawnAgent({
+				this.guardedSpawn({
 					agent,
 					company,
 					allAgents: agents,
 					storage,
 					trigger: { type: 'mention' },
 				})
-					.then((result) => {
+					?.then((result) => {
 						logger.info('orchestrator', `agent ${agent.id} finished mention response`, { toolCalls: result.toolCalls })
 					})
 					.catch((err) => {
@@ -600,7 +615,7 @@ export class Orchestrator {
 				if (agent) {
 					const company = await loadCompany(root)
 					logger.info('orchestrator', `spawning agent ${agent.id} for schedule ${schedule.id}`)
-					spawnAgent({
+					this.guardedSpawn({
 						agent,
 						company,
 						allAgents: agents,
@@ -608,7 +623,7 @@ export class Orchestrator {
 						trigger: { type: 'schedule', schedule_id: schedule.id },
 						message: `Scheduled task (${schedule.id}): ${schedule.description || 'No description'}. Check your current tasks and act accordingly.`,
 					})
-						.then((result) => {
+						?.then((result) => {
 							logger.info('orchestrator', `agent ${agent.id} finished schedule ${schedule.id}`, { toolCalls: result.toolCalls })
 						})
 						.catch((err) => {
@@ -790,7 +805,7 @@ export class Orchestrator {
 							if (agent) {
 								const company = await loadCompany(root)
 								logger.info('orchestrator', `spawning agent: ${agent.id} (${agent.role}) for task ${taskId}`)
-								spawnAgent({
+								this.guardedSpawn({
 									agent,
 									company,
 									allAgents: agents,
@@ -798,7 +813,7 @@ export class Orchestrator {
 									storage,
 									trigger: { type: 'task_assigned', task_id: taskId },
 								})
-									.then((result) => {
+									?.then((result) => {
 										logger.info('orchestrator', `agent ${agent.id} finished`, { toolCalls: result.toolCalls, error: result.error })
 									})
 									.catch((err) => {

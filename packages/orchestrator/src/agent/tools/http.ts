@@ -5,6 +5,12 @@ import { readYamlUnsafe } from '../../fs/yaml'
 import type { ToolDefinition, ToolContext, ToolResult, AutopilotToolOptions } from '../tools'
 import { checkSsrf } from './shared'
 
+/** Zod schema for secret YAML files used by the fetch tool. */
+const SecretSchema = z.object({
+	allowed_agents: z.array(z.string()).optional(),
+	api_key: z.string().optional(),
+}).passthrough()
+
 export function createHttpTool(companyRoot: string, options?: AutopilotToolOptions): ToolDefinition {
 	return {
 		name: 'fetch',
@@ -26,10 +32,7 @@ export function createHttpTool(companyRoot: string, options?: AutopilotToolOptio
 					`${args.secret_ref}.yaml`,
 				)
 				try {
-					const secret = await readYamlUnsafe(secretPath) as {
-						allowed_agents?: string[]
-						api_key?: string
-					}
+					const secret = SecretSchema.parse(await readYamlUnsafe(secretPath))
 					if (secret.allowed_agents && !secret.allowed_agents.includes(ctx.agentId)) {
 						return {
 							content: [{ type: 'text' as const, text: `Agent ${ctx.agentId} not allowed to use secret ${args.secret_ref}` }],

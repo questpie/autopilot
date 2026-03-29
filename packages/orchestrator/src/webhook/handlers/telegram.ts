@@ -6,6 +6,7 @@
  */
 
 import { join } from 'node:path'
+import { z } from 'zod'
 import {
 	parseTelegramUpdate,
 	extractMentions,
@@ -19,6 +20,11 @@ import { storageFactory } from '../../fs/sqlite-backend'
 import type { WebhookHandler, WebhookContext, WebhookResult } from '../handler'
 import { logger } from '../../logger'
 
+/** Zod schema for the Telegram secret YAML file. */
+const TelegramSecretSchema = z.object({
+	value: z.string(),
+}).passthrough()
+
 /**
  * Read the Telegram bot token from the secrets directory.
  *
@@ -27,8 +33,8 @@ import { logger } from '../../logger'
 async function readBotToken(companyRoot: string): Promise<string | null> {
 	const secretPath = join(companyRoot, 'secrets', 'telegram.yaml')
 	try {
-		const secret = await readYamlUnsafe(secretPath) as Record<string, unknown>
-		return (secret?.value as string) ?? null
+		const secret = TelegramSecretSchema.parse(await readYamlUnsafe(secretPath))
+		return secret.value
 	} catch {
 		return null
 	}

@@ -104,103 +104,111 @@ export class SqliteBackend implements StorageBackend {
 	}
 
 	async updateTask(id: string, updates: Partial<Task>, updatedBy: string): Promise<Task> {
-		const existing = await this.readTask(id)
-		if (!existing) throw new Error(`Task not found: ${id}`)
+		return this.db.transaction(async (tx) => {
+			const rows = await tx.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1)
+			if (rows.length === 0) throw new Error(`Task not found: ${id}`)
+			const existing = this.rowToTask(rows[0]!)
 
-		const timestamp = new Date().toISOString()
-		const historyEntry = {
-			at: timestamp,
-			by: updatedBy,
-			action: 'updated',
-			note: Object.keys(updates).join(', '),
-		}
+			const timestamp = new Date().toISOString()
+			const historyEntry = {
+				at: timestamp,
+				by: updatedBy,
+				action: 'updated',
+				note: Object.keys(updates).join(', '),
+			}
 
-		const merged = {
-			...existing,
-			...updates,
-			id: existing.id,
-			created_at: existing.created_at,
-			updated_at: timestamp,
-			history: [...existing.history, historyEntry],
-		}
+			const merged = {
+				...existing,
+				...updates,
+				id: existing.id,
+				created_at: existing.created_at,
+				updated_at: timestamp,
+				history: [...existing.history, historyEntry],
+			}
 
-		const validated = TaskSchema.parse(merged)
+			const validated = TaskSchema.parse(merged)
 
-		await this.db.update(schema.tasks).set({
-			title: validated.title,
-			description: validated.description,
-			type: validated.type,
-			status: validated.status,
-			priority: validated.priority,
-			assigned_to: validated.assigned_to ?? null,
-			reviewers: JSON.stringify(validated.reviewers),
-			approver: validated.approver ?? null,
-			project: validated.project ?? null,
-			parent: validated.parent ?? null,
-			depends_on: JSON.stringify(validated.depends_on),
-			blocks: JSON.stringify(validated.blocks),
-			related: JSON.stringify(validated.related),
-			workflow: validated.workflow ?? null,
-			workflow_step: validated.workflow_step ?? null,
-			context: JSON.stringify(validated.context),
-			blockers: JSON.stringify(validated.blockers),
-			resources: JSON.stringify(validated.resources),
-			labels: JSON.stringify(validated.labels),
-			milestone: validated.milestone ?? null,
-			updated_at: validated.updated_at,
-			started_at: validated.started_at ?? null,
-			completed_at: validated.completed_at ?? null,
-			deadline: validated.deadline ?? null,
-			history: JSON.stringify(validated.history),
-			metadata: JSON.stringify(validated.metadata ?? {}),
-		}).where(eq(schema.tasks.id, id))
+			await tx.update(schema.tasks).set({
+				title: validated.title,
+				description: validated.description,
+				type: validated.type,
+				status: validated.status,
+				priority: validated.priority,
+				assigned_to: validated.assigned_to ?? null,
+				reviewers: JSON.stringify(validated.reviewers),
+				approver: validated.approver ?? null,
+				project: validated.project ?? null,
+				parent: validated.parent ?? null,
+				depends_on: JSON.stringify(validated.depends_on),
+				blocks: JSON.stringify(validated.blocks),
+				related: JSON.stringify(validated.related),
+				workflow: validated.workflow ?? null,
+				workflow_step: validated.workflow_step ?? null,
+				context: JSON.stringify(validated.context),
+				blockers: JSON.stringify(validated.blockers),
+				resources: JSON.stringify(validated.resources),
+				labels: JSON.stringify(validated.labels),
+				milestone: validated.milestone ?? null,
+				updated_at: validated.updated_at,
+				started_at: validated.started_at ?? null,
+				completed_at: validated.completed_at ?? null,
+				deadline: validated.deadline ?? null,
+				history: JSON.stringify(validated.history),
+				metadata: JSON.stringify(validated.metadata ?? {}),
+			}).where(eq(schema.tasks.id, id))
 
-		return validated
+			return validated
+		})
 	}
 
 	async moveTask(id: string, newStatus: string, movedBy: string, blocker?: { reason: string; assigned_to?: string }): Promise<Task> {
-		const existing = await this.readTask(id)
-		if (!existing) throw new Error(`Task not found: ${id}`)
+		const validated = await this.db.transaction(async (tx) => {
+			const rows = await tx.select().from(schema.tasks).where(eq(schema.tasks.id, id)).limit(1)
+			if (rows.length === 0) throw new Error(`Task not found: ${id}`)
+			const existing = this.rowToTask(rows[0]!)
 
-		const timestamp = new Date().toISOString()
-		const historyEntry = {
-			at: timestamp,
-			by: movedBy,
-			action: 'status_changed',
-			from: existing.status,
-			to: newStatus,
-		}
+			const timestamp = new Date().toISOString()
+			const historyEntry = {
+				at: timestamp,
+				by: movedBy,
+				action: 'status_changed',
+				from: existing.status,
+				to: newStatus,
+			}
 
-		const newBlockers = blocker && newStatus === 'blocked'
-			? [...existing.blockers, { type: 'human_required', reason: blocker.reason, assigned_to: blocker.assigned_to ?? movedBy, resolved: false }]
-			: existing.blockers
+			const newBlockers = blocker && newStatus === 'blocked'
+				? [...existing.blockers, { type: 'human_required', reason: blocker.reason, assigned_to: blocker.assigned_to ?? movedBy, resolved: false }]
+				: existing.blockers
 
-		const validated = TaskSchema.parse({
-			...existing,
-			status: newStatus,
-			updated_at: timestamp,
-			started_at: newStatus === 'in_progress'
-				? (existing.started_at ?? timestamp)
-				: existing.started_at,
-			completed_at: newStatus === 'done' ? timestamp : existing.completed_at,
-			history: [...existing.history, historyEntry],
-			blockers: newBlockers,
+			const result = TaskSchema.parse({
+				...existing,
+				status: newStatus,
+				updated_at: timestamp,
+				started_at: newStatus === 'in_progress'
+					? (existing.started_at ?? timestamp)
+					: existing.started_at,
+				completed_at: newStatus === 'done' ? timestamp : existing.completed_at,
+				history: [...existing.history, historyEntry],
+				blockers: newBlockers,
+			})
+
+			await tx.update(schema.tasks).set({
+				status: result.status,
+				updated_at: result.updated_at,
+				started_at: result.started_at ?? null,
+				completed_at: result.completed_at ?? null,
+				history: JSON.stringify(result.history),
+				blockers: JSON.stringify(result.blockers),
+			}).where(eq(schema.tasks.id, id))
+
+			return result
 		})
-
-		await this.db.update(schema.tasks).set({
-			status: validated.status,
-			updated_at: validated.updated_at,
-			started_at: validated.started_at ?? null,
-			completed_at: validated.completed_at ?? null,
-			history: JSON.stringify(validated.history),
-			blockers: JSON.stringify(validated.blockers),
-		}).where(eq(schema.tasks.id, id))
 
 		await this.appendActivity({
 			agent: movedBy,
 			type: 'task_status_changed',
-			summary: `Task "${existing.title}" moved from ${existing.status} to ${newStatus}`,
-			details: { taskId: id, from: existing.status, to: newStatus, by: movedBy },
+			summary: `Task "${validated.title}" moved from ${validated.status} to ${newStatus}`,
+			details: { taskId: id, from: validated.status, to: newStatus, by: movedBy },
 		})
 
 		return validated
