@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { AgentsFileSchema } from '@questpie/autopilot-spec'
 import { WorkflowSchema } from '@questpie/autopilot-spec'
-import type { Schedule, Webhook } from '@questpie/autopilot-spec'
+import type { Schedule } from '@questpie/autopilot-spec'
 import { parse as parseYaml } from 'yaml'
 import { spawnAgent } from './agent'
 import { createApp } from './api'
@@ -13,7 +13,7 @@ import { GitManager } from './git/git-manager'
 import { Scheduler } from './scheduler'
 import { Watcher } from './watcher'
 import type { WatchEvent } from './watcher'
-import { WebhookServer, webhookHandlerRegistry } from './webhook'
+import { webhookHandlerRegistry } from './webhook'
 import { telegramWebhookHandler } from './webhook'
 import { advanceWorkflow, evaluateTransition } from './workflow'
 import { WorkflowLoader } from './workflow'
@@ -34,10 +34,8 @@ import { streamManagerFactory } from './session/stream'
 export interface OrchestratorOptions {
 	/** Absolute path to the company root directory on disk. */
 	companyRoot: string
-	/** Port for the incoming-webhook HTTP server (default `7777`). */
-	webhookPort?: number
-	/** Port for the read-only REST API server (default `7778`). */
-	apiPort?: number
+	/** Port for the unified HTTP server (default 7778). */
+	port?: number
 }
 
 /**
@@ -50,7 +48,6 @@ export interface OrchestratorOptions {
 export class Orchestrator {
 	private watcher: Watcher | null = null
 	private scheduler: Scheduler | null = null
-	private webhookServer: WebhookServer | null = null
 	private apiServer: ReturnType<typeof Bun.serve> | null = null
 	private gitManager: GitManager | null = null
 	private running = false
@@ -216,26 +213,7 @@ export class Orchestrator {
 		// 7. Register webhook handlers
 		webhookHandlerRegistry.register(telegramWebhookHandler)
 
-		// 8. Start webhook server
-		const port = this.options.webhookPort ?? 7777
-		this.webhookServer = new WebhookServer({
-			port,
-			companyRoot: root,
-			onWebhook: (webhook, payload) => this.handleWebhook(webhook, payload),
-		})
-		try {
-			await this.webhookServer.start()
-			logger.info('orchestrator', `webhook server started on port ${port}`)
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err)
-			if (msg.includes('EADDRINUSE') || msg.includes('in use')) {
-				logger.warn('orchestrator', `webhook port ${port} already in use — skipping (kill the other process or use --webhook-port)`)
-			} else {
-				logger.error('orchestrator', 'failed to start webhook server', { error: msg })
-			}
-		}
-
-		// 9a. Start Durable Streams server (session persistence)
+		// 8. Start Durable Streams server (session persistence)
 		try {
 			const { startDurableStreamServer } = await import('./session/durable')
 			await startDurableStreamServer(root)
@@ -245,8 +223,8 @@ export class Orchestrator {
 			})
 		}
 
-		// 9b. Start API server (Hono)
-		const apiPort = this.options.apiPort ?? 7778
+		// 9. Start unified HTTP server (API + webhooks + dashboard)
+		const apiPort = this.options.port ?? 7778
 		const authSettings = company.settings.auth
 		try {
 			const app = createApp({
@@ -256,13 +234,13 @@ export class Orchestrator {
 				port: apiPort,
 				fetch: app.fetch,
 			})
-			logger.info('orchestrator', `api server started on port ${apiPort}`)
+			logger.info('orchestrator', `server started on port ${apiPort}`)
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
 			if (msg.includes('EADDRINUSE') || msg.includes('in use')) {
-				logger.warn('orchestrator', `api port ${apiPort} already in use — skipping (kill the other process or use --api-port)`)
+				logger.warn('orchestrator', `port ${apiPort} already in use — skipping (kill the other process or use --port)`)
 			} else {
-				logger.error('orchestrator', 'failed to start api server', { error: msg })
+				logger.error('orchestrator', 'failed to start server', { error: msg })
 			}
 		}
 
@@ -343,15 +321,6 @@ export class Orchestrator {
 				logger.error('orchestrator', 'error stopping scheduler', { error: err instanceof Error ? err.message : String(err) })
 			}
 			this.scheduler = null
-		}
-
-		if (this.webhookServer) {
-			try {
-				this.webhookServer.stop()
-			} catch (err) {
-				logger.error('orchestrator', 'error stopping webhook server', { error: err instanceof Error ? err.message : String(err) })
-			}
-			this.webhookServer = null
 		}
 
 		if (this.apiServer) {
@@ -635,41 +604,6 @@ export class Orchestrator {
 			})
 		} catch (err) {
 			logger.error('orchestrator', `error handling schedule trigger (${schedule.id})`, { error: err instanceof Error ? err.message : String(err) })
-		}
-	}
-
-	private async handleWebhook(webhook: Webhook, payload: unknown): Promise<void> {
-		try {
-			logger.info('orchestrator', `webhook received: ${webhook.id} (agent: ${webhook.agent})`)
-
-			const { notifier } = await container.resolveAsync([notifierFactory])
-
-			// Dispatch to registered webhook handlers
-			if (webhookHandlerRegistry.has(webhook.id)) {
-				const result = await webhookHandlerRegistry.dispatch(webhook.id, payload, {
-					companyRoot: this.options.companyRoot,
-				})
-				if (result.handled) {
-					await notifier.notify({
-						type: 'alert',
-						title: `Webhook handled: ${webhook.id}`,
-						message: `Webhook ${webhook.id} routed to agent ${result.agentId ?? 'unknown'}`,
-						priority: 'normal',
-						agentId: result.agentId,
-					})
-				}
-				return
-			}
-
-			await notifier.notify({
-				type: 'alert',
-				title: `Webhook received: ${webhook.id}`,
-				message: `Webhook ${webhook.id} triggered for agent ${webhook.agent}`,
-				priority: webhook.action.priority === 'urgent' ? 'urgent' : 'normal',
-				agentId: webhook.agent,
-			})
-		} catch (err) {
-			logger.error('orchestrator', `error handling webhook (${webhook.id})`, { error: err instanceof Error ? err.message : String(err) })
 		}
 	}
 

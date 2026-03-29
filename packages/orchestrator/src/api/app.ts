@@ -51,6 +51,7 @@ import {
 	tasks,
 	teamHumans,
 	upload,
+	webhooks,
 } from './routes'
 
 export interface AppEnv {
@@ -151,7 +152,10 @@ export function createApp(config: AppConfig) {
 	// ── 3.6. IP Rate Limit ──────────────────────────────────────────────
 	app.use('*', ipRateLimit())
 
-	// ── 3.7. Artifact proxy (auth + reverse proxy) ──────────────────────
+	// ── 3.7. Webhooks (no auth — external services) ─────────────────────
+	app.route('/webhooks', webhooks)
+
+	// ── 3.8. Artifact proxy (auth + reverse proxy) ──────────────────────
 	app.use('/artifacts/*', artifactProxyAuth())
 	app.route('/artifacts', artifactProxy)
 

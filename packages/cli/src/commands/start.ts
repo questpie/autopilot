@@ -31,21 +31,20 @@ async function resolveDashboardDir(): Promise<string | null> {
 program.addCommand(
 	new Command('start')
 		.description('Start the Autopilot orchestrator + dashboard')
-		.option('-p, --port <port>', 'Webhook server port', '7777')
+		.option('-p, --port <port>', 'Server port', '7778')
 		.option('--no-dashboard', 'Skip starting the dashboard')
-		.option('--dashboard-port <port>', 'Dashboard port', '3000')
+		.option('--dashboard-port <port>', 'Dashboard dev server port', '3000')
 		.action(async (opts: { port: string; dashboard: boolean; dashboardPort: string }) => {
 			let dashboardProc: ChildProcess | null = null
 
 			try {
 				const root = await findCompanyRoot()
 				const port = Number.parseInt(opts.port, 10)
-				const apiPort = port + 1
 				const dashboardPort = Number.parseInt(opts.dashboardPort, 10)
 
 				const orchestrator = new Orchestrator({
 					companyRoot: root,
-					webhookPort: port,
+					port,
 				})
 
 				await orchestrator.start()
@@ -53,31 +52,35 @@ program.addCommand(
 				const company = await loadCompany(root)
 				const agents = await loadAgents(root)
 
-				// Start dashboard if not disabled
+				// Start dashboard — static build served by API server, dev server spawned only if no build
+				let dashboardBuilt = false
 				if (opts.dashboard) {
 					const dashDir = await resolveDashboardDir()
 					if (dashDir) {
-						const isBuilt = await access(join(dashDir, '.output', 'server', 'index.mjs')).then(() => true).catch(() => false)
-						const cmd = isBuilt ? 'node' : 'bun'
-						const args = isBuilt ? [join(dashDir, '.output', 'server', 'index.mjs')] : ['run', 'dev']
+						const hasViteBuild = await access(join(dashDir, 'dist', 'index.html')).then(() => true).catch(() => false)
+						const hasNitroBuild = await access(join(dashDir, '.output', 'public', 'index.html')).then(() => true).catch(() => false)
+						dashboardBuilt = hasViteBuild || hasNitroBuild
 
-						dashboardProc = spawn(cmd, args, {
-							cwd: dashDir,
-							stdio: 'pipe',
-							env: { ...process.env, PORT: String(dashboardPort) },
-						})
+						if (!dashboardBuilt) {
+							// No static build — spawn dev server with HMR
+							dashboardProc = spawn('bun', ['run', 'dev'], {
+								cwd: dashDir,
+								stdio: 'pipe',
+								env: { ...process.env, PORT: String(dashboardPort) },
+							})
 
-						dashboardProc.stderr?.on('data', (data: Buffer) => {
-							const line = data.toString().trim()
-							if (line) console.log(dim(`  [dashboard] ${line}`))
-						})
+							dashboardProc.stderr?.on('data', (data: Buffer) => {
+								const line = data.toString().trim()
+								if (line) console.log(dim(`  [dashboard] ${line}`))
+							})
 
-						dashboardProc.on('exit', (code) => {
-							if (code && code !== 0) {
-								console.log(warning(`Dashboard exited with code ${code}`))
-							}
-							dashboardProc = null
-						})
+							dashboardProc.on('exit', (code) => {
+								if (code && code !== 0) {
+									console.log(warning(`Dashboard exited with code ${code}`))
+								}
+								dashboardProc = null
+							})
+						}
 					} else {
 						console.log(dim('  Dashboard not found, skipping (use --no-dashboard to suppress)'))
 					}
@@ -87,20 +90,25 @@ program.addCommand(
 				console.log(brandHeader(`${company.name}  │  ${agents.length} agents  │  ${root}`))
 				console.log('')
 				console.log(dim('  Endpoints:'))
-				console.log(dim(`    Webhooks   http://localhost:${port}`))
-				console.log(dim(`    API        http://localhost:${apiPort}/api/status`))
-				console.log(dim(`    Files      http://localhost:${apiPort}/fs/`))
-				console.log(dim(`    Tasks      http://localhost:${apiPort}/api/tasks`))
-				console.log(dim(`    Agents     http://localhost:${apiPort}/api/agents`))
-				console.log(dim(`    Activity   http://localhost:${apiPort}/api/activity`))
-				if (opts.dashboard && dashboardProc) {
-					console.log(dim(`    Dashboard  http://localhost:${dashboardPort}`))
+				console.log(dim(`    Server     http://localhost:${port}`))
+				console.log(dim(`    API        http://localhost:${port}/api/status`))
+				console.log(dim(`    Webhooks   http://localhost:${port}/webhooks/`))
+				console.log(dim(`    Files      http://localhost:${port}/fs/`))
+				console.log(dim(`    Tasks      http://localhost:${port}/api/tasks`))
+				console.log(dim(`    Agents     http://localhost:${port}/api/agents`))
+				console.log(dim(`    Activity   http://localhost:${port}/api/activity`))
+				if (dashboardBuilt) {
+					console.log(dim(`    Dashboard  http://localhost:${port}`))
+				} else if (dashboardProc) {
+					console.log(dim(`    Dashboard  http://localhost:${dashboardPort} (dev)`))
 				}
 				console.log('')
 				console.log(separator())
 				console.log(`${dot('green')} ${success('Orchestrator is running.')}`)
-				if (dashboardProc) {
-					console.log(`${dot('green')} ${success('Dashboard is starting...')}`)
+				if (dashboardBuilt) {
+					console.log(`${dot('green')} ${success('Dashboard served at /')}`)
+				} else if (dashboardProc) {
+					console.log(`${dot('green')} ${success('Dashboard dev server starting...')}`)
 				}
 				console.log(dim('Press Ctrl+C to stop'))
 				console.log('')
