@@ -1,5 +1,6 @@
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { ResourceLinker } from '@/components/resource-linker'
+import { SessionReplay } from './session-replay'
 import { useTranslation } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { ArrowClockwiseIcon } from '@phosphor-icons/react'
@@ -149,12 +150,16 @@ export const MessageBubble = memo(function MessageBubble({
 					<MarkdownRenderer content={message.content} mode="inline" />
 				</div>
 
-				{/* Resource references */}
+				{/* D19: Session replay for session references, ResourceLinker for others */}
 				{message.references.length > 0 && (
-					<div className="mt-1 flex flex-wrap gap-1">
-						{message.references.map((ref) => (
-							<ResourceLinker key={ref} text={ref} className="text-xs" />
-						))}
+					<div className="mt-1">
+						{message.references.map((ref) =>
+							ref.startsWith('session-') ? (
+								<SessionReplay key={ref} sessionId={ref} />
+							) : (
+								<ResourceLinker key={ref} text={ref} className="text-xs" />
+							),
+						)}
 					</div>
 				)}
 
