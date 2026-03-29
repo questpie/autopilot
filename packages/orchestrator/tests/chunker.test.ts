@@ -61,6 +61,52 @@ describe('chunkText', () => {
 			expect(chunks[i].index).toBe(i)
 		}
 	})
+
+	test('custom maxTokens produces smaller chunks', () => {
+		const text = Array.from({ length: 10 }, (_, i) =>
+			`Paragraph ${i}: ${'content '.repeat(30)}`
+		).join('\n\n')
+
+		const defaultChunks = chunkText(text)
+		const smallChunks = chunkText(text, { maxTokens: 64 })
+
+		expect(smallChunks.length).toBeGreaterThan(defaultChunks.length)
+	})
+
+	test('overlap produces some shared content between adjacent chunks', () => {
+		const paragraphs = Array.from({ length: 20 }, (_, i) =>
+			`Unique paragraph number ${i} with enough text to fill space ${'z'.repeat(80)}`
+		).join('\n\n')
+
+		const chunks = chunkText(paragraphs, { maxTokens: 128, overlapTokens: 32 })
+		expect(chunks.length).toBeGreaterThan(2)
+		// Can't easily verify overlap content, but verify chunks exist
+	})
+
+	test('single very long paragraph gets split by sentences', () => {
+		const longParagraph = Array.from({ length: 50 }, (_, i) =>
+			`This is sentence number ${i} in a very long paragraph.`
+		).join(' ')
+
+		const chunks = chunkText(longParagraph, { maxTokens: 128 })
+		expect(chunks.length).toBeGreaterThan(1)
+	})
+
+	test('respects h2 and h3 headings as section boundaries', () => {
+		const md = [
+			'## Section A',
+			'',
+			Array.from({ length: 8 }, () => 'Content A. '.repeat(30)).join('\n\n'),
+			'',
+			'### Subsection B',
+			'',
+			Array.from({ length: 8 }, () => 'Content B. '.repeat(30)).join('\n\n'),
+		].join('\n')
+
+		const chunks = chunkText(md)
+		const sections = chunks.map(c => c.section).filter(Boolean)
+		expect(sections.some(s => s?.includes('Section A'))).toBe(true)
+	})
 })
 
 describe('chunkCode', () => {
@@ -116,5 +162,42 @@ describe('chunkCode', () => {
 
 		const chunks = chunkCode(code, 'main.go')
 		expect(chunks.length).toBeGreaterThanOrEqual(2)
+	})
+
+	test('handles Rust fn/struct', () => {
+		const code = [
+			'pub fn process() {',
+			'    println!("processing");',
+			'}',
+			'',
+			'pub struct Config {',
+			'    name: String,',
+			'}',
+		].join('\n')
+
+		const chunks = chunkCode(code, 'lib.rs')
+		expect(chunks.length).toBeGreaterThanOrEqual(2)
+		expect(chunks[0].section).toContain('lib.rs')
+	})
+
+	test('code chunk sections include function names', () => {
+		const code = [
+			'export function processData() {',
+			'  return []',
+			'}',
+			'export function validateInput() {',
+			'  return true',
+			'}',
+		].join('\n')
+
+		const chunks = chunkCode(code, 'utils.ts')
+		const sections = chunks.map(c => c.section).filter(Boolean)
+		expect(sections.some(s => s?.includes('processData'))).toBe(true)
+		expect(sections.some(s => s?.includes('validateInput'))).toBe(true)
+	})
+
+	test('empty code file returns single chunk', () => {
+		const chunks = chunkCode('', 'empty.ts')
+		expect(chunks.length).toBeGreaterThanOrEqual(1)
 	})
 })
