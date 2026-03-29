@@ -1,13 +1,15 @@
 import { useState } from "react"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { cn } from "@/lib/utils"
-import { CaretRightIcon, CheckCircleIcon, CircleNotchIcon } from "@phosphor-icons/react"
+import { ArrowClockwiseIcon, CaretRightIcon, CheckCircleIcon, CircleNotchIcon } from "@phosphor-icons/react"
 import type { StreamingState } from "./use-streaming-chat"
 
 interface StreamingMessageProps {
   agentId: string
   state: StreamingState
   compact?: boolean
+  /** D22: Retry callback for failed sessions. */
+  onRetry?: () => void
 }
 
 /** Generates a deterministic color from a string (for avatar backgrounds). */
@@ -33,7 +35,7 @@ function stringToColor(str: string): string {
  * Renders a streaming agent response with live text_delta rendering,
  * active tool call indicators, and a blinking cursor animation.
  */
-export function StreamingMessage({ agentId, state, compact = false }: StreamingMessageProps) {
+export function StreamingMessage({ agentId, state, compact = false, onRetry }: StreamingMessageProps) {
   const { isStreaming, streamedText, activeToolCalls, toolResults, error } = state
   const avatarColor = stringToColor(agentId)
   const initial = agentId.charAt(0).toUpperCase()
@@ -115,9 +117,28 @@ export function StreamingMessage({ agentId, state, compact = false }: StreamingM
           </div>
         )}
 
-        {/* Error */}
+        {/* D23: Queue indicator when streaming + tool calls are active */}
+        {isStreaming && activeToolCalls.length > 0 && streamedText && (
+          <div className="mt-1 text-[10px] text-muted-foreground/50">
+            Processing {activeToolCalls.length} tool call{activeToolCalls.length > 1 ? "s" : ""}...
+          </div>
+        )}
+
+        {/* D22: Error with retry */}
         {error && (
-          <div className="mt-1 text-[11px] text-destructive">{error}</div>
+          <div className="mt-1 flex items-center gap-2 text-[11px] text-destructive">
+            <span>{error}</span>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="flex items-center gap-1 text-primary/70 hover:text-primary"
+              >
+                <ArrowClockwiseIcon size={10} />
+                Retry
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

@@ -132,7 +132,26 @@ export function useStreamingChat(agentId: string | null) {
     setState((s) => ({ ...s, isStreaming: false }))
   }, [])
 
-  return { ...state, send, cancel }
+  // D22: Retry last message after error
+  const lastMessageRef = useRef<string | null>(null)
+  // Track last message inside send
+  const originalSend = send
+  const wrappedSend = useCallback(
+    (message: string) => {
+      lastMessageRef.current = message
+      return originalSend(message)
+    },
+    [originalSend],
+  )
+
+  const retry = useCallback(() => {
+    if (lastMessageRef.current && !state.isStreaming) {
+      setState(INITIAL_STATE)
+      wrappedSend(lastMessageRef.current)
+    }
+  }, [state.isStreaming, wrappedSend])
+
+  return { ...state, send: wrappedSend, cancel, retry }
 }
 
 function handleEvent(
