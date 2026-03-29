@@ -16,6 +16,15 @@ const config = defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  server: {
+    proxy: {
+      "/api": "http://localhost:7778",
+      "/webhooks": "http://localhost:7778",
+      "/streams": "http://localhost:7778",
+      "/artifacts": "http://localhost:7778",
+      "/fs": "http://localhost:7778",
+    },
+  },
 })
 
 export default config

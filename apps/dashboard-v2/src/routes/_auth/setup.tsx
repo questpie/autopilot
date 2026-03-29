@@ -13,7 +13,7 @@ import { WizardStep9 } from "@/features/setup/wizard-step-9"
 import { WizardDone } from "@/features/setup/wizard-done"
 import { AnimatePresence, m } from "framer-motion"
 import { useCallback, useState, useEffect } from "react"
-import { checkAuthServer } from "@/lib/auth.server"
+import { checkAuthServer } from "@/lib/auth.fn"
 
 export const Route = createFileRoute("/_auth/setup")({
   component: SetupPage,

@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, redirect, useMatches } from "@tanstack/react-router"
-import { checkAuthServer } from "@/lib/auth.server"
+import { checkAuthServer } from "@/lib/auth.fn"
 
 export const Route = createFileRoute("/_auth")({
   beforeLoad: async () => {
