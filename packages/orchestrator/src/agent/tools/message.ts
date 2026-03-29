@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import type { StorageBackend } from '../../fs/storage'
 import { createPin } from '../../fs/pins'
+import { container } from '../../container'
+import { dbFactory } from '../../db'
 import type { ToolDefinition, ToolContext, ToolResult } from '../tools'
 import { getIndexer } from './shared'
 
@@ -40,14 +42,17 @@ export function createMessageTool(storage: StorageBackend, companyRoot: string):
 
 				ctx.eventBus.emit({ type: 'message', channel: channel.id, from: ctx.agentId, content: args.content })
 
-				await createPin(companyRoot, {
-					type: 'info',
-					title: `Message from ${ctx.agentId}`,
-					content: args.content,
-					group: 'agents',
-					created_by: ctx.agentId,
-					metadata: { agent_id: targetAgentId, task_id: undefined },
-				})
+				try {
+					const { db } = await container.resolveAsync([dbFactory])
+					await createPin(db.db, {
+						type: 'info',
+						title: `Message from ${ctx.agentId}`,
+						content: args.content,
+						group: 'agents',
+						created_by: ctx.agentId,
+						metadata: { agent_id: targetAgentId, task_id: undefined },
+					})
+				} catch { /* pin creation is best-effort */ }
 
 				return { content: [{ type: 'text' as const, text: `Direct message sent to ${targetAgentId} in channel ${channel.id}` }] }
 			}
