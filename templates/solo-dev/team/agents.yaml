@@ -1,8 +1,7 @@
-# Provider defaults to claude-agent-sdk (Claude models).
-# To use OpenAI GPT models instead, set on any agent:
-#   provider: codex-sdk
-#   model: gpt-4o
-# Supported codex-sdk models: gpt-4o, gpt-4.1, o3, o4-mini
+# Provider: tanstack-ai with OpenRouter backend.
+# Supports any model on OpenRouter using provider/model naming
+# (e.g. anthropic/claude-sonnet-4-20250514, openai/gpt-4o).
+# Requires OPENROUTER_API_KEY env var.
 
 agents:
   - id: ceo

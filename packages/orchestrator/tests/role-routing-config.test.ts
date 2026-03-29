@@ -105,10 +105,10 @@ describe('D46: role prompt caching', () => {
 	test('loadRolePrompt parses frontmatter defaults', async () => {
 		await writeFile(
 			join(tmpRoot, 'team', 'roles', 'ops.md'),
-			'---\ndefault_tools:\n  - bash\n  - readFile\ndescription: Operations agent\n---\nDo ops.',
+			'---\ndefault_tools:\n  - bash\n  - read_file\ndescription: Operations agent\n---\nDo ops.',
 		)
 		const result = loadRolePrompt(tmpRoot, 'ops', { companyName: '', teamRoster: '' })
-		expect(result.defaults.tools).toEqual(['bash', 'readFile'])
+		expect(result.defaults.tools).toEqual(['bash', 'read_file'])
 		expect(result.defaults.description).toBe('Operations agent')
 	})
 })

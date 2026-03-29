@@ -14,7 +14,7 @@ settings:
   auto_assign: true
   require_approval: ["merge", "deploy", "spend", "publish"]
   max_concurrent_agents: 4
-  agent_provider: "claude-agent-sdk"
+  agent_provider: "tanstack-ai"
   agent_model: "claude-sonnet-4-6"
   budget:
     daily_token_limit: 2000000
@@ -25,8 +25,7 @@ settings:
     enabled: true
     provider: auto
   embeddings:
-    provider: none            # 'gemini' | 'multilingual-e5' | 'nomic' | 'none'
-    # fallback: multilingual-e5  # local fallback when primary unavailable
+    provider: openrouter       # always OpenRouter (uses OPENROUTER_API_KEY)
     dimensions: 768
 
 integrations: {}

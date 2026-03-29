@@ -313,7 +313,7 @@ describe('SessionStreamManager edge cases', () => {
 		manager.subscribe('s1', (c) => r1.push(c))
 		manager.subscribe('s1', (c) => r2.push(c))
 
-		manager.emit('s1', { at: Date.now(), type: 'tool_call', tool: 'readFile' })
+		manager.emit('s1', { at: Date.now(), type: 'tool_call', tool: 'read_file' })
 
 		expect(r1).toHaveLength(1)
 		expect(r2).toHaveLength(1)

@@ -177,7 +177,7 @@ describe('search_web tool', () => {
 
 	test('tool name is search_web', () => {
 		const tool = createSearchWebTool('/tmp')
-		expect(tool.name).toBe('search_web')
+		expect(tool.name).toBe('web_search')
 	})
 
 	test('tool schema validates correct input', () => {

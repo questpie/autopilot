@@ -90,7 +90,7 @@ export function createFileTools(ctx: FileToolContext): ToolDefinition[] {
 
 	// ── readFile ───────────────────────────────────────────────────────────
 	const readFile: ToolDefinition = {
-		name: 'readFile',
+		name: 'read_file',
 		description:
 			'Read a file from the project. Optionally specify offset (line number to start) and limit (number of lines).',
 		schema: z.object({
@@ -125,7 +125,7 @@ export function createFileTools(ctx: FileToolContext): ToolDefinition[] {
 
 	// ── writeFile ─────────────────────────────────────────────────────────
 	const writeFile: ToolDefinition = {
-		name: 'writeFile',
+		name: 'write_file',
 		description: 'Write content to a file. Creates parent directories if needed.',
 		schema: z.object({
 			path: z.string().describe('Relative path from project root'),
@@ -150,7 +150,7 @@ export function createFileTools(ctx: FileToolContext): ToolDefinition[] {
 
 	// ── editFile ──────────────────────────────────────────────────────────
 	const editFile: ToolDefinition = {
-		name: 'editFile',
+		name: 'edit_file',
 		description:
 			'Edit a file by replacing an exact string. Fails if old_string is not found or not unique (unless replace_all is true).',
 		schema: z.object({

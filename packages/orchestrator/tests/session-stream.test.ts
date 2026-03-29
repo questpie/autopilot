@@ -113,7 +113,7 @@ describe('SessionStreamManager', () => {
 		manager.subscribe('session-1', (chunk) => received.push(chunk))
 
 		manager.emit('session-1', makeChunk('thinking', 'analyzing...'))
-		manager.emit('session-1', makeChunk('tool_call', 'readFile'))
+		manager.emit('session-1', makeChunk('tool_call', 'read_file'))
 		manager.emit('session-1', makeChunk('text', 'result'))
 		manager.emit('session-1', makeChunk('status', 'done'))
 

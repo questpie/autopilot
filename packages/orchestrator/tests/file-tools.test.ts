@@ -59,15 +59,15 @@ afterAll(async () => {
 
 // ─── readFile ─────────────────────────────────────────────────────────────────
 
-describe('readFile', () => {
+describe('read_file', () => {
 	test('reads a file', async () => {
-		const result = await exec('readFile', { path: 'hello.txt' })
+		const result = await exec('read_file', { path: 'hello.txt' })
 		expect(result.isError).toBeUndefined()
 		expect(getText(result)).toBe('Hello, world!')
 	})
 
 	test('reads with offset and limit', async () => {
-		const result = await exec('readFile', {
+		const result = await exec('read_file', {
 			path: 'multiline.txt',
 			offset: 1,
 			limit: 3,
@@ -76,18 +76,18 @@ describe('readFile', () => {
 	})
 
 	test('reads nested file', async () => {
-		const result = await exec('readFile', { path: 'sub/nested.ts' })
+		const result = await exec('read_file', { path: 'sub/nested.ts' })
 		expect(getText(result)).toBe('export const x = 1')
 	})
 
 	test('returns error for missing file', async () => {
-		const result = await exec('readFile', { path: 'nonexistent.txt' })
+		const result = await exec('read_file', { path: 'nonexistent.txt' })
 		expect(result.isError).toBe(true)
 		expect(getText(result)).toContain('File not found')
 	})
 
 	test('blocks path traversal', async () => {
-		const result = await exec('readFile', {
+		const result = await exec('read_file', {
 			path: '../../../etc/passwd',
 		})
 		expect(result.isError).toBe(true)
@@ -95,19 +95,19 @@ describe('readFile', () => {
 	})
 
 	test('blocks .git/config', async () => {
-		const result = await exec('readFile', { path: '.git/config' })
+		const result = await exec('read_file', { path: '.git/config' })
 		expect(result.isError).toBe(true)
 		expect(getText(result)).toContain('Access denied')
 	})
 
 	test('blocks .auth paths', async () => {
-		const result = await exec('readFile', { path: '.auth/auth.db' })
+		const result = await exec('read_file', { path: '.auth/auth.db' })
 		expect(result.isError).toBe(true)
 		expect(getText(result)).toContain('Access denied')
 	})
 
 	test('blocks secrets/.master-key', async () => {
-		const result = await exec('readFile', {
+		const result = await exec('read_file', {
 			path: 'secrets/.master-key',
 		})
 		expect(result.isError).toBe(true)
@@ -115,13 +115,13 @@ describe('readFile', () => {
 	})
 
 	test('blocks .data paths', async () => {
-		const result = await exec('readFile', { path: '.data/tasks.db' })
+		const result = await exec('read_file', { path: '.data/tasks.db' })
 		expect(result.isError).toBe(true)
 		expect(getText(result)).toContain('Access denied')
 	})
 
 	test('reads empty content with offset beyond file', async () => {
-		const result = await exec('readFile', {
+		const result = await exec('read_file', {
 			path: 'hello.txt',
 			offset: 9999,
 		})
@@ -132,9 +132,9 @@ describe('readFile', () => {
 
 // ─── writeFile ────────────────────────────────────────────────────────────────
 
-describe('writeFile', () => {
+describe('write_file', () => {
 	test('writes a new file', async () => {
-		const result = await exec('writeFile', {
+		const result = await exec('write_file', {
 			path: 'new-file.txt',
 			content: 'new content',
 		})
@@ -147,7 +147,7 @@ describe('writeFile', () => {
 	})
 
 	test('creates parent directories', async () => {
-		const result = await exec('writeFile', {
+		const result = await exec('write_file', {
 			path: 'deep/nested/dir/file.txt',
 			content: 'deep content',
 		})
@@ -158,7 +158,7 @@ describe('writeFile', () => {
 	})
 
 	test('writes empty content', async () => {
-		const result = await exec('writeFile', {
+		const result = await exec('write_file', {
 			path: 'empty.txt',
 			content: '',
 		})
@@ -167,7 +167,7 @@ describe('writeFile', () => {
 	})
 
 	test('blocks path traversal', async () => {
-		const result = await exec('writeFile', {
+		const result = await exec('write_file', {
 			path: '../../../tmp/evil.txt',
 			content: 'hacked',
 		})
@@ -176,7 +176,7 @@ describe('writeFile', () => {
 	})
 
 	test('blocks .git paths', async () => {
-		const result = await exec('writeFile', {
+		const result = await exec('write_file', {
 			path: '.git/config',
 			content: 'overwritten',
 		})
@@ -185,7 +185,7 @@ describe('writeFile', () => {
 	})
 
 	test('blocks .auth paths', async () => {
-		const result = await exec('writeFile', {
+		const result = await exec('write_file', {
 			path: '.auth/keys.yaml',
 			content: 'stolen',
 		})
@@ -194,7 +194,7 @@ describe('writeFile', () => {
 	})
 
 	test('blocks secrets/.master-key', async () => {
-		const result = await exec('writeFile', {
+		const result = await exec('write_file', {
 			path: 'secrets/.master-key',
 			content: 'overwritten',
 		})
@@ -205,12 +205,12 @@ describe('writeFile', () => {
 
 // ─── editFile ─────────────────────────────────────────────────────────────────
 
-describe('editFile', () => {
+describe('edit_file', () => {
 	test('replaces a unique occurrence', async () => {
 		// Seed a file for this test
 		await fsWriteFile(join(companyRoot, 'edit-target.txt'), 'foo bar baz')
 
-		const result = await exec('editFile', {
+		const result = await exec('edit_file', {
 			path: 'edit-target.txt',
 			old_string: 'bar',
 			new_string: 'BAR',
@@ -223,7 +223,7 @@ describe('editFile', () => {
 	})
 
 	test('fails when old_string not found', async () => {
-		const result = await exec('editFile', {
+		const result = await exec('edit_file', {
 			path: 'hello.txt',
 			old_string: 'NONEXISTENT',
 			new_string: 'replacement',
@@ -233,7 +233,7 @@ describe('editFile', () => {
 	})
 
 	test('fails when old_string is not unique (without replace_all)', async () => {
-		const result = await exec('editFile', {
+		const result = await exec('edit_file', {
 			path: 'editable.txt',
 			old_string: 'beta',
 			new_string: 'BETA',
@@ -249,7 +249,7 @@ describe('editFile', () => {
 			'alpha beta gamma beta delta',
 		)
 
-		const result = await exec('editFile', {
+		const result = await exec('edit_file', {
 			path: 'editable.txt',
 			old_string: 'beta',
 			new_string: 'BETA',
@@ -263,7 +263,7 @@ describe('editFile', () => {
 	})
 
 	test('returns error for missing file', async () => {
-		const result = await exec('editFile', {
+		const result = await exec('edit_file', {
 			path: 'no-such-file.txt',
 			old_string: 'a',
 			new_string: 'b',
@@ -273,7 +273,7 @@ describe('editFile', () => {
 	})
 
 	test('blocks path traversal', async () => {
-		const result = await exec('editFile', {
+		const result = await exec('edit_file', {
 			path: '../../../etc/hosts',
 			old_string: 'localhost',
 			new_string: 'evil',
@@ -283,7 +283,7 @@ describe('editFile', () => {
 	})
 
 	test('blocks .git paths', async () => {
-		const result = await exec('editFile', {
+		const result = await exec('edit_file', {
 			path: '.git/config',
 			old_string: 'a',
 			new_string: 'b',
@@ -293,7 +293,7 @@ describe('editFile', () => {
 	})
 
 	test('blocks .auth paths', async () => {
-		const result = await exec('editFile', {
+		const result = await exec('edit_file', {
 			path: '.auth/secrets.yaml',
 			old_string: 'a',
 			new_string: 'b',
@@ -471,7 +471,7 @@ describe('D3: symlink security', () => {
 			return
 		}
 
-		const result = await exec('readFile', { path: 'evil-link' })
+		const result = await exec('read_file', { path: 'evil-link' })
 		expect(result.isError).toBe(true)
 		expect(getText(result)).toContain('symlink')
 	})
@@ -485,7 +485,7 @@ describe('D3: symlink security', () => {
 			return
 		}
 
-		const result = await exec('readFile', { path: 'safe-link' })
+		const result = await exec('read_file', { path: 'safe-link' })
 		expect(result.isError).toBeUndefined()
 		expect(getText(result)).toBe('Hello, world!')
 	})
@@ -644,19 +644,19 @@ describe('scope enforcement', () => {
 	})
 
 	test('readFile allowed within scope', async () => {
-		const result = await scopedExec('readFile', { path: 'sub/nested.ts' })
+		const result = await scopedExec('read_file', { path: 'sub/nested.ts' })
 		expect(result.isError).toBeUndefined()
 		expect(getText(result)).toContain('export')
 	})
 
 	test('readFile denied outside scope', async () => {
-		const result = await scopedExec('readFile', { path: 'hello.txt' })
+		const result = await scopedExec('read_file', { path: 'hello.txt' })
 		expect(result.isError).toBe(true)
 		expect(getText(result)).toContain('not allowed by agent scope')
 	})
 
 	test('writeFile denied outside scope', async () => {
-		const result = await scopedExec('writeFile', {
+		const result = await scopedExec('write_file', {
 			path: 'hello.txt',
 			content: 'overwrite',
 		})
@@ -665,7 +665,7 @@ describe('scope enforcement', () => {
 	})
 
 	test('writeFile allowed within scope', async () => {
-		const result = await scopedExec('writeFile', {
+		const result = await scopedExec('write_file', {
 			path: 'sub/new-scoped.txt',
 			content: 'scoped write',
 		})

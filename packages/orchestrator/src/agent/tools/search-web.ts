@@ -12,7 +12,7 @@ import type { ToolDefinition, ToolContext, ToolResult } from '../tools'
  */
 export function createSearchWebTool(_companyRoot: string): ToolDefinition {
 	return {
-		name: 'search_web',
+		name: 'web_search',
 		description: 'Search the web for current information. Returns search results with titles, URLs, and content snippets.',
 		schema: z.object({
 			query: z.string().describe('Search query'),
