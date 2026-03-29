@@ -140,4 +140,34 @@ describe('Notifier', () => {
 		).resolves.toBeUndefined()
 		expect(errorSpy).toHaveBeenCalledTimes(1)
 	})
+
+	it('handles notification without agentId (defaults to system)', async () => {
+		await notifier.notify({
+			type: 'alert',
+			title: 'System alert',
+			message: 'No agent',
+			priority: 'normal',
+		})
+		expect(mockStorage.activityCalls).toHaveLength(1)
+		expect(mockStorage.activityCalls[0]!.agent).toBe('orchestrator')
+	})
+
+	it('multiple notifications accumulate in activity', async () => {
+		await notifier.notify({ type: 'alert', title: 'A', message: 'a', priority: 'normal' })
+		await notifier.notify({ type: 'alert', title: 'B', message: 'b', priority: 'normal' })
+		await notifier.notify({ type: 'alert', title: 'C', message: 'c', priority: 'normal' })
+		expect(mockStorage.activityCalls).toHaveLength(3)
+	})
+
+	it('low priority notification has no prefix', async () => {
+		await notifier.notify({
+			type: 'alert',
+			title: 'Low prio',
+			message: 'quiet',
+			priority: 'low',
+		})
+		const logged = (logSpy.mock.calls[0] as string[]).join(' ')
+		expect(logged).not.toContain('!!')
+		expect(logged).toContain('notification')
+	})
 })
