@@ -79,4 +79,72 @@ describe('yaml', () => {
 		const result = await readYamlUnsafe(filePath)
 		expect(result).toEqual({ nested: true })
 	})
+
+	it('throws on non-existent file (readYaml)', async () => {
+		const ctx = await createTestCompany()
+		root = ctx.root
+		cleanup = ctx.cleanup
+
+		const schema = z.object({ x: z.string() })
+		expect(readYaml(join(root, 'ghost.yaml'), schema)).rejects.toThrow()
+	})
+
+	it('throws on non-existent file (readYamlUnsafe)', async () => {
+		const ctx = await createTestCompany()
+		root = ctx.root
+		cleanup = ctx.cleanup
+
+		expect(readYamlUnsafe(join(root, 'ghost.yaml'))).rejects.toThrow()
+	})
+
+	it('handles unicode content', async () => {
+		const ctx = await createTestCompany()
+		root = ctx.root
+		cleanup = ctx.cleanup
+
+		const data = { name: 'Ján Ščťžý', emoji: '🚀✨', desc: 'čeština a slovenčina' }
+		const filePath = join(root, 'unicode.yaml')
+		await writeYaml(filePath, data)
+
+		const result = await readYamlUnsafe(filePath)
+		expect(result).toEqual(data)
+	})
+
+	it('preserves arrays and nested objects', async () => {
+		const ctx = await createTestCompany()
+		root = ctx.root
+		cleanup = ctx.cleanup
+
+		const data = {
+			agents: [
+				{ id: 'dev', tools: ['bash', 'read_file'] },
+				{ id: 'ops', tools: ['deploy'] },
+			],
+			settings: { nested: { deep: { value: 42 } } },
+		}
+		const filePath = join(root, 'complex.yaml')
+		await writeYaml(filePath, data)
+
+		const result = await readYamlUnsafe(filePath)
+		expect(result).toEqual(data)
+	})
+
+	it('readYaml applies schema defaults', async () => {
+		const ctx = await createTestCompany()
+		root = ctx.root
+		cleanup = ctx.cleanup
+
+		const schema = z.object({
+			name: z.string(),
+			count: z.number().default(0),
+			tags: z.array(z.string()).default([]),
+		})
+		const filePath = join(root, 'defaults.yaml')
+		await writeYaml(filePath, { name: 'test' })
+
+		const result = await readYaml(filePath, schema)
+		expect(result.name).toBe('test')
+		expect(result.count).toBe(0)
+		expect(result.tags).toEqual([])
+	})
 })
