@@ -1,6 +1,7 @@
+import { useState } from "react"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { cn } from "@/lib/utils"
-import { CircleNotchIcon } from "@phosphor-icons/react"
+import { CaretRightIcon, CheckCircleIcon, CircleNotchIcon } from "@phosphor-icons/react"
 import type { StreamingState } from "./use-streaming-chat"
 
 interface StreamingMessageProps {
@@ -33,12 +34,12 @@ function stringToColor(str: string): string {
  * active tool call indicators, and a blinking cursor animation.
  */
 export function StreamingMessage({ agentId, state, compact = false }: StreamingMessageProps) {
-  const { isStreaming, streamedText, activeToolCalls, error } = state
+  const { isStreaming, streamedText, activeToolCalls, toolResults, error } = state
   const avatarColor = stringToColor(agentId)
   const initial = agentId.charAt(0).toUpperCase()
 
   // Don't render if nothing to show
-  if (!isStreaming && !streamedText && !error) return null
+  if (!isStreaming && !streamedText && !error && toolResults.length === 0) return null
 
   return (
     <div className={cn("group flex gap-2.5 px-4 pt-2", compact && "px-3")}>
@@ -77,16 +78,30 @@ export function StreamingMessage({ agentId, state, compact = false }: StreamingM
           </div>
         )}
 
-        {/* Active tool calls */}
+        {/* D14: Completed tool results (collapsible) */}
+        {toolResults.length > 0 && (
+          <div className="mt-1.5 space-y-1">
+            {toolResults.map((tr, i) => (
+              <ToolResultItem key={`${tr.tool}-${i}`} tool={tr.tool} content={tr.content} />
+            ))}
+          </div>
+        )}
+
+        {/* D14: Active tool calls (spinner while running) */}
         {activeToolCalls.length > 0 && (
           <div className="mt-1 space-y-1">
             {activeToolCalls.map((tc, i) => (
               <div
                 key={`${tc.tool}-${i}`}
-                className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                className="flex items-center gap-1.5 rounded border border-border/50 bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground"
               >
-                <CircleNotchIcon size={12} className="animate-spin text-primary/50" />
+                <CircleNotchIcon size={12} className="shrink-0 animate-spin text-primary/50" />
                 <span className="font-mono">{tc.tool}</span>
+                {tc.params && Object.keys(tc.params).length > 0 && (
+                  <span className="truncate text-muted-foreground/50">
+                    {Object.entries(tc.params).map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ').slice(0, 60)}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -105,6 +120,42 @@ export function StreamingMessage({ agentId, state, compact = false }: StreamingM
           <div className="mt-1 text-[11px] text-destructive">{error}</div>
         )}
       </div>
+    </div>
+  )
+}
+
+/** D14: Collapsible tool result item — shows tool name + expand/collapse for result content. */
+function ToolResultItem({ tool, content }: { tool: string; content: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const preview = content.length > 80 ? `${content.slice(0, 80)}...` : content
+
+  return (
+    <div className="rounded border border-border/50 bg-muted/20 text-[11px]">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-muted-foreground hover:text-foreground"
+      >
+        <CheckCircleIcon size={12} className="shrink-0 text-green-500/70" />
+        <span className="font-mono font-medium">{tool}</span>
+        <CaretRightIcon
+          size={10}
+          className={cn("ml-auto shrink-0 transition-transform", expanded && "rotate-90")}
+        />
+      </button>
+      {expanded ? (
+        <div className="border-t border-border/30 px-2 py-1.5">
+          <pre className="max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-muted-foreground">
+            {content}
+          </pre>
+        </div>
+      ) : (
+        content && (
+          <div className="border-t border-border/30 px-2 py-1 text-muted-foreground/60">
+            {preview}
+          </div>
+        )
+      )}
     </div>
   )
 }
