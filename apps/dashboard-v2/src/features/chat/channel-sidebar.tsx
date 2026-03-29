@@ -1,30 +1,20 @@
-import { useState, useMemo, useCallback, useEffect, memo } from "react"
-import { Link } from "@tanstack/react-router"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import {
-  HashIcon,
-  ListChecksIcon,
-  CircleIcon,
   PlusIcon,
-  CaretDownIcon,
   MagnifyingGlassIcon,
-  CircleNotchIcon,
-  AtIcon,
 } from "@phosphor-icons/react"
 import { useTranslation } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
+import { CategoryHeader } from "./sidebar-category"
+import {
+  AgentChannelItem,
+  GroupChannelItem,
+  TaskChannelItem,
+  type Channel,
+} from "./sidebar-channel-item"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface Channel {
-  id: string
-  name: string
-  type: "group" | "direct" | "broadcast"
-  description?: string
-  metadata?: Record<string, unknown>
-  updated_at?: string
-}
 
 interface ChannelSidebarProps {
   channels: Channel[]
@@ -62,189 +52,6 @@ function saveCollapsed(state: Record<string, boolean>) {
     // silent
   }
 }
-
-// ---------------------------------------------------------------------------
-// Category header
-// ---------------------------------------------------------------------------
-
-const CategoryHeader = memo(function CategoryHeader({
-  label,
-  collapsed,
-  categoryKey,
-  onToggleCategory,
-  action,
-}: {
-  label: string
-  collapsed: boolean
-  categoryKey: string
-  onToggleCategory: (key: string) => void
-  action?: React.ReactNode
-}) {
-  const handleToggle = useCallback(() => {
-    onToggleCategory(categoryKey)
-  }, [onToggleCategory, categoryKey])
-
-  return (
-    <div className="group flex items-center px-2 pt-4 pb-0.5">
-      <button
-        type="button"
-        onClick={handleToggle}
-        className="flex flex-1 items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <CaretDownIcon
-          size={10}
-          className={cn(
-            "shrink-0 transition-transform",
-            collapsed && "-rotate-90",
-          )}
-        />
-        {label}
-      </button>
-      {action && (
-        <span className="opacity-0 transition-opacity group-hover:opacity-100">
-          {action}
-        </span>
-      )}
-    </div>
-  )
-})
-
-// ---------------------------------------------------------------------------
-// Channel items
-// ---------------------------------------------------------------------------
-
-const AgentChannelItem = memo(function AgentChannelItem({
-  channel,
-  isActive,
-  isWorking,
-}: {
-  channel: Channel
-  isActive: boolean
-  isWorking: boolean
-}) {
-  return (
-    <Link
-      to="/chat/$channelId"
-      params={{ channelId: channel.id }}
-      className={cn(
-        "group flex items-center gap-2 rounded-sm px-2 py-1 text-sm transition-colors",
-        isActive
-          ? "bg-primary/10 text-foreground"
-          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-      )}
-    >
-      {/* @ prefix */}
-      <AtIcon size={14} className="shrink-0 text-muted-foreground/60" />
-
-      {/* Name */}
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate font-heading text-xs",
-          !!channel.metadata?.unread && "font-semibold text-foreground",
-        )}
-      >
-        {channel.name}
-      </span>
-
-      {/* Unread badge */}
-      {typeof channel.metadata?.unread === "number" && channel.metadata.unread > 0 ? (
-        <span className="shrink-0 rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
-          {channel.metadata.unread}
-        </span>
-      ) : null}
-
-      {/* Status dot */}
-      <span className="shrink-0">
-        {isWorking ? (
-          <CircleNotchIcon size={10} className="animate-spin text-yellow-400" />
-        ) : (
-          <CircleIcon
-            size={8}
-            weight="fill"
-            className="text-green-500/50"
-          />
-        )}
-      </span>
-    </Link>
-  )
-})
-
-const GroupChannelItem = memo(function GroupChannelItem({
-  channel,
-  isActive,
-}: {
-  channel: Channel
-  isActive: boolean
-}) {
-  const unreadCount =
-    typeof channel.metadata?.unread === "number"
-      ? channel.metadata.unread
-      : 0
-
-  return (
-    <Link
-      to="/chat/$channelId"
-      params={{ channelId: channel.id }}
-      className={cn(
-        "group flex items-center gap-2 rounded-sm px-2 py-1 text-sm transition-colors",
-        isActive
-          ? "bg-primary/10 text-foreground"
-          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-      )}
-    >
-      <HashIcon size={14} className="shrink-0 text-muted-foreground/60" />
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate font-heading text-xs",
-          unreadCount > 0 && "font-semibold text-foreground",
-        )}
-      >
-        {channel.name}
-      </span>
-      {unreadCount > 0 ? (
-        <span className="shrink-0 rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
-          {unreadCount}
-        </span>
-      ) : null}
-    </Link>
-  )
-})
-
-const TaskChannelItem = memo(function TaskChannelItem({
-  channel,
-  isActive,
-}: {
-  channel: Channel
-  isActive: boolean
-}) {
-  // Derive status from metadata if available
-  const status = (channel.metadata?.status as string) ?? "unknown"
-  const statusColor =
-    status === "done" || status === "completed"
-      ? "text-green-500"
-      : status === "in_progress"
-        ? "text-yellow-400"
-        : "text-muted-foreground/40"
-
-  return (
-    <Link
-      to="/chat/$channelId"
-      params={{ channelId: channel.id }}
-      className={cn(
-        "group flex items-center gap-2 rounded-sm px-2 py-1 text-sm transition-colors",
-        isActive
-          ? "bg-primary/10 text-foreground"
-          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-      )}
-    >
-      <ListChecksIcon size={14} className="shrink-0 text-muted-foreground/60" />
-      <span className="min-w-0 flex-1 truncate font-heading text-xs">
-        {channel.name}
-      </span>
-      <CircleIcon size={8} weight="fill" className={cn("shrink-0", statusColor)} />
-    </Link>
-  )
-})
 
 // ---------------------------------------------------------------------------
 // Main sidebar component

@@ -1,5 +1,5 @@
-import { useRef, useCallback, useEffect, useState, type KeyboardEvent } from "react"
-import { PaperPlaneTiltIcon, XIcon } from "@phosphor-icons/react"
+import { useRef, useCallback, useEffect, useState } from "react"
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/lib/i18n"
 import { useChatUIStore } from "../chat-ui.store"
@@ -7,8 +7,11 @@ import { cn } from "@/lib/utils"
 import { useAutocomplete } from "./use-autocomplete"
 import { usePasteHandler } from "./use-paste-handler"
 import { useMessageSend } from "./use-message-send"
+import { useInputKeyboard } from "./use-input-keyboard"
 import { AutocompletePopup } from "./autocomplete-popup"
 import { UploadPreviewBar, FileAttachButton } from "./upload-controls"
+import { ReplyBar } from "./reply-bar"
+import { QueuedMessageIndicator } from "./queued-message-indicator"
 import { useBroadcastTyping } from "../use-broadcast-typing"
 
 interface MessageInputProps {
@@ -81,13 +84,18 @@ export function MessageInput({
     }
   }, [uploadRef, upload])
 
-  // D23: Clear queued indicator when streaming ends
+  // D23: Clear queued message when streaming ends
+  const prevIsStreaming = useRef(isStreaming)
   useEffect(() => {
-    if (!isStreaming) {
+    if (prevIsStreaming.current && !isStreaming) {
       setQueuedMessage(null)
       if (queueTimerRef.current) clearTimeout(queueTimerRef.current)
     }
+    prevIsStreaming.current = isStreaming
   }, [isStreaming])
+
+  // D23: Derive effective queued message — only show when streaming
+  const effectiveQueuedMessage = isStreaming ? queuedMessage : null
 
   // Clean up timer on unmount
   useEffect(() => {
@@ -143,37 +151,12 @@ export function MessageInput({
     }
   }, [draft, isStreaming, activeSessionId, onStreamingSend, clearDraft, channelId, handleSend])
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (autocompleteMode !== "none") {
-        if (e.key === "ArrowUp") {
-          e.preventDefault()
-          setAutocompleteIndex((prev) => Math.max(0, prev - 1))
-          return
-        }
-        if (e.key === "ArrowDown") {
-          e.preventDefault()
-          setAutocompleteIndex((prev) => prev + 1)
-          return
-        }
-        if (e.key === "Escape") {
-          e.preventDefault()
-          dismissAutocomplete()
-          return
-        }
-        if (e.key === "Tab" || e.key === "Enter") {
-          e.preventDefault()
-          return
-        }
-      }
-
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault()
-        handleSendOrSteer()
-      }
-    },
-    [autocompleteMode, handleSendOrSteer, setAutocompleteIndex, dismissAutocomplete],
-  )
+  const { handleKeyDown } = useInputKeyboard({
+    autocompleteMode,
+    setAutocompleteIndex,
+    dismissAutocomplete,
+    onSend: handleSendOrSteer,
+  })
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault()
@@ -183,24 +166,7 @@ export function MessageInput({
     <div className="border-t border-border">
       {/* Reply bar */}
       {replyingTo && (
-        <div className="flex items-center gap-2 border-b border-border bg-muted/20 px-3 py-1.5">
-          <div className="min-w-0 flex-1 border-l-2 border-primary/50 pl-2">
-            <span className="text-[11px] font-semibold text-foreground/80">
-              Replying to {replyingTo.senderName}
-            </span>
-            <p className="truncate text-[11px] text-muted-foreground/70">
-              {replyingTo.content.split("\n")[0].slice(0, 100)}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={clearReplyingTo}
-            className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-            title="Cancel reply"
-          >
-            <XIcon size={12} />
-          </button>
-        </div>
+        <ReplyBar replyingTo={replyingTo} onCancel={clearReplyingTo} />
       )}
 
       {/* D16: Steering indicator */}
@@ -302,11 +268,8 @@ export function MessageInput({
       </div>
 
       {/* D23: Queue depth indicator — shown after steering while agent is busy */}
-      {queuedMessage && isStreaming && (
-        <div className="flex items-center gap-1.5 border-t border-border px-3 py-1 text-[10px] text-muted-foreground animate-in fade-in slide-in-from-top-1 duration-200">
-          <span className="inline-block size-1.5 animate-pulse rounded-full bg-amber-500/70" />
-          Message queued — agent is working...
-        </div>
+      {effectiveQueuedMessage && (
+        <QueuedMessageIndicator message={effectiveQueuedMessage} />
       )}
     </div>
   )

@@ -1,9 +1,6 @@
-import { useRef, useEffect, useState, useMemo, useCallback, memo } from "react"
-import { useInfiniteQuery } from "@tanstack/react-query"
+import { useRef, useEffect, useState, useCallback, memo } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { ArrowDownIcon } from "@phosphor-icons/react"
 import type { Message } from "./chat.types"
-import { messagesInfiniteQuery } from "./chat.queries"
 import { MessageBlock } from "./message-block"
 import { DayDivider } from "./day-divider"
 import { StreamingMessage } from "./streaming-message"
@@ -11,65 +8,11 @@ import { TypingIndicator } from "./typing-indicator"
 import { InlineSessionPreview } from "./inline-session-preview"
 import { ConversationSkeleton } from "./chat-skeletons"
 import { ConversationEmpty } from "./chat-empty-states"
+import { ScrollToBottomButton } from "./scroll-to-bottom-button"
 import { cn } from "@/lib/utils"
 import { useChatUIStore } from "./chat-ui.store"
+import { useConversationData, estimateSize } from "./use-conversation-data"
 import type { StreamingState } from "./use-streaming-chat"
-
-interface MessageGroup {
-  type: "day-divider" | "message"
-  date?: Date
-  message?: Message
-  isGroupStart?: boolean
-}
-
-/**
- * Groups messages by day and by consecutive sender within 5 minutes.
- */
-function groupMessages(messages: Message[]): MessageGroup[] {
-  const groups: MessageGroup[] = []
-  let lastDate: string | null = null
-  let lastFrom: string | null = null
-  let lastTime: number | null = null
-
-  const FIVE_MINUTES = 5 * 60 * 1000
-
-  for (const msg of messages) {
-    const msgDate = new Date(msg.at)
-    const dateKey = msgDate.toDateString()
-
-    // Day divider
-    if (dateKey !== lastDate) {
-      groups.push({ type: "day-divider", date: msgDate })
-      lastDate = dateKey
-      lastFrom = null
-      lastTime = null
-    }
-
-    // Check if same sender within 5 min
-    const isSameSender = msg.from === lastFrom
-    const isWithinWindow =
-      lastTime !== null && msgDate.getTime() - lastTime < FIVE_MINUTES
-    const isGroupStart = !isSameSender || !isWithinWindow || msg.from === "system"
-
-    groups.push({
-      type: "message",
-      message: msg,
-      isGroupStart,
-    })
-
-    lastFrom = msg.from
-    lastTime = msgDate.getTime()
-  }
-
-  return groups
-}
-
-/** Estimate row height: day dividers are small, group-start messages taller. */
-function estimateSize(group: MessageGroup): number {
-  if (group.type === "day-divider") return 40
-  if (group.isGroupStart) return 72
-  return 32
-}
 
 interface ConversationProps {
   channelId: string
@@ -85,6 +28,7 @@ interface ConversationProps {
 }
 
 export function Conversation({ channelId, compact = false, streaming, typingAgents, typingUsers, onWatchLive }: ConversationProps) {
+  "use no memo"
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   // D18: Track which session is being previewed inline
@@ -94,56 +38,16 @@ export function Conversation({ channelId, compact = false, streaming, typingAgen
   const setReplyingTo = useChatUIStore((s) => s.setReplyingTo)
   const openThread = useChatUIStore((s) => s.openThread)
 
-  // Infinite query for cursor-based pagination
   const {
-    data,
+    messages,
+    groups: grouped,
+    messageMap,
+    threadStats,
     isLoading,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useInfiniteQuery(messagesInfiniteQuery(channelId))
-
-  // Flatten all pages into a single message array (oldest first)
-  const messages = useMemo(() => {
-    if (!data?.pages) return [] as Message[]
-    // Pages are fetched newest-first via "before" cursor; reverse to get chronological order
-    const allPages = [...data.pages].reverse()
-    const flat: Message[] = []
-    for (const page of allPages) {
-      for (const msg of page as Message[]) {
-        flat.push(msg)
-      }
-    }
-    return flat
-  }, [data])
-
-  const grouped = useMemo(() => groupMessages(messages), [messages])
-
-  // Build lookup map: messageId -> Message (for reply references)
-  const messageMap = useMemo(() => {
-    const map = new Map<string, Message>()
-    for (const msg of messages) {
-      map.set(msg.id, msg)
-    }
-    return map
-  }, [messages])
-
-  // Build thread reply counts: parentMessageId -> { count, lastAt }
-  const threadStats = useMemo(() => {
-    const stats = new Map<string, { count: number; lastAt: string }>()
-    for (const msg of messages) {
-      if (msg.thread_id) {
-        const existing = stats.get(msg.thread_id)
-        if (existing) {
-          existing.count++
-          if (msg.at > existing.lastAt) existing.lastAt = msg.at
-        } else {
-          stats.set(msg.thread_id, { count: 1, lastAt: msg.at })
-        }
-      }
-    }
-    return stats
-  }, [messages])
+  } = useConversationData(channelId)
 
   // Virtualizer for the message list
   const virtualizer = useVirtualizer({
@@ -333,16 +237,7 @@ export function Conversation({ channelId, compact = false, streaming, typingAgen
       </div>
 
       {/* Scroll-to-bottom indicator */}
-      {!autoScroll && (
-        <button
-          type="button"
-          onClick={scrollToBottom}
-          aria-label="Scroll to bottom"
-          className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5 border border-border bg-card px-3 py-1.5 font-heading text-[10px] text-muted-foreground shadow-sm transition-colors hover:text-foreground"
-        >
-          <ArrowDownIcon size={12} />
-        </button>
-      )}
+      {!autoScroll && <ScrollToBottomButton onClick={scrollToBottom} />}
     </div>
   )
 }
