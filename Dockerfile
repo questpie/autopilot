@@ -15,6 +15,7 @@ COPY packages/orchestrator/package.json packages/orchestrator/package.json
 COPY packages/spec/package.json packages/spec/package.json
 COPY packages/agents/package.json packages/agents/package.json
 COPY packages/avatar/package.json packages/avatar/package.json
+COPY packages/mcp-server/package.json packages/mcp-server/package.json
 COPY apps/dashboard-v2/package.json apps/dashboard-v2/package.json
 COPY apps/docs/package.json apps/docs/package.json
 
@@ -46,6 +47,7 @@ COPY packages/orchestrator/package.json packages/orchestrator/package.json
 COPY packages/spec/package.json packages/spec/package.json
 COPY packages/agents/package.json packages/agents/package.json
 COPY packages/avatar/package.json packages/avatar/package.json
+COPY packages/mcp-server/package.json packages/mcp-server/package.json
 COPY apps/dashboard-v2/package.json apps/dashboard-v2/package.json
 COPY apps/docs/package.json apps/docs/package.json
 
@@ -84,6 +86,7 @@ COPY packages/agents packages/agents
 COPY packages/avatar packages/avatar
 COPY packages/orchestrator packages/orchestrator
 COPY packages/cli packages/cli
+COPY packages/mcp-server packages/mcp-server
 
 # Copy built dashboard (.output/ has Nitro server bundle)
 COPY --from=dashboard-build /app/apps/dashboard-v2/.output apps/dashboard-v2/.output

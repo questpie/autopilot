@@ -9,6 +9,7 @@ import type { AgentProvider, AgentEvent } from './provider'
 import { TanStackAIProvider } from './providers/tanstack-ai'
 import { eventBus } from '../events'
 import { container, companyRootFactory } from '../container'
+import { dbFactory } from '../db'
 import { streamManagerFactory } from '../session/stream'
 import { logger } from '../logger'
 
@@ -91,11 +92,43 @@ export interface SpawnResult {
  * 5. Log session start/end to the activity feed.
  * 6. Delegate to the provider's `spawn()` for the actual LLM loop.
  */
+/** D40: Read plan limits from env. Returns null if no limit set. */
+function getPlanLimits(): { maxAgents?: number; maxTokensDay?: number } {
+	const maxAgents = process.env.PLAN_MAX_AGENTS ? Number(process.env.PLAN_MAX_AGENTS) : undefined
+	const maxTokensDay = process.env.PLAN_MAX_TOKENS_DAY ? Number(process.env.PLAN_MAX_TOKENS_DAY) : undefined
+	return { maxAgents, maxTokensDay }
+}
+
 export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	const { agent, company, allAgents, task, storage, trigger, message, mode = 'autonomous', channelId } = options
 	const { companyRoot } = container.resolve([companyRootFactory])
 	const { streamManager } = container.resolve([streamManagerFactory])
 	const sessionId = `session-${Date.now().toString(36)}-${agent.id}`
+
+	// D40: Enforce plan limits
+	const limits = getPlanLimits()
+	if (limits.maxAgents) {
+		const active = streamManager.getActiveStreams().length
+		if (active >= limits.maxAgents) {
+			return { sessionId, toolCalls: 0, error: `Plan limit: max ${limits.maxAgents} concurrent agents` }
+		}
+	}
+	if (limits.maxTokensDay) {
+		try {
+			const { db } = await container.resolveAsync([dbFactory])
+			const raw = (db.db as unknown as { $client: import('@libsql/client').Client }).$client
+			const result = await raw.execute(`
+				SELECT COALESCE(SUM(tokens_used), 0) as tokens
+				FROM agent_sessions WHERE started_at > datetime('now', '-24 hours')
+			`)
+			const used = Number(result.rows[0]?.tokens ?? 0)
+			if (used >= limits.maxTokensDay) {
+				return { sessionId, toolCalls: 0, error: `Plan limit: daily token limit (${limits.maxTokensDay}) reached` }
+			}
+		} catch {
+			// Can't check — proceed anyway
+		}
+	}
 
 	// 1. Resolve provider (from agent definition or company default)
 	const agentProvider = (agent as Record<string, unknown>).provider as string | undefined

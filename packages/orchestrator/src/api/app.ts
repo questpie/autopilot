@@ -41,6 +41,7 @@ import {
 	search,
 	sessions,
 	agentSessions,
+	usage,
 	settings,
 	skills,
 	status,
@@ -185,6 +186,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/events', events)
 		.route('/api/sessions', sessions)
 		.route('/api/agent-sessions', agentSessions)
+		.route('/api/usage', usage)
 		.route('/api/notifications', notifications)
 		.route('/api/fs', fsBrowser)
 
