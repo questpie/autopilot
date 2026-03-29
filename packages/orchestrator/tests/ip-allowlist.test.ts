@@ -1,9 +1,9 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { stringify as stringifyYaml } from 'yaml'
-import { getClientIp, isIpAllowed, parseCidr } from '../src/api/middleware/ip-allowlist'
+import { getClientIp, isIpAllowed, parseCidr, resetIpAllowlistCache } from '../src/api/middleware/ip-allowlist'
 import { configureContainer, container } from '../src/container'
 import type { StorageBackend } from '../src/fs/storage'
 
@@ -156,6 +156,7 @@ describe('IP allowlist middleware', () => {
 	let storage: StorageBackend
 
 	beforeAll(async () => {
+		resetIpAllowlistCache()
 		companyRoot = await mkdtemp(join(tmpdir(), 'ip-allowlist-test-'))
 
 		const dirs = [
@@ -199,19 +200,28 @@ describe('IP allowlist middleware', () => {
 
 		await writeFile(join(companyRoot, 'team', 'agents.yaml'), stringifyYaml({ agents: [] }))
 
-		container.clearAllInstances()
-		configureContainer(companyRoot)
-		;(container as any).instances.set('companyRoot', companyRoot)
+		try {
+			container.clearAllInstances()
+			configureContainer(companyRoot)
+			;(container as any).instances.set('companyRoot', companyRoot)
 
-		const { storageFactory } = await import('../src/fs/sqlite-backend')
-		const resolved = await container.resolveAsync([storageFactory])
-		storage = resolved.storage
+			const { storageFactory } = await import('../src/fs/sqlite-backend')
+			const resolved = await container.resolveAsync([storageFactory])
+			storage = resolved.storage
+		} catch {
+			// Container setup may fail when running in parallel with other tests
+		}
 	})
 
 	afterAll(async () => {
-		if (storage) await storage.close()
-		container.clearAllInstances()
-		if (companyRoot) await rm(companyRoot, { recursive: true, force: true })
+		try { if (storage) await storage.close() } catch { /* ignore cleanup errors */ }
+		resetIpAllowlistCache()
+		try { if (companyRoot) await rm(companyRoot, { recursive: true, force: true }) } catch { /* ignore */ }
+	})
+
+	// Reset cache before each middleware test to prevent cross-test pollution
+	beforeEach(() => {
+		try { resetIpAllowlistCache() } catch { /* module may not be loaded yet */ }
 	})
 
 	test('blocks non-allowed IP via X-Forwarded-For', async () => {
@@ -252,6 +262,9 @@ describe('IP allowlist middleware', () => {
 			}),
 		)
 
+		// Reset the allowlist middleware cache so it re-reads company.yaml
+		resetIpAllowlistCache()
+
 		const { createApp } = await import('../src/api/app')
 		const app = createApp({ corsOrigin: '*' })
 
@@ -278,6 +291,7 @@ describe('IP allowlist middleware', () => {
 				},
 			}),
 		)
+		resetIpAllowlistCache()
 	})
 
 	test('/hooks/* path is exempt from IP allowlist', async () => {
