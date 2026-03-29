@@ -137,6 +137,8 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		details: { sessionId, trigger, taskId: task?.id, provider: provider.name, model: agent.model },
 	})
 	eventBus.emit({ type: 'agent_session', agentId: agent.id, status: 'started', sessionId })
+	// D9: Emit typing started
+	eventBus.emit({ type: 'agent_typing', agentId: agent.id, status: 'started', sessionId })
 
 	// 7. Spawn via provider
 	const onEvent = (event: AgentEvent) => {
@@ -178,11 +180,17 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 			},
 			onEvent,
 		)
+		// D8: Emit final aggregated text event after all text_delta chunks
+		if (sessionResult.result) {
+			streamManager.emit(sessionId, { at: Date.now(), type: 'text', content: sessionResult.result })
+		}
 	} catch (err) {
 		const error = err instanceof Error ? err.message : String(err)
 		sessionResult = { toolCalls: 0, error }
 		streamManager.emit(sessionId, { at: Date.now(), type: 'error', content: error })
 	} finally {
+		// D9: Emit typing stopped
+		eventBus.emit({ type: 'agent_typing', agentId: agent.id, status: 'stopped', sessionId })
 		streamManager.endStream(sessionId)
 
 		await storage.appendActivity({

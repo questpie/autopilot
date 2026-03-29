@@ -5,7 +5,7 @@ import type { ToolDefinition, ToolContext } from './tools'
  * Provider-agnostic — same interface for Claude, OpenAI, Gemini, etc.
  */
 export interface AgentEvent {
-	type: 'text' | 'tool_call' | 'tool_result' | 'error' | 'status'
+	type: 'text' | 'text_delta' | 'tool_call' | 'tool_result' | 'error' | 'status'
 	content?: string
 	tool?: string
 	toolCallId?: string

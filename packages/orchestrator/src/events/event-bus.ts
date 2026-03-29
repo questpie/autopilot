@@ -4,6 +4,7 @@ export type AutopilotEvent =
 	| { type: 'activity'; agent: string; toolName: string; summary: string }
 	| { type: 'pin_changed'; pinId: string; action: 'created' | 'removed' | 'updated' }
 	| { type: 'agent_session'; agentId: string; status: 'started' | 'ended'; sessionId: string }
+	| { type: 'agent_typing'; agentId: string; status: 'started' | 'stopped'; sessionId: string }
 	| { type: 'workflow_advanced'; taskId: string; from: string; to: string }
 	| { type: 'channel_created'; channelId: string; name: string }
 	| { type: 'channel_deleted'; channelId: string }

@@ -26,7 +26,7 @@ export const SessionMetaSchema = z.object({
 
 export const StreamChunkSchema = z.object({
 	at: z.number(),
-	type: z.enum(['thinking', 'text', 'tool_call', 'tool_result', 'error', 'status']),
+	type: z.enum(['thinking', 'text', 'text_delta', 'tool_call', 'tool_result', 'error', 'status']),
 	content: z.string().optional(),
 	tool: z.string().optional(),
 	params: z.record(z.unknown()).optional(),
