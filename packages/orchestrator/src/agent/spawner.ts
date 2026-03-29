@@ -53,6 +53,9 @@ export function getProvider(name: string): AgentProvider {
 // TanStack AI + OpenRouter for multi-model access (Anthropic, OpenAI, Google, etc.)
 registerProvider(new TanStackAIProvider())
 
+/** D10: Session mode — chat (streaming to user) vs autonomous (background). */
+export type SpawnMode = 'autonomous' | 'chat'
+
 /** Options required to spawn an agent session. */
 export interface SpawnOptions {
 	agent: Agent
@@ -63,6 +66,10 @@ export interface SpawnOptions {
 	trigger: { type: string; task_id?: string; schedule_id?: string }
 	/** Optional human message to use as the prompt (e.g. from `autopilot chat`). */
 	message?: string
+	/** D10: Session mode — 'chat' streams to user, 'autonomous' runs in background. Default: 'autonomous'. */
+	mode?: SpawnMode
+	/** DM channel ID for chat mode (used to save final message). */
+	channelId?: string
 }
 
 /** Outcome of a completed agent session. */
@@ -85,7 +92,7 @@ export interface SpawnResult {
  * 6. Delegate to the provider's `spawn()` for the actual LLM loop.
  */
 export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
-	const { agent, company, allAgents, task, storage, trigger, message } = options
+	const { agent, company, allAgents, task, storage, trigger, message, mode = 'autonomous', channelId } = options
 	const { companyRoot } = container.resolve([companyRootFactory])
 	const { streamManager } = container.resolve([streamManagerFactory])
 	const sessionId = `session-${Date.now().toString(36)}-${agent.id}`
@@ -107,7 +114,11 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	})
 
 	// 3. Create custom tools + file tools
-	const autopilotTools = createAutopilotTools(companyRoot, storage)
+	let autopilotTools = createAutopilotTools(companyRoot, storage)
+	// D10: In chat mode, exclude message() tool — agent streams text directly to user
+	if (mode === 'chat') {
+		autopilotTools = autopilotTools.filter((t) => t.name !== 'message')
+	}
 	const fileTools = createFileTools({
 		companyRoot,
 		agentId: agent.id,
@@ -125,6 +136,11 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 			? `Work on task: ${task.title}\n\nDescription: ${task.description || 'No description'}\nPriority: ${task.priority}\nStatus: ${task.status}\n\nDo your work using the available tools. When done, update the task status.`
 			: `You have been triggered by: ${trigger.type}. Check your current tasks and act accordingly.`
 
+	// D10: In chat mode, add instruction to respond directly via text (not message tool)
+	const systemPrompt = mode === 'chat'
+		? `${context.systemPrompt}\n\nYou are in direct chat mode. Respond directly to the user through text. Do not use the message() tool — your text output is streamed directly to the user.`
+		: context.systemPrompt
+
 	// 5. Create session stream for attach
 	streamManager.createStream(sessionId, agent.id)
 
@@ -133,8 +149,8 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		at: new Date().toISOString(),
 		agent: agent.id,
 		type: 'session_start',
-		summary: `Session started: ${task?.title ?? trigger.type} [${provider.name}/${agent.model}]`,
-		details: { sessionId, trigger, taskId: task?.id, provider: provider.name, model: agent.model },
+		summary: `Session started: ${task?.title ?? trigger.type} [${provider.name}/${agent.model}] (${mode})`,
+		details: { sessionId, trigger, taskId: task?.id, provider: provider.name, model: agent.model, mode, channelId },
 	})
 	eventBus.emit({ type: 'agent_session', agentId: agent.id, status: 'started', sessionId })
 	// D9: Emit typing started
@@ -166,7 +182,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	try {
 		sessionResult = await provider.spawn(
 			{
-				systemPrompt: context.systemPrompt,
+				systemPrompt,
 				prompt,
 				model: agent.model || DEFAULT_MODELS[providerName] || 'claude-sonnet-4-6',
 				tools: allTools,
