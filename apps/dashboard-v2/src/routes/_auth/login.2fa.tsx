@@ -79,6 +79,20 @@ function TwoFactorPage() {
   const { digits, useBackup, backupCode, trustDevice, error, isSubmitting, failCount } = state
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+  const backupInputRef = useRef<HTMLInputElement>(null)
+
+  const handleToggleBackup = useCallback(() => {
+    const nextUseBackup = !useBackup
+    dispatch({ type: "SET_USE_BACKUP", useBackup: nextUseBackup })
+    // Focus the appropriate input after React re-renders
+    requestAnimationFrame(() => {
+      if (nextUseBackup) {
+        backupInputRef.current?.focus()
+      } else {
+        inputRefs.current[0]?.focus()
+      }
+    })
+  }, [useBackup])
 
   const submitCode = useCallback(
     async (code: string) => {
@@ -222,7 +236,7 @@ function TwoFactorPage() {
             <Input
               id="backup-code"
               type="text"
-              autoFocus
+              ref={backupInputRef}
               placeholder="a1b2-c3d4"
               value={backupCode}
               onChange={(e) => dispatch({ type: "SET_BACKUP_CODE", backupCode: e.currentTarget.value })}
@@ -248,7 +262,7 @@ function TwoFactorPage() {
           <div className="flex justify-center gap-2" onPaste={handleDigitPaste}>
             {digits.map((digit, i) => (
               <input
-                key={`digit-${i}`}
+                key={`totp-slot-${["a", "b", "c", "d", "e", "f"][i]}`}
                 ref={(el) => {
                   inputRefs.current[i] = el
                 }}
@@ -256,7 +270,6 @@ function TwoFactorPage() {
                 inputMode="numeric"
                 maxLength={1}
                 value={digit}
-                autoFocus={i === 0}
                 disabled={isSubmitting}
                 onChange={(e) => handleDigitChange(i, e.target.value)}
                 onKeyDown={(e) => handleDigitKeyDown(i, e)}
@@ -292,7 +305,7 @@ function TwoFactorPage() {
         <button
           type="button"
           className="text-xs text-primary hover:underline"
-          onClick={() => dispatch({ type: "SET_USE_BACKUP", useBackup: !useBackup })}
+          onClick={handleToggleBackup}
         >
           {useBackup
             ? t("auth.two_factor_use_totp")

@@ -36,8 +36,11 @@ export function CompanySettingsForm() {
 
   const [form, setForm] = useState<CompanySettings>({})
 
+  // Sync server data to form state when settings change
   useEffect(() => {
-    if (settings) setForm(settings)
+    if (settings) {
+      setForm(settings)
+    }
   }, [settings])
 
   const saveMutation = useMutation({
@@ -67,7 +70,7 @@ export function CompanySettingsForm() {
       <section>
         <h3 className="mb-3 font-heading text-sm font-semibold">Agent Settings</h3>
         <div className="space-y-3">
-          <label className="flex items-center gap-3">
+          <label className="flex items-center gap-3" aria-label="Require approval">
             <input
               type="checkbox"
               checked={form.require_approval ?? false}
@@ -80,7 +83,7 @@ export function CompanySettingsForm() {
             </div>
           </label>
 
-          <label className="flex items-center gap-3">
+          <label className="flex items-center gap-3" aria-label="Micro-agent routing">
             <input
               type="checkbox"
               checked={form.micro_agents ?? true}
@@ -94,8 +97,9 @@ export function CompanySettingsForm() {
           </label>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Max concurrent agents</label>
+            <label htmlFor="max-concurrent-agents" className="mb-1 block text-sm font-medium">Max concurrent agents</label>
             <input
+              id="max-concurrent-agents"
               type="number"
               min={1}
               max={50}
@@ -112,8 +116,9 @@ export function CompanySettingsForm() {
         <h3 className="mb-3 font-heading text-sm font-semibold">Model Defaults</h3>
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-sm font-medium">Default model</label>
+            <label htmlFor="default-model" className="mb-1 block text-sm font-medium">Default model</label>
             <input
+              id="default-model"
               type="text"
               value={form.default_model ?? ""}
               onChange={(e) => setForm({ ...form, default_model: e.target.value })}
@@ -124,8 +129,9 @@ export function CompanySettingsForm() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Utility model</label>
+            <label htmlFor="utility-model" className="mb-1 block text-sm font-medium">Utility model</label>
             <input
+              id="utility-model"
               type="text"
               value={form.utility_model ?? ""}
               onChange={(e) => setForm({ ...form, utility_model: e.target.value })}

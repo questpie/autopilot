@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
 import { SquareBuildLogo } from "@/components/brand"
 import { EyeIcon, EyeSlashIcon, WarningCircleIcon } from "@phosphor-icons/react"
-import { useReducer, useRef, useCallback } from "react"
+import { useReducer, useRef, useCallback, useEffect } from "react"
 import { m, AnimatePresence } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -81,6 +81,7 @@ function loginReducer(state: LoginState, action: LoginAction): LoginState {
 }
 
 function LoginPage() {
+  "use no memo"
   const { t } = useTranslation()
   const router = useRouter()
   const search = Route.useSearch()
@@ -90,6 +91,11 @@ function LoginPage() {
 
   const { showPassword, error, showError, failCount, rateLimitCountdown } = state
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const emailInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    emailInputRef.current?.focus()
+  }, [])
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -199,12 +205,15 @@ function LoginPage() {
             <Input
               id="email"
               type="email"
-              autoFocus
               autoComplete="email"
               placeholder="you@company.com"
               disabled={form.formState.isSubmitting || isRateLimited}
               aria-invalid={!!form.formState.errors.email}
               {...form.register("email")}
+              ref={(el) => {
+                form.register("email").ref(el)
+                emailInputRef.current = el
+              }}
             />
             {form.formState.errors.email && (
               <p className="text-xs text-destructive">

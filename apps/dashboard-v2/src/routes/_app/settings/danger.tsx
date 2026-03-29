@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router"
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { useMutation } from "@tanstack/react-query"
 import {
   DownloadSimpleIcon,
@@ -33,6 +33,9 @@ function SettingsDangerPage() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState("")
+  const deleteInputRef = useCallback((el: HTMLInputElement | null) => {
+    el?.focus()
+  }, [])
 
   const exportMutation = useMutation({
     mutationFn: async () => {
@@ -177,10 +180,10 @@ function SettingsDangerPage() {
             </DialogDescription>
           </DialogHeader>
           <Input
+            ref={deleteInputRef}
             value={deleteConfirmText}
             onChange={(e) => setDeleteConfirmText(e.currentTarget.value)}
             placeholder={t("settings.danger_delete_placeholder")}
-            autoFocus
           />
           <DialogFooter>
             <Button

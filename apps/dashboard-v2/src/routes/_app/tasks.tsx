@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { z } from "zod/v4"
-import { useState, useMemo, useCallback } from "react"
+import { useReducer, useMemo, useCallback } from "react"
 import { PlusIcon, ListIcon, SquaresFourIcon } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +22,61 @@ import { PageTransition } from "@/components/layouts/page-transition"
 import { PageError } from "@/components/feedback"
 import type { SortOption, GroupOption } from "@/features/tasks/task-filters"
 
+interface TasksState {
+  statusFilter: string
+  priorityFilter: string
+  searchQuery: string
+  sortBy: SortOption
+  groupBy: GroupOption
+  createOpen: boolean
+  selectedIds: Set<string>
+}
+
+type TasksAction =
+  | { type: "SET_STATUS_FILTER"; value: string }
+  | { type: "SET_PRIORITY_FILTER"; value: string }
+  | { type: "SET_SEARCH_QUERY"; value: string }
+  | { type: "SET_SORT_BY"; value: SortOption }
+  | { type: "SET_GROUP_BY"; value: GroupOption }
+  | { type: "SET_CREATE_OPEN"; value: boolean }
+  | { type: "TOGGLE_SELECTION"; id: string }
+  | { type: "CLEAR_SELECTION" }
+
+function tasksReducer(state: TasksState, action: TasksAction): TasksState {
+  switch (action.type) {
+    case "SET_STATUS_FILTER":
+      return { ...state, statusFilter: action.value }
+    case "SET_PRIORITY_FILTER":
+      return { ...state, priorityFilter: action.value }
+    case "SET_SEARCH_QUERY":
+      return { ...state, searchQuery: action.value }
+    case "SET_SORT_BY":
+      return { ...state, sortBy: action.value }
+    case "SET_GROUP_BY":
+      return { ...state, groupBy: action.value }
+    case "SET_CREATE_OPEN":
+      return { ...state, createOpen: action.value }
+    case "TOGGLE_SELECTION": {
+      const next = new Set(state.selectedIds)
+      if (next.has(action.id)) next.delete(action.id)
+      else next.add(action.id)
+      return { ...state, selectedIds: next }
+    }
+    case "CLEAR_SELECTION":
+      return { ...state, selectedIds: new Set() }
+  }
+}
+
+const initialTasksState: TasksState = {
+  statusFilter: "all",
+  priorityFilter: "all",
+  searchQuery: "",
+  sortBy: "created_at",
+  groupBy: "status",
+  createOpen: false,
+  selectedIds: new Set(),
+}
+
 export const Route = createFileRoute("/_app/tasks")({
   component: TasksPage,
   validateSearch: z.object({
@@ -41,15 +96,15 @@ function TasksPage() {
   const viewMode = useTaskUIStore((s) => s.viewMode)
   const setViewMode = useTaskUIStore((s) => s.setViewMode)
 
-  // Filters
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [priorityFilter, setPriorityFilter] = useState("all")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [sortBy, setSortBy] = useState<SortOption>("created_at")
-  const [groupBy, setGroupBy] = useState<GroupOption>("status")
+  const [state, dispatch] = useReducer(tasksReducer, initialTasksState)
+  const { statusFilter, priorityFilter, searchQuery, sortBy, groupBy, createOpen, selectedIds } = state
 
-  // Task creation sheet
-  const [createOpen, setCreateOpen] = useState(false)
+  const setStatusFilter = useCallback((value: string) => dispatch({ type: "SET_STATUS_FILTER", value }), [])
+  const setPriorityFilter = useCallback((value: string) => dispatch({ type: "SET_PRIORITY_FILTER", value }), [])
+  const setSearchQuery = useCallback((value: string) => dispatch({ type: "SET_SEARCH_QUERY", value }), [])
+  const setSortBy = useCallback((value: SortOption) => dispatch({ type: "SET_SORT_BY", value }), [])
+  const setGroupBy = useCallback((value: GroupOption) => dispatch({ type: "SET_GROUP_BY", value }), [])
+  const setCreateOpen = useCallback((value: boolean) => dispatch({ type: "SET_CREATE_OPEN", value }), [])
 
   // Build query filters
   const filters = useMemo(() => {
@@ -88,23 +143,12 @@ function TasksPage() {
 
   const taskIds = useMemo(() => tasks.map((t) => t.id), [tasks])
 
-  // Selection state
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-
   const handleToggleSelection = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
+    dispatch({ type: "TOGGLE_SELECTION", id })
   }, [])
 
   const handleClearSelection = useCallback(() => {
-    setSelectedIds(new Set())
+    dispatch({ type: "CLEAR_SELECTION" })
   }, [])
 
   const handleOpenTask = useCallback(

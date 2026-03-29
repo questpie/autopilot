@@ -40,6 +40,12 @@ export const ImageLightbox = memo(function ImageLightbox({ src, alt, onClose }: 
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
       onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onClose()
+        }
+      }}
       role="dialog"
       aria-modal
       aria-label={alt ?? "Image preview"}
@@ -56,10 +62,20 @@ export const ImageLightbox = memo(function ImageLightbox({ src, alt, onClose }: 
       </button>
 
       {/* Image */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <img
         src={src}
         alt={alt ?? ""}
         onClick={toggleZoom}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            toggleZoom(e as unknown as React.MouseEvent)
+          }
+        }}
+        tabIndex={0}
+        role="button"
+        aria-label={zoomed ? "Zoom out" : "Zoom in"}
         className={cn(
           "transition-all duration-200",
           zoomed

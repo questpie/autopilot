@@ -39,7 +39,7 @@ export function SessionView({ agentId, agentName, events: preloadedEvents, live 
     // Try durable stream SSE endpoint for the active session
     const durableUrl = `${API_BASE}/api/agent-sessions/session-${agentId}/stream?live=sse&offset=-1`
     const es = new EventSource(durableUrl, { withCredentials: true })
-    let eventCounter = 0
+    const eventCounter = { value: 0 }
     let useDurable = true
 
     es.onmessage = (msg) => {
@@ -52,9 +52,9 @@ export function SessionView({ agentId, agentName, events: preloadedEvents, live 
         }
 
         if (data.type === "activity" && data.agent === agentId) {
-          eventCounter++
+          eventCounter.value += 1
           const sessionEvent: SessionEvent = {
-            id: `sse-${eventCounter}`,
+            id: `sse-${eventCounter.value}`,
             type: mapActivityToEventType(data.toolName as string | undefined),
             timestamp: (data.at as string) ?? new Date().toISOString(),
             content: (data.summary as string) ?? "",

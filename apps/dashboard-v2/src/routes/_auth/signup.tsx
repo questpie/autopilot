@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { EyeIcon, EyeSlashIcon, WarningCircleIcon, ShieldWarningIcon } from "@phosphor-icons/react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { m, AnimatePresence } from "framer-motion"
 import { zxcvbnAsync, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPkg from "@zxcvbn-ts/language-common"
@@ -67,9 +67,9 @@ function PasswordStrengthMeter({ score }: { score: number }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex gap-1">
-        {[0, 1, 2, 3].map((i) => (
+        {(["s0", "s1", "s2", "s3"] as const).map((id, i) => (
           <div
-            key={`strength-${i}`}
+            key={id}
             className={`h-1 flex-1 transition-colors ${
               i <= score - 1 ? colors[score] : "bg-muted"
             }`}
@@ -84,6 +84,7 @@ function PasswordStrengthMeter({ score }: { score: number }) {
 }
 
 function SignupPage() {
+  "use no memo"
   const { t } = useTranslation()
   const router = useRouter()
   const { token, email } = Route.useSearch()
@@ -93,6 +94,11 @@ function SignupPage() {
   const [passwordScore, setPasswordScore] = useState(0)
 
   const hasInvite = !!token && !!email
+  const nameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    nameInputRef.current?.focus()
+  }, [])
 
   const form = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
@@ -204,11 +210,14 @@ function SignupPage() {
             <Input
               id="name"
               type="text"
-              autoFocus
               autoComplete="name"
               disabled={form.formState.isSubmitting}
               aria-invalid={!!form.formState.errors.name}
               {...form.register("name")}
+              ref={(el) => {
+                form.register("name").ref(el)
+                nameInputRef.current = el
+              }}
             />
             {form.formState.errors.name && (
               <p className="text-xs text-destructive">

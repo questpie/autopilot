@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
 import { ArrowLeftIcon, WarningCircleIcon, CloudIcon } from "@phosphor-icons/react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useWizardState } from "./use-wizard-state"
 import { api } from "@/lib/api"
 
@@ -39,6 +39,10 @@ export function WizardStep3({ onComplete, onBack }: WizardStep3Props) {
         if ("mode" in data) setDeploymentMode(data.mode as "selfhosted" | "cloud")
       })
       .catch(() => {})
+  }, [])
+
+  const apiKeyRefCallback = useCallback((el: HTMLInputElement | null) => {
+    el?.focus()
   }, [])
 
   const form = useForm<ProviderValues>({
@@ -153,11 +157,14 @@ export function WizardStep3({ onComplete, onBack }: WizardStep3Props) {
             <Input
               id="api-key"
               type="password"
-              autoFocus
               placeholder="sk-or-..."
               disabled={form.formState.isSubmitting}
               aria-invalid={!!form.formState.errors.apiKey}
               {...form.register("apiKey")}
+              ref={(el) => {
+                form.register("apiKey").ref(el)
+                apiKeyRefCallback(el)
+              }}
             />
             {form.formState.errors.apiKey && (
               <p className="text-xs text-destructive">{form.formState.errors.apiKey.message}</p>

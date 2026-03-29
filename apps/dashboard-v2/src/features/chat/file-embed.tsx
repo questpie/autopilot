@@ -1,4 +1,4 @@
-import { lazy, useState, useCallback, memo, Suspense } from "react"
+import { createElement, lazy, useState, useCallback, memo, Suspense } from "react"
 import {
   FileTextIcon,
   FileCodeIcon,
@@ -85,12 +85,11 @@ interface FileEmbedCardProps {
 export const FileEmbedCard = memo(function FileEmbedCard({ path, size }: FileEmbedCardProps) {
   const ext = getExtension(path)
   const fileName = getFileName(path)
-  const Icon = getFileIcon(ext)
   const url = resolveUrl(path)
 
   return (
     <div className="mt-1.5 inline-flex w-full max-w-sm items-center gap-2.5 rounded border border-border bg-muted/5 px-3 py-2">
-      <Icon size={20} className="shrink-0 text-muted-foreground" />
+      {createElement(getFileIcon(ext), { size: 20, className: "shrink-0 text-muted-foreground" })}
       <div className="min-w-0 flex-1">
         <span className="block truncate text-xs font-medium text-foreground">
           {fileName}
@@ -206,7 +205,6 @@ export const CodeEmbed = memo(function CodeEmbed({ path, content, onOpen }: Code
   const [expanded, setExpanded] = useState(false)
   const fileName = getFileName(path)
   const ext = getExtension(path)
-  const Icon = getFileIcon(ext)
 
   const lines = content?.split("\n") ?? []
   const isLong = lines.length > CODE_PREVIEW_LINES
@@ -216,7 +214,7 @@ export const CodeEmbed = memo(function CodeEmbed({ path, content, onOpen }: Code
     <div className="mt-1.5 w-full max-w-lg overflow-hidden rounded border border-border bg-muted/5">
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
-        <Icon size={14} className="shrink-0 text-muted-foreground" />
+        {createElement(getFileIcon(ext), { size: 14, className: "shrink-0 text-muted-foreground" })}
         <span className="min-w-0 flex-1 truncate font-heading text-xs text-foreground">
           {fileName}
         </span>
@@ -238,10 +236,10 @@ export const CodeEmbed = memo(function CodeEmbed({ path, content, onOpen }: Code
           <div className="overflow-x-auto p-2 font-mono text-[11px] leading-relaxed">
             <table className="border-collapse">
               <tbody>
-                {displayLines.map((line, i) => (
-                  <tr key={i}>
+                {displayLines.map((line, lineIndex) => (
+                  <tr key={`line-${lineIndex}-${line.length}`}>
                     <td className="select-none pr-3 text-right text-[10px] text-muted-foreground/40 tabular-nums">
-                      {i + 1}
+                      {lineIndex + 1}
                     </td>
                     <td className="whitespace-pre text-foreground/80">{line}</td>
                   </tr>

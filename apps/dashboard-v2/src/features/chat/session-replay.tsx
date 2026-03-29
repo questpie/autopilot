@@ -81,9 +81,10 @@ export function SessionReplay({ sessionId }: SessionReplayProps) {
         }
         setEvents(parsed)
       }
+      setLoading(false)
+      setLoaded(true)
     } catch {
       // Silently fail
-    } finally {
       setLoading(false)
       setLoaded(true)
     }

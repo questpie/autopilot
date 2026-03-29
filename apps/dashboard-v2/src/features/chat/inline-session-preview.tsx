@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useReducer, useState } from "react"
 import { cn } from "@/lib/utils"
 import { API_BASE } from "@/lib/api"
 import { CaretRightIcon, CheckCircleIcon, CircleNotchIcon, XIcon } from "@phosphor-icons/react"
@@ -21,9 +21,29 @@ interface InlineSessionPreviewProps {
  * D18: Inline session preview — connects to the durable stream SSE
  * and shows live tool calls when "Watch live" is clicked.
  */
+type StreamAction =
+  | { type: "CONNECTED" }
+  | { type: "DISCONNECTED" }
+  | { type: "ADD_EVENT"; event: StreamEvent }
+
+interface StreamState {
+  events: StreamEvent[]
+  connected: boolean
+}
+
+function streamReducer(state: StreamState, action: StreamAction): StreamState {
+  switch (action.type) {
+    case "CONNECTED":
+      return { ...state, connected: true }
+    case "DISCONNECTED":
+      return { ...state, connected: false }
+    case "ADD_EVENT":
+      return { ...state, events: [...state.events.slice(-50), action.event] }
+  }
+}
+
 export function InlineSessionPreview({ sessionId, onClose, compact = false }: InlineSessionPreviewProps) {
-  const [events, setEvents] = useState<StreamEvent[]>([])
-  const [connected, setConnected] = useState(false)
+  const [{ events, connected }, dispatch] = useReducer(streamReducer, { events: [], connected: false })
   const sourceRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
@@ -31,19 +51,19 @@ export function InlineSessionPreview({ sessionId, onClose, compact = false }: In
     const source = new EventSource(url, { withCredentials: true })
     sourceRef.current = source
 
-    source.onopen = () => setConnected(true)
+    source.onopen = () => dispatch({ type: "CONNECTED" })
     source.onmessage = (event) => {
       try {
         const parsed = JSON.parse(event.data as string) as StreamEvent
         // Only show tool calls and results for a concise view
         if (parsed.type === "tool_call" || parsed.type === "tool_result" || parsed.type === "error") {
-          setEvents((prev) => [...prev.slice(-50), parsed]) // Keep last 50
+          dispatch({ type: "ADD_EVENT", event: parsed })
         }
       } catch {
         // Ignore non-JSON
       }
     }
-    source.onerror = () => setConnected(false)
+    source.onerror = () => dispatch({ type: "DISCONNECTED" })
 
     return () => {
       source.close()

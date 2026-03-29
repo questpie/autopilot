@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react"
+import { useState, useMemo, useCallback, useRef } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   Select,
@@ -36,6 +36,13 @@ export function ChatPanel() {
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(
     rightPanel.channel ?? null,
   )
+
+  // Auto-select context tab when it becomes available (replaces useEffect + setState)
+  const prevContextVisible = useRef(context.visible)
+  if (context.visible && !prevContextVisible.current) {
+    setActiveTab("context")
+  }
+  prevContextVisible.current = context.visible
 
   const { data } = useQuery(channelsQuery)
   const channels = (data ?? []) as Channel[]
@@ -82,20 +89,6 @@ export function ChatPanel() {
     if (tabChannels.length > 0) return tabChannels[0].id
     return null
   }, [activeTab, context.channelId, selectedChannelId, tabChannels])
-
-  // When context changes and context tab is active, switch
-  useEffect(() => {
-    if (context.visible && activeTab === "context") {
-      // Context drives the channel
-    }
-  }, [context, activeTab])
-
-  // Auto-select context tab when it becomes available
-  useEffect(() => {
-    if (context.visible) {
-      setActiveTab("context")
-    }
-  }, [context.visible])
 
   // Keyboard shortcut: Cmd+Shift+C toggles panel
   const togglePanel = useCallback(() => {

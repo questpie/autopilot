@@ -103,6 +103,7 @@ export function ProviderForm() {
   return (
     <FormProvider {...methods}>
       <form
+        // Client-side form: prevent default submission, individual fields save on change
         onSubmit={(e) => e.preventDefault()}
         className="flex max-w-lg flex-col gap-8"
       >

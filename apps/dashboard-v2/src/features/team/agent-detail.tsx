@@ -232,8 +232,8 @@ export function AgentDetail({ agentId, onClose: _onClose }: AgentDetailProps) {
       {agent.triggers.length > 0 && (
         <DetailSection icon={LightningIcon} label={t("team.detail_triggers")}>
           <div className="flex flex-col gap-1">
-            {agent.triggers.map((trigger, i) => (
-              <div key={i} className="flex items-center gap-2">
+            {agent.triggers.map((trigger) => (
+              <div key={`${trigger.on}-${trigger.cron ?? ''}`} className="flex items-center gap-2">
                 <code className="bg-muted px-1.5 py-0.5 font-mono text-[10px]">
                   {trigger.on}
                 </code>
