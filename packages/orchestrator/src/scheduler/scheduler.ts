@@ -49,7 +49,13 @@ export class Scheduler {
 
 	private async loadSchedules(): Promise<void> {
 		const schedulesPath = join(this.options.companyRoot, 'team', 'schedules.yaml')
-		const file = await readYaml(schedulesPath, SchedulesFileSchema)
+		let file: { schedules: Schedule[] }
+		try {
+			file = await readYaml(schedulesPath, SchedulesFileSchema)
+		} catch {
+			// No schedules.yaml — nothing to schedule
+			return
+		}
 
 		for (const schedule of file.schedules) {
 			if (!schedule.enabled) continue

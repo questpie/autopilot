@@ -161,4 +161,50 @@ describe('Scheduler', () => {
 
 		scheduler.stop()
 	})
+
+	test('handles missing schedules.yaml gracefully', async () => {
+		// No schedules.yaml written
+		const scheduler = new Scheduler({
+			companyRoot,
+			onTrigger: async () => {},
+		})
+
+		await scheduler.start()
+		expect(scheduler.getActiveJobs()).toHaveLength(0)
+		scheduler.stop()
+	})
+
+	test('stop is idempotent', async () => {
+		const scheduler = new Scheduler({
+			companyRoot,
+			onTrigger: async () => {},
+		})
+		await scheduler.start()
+		scheduler.stop()
+		scheduler.stop() // second stop — no throw
+		expect(scheduler.getActiveJobs()).toHaveLength(0)
+	})
+
+	test('multiple enabled schedules for different agents', async () => {
+		await writeYaml(join(companyRoot, 'team', 'schedules.yaml'), {
+			schedules: [
+				{ id: 'dev-check', agent: 'developer', cron: '0 9 * * *', enabled: true },
+				{ id: 'ops-check', agent: 'devops', cron: '0 10 * * *', enabled: true },
+				{ id: 'ceo-review', agent: 'ceo', cron: '0 17 * * 5', enabled: true },
+			],
+		})
+
+		const scheduler = new Scheduler({
+			companyRoot,
+			onTrigger: async () => {},
+		})
+
+		await scheduler.start()
+		const jobs = scheduler.getActiveJobs()
+		expect(jobs).toHaveLength(3)
+		expect(jobs).toContain('dev-check')
+		expect(jobs).toContain('ops-check')
+		expect(jobs).toContain('ceo-review')
+		scheduler.stop()
+	})
 })
