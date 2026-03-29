@@ -108,4 +108,77 @@ describe('search-index', () => {
 		const results = await searchHybrid(db, 'deploy', null, { limit: 10 })
 		expect(results.length).toBe(2)
 	})
+
+	// ── Additional coverage ─────────────────────────────────────────────
+
+	it('removeEntity is idempotent (removing twice does not throw)', async () => {
+		await setup()
+		await indexEntity(db, 'task', 'task-1', 'Test', 'Content')
+		await removeEntity(db, 'task', 'task-1')
+		await removeEntity(db, 'task', 'task-1') // second remove — no throw
+	})
+
+	it('removeEntity for non-existent entity does not throw', async () => {
+		await setup()
+		await removeEntity(db, 'task', 'ghost-task') // never existed
+	})
+
+	it('FTS uses porter stemming (searching → search)', async () => {
+		await setup()
+		await indexEntity(db, 'knowledge', 'k1', 'Search', 'The searching algorithm finds results quickly')
+		const results = await searchFts(db, 'search')
+		expect(results.length).toBe(1)
+	})
+
+	it('indexes multiple entity types independently', async () => {
+		await setup()
+		await indexEntity(db, 'task', 't1', 'Task', 'Fix the database connection issue')
+		await indexEntity(db, 'message', 'm1', 'Message', 'The database needs attention')
+		await indexEntity(db, 'knowledge', 'k1', 'Knowledge', 'Database administration guide')
+		await indexEntity(db, 'agent', 'a1', 'Agent', 'Database specialist agent')
+
+		const all = await searchFts(db, 'database')
+		expect(all.length).toBe(4)
+	})
+
+	it('result includes entityType, entityId, title, snippet, score', async () => {
+		await setup()
+		await indexEntity(db, 'knowledge', 'guide.md', 'Setup Guide', 'How to configure the application')
+
+		const results = await searchFts(db, 'configure')
+		expect(results.length).toBe(1)
+		const r = results[0]!
+		expect(r.entityType).toBe('knowledge')
+		expect(r.entityId).toBe('guide.md')
+		expect(r.title).toBe('Setup Guide')
+		expect(r.snippet).toBeTruthy()
+		expect(typeof r.score).toBe('number')
+	})
+
+	it('searchHybrid with type filter narrows results', async () => {
+		await setup()
+		await indexEntity(db, 'task', 't1', 'API', 'Build REST API')
+		await indexEntity(db, 'knowledge', 'k1', 'API', 'API documentation')
+
+		const tasksOnly = await searchHybrid(db, 'API', null, { type: 'task' })
+		expect(tasksOnly.length).toBe(1)
+		expect(tasksOnly[0]!.entityType).toBe('task')
+	})
+
+	it('handles empty database gracefully', async () => {
+		await setup()
+		const fts = await searchFts(db, 'anything')
+		expect(fts.length).toBe(0)
+		const hybrid = await searchHybrid(db, 'anything', null)
+		expect(hybrid.length).toBe(0)
+	})
+
+	it('title can be null', async () => {
+		await setup()
+		const indexed = await indexEntity(db, 'message', 'm1', null, 'A message without a title')
+		expect(indexed).toBe(true)
+		const results = await searchFts(db, 'message')
+		expect(results.length).toBe(1)
+		expect(results[0]!.title).toBeNull()
+	})
 })
