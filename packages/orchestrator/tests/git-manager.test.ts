@@ -128,4 +128,46 @@ describe('GitManager', () => {
 		await manager.initialize()
 		await manager.stop()
 	})
+
+	it('flush with empty queue is a no-op', async () => {
+		const manager = new GitManager({
+			companyRoot: root,
+			enabled: true,
+			batchIntervalMs: 100,
+			autoPush: false,
+			remote: '',
+			branch: 'main',
+		})
+		await manager.initialize()
+		await manager.flush() // nothing queued — should not throw
+		await manager.stop()
+	})
+
+	it('stop is idempotent', async () => {
+		const manager = new GitManager({
+			companyRoot: root,
+			enabled: false,
+			batchIntervalMs: 5000,
+			autoPush: false,
+			remote: '',
+			branch: 'main',
+		})
+		await manager.initialize()
+		await manager.stop()
+		await manager.stop() // second stop — no throw
+	})
+
+	it('queueCommit after stop is a no-op', async () => {
+		const manager = new GitManager({
+			companyRoot: root,
+			enabled: false,
+			batchIntervalMs: 5000,
+			autoPush: false,
+			remote: '',
+			branch: 'main',
+		})
+		await manager.initialize()
+		await manager.stop()
+		manager.queueCommit(['file.txt'], 'after stop') // should not throw
+	})
 })

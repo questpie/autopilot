@@ -56,10 +56,49 @@ describe('migration', () => {
 
 	it('should be idempotent — running createDb twice should not fail', async () => {
 		await setup()
-		// Second call should not throw
 		const { db: db2 } = await createDb(root)
 		const raw2 = (db2 as unknown as { $client: Client }).$client
 		const result = await raw2.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'")
 		expect(result.rows.length).toBe(1)
+	})
+
+	it('should create chunks_fts virtual table', async () => {
+		await setup()
+		const raw = getRawClient()
+		const result = await raw.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
+		expect(result.rows.length).toBe(1)
+	})
+
+	it('should create FTS triggers for chunks', async () => {
+		await setup()
+		const raw = getRawClient()
+		const result = await raw.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'chunks_fts%'")
+		expect(result.rows.length).toBe(3) // ai, ad, au
+	})
+
+	it('should create all core tables', async () => {
+		await setup()
+		const raw = getRawClient()
+		const coreNames = ['tasks', 'messages', 'activity', 'agent_sessions', 'channels', 'channel_members', 'chunks', 'pins', 'file_locks', 'notifications']
+		for (const name of coreNames) {
+			const result = await raw.execute(`SELECT name FROM sqlite_master WHERE type='table' AND name='${name}'`)
+			expect(result.rows.length).toBe(1)
+		}
+	})
+
+	it('search_index has embedding column', async () => {
+		await setup()
+		const raw = getRawClient()
+		const result = await raw.execute("PRAGMA table_info(search_index)")
+		const cols = result.rows.map((r) => r.name as string)
+		expect(cols).toContain('embedding')
+	})
+
+	it('chunks has embedding column', async () => {
+		await setup()
+		const raw = getRawClient()
+		const result = await raw.execute("PRAGMA table_info(chunks)")
+		const cols = result.rows.map((r) => r.name as string)
+		expect(cols).toContain('embedding')
 	})
 })
