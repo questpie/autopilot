@@ -6,6 +6,8 @@ import { messagesQuery } from "./chat.queries"
 import { MessageBubble } from "./message-bubble"
 import { DayDivider } from "./day-divider"
 import { StreamingMessage } from "./streaming-message"
+import { TypingIndicator } from "./typing-indicator"
+import { InlineSessionPreview } from "./inline-session-preview"
 import { ConversationSkeleton } from "./chat-skeletons"
 import { ConversationEmpty } from "./chat-empty-states"
 import { cn } from "@/lib/utils"
@@ -77,12 +79,18 @@ interface ConversationProps {
   compact?: boolean
   /** D13: Live streaming state from useStreamingChat — renders live agent response below messages. */
   streaming?: StreamingState & { agentId: string }
+  /** D17: Agents currently typing in this channel. */
+  typingAgents?: Array<{ agentId: string; sessionId: string }>
+  /** D17: Callback when "Watch live" is clicked. */
+  onWatchLive?: (sessionId: string) => void
 }
 
-export function Conversation({ channelId, compact = false, streaming }: ConversationProps) {
+export function Conversation({ channelId, compact = false, streaming, typingAgents, onWatchLive }: ConversationProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
+  // D18: Track which session is being previewed inline
+  const [watchingSessionId, setWatchingSessionId] = useState<string | null>(null)
   const prevMessageCountRef = useRef(0)
   const { shouldReduce } = useMotionPreference()
 
@@ -183,6 +191,27 @@ export function Conversation({ channelId, compact = false, streaming }: Conversa
           <StreamingMessage
             agentId={streaming.agentId}
             state={streaming}
+            compact={compact}
+          />
+        )}
+
+        {/* D18: Inline session preview when watching live */}
+        {watchingSessionId && (
+          <InlineSessionPreview
+            sessionId={watchingSessionId}
+            onClose={() => setWatchingSessionId(null)}
+            compact={compact}
+          />
+        )}
+
+        {/* D17: Typing indicator */}
+        {typingAgents && typingAgents.length > 0 && (
+          <TypingIndicator
+            agents={typingAgents}
+            onWatchLive={(sid) => {
+              setWatchingSessionId(sid)
+              onWatchLive?.(sid)
+            }}
             compact={compact}
           />
         )}
