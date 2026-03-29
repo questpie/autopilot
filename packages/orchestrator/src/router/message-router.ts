@@ -104,8 +104,7 @@ function routeByKeyword(
 
 	for (const agent of agents) {
 		// D47: Use agent-level keywords if defined, else fall back to role defaults
-		const agentRecord = agent as Record<string, unknown>
-		const keywords = (agentRecord.keywords as string[] | undefined)
+		const keywords = agent.keywords
 			?? DEFAULT_ROLE_KEYWORDS[agent.role]
 			?? []
 

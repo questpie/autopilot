@@ -150,6 +150,9 @@ export class Indexer {
 		'env', 'ini', 'cfg', 'conf', 'dockerfile',
 	])
 
+	/** D27: Binary document formats parsed via officeparser. */
+	private static OFFICE_EXTENSIONS = new Set(['pdf', 'docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods'])
+
 	/**
 	 * D27: Index all supported files from the knowledge directory.
 	 * Supports md, txt, html, json, csv, yaml, code, and more.
@@ -188,6 +191,21 @@ export class Indexer {
 							}
 						} catch {
 							// Skip unreadable images
+						}
+					}
+					// D27: Binary document formats (PDF, DOCX, PPTX, XLSX) via officeparser
+					else if (Indexer.OFFICE_EXTENSIONS.has(ext)) {
+						try {
+							const { parseOfficeAsync } = await import('officeparser')
+							const relPath = relative(knowledgeDir, fullPath)
+							const content = await parseOfficeAsync(fullPath)
+							if (content && content.trim().length > 0) {
+								const title = entry.name.replace(/\.[^.]+$/, '')
+								const changed = await this.indexEntitySafe('knowledge', relPath, title, content)
+								if (changed) count++
+							}
+						} catch {
+							// Skip unparseable documents
 						}
 					}
 					// D27: Index all supported text formats

@@ -84,6 +84,16 @@ export async function checkRateLimit(
 }
 
 /**
+ * Convenience wrapper: 3 password reset attempts per 15-minute window.
+ */
+export function checkPasswordResetLimit(
+	db: AutopilotDb,
+	email: string,
+): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+	return checkRateLimit(db, `password-reset:${email}`, 900, 3)
+}
+
+/**
  * IP-based rate limiting — 20 req/min.
  * Applied BEFORE auth middleware.
  * Exempt: /hooks/* and /api/status

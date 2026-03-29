@@ -28,6 +28,7 @@ export const AgentSchema = z.object({
 	tools: z.array(z.string()).default(['fs', 'terminal']),
 	mcps: z.array(z.string()).default([]),
 	triggers: z.array(AgentTriggerSchema).default([]),
+	keywords: z.array(z.string()).optional(),
 })
 
 export const AgentsFileSchema = z.object({

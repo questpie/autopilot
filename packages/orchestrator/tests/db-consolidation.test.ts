@@ -24,7 +24,8 @@ describe('DB consolidation (ADR-019)', () => {
 		const result = await createDb(root)
 		expect(result.db).toBeDefined()
 		expect(result.raw).toBeDefined()
-		expect(result.raw.filename).toBe(join(root, '.data', 'autopilot.db'))
+		// libSQL Client doesn't expose filename — verify the DB file exists instead
+		expect(existsSync(join(root, '.data', 'autopilot.db'))).toBe(true)
 	})
 
 	it('createAuth accepts Drizzle db from createDb (shared connection)', async () => {
@@ -53,6 +54,5 @@ describe('DB consolidation (ADR-019)', () => {
 		// Verify both operate on the same file
 		const dbPath = join(root, '.data', 'autopilot.db')
 		expect(existsSync(dbPath)).toBe(true)
-		expect(raw.filename).toBe(dbPath)
 	})
 })

@@ -176,6 +176,12 @@ let cachedConfig: { allowlist: string[]; trustedProxies: string[] | undefined } 
 let cacheTimestamp = 0
 const CACHE_TTL = 30_000 // 30 seconds
 
+/** Reset cached config (for testing). */
+export function resetIpAllowlistCache() {
+	cachedConfig = null
+	cacheTimestamp = 0
+}
+
 /**
  * Extract client IP from request headers.
  * X-Forwarded-For is only trusted when the connecting socket IP is in trustedProxies.

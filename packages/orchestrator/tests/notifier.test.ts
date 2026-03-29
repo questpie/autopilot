@@ -60,7 +60,8 @@ describe('Notifier', () => {
 		}
 		await notifier.notify(notification)
 		expect(logSpy).toHaveBeenCalledTimes(1)
-		const logged = logSpy.mock.calls[0]![0] as string
+		// Logger calls console.log(prefix, message, dataStr) — join all args
+		const logged = (logSpy.mock.calls[0] as string[]).join(' ')
 		expect(logged).toContain('[orchestrator]')
 		expect(logged).toContain('Task done')
 	})
@@ -88,7 +89,7 @@ describe('Notifier', () => {
 			message: 'Something urgent',
 			priority: 'urgent',
 		})
-		const urgentLog = logSpy.mock.calls[0]![0] as string
+		const urgentLog = (logSpy.mock.calls[0] as string[]).join(' ')
 		expect(urgentLog).toContain('!!')
 
 		await notifier.notify({
@@ -97,7 +98,7 @@ describe('Notifier', () => {
 			message: 'Something high',
 			priority: 'high',
 		})
-		const highLog = logSpy.mock.calls[1]![0] as string
+		const highLog = (logSpy.mock.calls[1] as string[]).join(' ')
 		expect(highLog).toContain('!')
 		// Make sure it's just one !, not !!
 		expect(highLog).not.toContain('!!notification')
@@ -108,8 +109,8 @@ describe('Notifier', () => {
 			message: 'Something normal',
 			priority: 'normal',
 		})
-		const normalLog = logSpy.mock.calls[2]![0] as string
-		expect(normalLog).toMatch(/\[orchestrator\] notification/)
+		const normalLog = (logSpy.mock.calls[2] as string[]).join(' ')
+		expect(normalLog).toMatch(/\[orchestrator\].*notification/)
 	})
 
 	it('includes taskId and agentId in details', async () => {

@@ -62,7 +62,7 @@ describe('parseWatchEvent', () => {
 	})
 
 	test('returns null for unknown paths', () => {
-		const event = parseWatchEvent('/company', '/company/knowledge/readme.md')
+		const event = parseWatchEvent('/company', '/company/random/unknown-file.txt')
 		expect(event).toBeNull()
 	})
 

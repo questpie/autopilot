@@ -5,8 +5,16 @@ import type {
 	EmbeddingModality,
 	EmbeddingTaskType,
 } from '../src/embeddings/provider'
-import { NoneEmbeddingProvider } from '../src/embeddings/none-provider'
 import { EmbeddingService, createEmbeddingService } from '../src/embeddings'
+
+/** Inline replacement for removed NoneEmbeddingProvider — returns nulls for everything. */
+class NoneEmbeddingProvider implements EmbeddingProvider {
+	name = 'none'
+	dimensions = 0
+	supports(_modality: EmbeddingModality) { return false }
+	async embed(_input: EmbeddingInput) { return null }
+	async embedBatch(inputs: EmbeddingInput[]) { return inputs.map(() => null) }
+}
 
 // ─── Mock Provider ───────────────────────────────────────────────────────
 
@@ -80,56 +88,31 @@ describe('NoneEmbeddingProvider', () => {
 // ─── EmbeddingService Tests ──────────────────────────────────────────────
 
 describe('EmbeddingService', () => {
-	test('uses primary provider when it supports the modality', async () => {
-		const primary = new MockProvider({ name: 'primary', dimensions: 768, modalities: ['text'] })
-		const fallback = new MockProvider({ name: 'fallback', dimensions: 384, modalities: ['text'] })
-		const service = new EmbeddingService(primary, fallback)
+	test('uses provider when it supports the modality', async () => {
+		const provider = new MockProvider({ name: 'primary', dimensions: 768, modalities: ['text'] })
+		const service = new EmbeddingService(provider)
 
 		const result = await service.embedText('hello')
 		expect(result).not.toBeNull()
 		expect(result!.length).toBe(768)
-		expect(primary.embedCallCount).toBe(1)
-		expect(fallback.embedCallCount).toBe(0)
+		expect(provider.embedCallCount).toBe(1)
 	})
 
-	test('falls back when primary fails', async () => {
-		const primary = new MockProvider({ name: 'primary', dimensions: 768, modalities: ['text'], shouldFail: true })
-		const fallback = new MockProvider({ name: 'fallback', dimensions: 384, modalities: ['text'] })
-		const service = new EmbeddingService(primary, fallback)
-
-		const result = await service.embedText('hello')
-		expect(result).not.toBeNull()
-		expect(result!.length).toBe(384)
-		expect(primary.embedCallCount).toBe(1)
-		expect(fallback.embedCallCount).toBe(1)
-	})
-
-	test('falls back when primary does not support modality', async () => {
-		const primary = new MockProvider({ name: 'primary', dimensions: 768, modalities: ['image'] })
-		const fallback = new MockProvider({ name: 'fallback', dimensions: 384, modalities: ['text'] })
-		const service = new EmbeddingService(primary, fallback)
-
-		const result = await service.embedText('hello')
-		expect(result).not.toBeNull()
-		expect(primary.embedCallCount).toBe(0)
-		expect(fallback.embedCallCount).toBe(1)
-	})
-
-	test('returns null when both primary and fallback fail', async () => {
-		const primary = new MockProvider({ name: 'primary', dimensions: 768, modalities: ['text'], shouldFail: true })
-		const fallback = new MockProvider({ name: 'fallback', dimensions: 384, modalities: ['text'], shouldFail: true })
-		const service = new EmbeddingService(primary, fallback)
+	test('returns null when provider fails', async () => {
+		const provider = new MockProvider({ name: 'primary', dimensions: 768, modalities: ['text'], shouldFail: true })
+		const service = new EmbeddingService(provider)
 
 		const result = await service.embedText('hello')
 		expect(result).toBeNull()
 	})
 
-	test('returns null when no provider supports modality', async () => {
-		const primary = new MockProvider({ name: 'primary', dimensions: 768, modalities: ['image'] })
-		const service = new EmbeddingService(primary)
+	test('returns null when provider does not support modality', async () => {
+		const provider = new MockProvider({ name: 'primary', dimensions: 768, modalities: ['image'] })
+		const service = new EmbeddingService(provider)
 
 		const result = await service.embedText('hello')
 		expect(result).toBeNull()
+		expect(provider.embedCallCount).toBe(0)
 	})
 
 	test('embedQuery uses retrieval_query task type', async () => {
@@ -170,7 +153,7 @@ describe('EmbeddingService', () => {
 		expect(primary.embedCallCount).toBe(1)
 	})
 
-	test('providerName and dimensions reflect primary', () => {
+	test('providerName and dimensions reflect provider', () => {
 		const primary = new MockProvider({ name: 'test-provider', dimensions: 512, modalities: ['text'] })
 		const service = new EmbeddingService(primary)
 		expect(service.providerName).toBe('test-provider')
@@ -181,19 +164,21 @@ describe('EmbeddingService', () => {
 // ─── createEmbeddingService Tests ────────────────────────────────────────
 
 describe('createEmbeddingService', () => {
-	test('returns none provider when no config', async () => {
+	test('returns openrouter provider by default', async () => {
 		const service = await createEmbeddingService()
-		expect(service.providerName).toBe('none')
-		expect(service.dimensions).toBe(0)
+		expect(service.providerName).toBe('openrouter')
+		expect(service.dimensions).toBeGreaterThan(0)
 	})
 
-	test('returns none provider when provider is none', async () => {
-		const service = await createEmbeddingService({ provider: 'none' })
-		expect(service.providerName).toBe('none')
+	test('embedText returns a vector or null (never throws)', async () => {
+		const service = await createEmbeddingService()
+		const result = await service.embedText('hello')
+		// May return null if OPENROUTER_API_KEY is not set — that's fine
+		expect(result === null || result instanceof Float32Array).toBe(true)
 	})
 
-	test('none service embed returns null', async () => {
-		const service = await createEmbeddingService({ provider: 'none' })
+	test('none provider via NoneEmbeddingProvider returns null', async () => {
+		const service = new EmbeddingService(new NoneEmbeddingProvider())
 		const result = await service.embedText('hello')
 		expect(result).toBeNull()
 	})

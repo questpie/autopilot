@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach, spyOn, mock } from 'bun:test'
 import { routeMessage } from '../src/router/message-router'
 import { container } from '../src/container'
+import * as microAgent from '../src/agent/micro-agent'
 import type { Agent } from '@questpie/autopilot-spec'
 import type { StorageBackend, ActivityEntry } from '../src/fs/storage'
 
@@ -40,6 +41,7 @@ function makeAgent(overrides: Partial<Agent> & { id: string; role: string }): Ag
 describe('routeMessage', () => {
 	let mockStorage: StorageBackend
 	let resolveAsyncSpy: ReturnType<typeof spyOn>
+	let classifySpy: ReturnType<typeof spyOn>
 
 	const agents: Agent[] = [
 		makeAgent({ id: 'dev', name: 'Developer', role: 'developer' }),
@@ -55,10 +57,13 @@ describe('routeMessage', () => {
 		resolveAsyncSpy = spyOn(container, 'resolveAsync').mockResolvedValue({
 			storage: mockStorage,
 		} as any)
+		// Mock classify() to prevent real LLM calls — return null to test keyword/CEO fallback
+		classifySpy = spyOn(microAgent, 'classify').mockResolvedValue(null)
 	})
 
 	afterEach(() => {
 		resolveAsyncSpy.mockRestore()
+		classifySpy.mockRestore()
 	})
 
 	it('routes @mention to correct agent', async () => {

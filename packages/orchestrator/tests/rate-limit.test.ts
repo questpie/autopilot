@@ -88,7 +88,7 @@ describe('checkRateLimit', () => {
 		const { dbFactory } = await import('../src/db')
 		const { db: dbResult } = await container.resolveAsync([dbFactory])
 
-		const result = checkRateLimit(dbResult.db, `test:unit:${Date.now()}`, 60, 5)
+		const result = await checkRateLimit(dbResult.db, `test:unit:${Date.now()}`, 60, 5)
 		expect(result.allowed).toBe(true)
 		expect(result.remaining).toBe(4)
 		expect(typeof result.resetAt).toBe('number')
@@ -104,13 +104,13 @@ describe('checkRateLimit', () => {
 
 		// First 5 requests should be allowed
 		for (let i = 0; i < max; i++) {
-			const result = checkRateLimit(dbResult.db, key, 60, max)
+			const result = await checkRateLimit(dbResult.db, key, 60, max)
 			expect(result.allowed).toBe(true)
 			expect(result.remaining).toBe(max - (i + 1))
 		}
 
 		// 6th request should be denied
-		const denied = checkRateLimit(dbResult.db, key, 60, max)
+		const denied = await checkRateLimit(dbResult.db, key, 60, max)
 		expect(denied.allowed).toBe(false)
 		expect(denied.remaining).toBe(0)
 	})
@@ -122,8 +122,11 @@ describe('checkRateLimit', () => {
 
 		const key = `test:concurrent:${Date.now()}`
 
-		// 5 concurrent calls on the same key
-		const results = Array.from({ length: 5 }, () => checkRateLimit(dbResult.db, key, 60, 100))
+		// 5 sequential calls on the same key
+		const results = []
+		for (let i = 0; i < 5; i++) {
+			results.push(await checkRateLimit(dbResult.db, key, 60, 100))
+		}
 
 		// All should be allowed and remaining should decrease
 		const remainings = results.map((r) => r.remaining)
@@ -144,14 +147,13 @@ describe('checkRateLimit', () => {
 		// Manually insert a previous window entry with count=10
 		const raw = (dbResult.db as any).$client
 		const expiresAt = windowStart + windowSec * 2
-		raw
-			.prepare(
-				`INSERT OR REPLACE INTO rate_limit_entries (key, window_start, count, expires_at) VALUES (?, ?, ?, ?)`,
-			)
-			.run(`test:sliding:boundary`, prevWindowStart, 10, expiresAt)
+		await raw.execute({
+			sql: `INSERT OR REPLACE INTO rate_limit_entries (key, window_start, count, expires_at) VALUES (?, ?, ?, ?)`,
+			args: [`test:sliding:boundary`, prevWindowStart, 10, expiresAt],
+		})
 
 		// Now call checkRateLimit — the sliding window should factor in the previous count
-		const result = checkRateLimit(dbResult.db, `test:sliding:boundary`, windowSec, 20)
+		const result = await checkRateLimit(dbResult.db, `test:sliding:boundary`, windowSec, 20)
 
 		// The estimated count must be > 1 (current) because prevCount * weight > 0
 		// (unless we're right at the window boundary, weight ~ 0)
@@ -174,13 +176,13 @@ describe('checkPasswordResetLimit', () => {
 
 		// First 3 attempts should be allowed
 		for (let i = 0; i < 3; i++) {
-			const result = checkPasswordResetLimit(dbResult.db, email)
+			const result = await checkPasswordResetLimit(dbResult.db, email)
 			expect(result.allowed).toBe(true)
 			expect(result.remaining).toBe(2 - i)
 		}
 
 		// 4th attempt should be denied
-		const denied = checkPasswordResetLimit(dbResult.db, email)
+		const denied = await checkPasswordResetLimit(dbResult.db, email)
 		expect(denied.allowed).toBe(false)
 		expect(denied.remaining).toBe(0)
 	})
@@ -191,7 +193,7 @@ describe('checkPasswordResetLimit', () => {
 		const { db: dbResult } = await container.resolveAsync([dbFactory])
 
 		const email = `reset-window-${Date.now()}@example.com`
-		const result = checkPasswordResetLimit(dbResult.db, email)
+		const result = await checkPasswordResetLimit(dbResult.db, email)
 
 		const now = Math.floor(Date.now() / 1000)
 		// resetAt should be aligned to a 900-second boundary
@@ -211,12 +213,12 @@ describe('checkPasswordResetLimit', () => {
 		const email2 = `reset-iso2-${ts}@example.com`
 
 		// Exhaust email1
-		for (let i = 0; i < 3; i++) checkPasswordResetLimit(dbResult.db, email1)
-		const denied = checkPasswordResetLimit(dbResult.db, email1)
+		for (let i = 0; i < 3; i++) await checkPasswordResetLimit(dbResult.db, email1)
+		const denied = await checkPasswordResetLimit(dbResult.db, email1)
 		expect(denied.allowed).toBe(false)
 
 		// email2 should still be fresh
-		const allowed = checkPasswordResetLimit(dbResult.db, email2)
+		const allowed = await checkPasswordResetLimit(dbResult.db, email2)
 		expect(allowed.allowed).toBe(true)
 	})
 })
@@ -344,7 +346,7 @@ describe('agent rate limiting', () => {
 		const max = 600
 
 		// Should allow first request
-		const result = checkRateLimit(dbResult.db, key, 60, max)
+		const result = await checkRateLimit(dbResult.db, key, 60, max)
 		expect(result.allowed).toBe(true)
 		expect(result.remaining).toBe(599)
 	})
@@ -359,12 +361,12 @@ describe('agent rate limiting', () => {
 
 		// Exhaust the search limit
 		for (let i = 0; i < max; i++) {
-			const r = checkRateLimit(dbResult.db, key, 60, max)
+			const r = await checkRateLimit(dbResult.db, key, 60, max)
 			expect(r.allowed).toBe(true)
 		}
 
 		// Next request should be denied
-		const denied = checkRateLimit(dbResult.db, key, 60, max)
+		const denied = await checkRateLimit(dbResult.db, key, 60, max)
 		expect(denied.allowed).toBe(false)
 		expect(denied.remaining).toBe(0)
 	})
@@ -379,12 +381,12 @@ describe('agent rate limiting', () => {
 
 		// Should allow requests up to limit
 		for (let i = 0; i < max; i++) {
-			const r = checkRateLimit(dbResult.db, key, 60, max)
+			const r = await checkRateLimit(dbResult.db, key, 60, max)
 			expect(r.allowed).toBe(true)
 		}
 
 		// 101st should be denied
-		const denied = checkRateLimit(dbResult.db, key, 60, max)
+		const denied = await checkRateLimit(dbResult.db, key, 60, max)
 		expect(denied.allowed).toBe(false)
 	})
 

@@ -110,6 +110,14 @@ export function registerTools(server: McpServer): void {
 		return { content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] }
 	})
 
+	server.tool('file_write', 'Write content to a file in the company directory', {
+		path: z.string().describe('Relative path from company root'),
+		content: z.string().describe('File content to write'),
+	}, async (args) => {
+		const data = await apiPost(`/api/fs/${encodeURIComponent(args.path)}`, { content: args.content })
+		return { content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] }
+	})
+
 	server.tool('file_list', 'List files in a directory', {
 		path: z.string().optional().describe('Directory path (default: root)'),
 	}, async (args) => {

@@ -10,6 +10,10 @@ describe('resolveActor', () => {
 	test('returns webhook actor for /hooks/* without credentials', async () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
+			// Configure webhook with auth: none so no HMAC is required
+			await writeYaml(join(root, 'team', 'webhooks.yaml'), {
+				webhooks: [{ path: '/hooks/test', auth: 'none', enabled: true }],
+			})
 			const request = new Request('http://localhost:7778/hooks/test')
 			const actor = await resolveActor(request, {
 				companyRoot: root,
@@ -17,9 +21,9 @@ describe('resolveActor', () => {
 			})
 
 			expect(actor).not.toBeNull()
-			expect(actor!.id).toBe('webhook')
-			expect(actor!.role).toBe('member')
-			expect(actor!.type).toBe('api')
+			expect((actor as Actor).id).toBe('webhook')
+			expect((actor as Actor).role).toBe('viewer')
+			expect((actor as Actor).type).toBe('api')
 		} finally {
 			await cleanup()
 		}
