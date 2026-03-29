@@ -26,6 +26,8 @@ export interface AgentSpawnOptions {
 	agentTools?: string[]
 	/** Agent filesystem scope for PreToolUse enforcement */
 	agentScope?: { fsRead?: string[]; fsWrite?: string[]; secrets?: string[] }
+	/** Enable OpenRouter :online web search for this agent */
+	webSearch?: boolean
 }
 
 /**
@@ -43,8 +45,7 @@ export interface AgentSessionResult {
  * Implement this to add support for new LLM providers.
  *
  * Built-in implementations:
- * - {@link ClaudeAgentSDKProvider} (default, uses `@anthropic-ai/claude-agent-sdk`)
- * - {@link AnthropicProvider} (uses `@anthropic-ai/sdk` API key flow)
+ * - {@link TanStackAIProvider} (default, uses `@tanstack/ai` + OpenRouter)
  */
 export interface AgentProvider {
 	readonly name: string

@@ -7,7 +7,7 @@
  *   agents 600/min general, 50/min search, 100/min chat; webhook source exempt)
  */
 import { createMiddleware } from 'hono/factory'
-import type { Database } from 'bun:sqlite'
+import type { Client } from '@libsql/client'
 import type { AppEnv } from '../app'
 import type { AutopilotDb } from '../../db'
 import { getClientIp } from './ip-allowlist'
@@ -20,52 +20,61 @@ import { getClientIp } from './ip-allowlist'
  *
  * This avoids hard resets at window boundaries without requiring schema changes.
  */
-export function checkRateLimit(
+export async function checkRateLimit(
 	db: AutopilotDb,
 	key: string,
 	windowSec: number,
 	max: number,
-): { allowed: boolean; remaining: number; resetAt: number } {
+): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
 	const now = Math.floor(Date.now() / 1000)
 	const windowStart = now - (now % windowSec) // Align to window boundary
 	const prevWindowStart = windowStart - windowSec
 	const expiresAt = windowStart + windowSec * 2 // Keep for 2 windows for cleanup
 
-	const raw = (db as unknown as { $client: Database }).$client
+	const raw = (db as unknown as { $client: Client }).$client
 
 	// Use a transaction for atomicity
-	const result = raw.transaction(() => {
+	const tx = await raw.transaction('write')
+	let result: { estimatedCount: number; currentCount: number }
+	try {
 		// Get previous window count for sliding window estimation
-		const prevEntry = raw
-			.prepare(`SELECT count FROM rate_limit_entries WHERE key = ? AND window_start = ?`)
-			.get(key, prevWindowStart) as { count: number } | null
-		const prevCount = prevEntry?.count ?? 0
+		const prevResult = await tx.execute({
+			sql: `SELECT count FROM rate_limit_entries WHERE key = ? AND window_start = ?`,
+			args: [key, prevWindowStart],
+		})
+		const prevCount = prevResult.rows[0]?.count as number | undefined ?? 0
 
 		// Upsert current window count
-		const existing = raw
-			.prepare(`SELECT id, count FROM rate_limit_entries WHERE key = ? AND window_start = ?`)
-			.get(key, windowStart) as { id: number; count: number } | null
+		const existingResult = await tx.execute({
+			sql: `SELECT id, count FROM rate_limit_entries WHERE key = ? AND window_start = ?`,
+			args: [key, windowStart],
+		})
+		const existing = existingResult.rows[0] as { id: number; count: number } | undefined
 
 		let currentCount: number
 		if (existing) {
-			currentCount = existing.count + 1
-			raw.prepare(`UPDATE rate_limit_entries SET count = ? WHERE id = ?`).run(
-				currentCount,
-				existing.id,
-			)
+			currentCount = (existing.count as number) + 1
+			await tx.execute({
+				sql: `UPDATE rate_limit_entries SET count = ? WHERE id = ?`,
+				args: [currentCount, existing.id],
+			})
 		} else {
 			currentCount = 1
-			raw.prepare(
-				`INSERT INTO rate_limit_entries (key, window_start, count, expires_at) VALUES (?, ?, 1, ?)`,
-			).run(key, windowStart, expiresAt)
+			await tx.execute({
+				sql: `INSERT INTO rate_limit_entries (key, window_start, count, expires_at) VALUES (?, ?, 1, ?)`,
+				args: [key, windowStart, expiresAt],
+			})
 		}
 
 		// Weighted sliding window: weight previous window by its remaining overlap
 		const weight = (windowStart + windowSec - now) / windowSec
 		const estimatedCount = Math.floor(prevCount * weight) + currentCount
 
-		return { estimatedCount, currentCount }
-	})()
+		result = { estimatedCount, currentCount }
+		await tx.commit()
+	} finally {
+		tx.close()
+	}
 
 	const allowed = result.estimatedCount <= max
 	const remaining = Math.max(0, max - result.estimatedCount)
@@ -91,7 +100,7 @@ export function ipRateLimit() {
 		const db = c.get('db')
 		const key = `ip:${clientIp}`
 
-		const result = checkRateLimit(db, key, 60, 20)
+		const result = await checkRateLimit(db, key, 60, 20)
 
 		// Always set headers
 		c.header('X-RateLimit-Limit', '20')
@@ -140,7 +149,7 @@ export function actorRateLimit() {
 			max = isAgent ? 600 : 300
 		}
 
-		const result = checkRateLimit(db, key, 60, max)
+		const result = await checkRateLimit(db, key, 60, max)
 
 		c.header('X-RateLimit-Limit', String(max))
 		c.header('X-RateLimit-Remaining', String(result.remaining))
@@ -153,4 +162,3 @@ export function actorRateLimit() {
 		await next()
 	})
 }
-

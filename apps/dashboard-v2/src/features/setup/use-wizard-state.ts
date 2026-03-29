@@ -15,8 +15,8 @@ export interface WizardState {
     name: string
     email: string
   } | null
-  /** Provider choice from step 3 */
-  providerChoice: "claude" | "openai" | null
+  /** Provider choice from step 3 (always openrouter in v3) */
+  providerChoice: "openrouter" | null
   /** Team template from step 5 */
   teamTemplate: "solo" | "minimal" | "custom" | null
 }
@@ -28,7 +28,7 @@ interface WizardActions {
   nextStep: () => void
   prevStep: () => void
   setAccountData: (data: { name: string; email: string }) => void
-  setProviderChoice: (choice: "claude" | "openai") => void
+  setProviderChoice: (choice: "openrouter") => void
   setTeamTemplate: (template: "solo" | "minimal" | "custom") => void
   reset: () => void
   isStepComplete: (step: WizardStep) => boolean

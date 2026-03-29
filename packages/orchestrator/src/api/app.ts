@@ -40,6 +40,7 @@ import {
 	pins,
 	search,
 	sessions,
+	agentSessions,
 	settings,
 	skills,
 	status,
@@ -183,6 +184,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/upload', upload)
 		.route('/api/events', events)
 		.route('/api/sessions', sessions)
+		.route('/api/agent-sessions', agentSessions)
 		.route('/api/notifications', notifications)
 		.route('/api/fs', fsBrowser)
 

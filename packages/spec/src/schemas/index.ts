@@ -12,6 +12,8 @@ export { AgentMemorySchema, MemoryDecisionSchema, MemoryMistakeSchema, MemoryFac
 export { PinSchema, PinActionSchema, PinMetadataSchema, DashboardGroupSchema, DashboardGroupsFileSchema } from './pin'
 export { SessionMetaSchema, StreamChunkSchema } from './session'
 export { SecretSchema } from './secret'
+export { DeploymentModeSchema, DEPLOYMENT_MODES, resolveDeploymentMode } from './deployment'
+export type { DeploymentMode } from './deployment'
 export { HumanSchema, HumansFileSchema, NotificationRoutingSchema, QuietHoursSchema } from './human'
 export { TransportConfigSchema, TransportsFileSchema } from './transport'
 export { ApprovalGateSchema, ApprovalGatesFileSchema } from './policy'

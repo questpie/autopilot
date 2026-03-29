@@ -1,171 +1,107 @@
-import { join } from 'path'
 import { z } from 'zod'
-import { PATHS } from '@questpie/autopilot-spec'
-import { readYamlUnsafe } from '../../fs/yaml'
-import { loadCompany } from '../../fs/company'
 import type { ToolDefinition, ToolContext, ToolResult } from '../tools'
-import { checkSsrf } from './shared'
 
-export function createSearchWebTool(companyRoot: string): ToolDefinition {
+/**
+ * Web search tool using OpenRouter's `:online` web search plugin.
+ *
+ * How it works: Makes a chat completion request to OpenRouter with a search model
+ * (e.g., `openai/gpt-4o-mini:online`), which triggers native web search.
+ * The response includes search results with URL citations.
+ *
+ * Zero extra infrastructure — uses the same OPENROUTER_API_KEY.
+ */
+export function createSearchWebTool(_companyRoot: string): ToolDefinition {
 	return {
 		name: 'search_web',
-		description: 'Search the web using a search API. Returns titles, URLs, and snippets.',
+		description: 'Search the web for current information. Returns search results with titles, URLs, and content snippets.',
 		schema: z.object({
 			query: z.string().describe('Search query'),
 			max_results: z.number().optional().describe('Max results to return, default 5'),
 		}),
-		execute: async (args, ctx) => {
+		execute: async (args, _ctx) => {
 			const maxResults = args.max_results ?? 5
-
-			// Load search API key from secrets/search-api.yaml
-			const secretPath = join(
-				companyRoot,
-				PATHS.SECRETS_DIR.replace(/^\/company/, ''),
-				'search-api.yaml',
-			)
-			let apiKey: string | undefined
-			let allowedAgents: string[] | undefined
-			try {
-				const secret = (await readYamlUnsafe(secretPath)) as {
-					api_key?: string
-					allowed_agents?: string[]
-				}
-				apiKey = secret.api_key
-				allowedAgents = secret.allowed_agents
-			} catch {
-				return {
-					content: [{ type: 'text' as const, text: 'Web search not configured. Add search API key in secrets/search-api.yaml.' }],
-					isError: true,
-				}
-			}
+			const apiKey = process.env.OPENROUTER_API_KEY
 
 			if (!apiKey) {
 				return {
-					content: [{ type: 'text' as const, text: 'Web search not configured. Add search API key in secrets/search-api.yaml.' }],
+					content: [{ type: 'text' as const, text: 'Web search requires OPENROUTER_API_KEY to be configured.' }],
 					isError: true,
 				}
 			}
 
-			// Check agent access
-			if (allowedAgents && allowedAgents.length > 0 && !allowedAgents.includes(ctx.agentId)) {
-				return {
-					content: [{ type: 'text' as const, text: `Agent ${ctx.agentId} not allowed to use search_web.` }],
-					isError: true,
-				}
-			}
-
-			// Determine search provider from company.yaml settings
-			let searchProvider = 'brave'
 			try {
-				const company = await loadCompany(companyRoot)
-				const settings = company.settings as Record<string, unknown>
-				if (settings.search_provider && typeof settings.search_provider === 'string') {
-					searchProvider = settings.search_provider
-				}
-			} catch {
-				// Use default provider
-			}
-
-			try {
-				let results: Array<{ title: string; url: string; snippet: string }> = []
-
-				switch (searchProvider) {
-					case 'tavily': {
-						const resp = await fetch('https://api.tavily.com/search', {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({
-								api_key: apiKey,
-								query: args.query,
-								max_results: maxResults,
-							}),
-							signal: AbortSignal.timeout(15_000),
-						})
-						if (!resp.ok) {
-							return { content: [{ type: 'text' as const, text: `Tavily search failed: HTTP ${resp.status}` }], isError: true }
-						}
-						const data = (await resp.json()) as { results?: Array<{ title: string; url: string; content: string }> }
-						results = (data.results ?? []).slice(0, maxResults).map((r) => ({
-							title: r.title,
-							url: r.url,
-							snippet: r.content,
-						}))
-						break
-					}
-
-					case 'serpapi': {
-						const params = new URLSearchParams({
-							api_key: apiKey,
-							q: args.query,
-							num: String(maxResults),
-						})
-						const resp = await fetch(`https://serpapi.com/search.json?${params}`, {
-							signal: AbortSignal.timeout(15_000),
-						})
-						if (!resp.ok) {
-							return { content: [{ type: 'text' as const, text: `SerpAPI search failed: HTTP ${resp.status}` }], isError: true }
-						}
-						const data = (await resp.json()) as { organic_results?: Array<{ title: string; link: string; snippet: string }> }
-						results = (data.organic_results ?? []).slice(0, maxResults).map((r) => ({
-							title: r.title,
-							url: r.link,
-							snippet: r.snippet,
-						}))
-						break
-					}
-
-					case 'brave':
-					default: {
-						const params = new URLSearchParams({
-							q: args.query,
-							count: String(maxResults),
-						})
-						const resp = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
-							headers: {
-								'Accept': 'application/json',
-								'Accept-Encoding': 'gzip',
-								'X-Subscription-Token': apiKey,
+				// Use OpenRouter's :online plugin via a cheap model
+				const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+					method: 'POST',
+					headers: {
+						'Authorization': `Bearer ${apiKey}`,
+						'Content-Type': 'application/json',
+						'HTTP-Referer': 'https://questpie.com',
+						'X-Title': 'QuestPie Autopilot',
+					},
+					body: JSON.stringify({
+						model: 'openai/gpt-4o-mini:online',
+						messages: [
+							{
+								role: 'user',
+								content: `Search the web for: ${args.query}\n\nReturn the top ${maxResults} most relevant results. For each result include the title, URL, and a brief content snippet.`,
 							},
-							signal: AbortSignal.timeout(15_000),
-						})
-						if (!resp.ok) {
-							return { content: [{ type: 'text' as const, text: `Brave search failed: HTTP ${resp.status}` }], isError: true }
+						],
+						max_tokens: 1500,
+					}),
+					signal: AbortSignal.timeout(30_000),
+				})
+
+				if (!resp.ok) {
+					const body = await resp.text().catch(() => '')
+					return {
+						content: [{ type: 'text' as const, text: `Web search failed: HTTP ${resp.status} ${body.slice(0, 200)}` }],
+						isError: true,
+					}
+				}
+
+				const data = (await resp.json()) as {
+					choices?: Array<{
+						message?: {
+							content?: string
+							annotations?: Array<{
+								type: string
+								url_citation?: { url: string; title: string; content?: string }
+							}>
 						}
-						const data = (await resp.json()) as { web?: { results?: Array<{ title: string; url: string; description: string }> } }
-						results = (data.web?.results ?? []).slice(0, maxResults).map((r) => ({
-							title: r.title,
-							url: r.url,
-							snippet: r.description,
-						}))
-						break
+					}>
+				}
+
+				const choice = data.choices?.[0]?.message
+				const content = choice?.content ?? ''
+				const annotations = choice?.annotations ?? []
+
+				// If we have URL citations, format them nicely
+				if (annotations.length > 0) {
+					const citations = annotations
+						.filter((a) => a.type === 'url_citation' && a.url_citation)
+						.slice(0, maxResults)
+						.map((a, i) => {
+							const c = a.url_citation!
+							return `${i + 1}. **${c.title}**\n   ${c.url}\n   ${c.content?.slice(0, 200) ?? ''}`
+						})
+						.join('\n\n')
+
+					return {
+						content: [{ type: 'text' as const, text: citations || content }],
 					}
 				}
 
-				if (results.length === 0) {
-					return { content: [{ type: 'text' as const, text: 'No search results found.' }] }
+				// Fallback: return raw content from the model
+				return {
+					content: [{ type: 'text' as const, text: content || 'No search results found.' }],
 				}
-
-				// SSRF check on result URLs
-				const safeResults: typeof results = []
-				for (const r of results) {
-					const ssrfError = await checkSsrf(r.url)
-					if (!ssrfError) {
-						safeResults.push(r)
-					}
-				}
-
-				if (safeResults.length === 0) {
-					return { content: [{ type: 'text' as const, text: 'All search results were filtered by SSRF protection.' }] }
-				}
-
-				const markdown = safeResults
-					.map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.snippet}`)
-					.join('\n\n')
-
-				return { content: [{ type: 'text' as const, text: markdown }] }
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err)
-				return { content: [{ type: 'text' as const, text: `Web search failed: ${msg}` }], isError: true }
+				return {
+					content: [{ type: 'text' as const, text: `Web search failed: ${msg}` }],
+					isError: true,
+				}
 			}
 		},
 	}

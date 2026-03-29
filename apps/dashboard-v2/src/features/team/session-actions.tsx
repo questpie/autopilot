@@ -31,34 +31,23 @@ export function SessionActions({ agentId, agentName }: SessionActionsProps) {
   const [message, setMessage] = useState("")
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
 
-  // Send DM message to agent (queued for next session)
+  // Steer running session — sends message directly into the durable stream
   const sendMessageMutation = useMutation({
     mutationFn: async (content: string) => {
-      // Send to agent's DM channel (convention: dm-{agentId})
+      // Try steering the active session first (real-time injection)
+      const steerRes = await api.api["agent-sessions"][":id"].steer.$post({
+        param: { id: `session-${agentId}` },
+        json: { message: content },
+      })
+      if (steerRes.ok) return
+
+      // Fallback: send to agent's DM channel (queued for next session)
       const dmChannelId = `dm-${agentId}`
       const res = await api.api.channels[":id"].messages.$post({
         param: { id: dmChannelId },
         json: { content },
       })
-      if (!res.ok) {
-        // If DM channel doesn't exist, try creating it first
-        const createRes = await api.api.channels.$post({
-          json: {
-            name: `DM: ${agentName}`,
-            type: "direct" as const,
-            members: [
-              { actor_id: agentId, actor_type: "agent" as const },
-            ],
-          },
-        })
-        if (!createRes.ok) throw new Error("Failed to create DM channel")
-        // Retry sending
-        const retryRes = await api.api.channels[":id"].messages.$post({
-          param: { id: dmChannelId },
-          json: { content },
-        })
-        if (!retryRes.ok) throw new Error("Failed to send message")
-      }
+      if (!res.ok) throw new Error("Failed to send message")
     },
     onSuccess: () => {
       toast.success(t("team.session_message_sent"))
@@ -105,6 +94,24 @@ export function SessionActions({ agentId, agentName }: SessionActionsProps) {
 
   return (
     <div className="flex flex-col gap-2 border-t border-border p-4">
+      {/* Message input */}
+      <div className="flex gap-2">
+        <Input
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={t("team.session_message_placeholder", { name: agentName })}
+          className="text-xs"
+        />
+        <Button
+          size="icon-sm"
+          onClick={handleSendMessage}
+          disabled={!message.trim() || sendMessageMutation.isPending}
+        >
+          <PaperPlaneRightIcon size={14} />
+        </Button>
+      </div>
+
       {/* Action buttons */}
       <div className="flex items-center gap-2">
         <Button
@@ -129,24 +136,6 @@ export function SessionActions({ agentId, agentName }: SessionActionsProps) {
         >
           <XCircleIcon size={12} />
           {t("team.session_cancel")}
-        </Button>
-      </div>
-
-      {/* Message input */}
-      <div className="flex gap-2">
-        <Input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={t("team.session_message_placeholder", { name: agentName })}
-          className="text-xs"
-        />
-        <Button
-          size="icon-sm"
-          onClick={handleSendMessage}
-          disabled={!message.trim() || sendMessageMutation.isPending}
-        >
-          <PaperPlaneRightIcon size={14} />
         </Button>
       </div>
 

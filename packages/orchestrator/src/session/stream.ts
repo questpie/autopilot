@@ -1,4 +1,5 @@
 import type { StreamChunk } from '@questpie/autopilot-spec'
+import { createSessionStream, appendToSessionStream } from './durable'
 import { logger } from '../logger'
 
 /** A live session stream that listeners can subscribe to. */
@@ -17,7 +18,7 @@ export interface SessionStream {
 export class SessionStreamManager {
 	private streams: Map<string, SessionStream> = new Map()
 
-	/** Open a new stream for the given session. */
+	/** Open a new stream for the given session. Also creates a durable stream. */
 	createStream(sessionId: string, agentId: string): SessionStream {
 		const stream: SessionStream = {
 			sessionId,
@@ -25,14 +26,23 @@ export class SessionStreamManager {
 			listeners: new Set(),
 		}
 		this.streams.set(sessionId, stream)
+
+		// Create durable stream (fire-and-forget)
+		createSessionStream(sessionId).catch((err) => {
+			logger.warn('session-stream', `failed to create durable stream for ${sessionId}`, {
+				error: err instanceof Error ? err.message : String(err),
+			})
+		})
+
 		return stream
 	}
 
-	/** Push a chunk to all listeners of a session stream. */
+	/** Push a chunk to all listeners AND to the durable stream. */
 	emit(sessionId: string, chunk: StreamChunk): void {
 		const stream = this.streams.get(sessionId)
 		if (!stream) return
 
+		// Emit to in-memory listeners (CLI attach, dashboard SSE)
 		for (const listener of stream.listeners) {
 			try {
 				listener(chunk)
@@ -40,6 +50,9 @@ export class SessionStreamManager {
 				logger.error('session-stream', `listener error for ${sessionId}`, { error: err instanceof Error ? err.message : String(err) })
 			}
 		}
+
+		// Persist to durable stream (fire-and-forget)
+		appendToSessionStream(sessionId, chunk).catch(() => {})
 	}
 
 	/** Subscribe to a session stream. Returns an unsubscribe function. */

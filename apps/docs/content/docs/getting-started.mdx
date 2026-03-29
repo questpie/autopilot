@@ -12,8 +12,8 @@ Install Autopilot, scaffold a company, and give your first intent. One Bun proce
   curl -fsSL https://bun.sh/install | bash
   ```
 - **Authentication** (choose one):
-  - `autopilot provider login claude` -- use your Claude Max/Pro subscription (recommended)
-  - `ANTHROPIC_API_KEY` -- API key from [console.anthropic.com](https://console.anthropic.com) (alternative)
+  - `autopilot provider set openrouter --api-key sk-or-...` -- use your Claude Max/Pro subscription (recommended)
+  - `OPENROUTER_API_KEY` -- API key from [openrouter.ai/keys](https://openrouter.ai/keys) (alternative)
 - **Git** -- required for versioning company state and code operations
 
 That's it. No Docker. No Postgres. No Redis. No vector DB.
@@ -26,9 +26,9 @@ autopilot init my-company
 cd my-company
 
 # Authenticate (choose one)
-autopilot provider login claude    # Use Claude subscription (recommended)
+autopilot provider set openrouter --api-key sk-or-...    # Use Claude subscription (recommended)
 # OR
-export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
+export OPENROUTER_API_KEY=sk-or-...  # Use API key
 
 # Start the orchestrator + dashboard
 autopilot start
@@ -118,7 +118,7 @@ settings:
   auto_assign: true
   require_approval: ["merge", "deploy", "spend", "publish"]
   max_concurrent_agents: 4
-  agent_provider: "claude-agent-sdk"
+  agent_provider: "tanstack-ai"
   agent_model: "claude-sonnet-4-6"
   budget:
     daily_token_limit: 2000000
@@ -160,9 +160,9 @@ Start with 2-3 agents, add as you need. You choose the names, the roles, and the
 cd my-company
 
 # Authenticate (choose one)
-autopilot provider login claude    # Use Claude subscription (recommended)
+autopilot provider set openrouter --api-key sk-or-...    # Use Claude subscription (recommended)
 # OR
-export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
+export OPENROUTER_API_KEY=sk-or-...  # Use API key
 
 autopilot start
 ```

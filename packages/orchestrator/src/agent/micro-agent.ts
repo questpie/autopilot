@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
+import { chat } from '@tanstack/ai'
+import { openRouterText } from '@tanstack/ai-openrouter'
 import { logger } from '../logger'
 import { loadCompany } from '../fs/company'
 
@@ -7,7 +9,7 @@ import { loadCompany } from '../fs/company'
 // Types
 // ---------------------------------------------------------------------------
 
-export interface MicroAgentConfig<T = unknown> {
+export interface ClassifyConfig<T = unknown> {
 	id: string
 	description: string
 	systemPrompt: string
@@ -15,7 +17,7 @@ export interface MicroAgentConfig<T = unknown> {
 	maxTokens: number
 }
 
-type ProviderChoice = 'auto' | 'gemini' | 'haiku' | 'none'
+const DEFAULT_UTILITY_MODEL = 'google/gemma-3-4b-it:free'
 
 // ---------------------------------------------------------------------------
 // Cache (5-minute TTL)
@@ -50,100 +52,89 @@ function cacheSet(key: string, value: unknown): void {
 }
 
 // ---------------------------------------------------------------------------
-// Provider implementations
+// Core: classify — one function, uses chat() directly
 // ---------------------------------------------------------------------------
 
-async function classifyWithGemini<T>(
-	config: MicroAgentConfig<T>,
+/**
+ * Classify an input using the utility model via TanStack AI chat().
+ *
+ * Same API as agent sessions — just different model + no tools.
+ * Returns `T` on success, `null` on any error. Never throws.
+ */
+export async function classify<T>(
+	config: ClassifyConfig<T>,
 	input: string,
+	model?: string,
 ): Promise<T | null> {
-	const apiKey = process.env.GEMINI_API_KEY
-	if (!apiKey) return null
+	try {
+		const key = cacheKey(config.id, input)
+		const cached = cacheGet<T>(key)
+		if (cached !== undefined) return cached
 
-	const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+		if (!process.env.OPENROUTER_API_KEY) {
+			logger.warn('classify', 'OPENROUTER_API_KEY not set')
+			return null
+		}
 
-	const response = await fetch(url, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			contents: [
-				{
-					parts: [{ text: `${config.systemPrompt}\n\nInput:\n${input}\n\nRespond with ONLY valid JSON, no markdown fences.` }],
-				},
-			],
-			generationConfig: {
-				maxOutputTokens: config.maxTokens,
-				temperature: 0,
-			},
-		}),
-	})
+		const m = model ?? DEFAULT_UTILITY_MODEL
+		const result = await chat({
+			adapter: openRouterText(m as Parameters<typeof openRouterText>[0]),
+			messages: [{
+				role: 'user',
+				content: `${config.systemPrompt}\n\nInput:\n${input}\n\nRespond with ONLY valid JSON, no markdown fences.`,
+			}],
+			stream: false,
+		}) as string
 
-	if (!response.ok) {
-		logger.warn('micro-agent', `Gemini HTTP ${response.status}`, {
-			configId: config.id,
-			status: response.status,
+		if (!result) return null
+
+		const parsed = parseAndValidate(config, result)
+		if (parsed !== null) cacheSet(key, parsed)
+		return parsed
+	} catch (err) {
+		logger.error('classify', `${config.id} failed`, {
+			error: err instanceof Error ? err.message : String(err),
 		})
 		return null
 	}
-
-	const data = (await response.json()) as {
-		candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-	}
-
-	const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-	if (!text) return null
-
-	return parseAndValidate(config, text)
 }
 
-async function classifyWithHaiku<T>(
-	config: MicroAgentConfig<T>,
-	input: string,
-): Promise<T | null> {
-	const apiKey = process.env.ANTHROPIC_API_KEY
-	if (!apiKey) return null
+/**
+ * Get the utility model name from company config.
+ * Falls back to DEFAULT_UTILITY_MODEL if not configured.
+ */
+export async function getUtilityModel(companyRoot: string): Promise<string> {
+	try {
+		const company = await loadCompany(companyRoot)
+		const settings = company.settings as Record<string, unknown>
+		if (typeof settings.utility_model === 'string') return settings.utility_model
 
-	const { default: Anthropic } = await import('@anthropic-ai/sdk')
-	const client = new Anthropic()
-
-	const response = await client.messages.create({
-		model: 'claude-haiku-4-5-20250514',
-		max_tokens: config.maxTokens,
-		messages: [
-			{
-				role: 'user',
-				content: `${config.systemPrompt}\n\nInput:\n${input}\n\nRespond with ONLY valid JSON, no markdown fences.`,
-			},
-		],
-	})
-
-	const textBlock = response.content.find((b) => b.type === 'text')
-	if (!textBlock || textBlock.type !== 'text') return null
-
-	return parseAndValidate(config, textBlock.text)
+		const microConfig = settings.micro_agents as { cache_ttl?: number } | undefined
+		if (microConfig?.cache_ttl) CACHE_TTL_MS = microConfig.cache_ttl * 1000
+	} catch {
+		// defaults
+	}
+	return DEFAULT_UTILITY_MODEL
 }
 
 // ---------------------------------------------------------------------------
 // JSON parsing + Zod validation
 // ---------------------------------------------------------------------------
 
-function parseAndValidate<T>(config: MicroAgentConfig<T>, raw: string): T | null {
+function parseAndValidate<T>(config: ClassifyConfig<T>, raw: string): T | null {
 	try {
-		// Strip markdown fences if the model included them anyway
 		const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
 		const parsed = JSON.parse(cleaned)
 		const result = config.outputSchema.safeParse(parsed)
 		if (!result.success) {
-			logger.warn('micro-agent', 'schema validation failed', {
-				configId: config.id,
+			logger.warn('classify', `${config.id} schema validation failed`, {
 				errors: result.error.issues.map((i) => i.message),
 			})
 			return null
 		}
 		return result.data
 	} catch (err) {
-		logger.warn('micro-agent', 'JSON parse failed', {
-			configId: config.id,
+		logger.warn('classify', `${config.id} JSON parse failed`, {
 			error: err instanceof Error ? err.message : String(err),
 		})
 		return null
@@ -151,106 +142,10 @@ function parseAndValidate<T>(config: MicroAgentConfig<T>, raw: string): T | null
 }
 
 // ---------------------------------------------------------------------------
-// MicroAgentRunner
+// Pre-defined configs (same as before, just exported)
 // ---------------------------------------------------------------------------
 
-export class MicroAgentRunner {
-	private providerChoice: ProviderChoice
-
-	constructor(providerChoice: ProviderChoice = 'auto') {
-		this.providerChoice = providerChoice
-	}
-
-	/**
-	 * Classify an input using a lightweight LLM. Returns `T` on success, `null`
-	 * on any error. Never throws.
-	 */
-	async classify<T>(config: MicroAgentConfig<T>, input: string): Promise<T | null> {
-		try {
-			if (this.providerChoice === 'none') return null
-
-			// Check cache
-			const key = cacheKey(config.id, input)
-			const cached = cacheGet<T>(key)
-			if (cached !== undefined) {
-				logger.debug('micro-agent', 'cache hit', { configId: config.id })
-				return cached
-			}
-
-			const result = await this.runProviders(config, input)
-
-			if (result !== null) {
-				cacheSet(key, result)
-			}
-
-			return result
-		} catch (err) {
-			logger.error('micro-agent', 'classify failed', {
-				configId: config.id,
-				error: err instanceof Error ? err.message : String(err),
-			})
-			return null
-		}
-	}
-
-	private async runProviders<T>(config: MicroAgentConfig<T>, input: string): Promise<T | null> {
-		switch (this.providerChoice) {
-			case 'gemini':
-				return classifyWithGemini(config, input)
-			case 'haiku':
-				return classifyWithHaiku(config, input)
-			case 'auto':
-			default: {
-				// Gemini Flash first, then Haiku fallback
-				const geminiResult = await classifyWithGemini(config, input)
-				if (geminiResult !== null) return geminiResult
-
-				logger.debug('micro-agent', 'Gemini unavailable, falling back to Haiku', {
-					configId: config.id,
-				})
-				return classifyWithHaiku(config, input)
-			}
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Singleton factory
-// ---------------------------------------------------------------------------
-
-const runners = new Map<string, MicroAgentRunner>()
-
-export async function getMicroAgent(companyRoot: string): Promise<MicroAgentRunner> {
-	const existing = runners.get(companyRoot)
-	if (existing) return existing
-
-	let providerChoice: ProviderChoice = 'auto'
-	try {
-		const company = await loadCompany(companyRoot)
-		const config = company.settings.micro_agents
-
-		if (!config.enabled) {
-			providerChoice = 'none'
-		} else {
-			providerChoice = config.provider
-		}
-
-		CACHE_TTL_MS = config.cache_ttl * 1000
-	} catch {
-		// No company config or missing field — default to auto
-	}
-
-	const runner = new MicroAgentRunner(providerChoice)
-	runners.set(companyRoot, runner)
-	logger.info('micro-agent', `initialized (provider=${providerChoice})`)
-	return runner
-}
-
-// ---------------------------------------------------------------------------
-// Pre-defined configs
-// ---------------------------------------------------------------------------
-
-export const NOTIFICATION_CLASSIFIER: MicroAgentConfig<{
+export const NOTIFICATION_CLASSIFIER: ClassifyConfig<{
 	priority: 'critical' | 'high' | 'normal' | 'low'
 	channels: string[]
 	summary: string
@@ -272,7 +167,7 @@ Return JSON: {"priority": "...", "channels": [...], "summary": "..."}`,
 	maxTokens: 256,
 }
 
-export const MESSAGE_ROUTER: MicroAgentConfig<{
+export const MESSAGE_ROUTER: ClassifyConfig<{
 	agent_id: string
 	reason: string
 	confidence: number
@@ -292,14 +187,14 @@ Return JSON: {"agent_id": "...", "reason": "brief reason", "confidence": 0.0-1.0
 	maxTokens: 256,
 }
 
-export const ESCALATION_CLASSIFIER: MicroAgentConfig<{
+export const ESCALATION_CLASSIFIER: ClassifyConfig<{
 	should_escalate: boolean
 	reason: string
 	escalate_to: 'human' | 'meta' | 'none'
 	urgency: 'immediate' | 'soon' | 'normal'
 }> = {
 	id: 'escalation-classifier',
-	description: 'Determines if an agent situation requires escalation to a human or meta-agent',
+	description: 'Determines if an agent situation requires escalation',
 	systemPrompt: `You are an escalation classifier for an AI development team.
 Given a situation description, determine if it needs to be escalated.
 Escalate when: agent is stuck, approval is needed, security issue detected, budget exceeded, or repeated failures.
@@ -314,22 +209,18 @@ Return JSON: {"should_escalate": true/false, "reason": "...", "escalate_to": "hu
 	maxTokens: 256,
 }
 
-export const BLOCKED_TASK_CLASSIFIER: MicroAgentConfig<{
+export const BLOCKED_TASK_CLASSIFIER: ClassifyConfig<{
 	action: 'escalate' | 'reassign' | 'wait'
 	reason: string
 	reassign_to?: string
 }> = {
 	id: 'blocked-task-classifier',
-	description: 'Determines the best action for a task that has been blocked for an extended period',
-	systemPrompt: `You are a blocked-task escalation classifier for an AI development team.
-Given a blocked task with details about how long it's been blocked, its blockers, and who it's assigned to, decide the best course of action:
-- "escalate": notify the owner/admins that the task is stuck and needs attention
-- "reassign": suggest reassigning the task to a different agent (provide reassign_to)
-- "wait": the task is reasonably blocked and should be left alone for now
-
-Escalate when: the task has been blocked for a long time with no resolution, blockers seem stale, or the assigned agent cannot resolve the blocker.
-Reassign when: a different agent is better suited to handle the blocker or the current assignee seems stuck.
-Wait when: the blocker is legitimate and recent, or human input is genuinely pending.
+	description: 'Determines the best action for a blocked task',
+	systemPrompt: `You are a blocked-task classifier for an AI development team.
+Given a blocked task with details, decide the best course of action:
+- "escalate": notify the owner/admins
+- "reassign": suggest reassigning (provide reassign_to)
+- "wait": the blocker is legitimate and recent
 
 Return JSON: {"action": "escalate"|"reassign"|"wait", "reason": "brief explanation", "reassign_to": "agent_id or omit"}`,
 	outputSchema: z.object({

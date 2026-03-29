@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm, FormProvider, useFormContext, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -10,6 +10,7 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   CircleNotchIcon,
+  CloudIcon,
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
@@ -19,31 +20,14 @@ import { FormSection, FormSelect } from "@/components/forms"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 
-type ProviderName = "claude" | "openai" | "gemini"
 type ProviderStatus = { configured: boolean; model?: string }
 
 const providerSchema = z.object({
-  claudeApiKey: z.string(),
-  claudeModel: z.string(),
-  openaiApiKey: z.string(),
-  openaiModel: z.string(),
+  openrouterApiKey: z.string(),
   embeddingsProvider: z.enum(["gemini", "local", "none"]),
 })
 
 type ProviderFormValues = z.infer<typeof providerSchema>
-
-const CLAUDE_MODELS = [
-  { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
-  { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
-  { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
-]
-
-const OPENAI_MODELS = [
-  { value: "gpt-4o", label: "GPT-4o" },
-  { value: "o3", label: "o3" },
-  { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { value: "codex-mini", label: "Codex Mini" },
-]
 
 const EMBEDDINGS_OPTIONS = [
   { value: "gemini", label: "Gemini embeddings" },
@@ -53,30 +37,68 @@ const EMBEDDINGS_OPTIONS = [
 
 /**
  * AI provider configuration form.
- * Manages API keys and model selection for Claude and OpenAI.
+ * Manages the OpenRouter API key and embeddings settings.
+ * In cloud mode, shows a managed banner instead.
  */
 export function ProviderForm() {
   const { t } = useTranslation()
+  const [deploymentMode, setDeploymentMode] = useState<"selfhosted" | "cloud">("selfhosted")
+
+  useEffect(() => {
+    api.api.settings["deployment-mode"]
+      .$get()
+      .then((res) => res.json())
+      .then((data) => {
+        if ("mode" in data) setDeploymentMode(data.mode as "selfhosted" | "cloud")
+      })
+      .catch(() => {})
+  }, [])
 
   const { data: providerStatus } = useQuery({
     queryKey: ["settings", "providers"],
     queryFn: async () => {
       const res = await api.api.settings.providers.$get()
       if (!res.ok) throw new Error("Failed to load provider status")
-      return (await res.json()) as Record<ProviderName, ProviderStatus>
+      return (await res.json()) as Record<string, ProviderStatus>
     },
   })
 
   const methods = useForm<ProviderFormValues>({
     resolver: zodResolver(providerSchema),
     defaultValues: {
-      claudeApiKey: "",
-      claudeModel: "claude-sonnet-4-20250514",
-      openaiApiKey: "",
-      openaiModel: "gpt-4o",
+      openrouterApiKey: "",
       embeddingsProvider: "none",
     },
   })
+
+  // Cloud mode — managed by QuestPie
+  if (deploymentMode === "cloud") {
+    return (
+      <div className="flex max-w-lg flex-col gap-6">
+        <div className="flex items-center gap-3 border border-primary/30 bg-primary/5 p-4">
+          <CloudIcon className="size-6 text-primary" />
+          <div>
+            <p className="font-heading text-sm font-medium">
+              {t("settings.cloud_managed")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t("settings.cloud_managed_desc")}
+            </p>
+          </div>
+        </div>
+
+        <FormProvider {...methods}>
+          <FormSection title={t("settings.provider_embeddings")}>
+            <FormSelect
+              name="embeddingsProvider"
+              label={t("settings.provider_embeddings")}
+              options={EMBEDDINGS_OPTIONS}
+            />
+          </FormSection>
+        </FormProvider>
+      </div>
+    )
+  }
 
   return (
     <FormProvider {...methods}>
@@ -84,29 +106,9 @@ export function ProviderForm() {
         onSubmit={(e) => e.preventDefault()}
         className="flex max-w-lg flex-col gap-8"
       >
-        <ProviderCard
-          title={t("settings.provider_claude")}
-          description={t("settings.provider_claude_desc")}
-          provider="claude"
-          apiKeyName="claudeApiKey"
-          modelName="claudeModel"
-          modelOptions={CLAUDE_MODELS}
-          configured={providerStatus?.claude?.configured}
-        />
+        <OpenRouterCard configured={providerStatus?.openrouter?.configured} />
 
-        <ProviderCard
-          title={t("settings.provider_openai")}
-          description={t("settings.provider_openai_desc")}
-          provider="openai"
-          apiKeyName="openaiApiKey"
-          modelName="openaiModel"
-          modelOptions={OPENAI_MODELS}
-          configured={providerStatus?.openai?.configured}
-        />
-
-        <FormSection
-          title={t("settings.provider_embeddings")}
-        >
+        <FormSection title={t("settings.provider_embeddings")}>
           <FormSelect
             name="embeddingsProvider"
             label={t("settings.provider_embeddings")}
@@ -118,23 +120,7 @@ export function ProviderForm() {
   )
 }
 
-function ProviderCard({
-  title,
-  description,
-  provider,
-  apiKeyName,
-  modelName,
-  modelOptions,
-  configured,
-}: {
-  title: string
-  description: string
-  provider: ProviderName
-  apiKeyName: string
-  modelName: string
-  modelOptions: Array<{ value: string; label: string }>
-  configured?: boolean
-}) {
+function OpenRouterCard({ configured }: { configured?: boolean }) {
   const { t } = useTranslation()
   const { control, getValues } = useFormContext()
   const queryClient = useQueryClient()
@@ -142,15 +128,15 @@ function ProviderCard({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const key = getValues(apiKeyName) as string
+      const key = getValues("openrouterApiKey") as string
       if (!key) throw new Error("API key is required")
       const res = await api.api.settings.providers[":provider"].$post({
-        param: { provider },
+        param: { provider: "openrouter" },
         json: { apiKey: key },
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(body.error ?? `Failed to save ${provider} key`)
+        throw new Error(body.error ?? "Failed to save OpenRouter key")
       }
     },
     onSuccess: () => {
@@ -172,7 +158,7 @@ function ProviderCard({
     <FormSection
       title={
         <span className="flex items-center gap-2">
-          {title}
+          {t("settings.provider_openrouter")}
           {configured && saveStatus === "idle" && (
             <Badge variant="secondary" className="rounded-none text-[10px] text-green-400">
               <CheckCircleIcon size={10} className="mr-0.5" />
@@ -181,13 +167,12 @@ function ProviderCard({
           )}
         </span>
       }
-      description={description}
+      description={t("settings.provider_openrouter_desc")}
     >
       <div className="flex flex-col gap-3">
-        {/* API Key with visibility toggle */}
         <Controller
           control={control}
-          name={apiKeyName}
+          name="openrouterApiKey"
           render={({ field }) => (
             <div className="flex flex-col gap-1.5">
               <label className="font-heading text-xs font-medium text-foreground">
@@ -200,7 +185,7 @@ function ProviderCard({
                   placeholder={
                     configured
                       ? t("settings.provider_api_key_configured")
-                      : t("settings.provider_api_key_placeholder")
+                      : "sk-or-..."
                   }
                   className={cn(
                     "flex h-9 w-full rounded-none border border-input bg-transparent px-3 pr-8 py-1 text-sm transition-colors",
@@ -216,14 +201,19 @@ function ProviderCard({
                   {showKey ? <EyeSlashIcon size={14} /> : <EyeIcon size={14} />}
                 </button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                300+ models from Anthropic, OpenAI, Google, and more.{" "}
+                <a
+                  href="https://openrouter.ai/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline"
+                >
+                  Get your key
+                </a>
+              </p>
             </div>
           )}
-        />
-
-        <FormSelect
-          name={modelName}
-          label={t("settings.provider_model")}
-          options={modelOptions}
         />
 
         <div className="flex items-center gap-2">
@@ -256,4 +246,3 @@ function ProviderCard({
     </FormSection>
   )
 }
-

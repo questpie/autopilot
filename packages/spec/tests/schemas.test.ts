@@ -41,7 +41,7 @@ describe('CompanySchema', () => {
 		expect(result.languages).toEqual(['en'])
 		expect(result.settings.auto_assign).toBe(true)
 		expect(result.settings.max_concurrent_agents).toBe(6)
-		expect(result.settings.agent_provider).toBe('anthropic')
+		expect(result.settings.agent_provider).toBe('tanstack-ai')
 		expect(result.settings.budget.daily_token_limit).toBe(5_000_000)
 		expect(result.settings.budget.alert_at).toBe(80)
 		expect(result.owner.notification_channels).toEqual([])
@@ -100,7 +100,7 @@ describe('AgentSchema', () => {
 
 	test('applies default values', () => {
 		const result = AgentSchema.parse(validAgent)
-		expect(result.model).toBe('claude-sonnet-4-20250514')
+		expect(result.model).toBe('anthropic/claude-sonnet-4')
 		expect(result.tools).toEqual(['fs', 'terminal'])
 		expect(result.mcps).toEqual([])
 		expect(result.triggers).toEqual([])

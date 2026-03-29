@@ -34,9 +34,9 @@ This scaffolds the full company filesystem from the `solo-dev` template, initial
 
 ```bash title="terminal"
 # Authenticate (choose one)
-autopilot provider login claude    # Use Claude subscription (recommended)
+autopilot provider set openrouter --api-key sk-or-...    # Use Claude subscription (recommended)
 # OR
-export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
+export OPENROUTER_API_KEY=sk-or-...  # Use API key
 
 # Recommended: master key for secrets encryption
 export AUTOPILOT_MASTER_KEY=$(openssl rand -base64 32)
@@ -87,8 +87,8 @@ sudo -u autopilot bash -c '
 ```bash title="/opt/autopilot/.env"
 AUTOPILOT_MASTER_KEY=your-generated-key-here
 NODE_ENV=production
-# Uncomment if using API key instead of subscription login (autopilot provider login claude):
-# ANTHROPIC_API_KEY=sk-ant-your-key-here
+# Uncomment if using API key instead of subscription login (autopilot provider set openrouter --api-key sk-or-...):
+# OPENROUTER_API_KEY=sk-or-your-key-here
 ```
 
 ```bash title="terminal"
@@ -197,7 +197,7 @@ module.exports = {
     args: 'start',
     cwd: '/path/to/my-company',
     env: {
-      ANTHROPIC_API_KEY: 'sk-ant-...',
+      OPENROUTER_API_KEY: 'sk-or-...',
       AUTOPILOT_MASTER_KEY: 'your-key',
       NODE_ENV: 'production',
     },

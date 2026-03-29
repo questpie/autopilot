@@ -19,8 +19,8 @@ export const CompanySettingsSchema = z.object({
 	auto_assign: z.boolean().default(true),
 	require_approval: z.array(z.string()).default(['merge', 'deploy', 'spend', 'publish']),
 	max_concurrent_agents: z.number().int().min(1).default(6),
-	agent_provider: z.string().default('anthropic'),
-	agent_model: z.string().default('claude-sonnet-4-20250514'),
+	agent_provider: z.string().default('tanstack-ai'),
+	agent_model: z.string().default('anthropic/claude-sonnet-4'),
 	budget: z
 		.object({
 			daily_token_limit: z.number().int().default(5_000_000),
@@ -36,19 +36,18 @@ export const CompanySettingsSchema = z.object({
 		.nullable()
 		.default({})
 		.transform((v) => v ?? { ip_allowlist: [], trusted_proxies: ['127.0.0.1', '::1', '::ffff:127.0.0.1'] }),
+	/** Model for lightweight classification tasks (micro-agents, routing, memory extraction). */
+	utility_model: z.string().default('google/gemma-3-4b-it:free'),
 	micro_agents: z
 		.object({
-			enabled: z.boolean().default(true),
-			provider: z.enum(['auto', 'gemini', 'haiku', 'none']).default('auto'),
-			model: z.string().optional(),
 			cache_ttl: z.number().default(300),
 			escalation_threshold: z.number().default(30),
 		})
 		.default({}),
 	embeddings: z
 		.object({
-			provider: z.enum(['gemini', 'multilingual-e5', 'nomic', 'none']).default('none'),
-			fallback: z.enum(['gemini', 'multilingual-e5', 'nomic', 'none']).optional(),
+			/** Embedding model on OpenRouter (default: nvidia/llama-nemotron-embed-vl-1b-v2:free) */
+			model: z.string().optional(),
 			dimensions: z.number().int().min(1).default(768),
 		})
 		.optional(),

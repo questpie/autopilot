@@ -3,8 +3,8 @@ import type { ToolDefinition, ToolContext, ToolResult } from '../tools'
 
 export function createSearchTool(companyRoot: string): ToolDefinition {
 	return {
-		name: 'search',
-		description: 'Search across all entities (tasks, messages, knowledge, pins, agents, channels, skills). Returns ranked results.',
+		name: 'search_index',
+		description: 'Search the internal index across all entities (tasks, messages, knowledge, pins, agents, channels, skills). Returns ranked results.',
 		schema: z.object({
 			query: z.string().describe('Search query'),
 			type: z.enum(['task', 'message', 'knowledge', 'pin', 'agent', 'channel', 'skill']).optional().describe('Filter by entity type'),

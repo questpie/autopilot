@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import type { SessionEvent } from "./session-event-item"
-import { api } from "@/lib/api"
+import { api, API_BASE } from "@/lib/api"
 
 /**
  * Parse JSONL session log data into SessionEvent array.
@@ -48,7 +48,36 @@ export function useSessionReplay(agentId: string, sessionId: string) {
   const query = useQuery({
     queryKey: queryKeys.sessions.detail(sessionId),
     queryFn: async () => {
-      // Try to load session log from filesystem API
+      // Try durable stream first (v3 sessions)
+      try {
+        const durableRes = await fetch(
+          `${API_BASE}/api/agent-sessions/${sessionId}/stream?offset=0`,
+          { credentials: "include" },
+        )
+        if (durableRes.ok) {
+          const chunks = (await durableRes.json()) as Array<{
+            at: number
+            type: string
+            content?: string
+            tool?: string
+            params?: Record<string, unknown>
+          }>
+          if (chunks.length > 0) {
+            return chunks.map((chunk, i) => ({
+              id: `ds-${i}`,
+              type: mapRawType(chunk.type, chunk.tool),
+              timestamp: new Date(chunk.at).toISOString(),
+              content: chunk.content ?? "",
+              toolName: chunk.tool,
+              agentId,
+            }))
+          }
+        }
+      } catch {
+        // Fall through to JSONL/activity fallback
+      }
+
+      // Fallback: load session log from filesystem API
       const res = await api.api.fs[":path{.+}"].$get({
         param: { path: `logs/sessions/${sessionId}.jsonl` },
       })

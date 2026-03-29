@@ -1,6 +1,6 @@
 import { container, companyRootFactory } from '../container'
 import { eq, and, sql, desc, asc } from 'drizzle-orm'
-import { Database } from 'bun:sqlite'
+import type { Client } from '@libsql/client'
 import { TaskSchema, MessageSchema } from '@questpie/autopilot-spec'
 import { createDb, initFts, type AutopilotDb } from '../db'
 import { schema } from '../db'
@@ -37,11 +37,11 @@ export class SqliteBackend implements StorageBackend {
 		// Drizzle migrations handle all table creation (see drizzle/ folder).
 		// FTS5 virtual tables + triggers are initialized separately since
 		// Drizzle ORM does not support virtual tables.
-		initFts(this.db)
+		await initFts(this.db)
 	}
 
-	private getRawDb(): Database {
-		return (this.db as unknown as { $client: Database }).$client
+	private getRawDb(): Client {
+		return (this.db as unknown as { $client: Client }).$client
 	}
 
 	async close(): Promise<void> {
@@ -300,15 +300,18 @@ export class SqliteBackend implements StorageBackend {
 
 	async searchMessages(query: string, limit = 50): Promise<Message[]> {
 		const raw = this.getRawDb()
-		const rows = raw.prepare(`
-			SELECT m.* FROM messages m
-			JOIN messages_fts fts ON m.rowid = fts.rowid
-			WHERE messages_fts MATCH ?
-			ORDER BY rank
-			LIMIT ?
-		`).all(query, limit) as Record<string, unknown>[]
+		const result = await raw.execute({
+			sql: `
+				SELECT m.* FROM messages m
+				JOIN messages_fts fts ON m.rowid = fts.rowid
+				WHERE messages_fts MATCH ?
+				ORDER BY rank
+				LIMIT ?
+			`,
+			args: [query, limit],
+		})
 
-		return rows.map((row) => this.rowToMessage(row))
+		return result.rows.map((row) => this.rowToMessage(row as unknown as Record<string, unknown>))
 	}
 
 	// ─── Activity ───────────────────────────────────────────────────────

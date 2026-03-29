@@ -45,7 +45,7 @@ One Bun process. One SQLite file. No external databases.
 |-------------|---------|-------|
 | [Bun](https://bun.sh) | 1.3+ | Runtime (or use Docker instead) |
 | Git | 2.x+ | Company state versioning |
-| Authentication | — | `autopilot provider login claude` (subscription, recommended) or `ANTHROPIC_API_KEY` (API key) |
+| Authentication | — | `autopilot provider set openrouter --api-key sk-or-...` (subscription, recommended) or `OPENROUTER_API_KEY` (API key) |
 
 ## Choose Your Path
 
@@ -74,9 +74,9 @@ autopilot init my-company
 cd my-company
 
 # Authenticate (choose one)
-autopilot provider login claude    # Use Claude subscription (recommended)
+autopilot provider set openrouter --api-key sk-or-...    # Use Claude subscription (recommended)
 # OR
-export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
+export OPENROUTER_API_KEY=sk-or-...  # Use API key
 
 autopilot start
 ```

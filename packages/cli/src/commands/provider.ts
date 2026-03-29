@@ -1,38 +1,25 @@
 import { Command } from 'commander'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
-import { spawn } from 'node:child_process'
 import { program } from '../program'
 import { header, dim, success, error, badge, separator, dot } from '../utils/format'
 import { findCompanyRoot } from '../utils/find-root'
 
 // ── Provider definitions ─────────────────────────────────────────────────
 
-type ProviderName = 'claude' | 'codex'
+type ProviderName = 'openrouter'
 
 interface ProviderDef {
 	displayName: string
 	envKey: string
-	loginCmd: [string, string[]]
-	logoutCmd: [string, string[]]
-	credentialPaths: string[]
+	keyPrefix: string
 }
 
 const PROVIDERS: Record<ProviderName, ProviderDef> = {
-	claude: {
-		displayName: 'Claude (Anthropic)',
-		envKey: 'ANTHROPIC_API_KEY',
-		loginCmd: ['bunx', ['claude', 'login']],
-		logoutCmd: ['bunx', ['claude', 'logout']],
-		credentialPaths: [join(homedir(), '.claude')],
-	},
-	codex: {
-		displayName: 'Codex (OpenAI)',
-		envKey: 'OPENAI_API_KEY',
-		loginCmd: ['bunx', ['codex', 'login']],
-		logoutCmd: ['bunx', ['codex', 'logout']],
-		credentialPaths: [join(homedir(), '.codex', 'auth.json')],
+	openrouter: {
+		displayName: 'OpenRouter',
+		envKey: 'OPENROUTER_API_KEY',
+		keyPrefix: 'sk-or-',
 	},
 }
 
@@ -47,18 +34,6 @@ function validateProvider(name: string): ProviderName {
 		process.exit(1)
 	}
 	return name as ProviderName
-}
-
-function spawnInteractive(cmd: string, args: string[]): Promise<number> {
-	return new Promise((resolve, reject) => {
-		const child = spawn(cmd, args, { stdio: 'inherit' })
-		child.on('close', (code) => resolve(code ?? 0))
-		child.on('error', (err) => reject(err))
-	})
-}
-
-function hasCredentialFiles(provider: ProviderDef): boolean {
-	return provider.credentialPaths.some((p) => existsSync(p))
 }
 
 function readEnvFile(envPath: string): string {
@@ -101,40 +76,7 @@ function maskKey(key: string): string {
 // ── Command ──────────────────────────────────────────────────────────────
 
 const providerCmd = new Command('provider').description(
-	'Manage AI provider authentication (Claude, Codex)',
-)
-
-// ── provider login <provider> ────────────────────────────────────────────
-
-providerCmd.addCommand(
-	new Command('login')
-		.description('Login to a provider via interactive flow')
-		.argument('<provider>', `Provider name (${VALID_PROVIDERS.join(', ')})`)
-		.action(async (name: string) => {
-			const providerName = validateProvider(name)
-			const provider = PROVIDERS[providerName]
-
-			console.log(header(`Login to ${provider.displayName}`))
-			console.log(dim('  Starting interactive login flow...\n'))
-
-			try {
-				const code = await spawnInteractive(provider.loginCmd[0], provider.loginCmd[1])
-				if (code === 0) {
-					console.log('\n' + success(`${provider.displayName} login complete`))
-				} else {
-					console.error('\n' + error(`Login process exited with code ${code}`))
-					process.exit(1)
-				}
-			} catch (err) {
-				console.error(error(`Could not start login flow for ${provider.displayName}`))
-				console.error(
-					dim(
-						`  Make sure the CLI is available: ${provider.loginCmd[0]} ${provider.loginCmd[1].join(' ')}`,
-					),
-				)
-				process.exit(1)
-			}
-		}),
+	'Manage AI provider authentication (OpenRouter)',
 )
 
 // ── provider set <provider> --api-key <key> ──────────────────────────────
@@ -187,9 +129,8 @@ providerCmd.addCommand(
 				const envFromFile = envPath ? getEnvValue(envPath, provider.envKey) : undefined
 				const envFromProcess = process.env[provider.envKey]
 				const apiKey = envFromFile ?? envFromProcess
-				const hasCreds = hasCredentialFiles(provider)
 
-				const statusDot = apiKey || hasCreds ? dot('green') : dot('red')
+				const statusDot = apiKey ? dot('green') : dot('red')
 				console.log(`  ${statusDot} ${badge(name, 'cyan')} ${provider.displayName}`)
 
 				if (apiKey) {
@@ -203,32 +144,26 @@ providerCmd.addCommand(
 					console.log(`      API Key: ${dim('not set')}`)
 				}
 
-				if (hasCreds) {
-					console.log(`      CLI Auth: ${success('configured')}`)
-				} else {
-					console.log(`      CLI Auth: ${dim('not configured')}`)
-				}
-
 				console.log()
 			}
 
 			console.log(separator())
-			console.log(dim('  Use "autopilot provider login <provider>" to authenticate via CLI'))
-			console.log(dim('  Use "autopilot provider set <provider> --api-key <key>" to set an API key'))
+			console.log(dim('  Use "autopilot provider set openrouter --api-key <key>" to set your API key'))
+			console.log(dim('  Get your key at https://openrouter.ai/keys'))
 		}),
 )
 
-// ── provider logout <provider> ───────────────────────────────────────────
+// ── provider remove <provider> ───────────────────────────────────────────
 
 providerCmd.addCommand(
-	new Command('logout')
+	new Command('remove')
 		.description('Clear provider credentials')
 		.argument('<provider>', `Provider name (${VALID_PROVIDERS.join(', ')})`)
 		.action(async (name: string) => {
 			const providerName = validateProvider(name)
 			const provider = PROVIDERS[providerName]
 
-			console.log(header(`Logout from ${provider.displayName}`))
+			console.log(header(`Remove ${provider.displayName} credentials`))
 
 			// Remove API key from .env
 			let envPath: string | null = null
@@ -248,32 +183,6 @@ providerCmd.addCommand(
 			}
 
 			delete process.env[provider.envKey]
-
-			// Try CLI logout
-			try {
-				console.log(dim('  Running CLI logout...\n'))
-				const code = await spawnInteractive(provider.logoutCmd[0], provider.logoutCmd[1])
-				if (code === 0) {
-					console.log('\n' + success(`  ${provider.displayName} CLI logout complete`))
-				}
-			} catch {
-				// CLI not available, that's fine
-				console.log(dim('  CLI logout not available (CLI not found)'))
-			}
-
-			// Remove credential files
-			const { rm } = await import('node:fs/promises')
-			for (const credPath of provider.credentialPaths) {
-				if (existsSync(credPath)) {
-					try {
-						await rm(credPath, { recursive: true })
-						console.log(success(`  Removed ${credPath}`))
-					} catch {
-						console.log(dim(`  Could not remove ${credPath}`))
-					}
-				}
-			}
-
 			console.log('\n' + success('Done'))
 		}),
 )

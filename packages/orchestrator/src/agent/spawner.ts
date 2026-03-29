@@ -3,11 +3,10 @@ import { assembleContext } from '../context/assembler'
 import { extractMemory } from './memory-extractor'
 import type { StorageBackend } from '../fs/storage'
 import { createAutopilotTools } from './tools'
+import { createFileTools } from './tools/file-tools'
 import type { ToolContext } from './tools'
 import type { AgentProvider, AgentEvent } from './provider'
-import { ClaudeAgentSDKProvider } from './providers/claude-agent-sdk'
-import { AnthropicProvider } from './providers/anthropic'
-import { CodexSDKProvider } from './providers/codex-sdk'
+import { TanStackAIProvider } from './providers/tanstack-ai'
 import { eventBus } from '../events'
 import { container, companyRootFactory } from '../container'
 import { streamManagerFactory } from '../session/stream'
@@ -25,19 +24,17 @@ export function registerProvider(provider: AgentProvider): void {
 	providers.set(provider.name, provider)
 }
 
-const DEFAULT_PROVIDER = 'claude-agent-sdk'
+const DEFAULT_PROVIDER = 'tanstack-ai'
 
 /** Default model per provider so bare agent configs get a sensible fallback. */
 const DEFAULT_MODELS: Record<string, string> = {
-	'claude-agent-sdk': 'claude-sonnet-4-6',
-	'anthropic': 'claude-sonnet-4-20250514',
-	'codex-sdk': 'gpt-4o',
+	'tanstack-ai': 'anthropic/claude-sonnet-4',
 }
 
 /**
  * Look up a registered provider by name.
  *
- * Falls back to the default provider (`claude-agent-sdk`) with a warning
+ * Falls back to the default provider (`tanstack-ai`) with a warning
  * when the requested provider is not registered.
  */
 export function getProvider(name: string): AgentProvider {
@@ -52,13 +49,9 @@ export function getProvider(name: string): AgentProvider {
 	return provider
 }
 
-// Register built-in providers
-// Claude Agent SDK works with both API key and Max subscription (default)
-registerProvider(new ClaudeAgentSDKProvider())
-// Anthropic SDK for direct Claude API access (claude-sonnet-4-20250514, etc.)
-registerProvider(new AnthropicProvider())
-// OpenAI Codex SDK for GPT models (gpt-4o, gpt-4.1, o3, o4-mini, etc.)
-registerProvider(new CodexSDKProvider())
+// Register built-in provider
+// TanStack AI + OpenRouter for multi-model access (Anthropic, OpenAI, Google, etc.)
+registerProvider(new TanStackAIProvider())
 
 /** Options required to spawn an agent session. */
 export interface SpawnOptions {
@@ -113,8 +106,16 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		task,
 	})
 
-	// 3. Create custom tools
+	// 3. Create custom tools + file tools
 	const autopilotTools = createAutopilotTools(companyRoot, storage)
+	const fileTools = createFileTools({
+		companyRoot,
+		agentId: agent.id,
+		scope: agent.fs_scope
+			? { fsRead: agent.fs_scope.read, fsWrite: agent.fs_scope.write }
+			: undefined,
+	})
+	const allTools = [...autopilotTools, ...fileTools]
 	const toolContext: ToolContext = { companyRoot, agentId: agent.id, storage, eventBus }
 
 	// 4. Build prompt
@@ -166,13 +167,14 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 				systemPrompt: context.systemPrompt,
 				prompt,
 				model: agent.model || DEFAULT_MODELS[providerName] || 'claude-sonnet-4-6',
-				tools: autopilotTools,
+				tools: allTools,
 				toolContext,
 				maxTurns: 50,
 				agentTools: agent.tools,
 				agentScope: agent.fs_scope
 					? { fsRead: agent.fs_scope.read, fsWrite: agent.fs_scope.write }
 					: undefined,
+				webSearch: (agent as Record<string, unknown>).web_search === true,
 			},
 			onEvent,
 		)

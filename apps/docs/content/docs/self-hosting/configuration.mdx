@@ -36,7 +36,7 @@ settings:
     - spend
     - publish
   max_concurrent_agents: 4            # Max simultaneous agent sessions
-  agent_provider: "claude-agent-sdk"  # Agent provider backend
+  agent_provider: "tanstack-ai"  # Agent provider backend
   agent_model: "claude-sonnet-4-6"    # Default model for agents
 
   # Budget
@@ -94,7 +94,7 @@ For complete auth setup (creating users, managing roles, 2FA), see [Authenticati
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | No | — | Claude API key (alternative to `autopilot provider login claude`) |
+| `OPENROUTER_API_KEY` | No | — | Claude API key (alternative to `autopilot provider set openrouter --api-key sk-or-...`) |
 | `COMPANY_ROOT` | Docker only | `cwd` | Path to company data directory |
 | `AUTOPILOT_MASTER_KEY` | Recommended | Auto-generated file | 256-bit base64 key for secrets encryption |
 | `NODE_ENV` | Recommended | `development` | Set `production` for secure cookies |
@@ -103,17 +103,17 @@ For complete auth setup (creating users, managing roles, 2FA), see [Authenticati
 | `MAX_CONCURRENT_AGENTS` | No | `5` | Max simultaneous agent sessions |
 | `CORS_ORIGIN` | No | — | Allowed CORS origin for the API. Set to your domain URL when behind a reverse proxy (e.g., `https://autopilot.yourdomain.com`). Falls back to `company.yaml` `auth.cors_origin`, then `http://localhost:3000`. |
 
-### ANTHROPIC_API_KEY
+### OPENROUTER_API_KEY
 
-Alternative to subscription login. If you prefer API keys over `autopilot provider login claude`, set this variable. Get one at [console.anthropic.com](https://console.anthropic.com).
+Alternative to subscription login. If you prefer API keys over `autopilot provider set openrouter --api-key sk-or-...`, set this variable. Get one at [openrouter.ai/keys](https://openrouter.ai/keys).
 
 ```bash title="terminal"
 # Option A: Subscription login (recommended)
-autopilot provider login claude
+autopilot provider set openrouter --api-key sk-or-...
 # Works on headless VPS — prints a URL to open on any device.
 
 # Option B: API key
-export ANTHROPIC_API_KEY=sk-ant-api03-...
+export OPENROUTER_API_KEY=sk-or-...
 ```
 
 ### AUTOPILOT_MASTER_KEY
@@ -143,7 +143,7 @@ Autopilot uses embeddings for semantic search across knowledge, tasks, and compa
 
 ```yaml title="company.yaml"
 settings:
-  agent_provider: "claude-agent-sdk"  # Uses Anthropic's embedding model
+  agent_provider: "tanstack-ai"  # Uses Anthropic's embedding model
 ```
 
 Embeddings are stored in the SQLite database (`.data/autopilot.db`) and rebuilt automatically on startup.
@@ -152,13 +152,13 @@ Embeddings are stored in the SQLite database (`.data/autopilot.db`) and rebuilt 
 
 ```yaml title="company.yaml"
 settings:
-  agent_provider: "claude-agent-sdk"  # Primary: Claude Agent SDK
+  agent_provider: "tanstack-ai"  # Primary: Claude Agent SDK
   agent_model: "claude-sonnet-4-6"    # Model for agent sessions
 ```
 
 Supported providers:
-- `claude-agent-sdk` — Anthropic Claude Agent SDK (primary, recommended)
-- `codex-sdk` — OpenAI Codex SDK (alternative)
+- `tanstack-ai` — Anthropic Claude Agent SDK (primary, recommended)
+- `tanstack-ai` — OpenAI Codex SDK (alternative)
 
 ## Rate Limiting
 

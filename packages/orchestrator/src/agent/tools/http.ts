@@ -7,8 +7,8 @@ import { checkSsrf } from './shared'
 
 export function createHttpTool(companyRoot: string, options?: AutopilotToolOptions): ToolDefinition {
 	return {
-		name: 'http',
-		description: 'Make an HTTP request to an external API',
+		name: 'fetch',
+		description: 'Fetch a URL or call an external API. Supports GET, POST, PUT, PATCH, DELETE with custom headers and body.',
 		schema: z.object({
 			method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
 			url: z.string().describe('Full URL'),

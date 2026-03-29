@@ -11,161 +11,74 @@ export { type EmbeddingModality } from './provider'
 import { logger } from '../logger'
 
 /**
- * Orchestrates embedding generation with primary → fallback → null chain.
+ * Embedding service — always uses OpenRouter.
  *
- * Never throws — all failures result in null (FTS-only degradation).
+ * Default model: nvidia/llama-nemotron-embed-vl-1b-v2:free (multimodal, FREE).
+ * Uses the same OPENROUTER_API_KEY as agents and web search.
+ * Never throws — failures degrade to null (FTS-only fallback).
  */
 export class EmbeddingService {
-	private primary: EmbeddingProvider
-	private fallback: EmbeddingProvider | null
+	private provider: EmbeddingProvider
 
-	constructor(primary: EmbeddingProvider, fallback?: EmbeddingProvider | null) {
-		this.primary = primary
-		this.fallback = fallback ?? null
+	constructor(provider: EmbeddingProvider) {
+		this.provider = provider
 	}
 
-	/** Provider name for logging. */
 	get providerName(): string {
-		return this.primary.name
+		return this.provider.name
 	}
 
-	/** Output dimensions of the primary provider. */
 	get dimensions(): number {
-		return this.primary.dimensions
+		return this.provider.dimensions
 	}
 
-	/**
-	 * Embed a single input. Tries primary, then fallback, then returns null.
-	 */
 	async embed(input: EmbeddingInput, taskType?: EmbeddingTaskType): Promise<Float32Array | null> {
-		// Determine modality
 		const modality = input.type === 'file' ? 'text' : input.type
-
-		// Try primary
-		if (this.primary.supports(modality)) {
-			const result = await this.primary.embed(input, taskType)
-			if (result) return result
-		}
-
-		// Try fallback
-		if (this.fallback?.supports(modality)) {
-			const result = await this.fallback.embed(input, taskType)
-			if (result) return result
-		}
-
-		return null
+		if (!this.provider.supports(modality)) return null
+		return this.provider.embed(input, taskType)
 	}
 
-	/**
-	 * Embed a batch of inputs.
-	 */
 	async embedBatch(inputs: EmbeddingInput[], taskType?: EmbeddingTaskType): Promise<(Float32Array | null)[]> {
-		const results: (Float32Array | null)[] = []
-		for (const input of inputs) {
-			results.push(await this.embed(input, taskType))
-		}
-		return results
+		return this.provider.embedBatch(inputs, taskType)
 	}
 
-	/**
-	 * Convenience: embed a text string for document indexing.
-	 */
 	async embedText(text: string, taskType: EmbeddingTaskType = 'retrieval_document'): Promise<Float32Array | null> {
 		return this.embed({ type: 'text', content: text }, taskType)
 	}
 
-	/**
-	 * Convenience: embed a text string for search queries.
-	 */
 	async embedQuery(text: string): Promise<Float32Array | null> {
 		return this.embed({ type: 'text', content: text }, 'retrieval_query')
 	}
 
-	/**
-	 * Convenience: embed an image buffer.
-	 */
 	async embedImage(data: Buffer, mimeType: string): Promise<Float32Array | null> {
 		return this.embed({ type: 'image', data, mimeType })
 	}
 
-	/**
-	 * Convenience: embed a file by path (reads file and infers type).
-	 */
 	async embedFile(path: string): Promise<Float32Array | null> {
 		return this.embed({ type: 'file', path })
 	}
 }
 
 /**
- * Lazily create a provider by name. Uses dynamic imports so unused providers
- * are never loaded.
- */
-async function createProvider(
-	name: EmbeddingProviderName,
-	opts?: { dimensions?: number; apiKey?: string },
-): Promise<EmbeddingProvider> {
-	switch (name) {
-		case 'gemini': {
-			const { GeminiEmbeddingProvider } = await import('./gemini-provider')
-			return new GeminiEmbeddingProvider(opts)
-		}
-		case 'multilingual-e5': {
-			const { E5EmbeddingProvider } = await import('./e5-provider')
-			return new E5EmbeddingProvider()
-		}
-		case 'nomic': {
-			const { NomicEmbeddingProvider } = await import('./nomic-provider')
-			return new NomicEmbeddingProvider()
-		}
-		case 'none': {
-			const { NoneEmbeddingProvider } = await import('./none-provider')
-			return new NoneEmbeddingProvider()
-		}
-		default: {
-			logger.warn('embeddings', `unknown provider "${name}", falling back to none`)
-			const { NoneEmbeddingProvider } = await import('./none-provider')
-			return new NoneEmbeddingProvider()
-		}
-	}
-}
-
-/**
- * Create an {@link EmbeddingService} from a config object (typically read from
- * `company.yaml` `settings.embeddings`).
- *
- * If no config is provided, defaults to the none provider (FTS-only).
+ * Create the embedding service — always OpenRouter.
+ * Config is optional and only used for custom dimensions/model.
  */
 export async function createEmbeddingService(config?: EmbeddingConfig): Promise<EmbeddingService> {
-	if (!config || config.provider === 'none') {
-		const { NoneEmbeddingProvider } = await import('./none-provider')
-		return new EmbeddingService(new NoneEmbeddingProvider())
-	}
-
-	const primaryOpts = {
-		dimensions: config.dimensions,
-	}
-
-	let primary: EmbeddingProvider
 	try {
-		primary = await createProvider(config.provider, primaryOpts)
-		logger.info('embeddings', `primary provider: ${primary.name} (${primary.dimensions}d)`)
+		const { OpenRouterEmbeddingProvider } = await import('./openrouter-provider')
+		const provider = new OpenRouterEmbeddingProvider({
+			dimensions: config?.dimensions,
+		})
+		logger.info('embeddings', `provider: ${provider.name} (${provider.dimensions}d)`)
+		return new EmbeddingService(provider)
 	} catch (err) {
-		logger.error('embeddings', `failed to create primary provider "${config.provider}"`, { error: err instanceof Error ? err.message : String(err) })
-		const { NoneEmbeddingProvider } = await import('./none-provider')
-		return new EmbeddingService(new NoneEmbeddingProvider())
+		logger.error('embeddings', 'failed to create OpenRouter embedding provider', {
+			error: err instanceof Error ? err.message : String(err),
+		})
+		// Return a stub that always returns null — FTS still works
+		const { OpenRouterEmbeddingProvider } = await import('./openrouter-provider')
+		return new EmbeddingService(new OpenRouterEmbeddingProvider())
 	}
-
-	let fallback: EmbeddingProvider | null = null
-	if (config.fallback && config.fallback !== 'none') {
-		try {
-			fallback = await createProvider(config.fallback)
-			logger.info('embeddings', `fallback provider: ${fallback.name} (${fallback.dimensions}d)`)
-		} catch (err) {
-			logger.error('embeddings', `failed to create fallback provider "${config.fallback}"`, { error: err instanceof Error ? err.message : String(err) })
-		}
-	}
-
-	return new EmbeddingService(primary, fallback)
 }
 
 import { container, companyRootFactory } from '../container'
@@ -176,7 +89,7 @@ export const embeddingServiceFactory = container.registerAsync('embeddingService
 	try {
 		const company = await loadCompany(companyRoot)
 		const settings = company.settings as Record<string, unknown>
-		const embeddingsConfig = settings?.embeddings as Parameters<typeof createEmbeddingService>[0]
+		const embeddingsConfig = settings?.embeddings as EmbeddingConfig | undefined
 		return createEmbeddingService(embeddingsConfig)
 	} catch {
 		return createEmbeddingService()

@@ -28,7 +28,7 @@ export interface EmbeddingProvider {
 	supports(modality: EmbeddingModality): boolean
 }
 
-export type EmbeddingProviderName = 'gemini' | 'multilingual-e5' | 'nomic' | 'none'
+export type EmbeddingProviderName = 'openrouter'
 
 export interface EmbeddingConfig {
 	provider: EmbeddingProviderName

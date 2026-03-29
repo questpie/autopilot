@@ -18,7 +18,7 @@ import { telegramWebhookHandler } from './webhook'
 import { advanceWorkflow, evaluateTransition } from './workflow'
 import { WorkflowLoader } from './workflow'
 
-import { getMicroAgent, BLOCKED_TASK_CLASSIFIER } from './agent/micro-agent'
+import { classify, getUtilityModel, BLOCKED_TASK_CLASSIFIER } from './agent/micro-agent'
 import { logger } from './logger'
 import { authFactory } from './auth'
 import { configureContainer, container } from './container'
@@ -218,7 +218,17 @@ export class Orchestrator {
 			}
 		}
 
-		// 9. Start API server (Hono)
+		// 9a. Start Durable Streams server (session persistence)
+		try {
+			const { startDurableStreamServer } = await import('./session/durable')
+			await startDurableStreamServer(root)
+		} catch (err) {
+			logger.warn('orchestrator', 'durable streams server failed to start (sessions will use in-memory only)', {
+				error: err instanceof Error ? err.message : String(err),
+			})
+		}
+
+		// 9b. Start API server (Hono)
 		const apiPort = this.options.apiPort ?? 7778
 		const authSettings = company.settings.auth
 		try {
@@ -856,15 +866,15 @@ export class Orchestrator {
 		if (blockedMinutes < threshold) return
 
 		try {
-			const runner = await getMicroAgent(this.options.companyRoot)
-			const result = await runner.classify(BLOCKED_TASK_CLASSIFIER, JSON.stringify({
+			const model = await getUtilityModel(this.options.companyRoot)
+			const result = await classify(BLOCKED_TASK_CLASSIFIER, JSON.stringify({
 				taskId: task.id,
 				title: task.title,
 				status: task.status,
 				blockedMinutes: Math.round(blockedMinutes),
 				blockers: task.blockers,
 				assignedTo: task.assigned_to,
-			}))
+			}), model)
 
 			if (!result) return // AI unavailable — do nothing
 

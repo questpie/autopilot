@@ -1,9 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
 import type { Agent } from '@questpie/autopilot-spec'
 import type { Message, StorageBackend } from '../fs/storage'
 import { container } from '../container'
 import { storageFactory } from '../fs/sqlite-backend'
-import { getMicroAgent, MESSAGE_ROUTER } from '../agent/micro-agent'
+import { classify, getUtilityModel, MESSAGE_ROUTER } from '../agent/micro-agent'
 
 export interface RouteOptions {
 	channelId?: string
@@ -53,20 +52,16 @@ export async function routeMessage(
 		}
 	}
 
-	// 3. LLM-based routing
+	// 3. AI routing via classify() — same chat() API, just different model
 	try {
-		const result = await routeWithLLM(message, agents, options)
-		if (result) return result
-	} catch {
-		// LLM call failed — fall through to keyword matching
-	}
-
-	// 4. Micro-agent routing (Gemini Flash — fast, cheap, simple message→agent mapping)
-	try {
-		const runner = await getMicroAgent(_companyRoot)
+		const model = await getUtilityModel(_companyRoot)
 		const agentContext = agents.map(a => `- id="${a.id}" role="${a.role}" description="${a.description ?? 'N/A'}"`).join('\n')
-		const input = `Available agents:\n${agentContext}\n\nChannel: ${options?.channelId ?? 'default'}\nMessage: ${message}`
-		const result = await runner.classify(MESSAGE_ROUTER, input)
+		const recentMessages = options?.recentMessages ?? []
+		const conversationContext = recentMessages.length > 0
+			? `\nRecent conversation:\n${recentMessages.slice(-10).map(m => `[${m.from}]: ${m.content.slice(0, 200)}`).join('\n')}`
+			: ''
+		const input = `Available agents:\n${agentContext}${conversationContext}\n\nChannel: ${options?.channelId ?? 'default'}\nMessage: ${message}`
+		const result = await classify(MESSAGE_ROUTER, input, model)
 		if (result) {
 			const agent = agents.find(a => a.id === result.agent_id)
 			if (agent) return { agent, reason: `AI routing: ${result.reason}` }
@@ -75,7 +70,7 @@ export async function routeMessage(
 		// fall through to keyword fallback
 	}
 
-	// 4b. Keyword fallback (when micro-agent unavailable)
+	// 4. Keyword fallback
 	const keywordResult = routeByKeyword(message, agents)
 	if (keywordResult) return keywordResult
 
@@ -85,65 +80,7 @@ export async function routeMessage(
 }
 
 /**
- * Use Claude Haiku to determine the best agent for a message based on
- * agent descriptions, recent conversation context, and conversation continuity.
- */
-async function routeWithLLM(
-	message: string,
-	agents: Agent[],
-	options?: RouteOptions,
-): Promise<{ agent: Agent; reason: string } | null> {
-	const agentList = agents
-		.map(a => `- id: "${a.id}", role: "${a.role}", description: "${a.description ?? 'N/A'}"`)
-		.join('\n')
-
-	const recentMessages = options?.recentMessages ?? []
-	let conversationContext = ''
-	if (recentMessages.length > 0) {
-		const lastN = recentMessages.slice(-10)
-		conversationContext = `\n\nRecent conversation (most recent last):\n${lastN
-			.map(m => `[${m.from}]: ${m.content.slice(0, 200)}`)
-			.join('\n')}`
-	}
-
-	const client = new Anthropic()
-	const response = await client.messages.create({
-		model: 'claude-haiku-4-5-20250514',
-		max_tokens: 256,
-		messages: [
-			{
-				role: 'user',
-				content: `You are a message router. Given the available agents and a new message, decide which agent should respond.
-
-Available agents:
-${agentList}
-${conversationContext}
-
-New message: "${message}"
-
-Which agent should respond to this message? Consider:
-1. Role expertise — match the message topic to the agent's role and description
-2. Conversation continuity — if an agent was recently active in the conversation and the topic hasn't shifted, prefer that agent
-3. When uncertain, prefer the "meta" role agent (CEO) who can delegate
-
-Respond with ONLY valid JSON, no markdown fences:
-{"agent_id": "<agent id>", "reason": "<brief reason>"}`,
-			},
-		],
-	})
-
-	const textBlock = response.content.find(b => b.type === 'text')
-	if (!textBlock || textBlock.type !== 'text') return null
-
-	const parsed = JSON.parse(textBlock.text) as { agent_id: string; reason: string }
-	const agent = agents.find(a => a.id === parsed.agent_id)
-	if (!agent) return null
-
-	return { agent, reason: `LLM: ${parsed.reason}` }
-}
-
-/**
- * Fallback keyword-based routing when LLM is unavailable.
+ * Fallback keyword-based routing when micro-agent is unavailable.
  */
 function routeByKeyword(
 	message: string,

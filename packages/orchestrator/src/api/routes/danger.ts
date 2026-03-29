@@ -134,9 +134,9 @@ const danger = new Hono<AppEnv>()
 				await db.delete(schema.searchIndex)
 
 				// Clear FTS tables (raw SQL required for virtual tables)
-				const raw = (db as unknown as { $client: import('bun:sqlite').Database }).$client
-				try { raw.exec(`DELETE FROM search_fts`) } catch { /* may not exist */ }
-				try { raw.exec(`DELETE FROM messages_fts`) } catch { /* may not exist */ }
+				const raw = (db as unknown as { $client: import('@libsql/client').Client }).$client
+				try { await raw.execute(`DELETE FROM search_fts`) } catch { /* may not exist */ }
+				try { await raw.execute(`DELETE FROM messages_fts`) } catch { /* may not exist */ }
 
 				// Notify dashboard to refresh
 				eventBus.emit({ type: 'settings_changed' })
@@ -187,7 +187,7 @@ const danger = new Hono<AppEnv>()
 
 				// Close the DB connection before deleting the files
 				const db = c.get('db')
-				const raw = (db as unknown as { $client: import('bun:sqlite').Database }).$client
+				const raw = (db as unknown as { $client: import('@libsql/client').Client }).$client
 				try { raw.close() } catch { /* already closed */ }
 
 				// Remove the entire .data directory

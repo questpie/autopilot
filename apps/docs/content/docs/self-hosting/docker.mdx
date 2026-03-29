@@ -37,7 +37,7 @@ services:
       - ./my-company:/data/company
     environment:
       COMPANY_ROOT: /data/company
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       AUTOPILOT_MASTER_KEY: ${AUTOPILOT_MASTER_KEY}
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
@@ -56,16 +56,16 @@ services:
 export AUTOPILOT_MASTER_KEY=$(openssl rand -base64 32)
 
 # Authenticate (choose one):
-#   Option A (recommended): autopilot provider login claude
+#   Option A (recommended): autopilot provider set openrouter --api-key sk-or-...
 #     Works on headless VPS — prints a URL to open on any device.
 #   Option B: Set API key in .env
-#     ANTHROPIC_API_KEY=sk-ant-...
+#     OPENROUTER_API_KEY=sk-or-...
 
 # Save to .env for docker-compose
 cat > .env << 'EOF'
 AUTOPILOT_MASTER_KEY=your-generated-key-here
 # Uncomment if using API key instead of subscription login:
-# ANTHROPIC_API_KEY=sk-ant-your-key-here
+# OPENROUTER_API_KEY=sk-or-your-key-here
 EOF
 ```
 
@@ -81,7 +81,7 @@ The orchestrator is now running at `http://localhost:7778`.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | No | — | Claude API key (alternative to `autopilot provider login claude`) |
+| `OPENROUTER_API_KEY` | No | — | Claude API key (alternative to `autopilot provider set openrouter --api-key sk-or-...`) |
 | `COMPANY_ROOT` | Yes | — | Path to company data inside the container |
 | `AUTOPILOT_MASTER_KEY` | Recommended | Auto-generated file | 256-bit base64 key for secrets encryption |
 | `NODE_ENV` | Recommended | `development` | Set `production` for secure cookies and HTTPS |
@@ -208,7 +208,7 @@ docker logs autopilot
 # Common issues:
 # - "failed to load company.yaml" → COMPANY_ROOT path is wrong or volume not mounted
 # - "EADDRINUSE" → port conflict, change PORT/WEBHOOK_PORT
-# - "missing authentication" → run: autopilot provider login claude, or set ANTHROPIC_API_KEY
+# - "missing authentication" → run: autopilot provider set openrouter --api-key sk-or-..., or set OPENROUTER_API_KEY
 ```
 
 ### Port conflicts
@@ -237,7 +237,7 @@ cd autopilot/deploy
 
 # Configure
 cp .env.example .env
-nano .env  # Set DOMAIN and ANTHROPIC_API_KEY
+nano .env  # Set DOMAIN and OPENROUTER_API_KEY
 
 # Initialize and start
 docker compose run --rm autopilot autopilot init /data/company

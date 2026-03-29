@@ -7,35 +7,29 @@ describe('CompanySettingsSchema — embeddings', () => {
 		expect(result.embeddings).toBeUndefined()
 	})
 
-	it('parses embeddings with provider enum values', () => {
+	it('parses embeddings with custom dimensions', () => {
 		const result = CompanySettingsSchema.parse({
 			embeddings: {
-				provider: 'gemini',
-				fallback: 'nomic',
 				dimensions: 1536,
 			},
 		})
 		expect(result.embeddings).toEqual({
-			provider: 'gemini',
-			fallback: 'nomic',
 			dimensions: 1536,
 		})
 	})
 
-	it('defaults embeddings provider to "none" and dimensions to 768', () => {
+	it('defaults embeddings dimensions to 768', () => {
 		const result = CompanySettingsSchema.parse({
 			embeddings: {},
 		})
-		expect(result.embeddings?.provider).toBe('none')
 		expect(result.embeddings?.dimensions).toBe(768)
 	})
 
-	it('rejects invalid embedding provider', () => {
-		expect(() =>
-			CompanySettingsSchema.parse({
-				embeddings: { provider: 'invalid-provider' },
-			}),
-		).toThrow()
+	it('accepts custom embedding model', () => {
+		const result = CompanySettingsSchema.parse({
+			embeddings: { model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free' },
+		})
+		expect(result.embeddings?.model).toBe('nvidia/llama-nemotron-embed-vl-1b-v2:free')
 	})
 })
 
@@ -79,12 +73,12 @@ describe('CompanySchema — language fields', () => {
 			...minimalCompany,
 			settings: {
 				embeddings: {
-					provider: 'gemini',
+					model: 'nvidia/llama-nemotron-embed-vl-1b-v2:free',
 					dimensions: 1536,
 				},
 			},
 		})
-		expect(result.settings.embeddings?.provider).toBe('gemini')
+		expect(result.settings.embeddings?.model).toBe('nvidia/llama-nemotron-embed-vl-1b-v2:free')
 		expect(result.settings.embeddings?.dimensions).toBe(1536)
 	})
 })

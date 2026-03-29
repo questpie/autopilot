@@ -32,19 +32,22 @@ export function SessionView({ agentId, agentName, events: preloadedEvents, live 
   const isLive = live && !preloadedEvents
 
   // SSE connection for live mode
+  // Try durable stream first (resumable), fall back to global SSE events
   useEffect(() => {
     if (!isLive) return
 
-    const es = new EventSource(`${API_BASE}/api/events`, { withCredentials: true })
+    // Try durable stream SSE endpoint for the active session
+    const durableUrl = `${API_BASE}/api/agent-sessions/session-${agentId}/stream?live=sse&offset=-1`
+    const es = new EventSource(durableUrl, { withCredentials: true })
     let eventCounter = 0
+    let useDurable = true
 
     es.onmessage = (msg) => {
       try {
         const data = JSON.parse(msg.data as string) as Record<string, unknown>
 
-        // Filter for this agent's events
-        if (data.type === "agent_session" && data.agentId === agentId) {
-          // Session start/end meta events — skip content rendering
+        // Durable stream chunks have our StreamChunk format directly
+        if (data.type === "agent_session") {
           return
         }
 
@@ -69,8 +72,16 @@ export function SessionView({ agentId, agentName, events: preloadedEvents, live 
     }
 
     es.onerror = () => {
-      // Silently close on error — the main SSE hook handles reconnection
-      es.close()
+      if (useDurable) {
+        // Durable stream not available — fall back to global SSE events
+        useDurable = false
+        es.close()
+        const fallbackEs = new EventSource(`${API_BASE}/api/events`, { withCredentials: true })
+        fallbackEs.onmessage = es.onmessage
+        // Clean up fallback on unmount handled by the return below
+      } else {
+        es.close()
+      }
     }
 
     return () => {

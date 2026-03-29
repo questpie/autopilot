@@ -31,8 +31,7 @@ const ProviderStatusSchema = z.object({
 })
 
 const ProvidersResponseSchema = z.object({
-	claude: ProviderStatusSchema,
-	openai: ProviderStatusSchema,
+	openrouter: ProviderStatusSchema,
 	gemini: ProviderStatusSchema,
 })
 
@@ -41,7 +40,7 @@ const SaveProviderKeySchema = z.object({
 })
 
 const ProviderParamSchema = z.object({
-	provider: z.enum(['claude', 'openai', 'gemini']),
+	provider: z.enum(['openrouter', 'gemini']),
 })
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -76,22 +75,19 @@ function deepMerge(
 
 /** Map provider name to its .env variable name. */
 const PROVIDER_ENV_MAP: Record<string, string> = {
-	claude: 'ANTHROPIC_API_KEY',
-	openai: 'OPENAI_API_KEY',
+	openrouter: 'OPENROUTER_API_KEY',
 	gemini: 'GOOGLE_AI_API_KEY',
 }
 
 /** Map provider name to its default model. */
 const PROVIDER_MODEL_MAP: Record<string, string> = {
-	claude: 'claude-sonnet-4-20250514',
-	openai: 'gpt-4o',
+	openrouter: 'anthropic/claude-sonnet-4',
 	gemini: 'gemini-2.0-flash',
 }
 
 /** Key format validation patterns. */
 const KEY_PATTERNS: Record<string, RegExp> = {
-	claude: /^sk-ant-/,
-	openai: /^sk-/,
+	openrouter: /^sk-or-/,
 	gemini: /^AI/,
 }
 
@@ -294,6 +290,25 @@ const settings = new Hono<AppEnv>()
 			eventBus.emit({ type: 'settings_changed' })
 
 			return c.json({ ok: true as const }, 200)
+		},
+	)
+
+	// ── GET /settings/deployment-mode — resolve deployment mode from env ──
+	.get(
+		'/deployment-mode',
+		describeRoute({
+			tags: ['settings'],
+			description: 'Return the current deployment mode (selfhosted or cloud)',
+			responses: {
+				200: {
+					description: 'Deployment mode',
+					content: { 'application/json': { schema: resolver(z.object({ mode: z.enum(['selfhosted', 'cloud']) })) } },
+				},
+			},
+		}),
+		(c) => {
+			const mode = process.env.DEPLOYMENT_MODE === 'cloud' ? 'cloud' : 'selfhosted'
+			return c.json({ mode }, 200)
 		},
 	)
 

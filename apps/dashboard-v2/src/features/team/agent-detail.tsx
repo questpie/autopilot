@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import {
   CircleIcon,
@@ -11,11 +11,16 @@ import {
   CpuIcon,
   PlugsIcon,
   LightningIcon,
+  GlobeIcon,
 } from "@phosphor-icons/react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { ModelPicker } from "@/components/model-picker"
 import { useTranslation } from "@/lib/i18n"
+import { queryKeys } from "@/lib/query-keys"
+import { api } from "@/lib/api"
+import { toast } from "sonner"
 import { agentDetailQuery } from "./team.queries"
 import { getAvatarColor } from "./agent-card"
 import { cn } from "@/lib/utils"
@@ -27,7 +32,37 @@ interface AgentDetailProps {
 
 export function AgentDetail({ agentId, onClose: _onClose }: AgentDetailProps) {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const { data: agent, isLoading } = useQuery(agentDetailQuery(agentId))
+
+  const modelMutation = useMutation({
+    mutationFn: async (model: string) => {
+      const res = await api.api.agents[":id"].$patch({
+        param: { id: agentId },
+        json: { model },
+      })
+      if (!res.ok) throw new Error("Failed to update model")
+    },
+    onSuccess: () => {
+      toast.success(t("settings.saved"))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.root })
+    },
+    onError: (err) => toast.error((err as Error).message),
+  })
+
+  const webSearchMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await api.api.agents[":id"].$patch({
+        param: { id: agentId },
+        json: { web_search: enabled },
+      })
+      if (!res.ok) throw new Error("Failed to update web search")
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.root })
+    },
+    onError: (err) => toast.error((err as Error).message),
+  })
 
   if (isLoading) {
     return <AgentDetailSkeleton />
@@ -105,10 +140,32 @@ export function AgentDetail({ agentId, onClose: _onClose }: AgentDetailProps) {
         <p className="text-xs text-muted-foreground">{agent.description}</p>
       </DetailSection>
 
-      {/* Model + Provider */}
+      {/* Model */}
       <DetailSection icon={CpuIcon} label={t("team.detail_model")}>
-        <p className="font-heading text-xs text-foreground">{agent.model}</p>
-        <p className="text-[10px] text-muted-foreground">{agent.provider}</p>
+        <ModelPicker
+          value={agent.model}
+          onChange={(model) => modelMutation.mutate(model)}
+        />
+      </DetailSection>
+
+      {/* Web Search */}
+      <DetailSection icon={GlobeIcon} label={t("team.detail_web_search")}>
+        <button
+          type="button"
+          onClick={() => webSearchMutation.mutate(!(agent as Record<string, unknown>).web_search)}
+          className={cn(
+            "flex items-center gap-2 border px-3 py-1.5 text-xs transition-colors",
+            (agent as Record<string, unknown>).web_search
+              ? "border-green-500/30 bg-green-500/10 text-green-400"
+              : "border-border text-muted-foreground hover:border-primary/40",
+          )}
+        >
+          <GlobeIcon size={12} />
+          {(agent as Record<string, unknown>).web_search ? "Enabled" : "Disabled"}
+        </button>
+        <p className="text-[10px] text-muted-foreground">
+          Gives this agent real-time web access via OpenRouter
+        </p>
       </DetailSection>
 
       {/* Tools */}

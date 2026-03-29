@@ -1,28 +1,26 @@
-import { drizzle } from 'drizzle-orm/bun-sqlite'
-import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
-import { Database } from 'bun:sqlite'
+import { drizzle } from 'drizzle-orm/libsql'
+import { migrate } from 'drizzle-orm/libsql/migrator'
+import { createClient, type Client } from '@libsql/client'
 import { join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
-import * as sqliteVec from 'sqlite-vec'
 import * as schema from './schema'
 
 export type AutopilotDb = ReturnType<typeof drizzle<typeof schema>>
 
 export interface DbResult {
 	db: AutopilotDb
-	raw: Database
+	raw: Client
 }
 
 /**
- * Create a Drizzle-wrapped bun:sqlite database for the given company root.
+ * Create a Drizzle-wrapped libSQL database for the given company root.
  *
  * The DB file is stored at `<companyRoot>/.data/autopilot.db` with WAL mode
  * enabled for concurrent read performance.
  *
- * Loads sqlite-vec extension for vector search and runs Drizzle migrations
- * (including custom SQL for FTS5 / vec0 virtual tables).
+ * Runs Drizzle migrations (including custom SQL for FTS5 / vec0 virtual tables).
  *
- * Returns both the Drizzle ORM instance and the raw bun:sqlite Database
+ * Returns both the Drizzle ORM instance and the raw libSQL Client
  * so callers (e.g. Better Auth) can share the same underlying connection.
  */
 export async function createDb(companyRoot: string, opts?: { embeddingDimensions?: number }): Promise<DbResult> {
@@ -30,73 +28,68 @@ export async function createDb(companyRoot: string, opts?: { embeddingDimensions
 	await mkdir(dataDir, { recursive: true })
 
 	const dbPath = join(dataDir, 'autopilot.db')
-	const sqlite = new Database(dbPath, { create: true })
-	sqlite.exec('PRAGMA journal_mode = WAL')
-	sqlite.exec('PRAGMA synchronous = NORMAL')
-	sqlite.exec('PRAGMA foreign_keys = ON')
-	sqlite.exec('PRAGMA busy_timeout = 5000')
+	const client = createClient({
+		url: process.env.DATABASE_URL ?? `file:${dbPath}`,
+		syncUrl: process.env.TURSO_SYNC_URL,
+		authToken: process.env.TURSO_AUTH_TOKEN,
+	})
 
-	// Load sqlite-vec extension for vector similarity search (optional — may not be available)
-	try {
-		sqliteVec.load(sqlite)
-	} catch {
-		// Extension loading not supported in this SQLite build — vector search will be unavailable
-	}
+	await client.execute('PRAGMA journal_mode = WAL')
+	await client.execute('PRAGMA synchronous = NORMAL')
+	await client.execute('PRAGMA foreign_keys = ON')
+	await client.execute('PRAGMA busy_timeout = 5000')
 
-	const db = drizzle(sqlite, { schema })
+	const db = drizzle(client, { schema })
 
 	// Run drizzle migrations (regular tables)
 	migrate(db, { migrationsFolder: join(__dirname, '..', '..', 'drizzle') })
 
 	// Create FTS5 virtual table + triggers for unified search index
 	// (must be raw SQL — drizzle migrator cannot handle trigger semicolons)
-	initSearchFts(sqlite)
+	await initSearchFts(client)
 
-	// Create vec0 virtual table (requires sqlite-vec extension)
+	// Create vec0 virtual table (requires native vector support)
 	const dims = opts?.embeddingDimensions ?? 768
 	try {
-		sqlite.exec(`
+		await client.execute(`
 			CREATE VIRTUAL TABLE IF NOT EXISTS search_vec USING vec0(
 				search_id INTEGER PRIMARY KEY,
 				embedding float[${dims}]
 			)
 		`)
 	} catch {
-		// sqlite-vec not available — vector search will be unavailable
+		// vec0 not available — vector search will be unavailable
 	}
 
 	// Cleanup expired rate limit entries on startup and every 5 minutes
-	try { sqlite.exec(`DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()`) } catch { /* table may not exist yet */ }
+	try { await client.execute(`DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()`) } catch { /* table may not exist yet */ }
 	setInterval(() => {
-		try { sqlite.exec(`DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()`) }
-		catch { /* db closed */ }
+		client.execute(`DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()`).catch(() => {/* db closed */})
 	}, 5 * 60 * 1000)
 
 	// Cleanup expired file locks on startup and every minute
 	const nowMs = Date.now()
-	try { sqlite.exec(`DELETE FROM file_locks WHERE expires_at < ${nowMs}`) } catch { /* table may not exist yet */ }
+	try { await client.execute(`DELETE FROM file_locks WHERE expires_at < ${nowMs}`) } catch { /* table may not exist yet */ }
 	setInterval(() => {
-		try { sqlite.exec(`DELETE FROM file_locks WHERE expires_at < ${Date.now()}`) }
-		catch { /* db closed */ }
+		client.execute(`DELETE FROM file_locks WHERE expires_at < ${Date.now()}`).catch(() => {/* db closed */})
 	}, 60 * 1000)
 
 	// Cleanup expired pins on startup and every 5 minutes
-	try { sqlite.exec(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${nowMs}`) } catch { /* table may not exist yet */ }
+	try { await client.execute(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${nowMs}`) } catch { /* table may not exist yet */ }
 	setInterval(() => {
-		try { sqlite.exec(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${Date.now()}`) }
-		catch { /* db closed */ }
+		client.execute(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${Date.now()}`).catch(() => {/* db closed */})
 	}, 5 * 60 * 1000)
 
-	return { db, raw: sqlite }
+	return { db, raw: client }
 }
 
 /**
  * Initialize FTS5 virtual table and triggers for the unified search_index table.
  * Uses raw SQL because Drizzle ORM does not support virtual tables or triggers.
  */
-function initSearchFts(sqlite: Database): void {
+async function initSearchFts(client: Client): Promise<void> {
 	try {
-		sqlite.exec(`
+		await client.execute(`
 			CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
 				title, content,
 				content=search_index,
@@ -109,17 +102,17 @@ function initSearchFts(sqlite: Database): void {
 	}
 
 	try {
-		sqlite.exec(`
+		await client.execute(`
 			CREATE TRIGGER IF NOT EXISTS search_fts_ai AFTER INSERT ON search_index BEGIN
 				INSERT INTO search_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
 			END
 		`)
-		sqlite.exec(`
+		await client.execute(`
 			CREATE TRIGGER IF NOT EXISTS search_fts_ad AFTER DELETE ON search_index BEGIN
 				INSERT INTO search_fts(search_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
 			END
 		`)
-		sqlite.exec(`
+		await client.execute(`
 			CREATE TRIGGER IF NOT EXISTS search_fts_au AFTER UPDATE ON search_index BEGIN
 				INSERT INTO search_fts(search_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
 				INSERT INTO search_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
@@ -134,11 +127,11 @@ function initSearchFts(sqlite: Database): void {
  * Initialize FTS5 virtual tables and triggers for message full-text search.
  * Uses raw SQL because Drizzle ORM does not support virtual tables.
  */
-export function initFts(db: AutopilotDb): void {
-	const raw = (db as unknown as { $client: Database }).$client
+export async function initFts(db: AutopilotDb): Promise<void> {
+	const raw = (db as unknown as { $client: Client }).$client
 
 	try {
-		raw.exec(`
+		await raw.execute(`
 			CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
 				content,
 				content=messages,
@@ -151,17 +144,17 @@ export function initFts(db: AutopilotDb): void {
 
 	// Triggers for automatic FTS sync
 	try {
-		raw.exec(`
+		await raw.execute(`
 			CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
 				INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
 			END
 		`)
-		raw.exec(`
+		await raw.execute(`
 			CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
 				INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
 			END
 		`)
-		raw.exec(`
+		await raw.execute(`
 			CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
 				INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
 				INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);

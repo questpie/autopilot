@@ -3,7 +3,7 @@ import { join, relative } from 'node:path'
 import { PATHS } from '@questpie/autopilot-spec'
 import type { AutopilotDb } from './index'
 import { eq, and } from 'drizzle-orm'
-import { Database } from 'bun:sqlite'
+import type { Client } from '@libsql/client'
 import { indexEntity, removeEntity, type EntityType } from './search-index'
 import { schema } from './index'
 import { container, companyRootFactory } from '../container'
@@ -85,7 +85,7 @@ export class Indexer {
 	async indexTasks(): Promise<number> {
 		let count = 0
 		try {
-			const rows = this.db.select().from(schema.tasks).all()
+			const rows = await this.db.select().from(schema.tasks).all()
 			for (const row of rows) {
 				const content = [row.title, row.description, row.status, row.type]
 					.filter(Boolean)
@@ -105,7 +105,7 @@ export class Indexer {
 	async indexMessages(): Promise<number> {
 		let count = 0
 		try {
-			const rows = this.db.select().from(schema.messages).all()
+			const rows = await this.db.select().from(schema.messages).all()
 			for (const row of rows) {
 				const title = row.channel ? `#${row.channel}` : `DM from ${row.from_id}`
 				const changed = await this.indexEntitySafe('message', row.id, title, row.content)
@@ -279,7 +279,7 @@ export class Indexer {
 			if (!embedding) return
 
 			// Get the search_index row id for this entity
-			const row = this.db
+			const row = await this.db
 				.select({ id: schema.searchIndex.id })
 				.from(schema.searchIndex)
 				.where(and(eq(schema.searchIndex.entityType, type), eq(schema.searchIndex.entityId, id)))
@@ -287,17 +287,17 @@ export class Indexer {
 
 			if (!row) return
 
-			const raw = (this.db as unknown as { $client: Database }).$client
+			const raw = (this.db as unknown as { $client: Client }).$client
 			const embeddingBuffer = Buffer.from(embedding.buffer)
 
 			// Delete existing vector for this search_id, then insert
 			try {
-				raw.prepare('DELETE FROM search_vec WHERE search_id = ?').run(row.id)
+				await raw.execute({ sql: 'DELETE FROM search_vec WHERE search_id = ?', args: [row.id] })
 			} catch {
 				// search_vec might not exist
 			}
 			try {
-				raw.prepare('INSERT INTO search_vec (search_id, embedding) VALUES (?, ?)').run(row.id, embeddingBuffer)
+				await raw.execute({ sql: 'INSERT INTO search_vec (search_id, embedding) VALUES (?, ?)', args: [row.id, embeddingBuffer] })
 			} catch {
 				// search_vec not available — skip silently
 			}

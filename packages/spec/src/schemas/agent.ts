@@ -13,15 +13,17 @@ export const AgentTriggerSchema = z.object({
 })
 
 /** Supported agent provider backends. */
-export const AGENT_PROVIDERS = ['claude-agent-sdk', 'codex-sdk'] as const
+export const AGENT_PROVIDERS = ['tanstack-ai'] as const
 
 export const AgentSchema = z.object({
 	id: z.string().regex(/^[a-z0-9-]+$/),
 	name: z.string(),
 	role: z.enum(AGENT_ROLES),
 	description: z.string(),
-	provider: z.enum(AGENT_PROVIDERS).default('claude-agent-sdk'),
-	model: z.string().default('claude-sonnet-4-20250514'),
+	provider: z.enum(AGENT_PROVIDERS).default('tanstack-ai'),
+	model: z.string().default('anthropic/claude-sonnet-4'),
+	/** Enable web search via OpenRouter :online plugin. Adds real-time web access to this agent. */
+	web_search: z.boolean().default(false),
 	fs_scope: FsScopeSchema,
 	tools: z.array(z.string()).default(['fs', 'terminal']),
 	mcps: z.array(z.string()).default([]),

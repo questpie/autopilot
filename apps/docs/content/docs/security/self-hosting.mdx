@@ -86,7 +86,7 @@ docker run -d \
   -e COMPANY_ROOT=/data/company \
   -e NODE_ENV=production \
   -e AUTOPILOT_MASTER_KEY="$(openssl rand -base64 32)" \
-  -e ANTHROPIC_API_KEY="sk-ant-..." \
+  -e OPENROUTER_API_KEY="sk-or-..." \
   questpie/autopilot-orchestrator:latest
 ```
 
@@ -94,7 +94,7 @@ docker run -d \
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | Yes | -- | Claude API key for agent sessions |
+| `OPENROUTER_API_KEY` | Yes | -- | Claude API key for agent sessions |
 | `COMPANY_ROOT` | Yes | -- | Path to company data directory |
 | `AUTOPILOT_MASTER_KEY` | Recommended | Auto-generated file | 256-bit base64 key for secrets encryption |
 | `NODE_ENV` | Recommended | `development` | Set `production` for secure cookies and HTTPS |
@@ -112,7 +112,7 @@ docker run -d \
 - Keep webhook port (7777) reachable only for services that need it
 - Ensure `secrets/.master-key` is NOT committed to git
 - Ensure `.auth/` directory is NOT backed up to insecure locations
-- Set `ANTHROPIC_API_KEY` as env var, not in company files
+- Set `OPENROUTER_API_KEY` as env var, not in company files
 - Review audit logs periodically (`logs/audit/`)
 - Configure `secret_ref` on all authenticated webhooks
 - Configure IP allowlist in `settings.auth.ip_allowlist` for production

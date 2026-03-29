@@ -8,7 +8,6 @@ import { createPinTool } from './tools/pin'
 import { createSearchTool } from './tools/search'
 import { createHttpTool } from './tools/http'
 import { createSearchWebTool } from './tools/search-web'
-import { createBrowseTool } from './tools/browse'
 
 // ─── Tool definition types ─────────────────────────────────────────────────
 
@@ -46,7 +45,7 @@ export interface AutopilotToolOptions {
 /**
  * Build the full set of autopilot tools available to agents.
  *
- * Includes: `task`, `message`, `pin`, `search`, `http`, `search_web`, `browse`.
+ * Includes: `task`, `message`, `pin`, `search_index`, `fetch`, `web_search`.
  */
 export function createAutopilotTools(companyRoot: string, storage: StorageBackend, options?: AutopilotToolOptions): ToolDefinition[] {
 	// biome-ignore lint: generic variance is intentional
@@ -57,26 +56,9 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 		createSearchTool(companyRoot),
 		createHttpTool(companyRoot, options),
 		createSearchWebTool(companyRoot),
-		createBrowseTool(companyRoot),
 	]
 
 	return tools
-}
-
-/** Convert our tool definitions to Anthropic API tool format */
-export function toolsToAnthropicFormat(tools: ToolDefinition[]): Array<{
-	name: string
-	description: string
-	input_schema: Record<string, unknown>
-}> {
-	return tools.map((t) => {
-		const jsonSchema = zodToJsonSchema(t.schema)
-		return {
-			name: t.name,
-			description: t.description,
-			input_schema: jsonSchema,
-		}
-	})
 }
 
 /** Find a tool by name and execute it */

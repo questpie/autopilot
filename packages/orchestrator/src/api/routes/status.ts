@@ -1,4 +1,4 @@
-import type { Database } from 'bun:sqlite'
+import type { Client } from '@libsql/client'
 import { StatusResponseSchema } from '@questpie/autopilot-spec'
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
@@ -24,7 +24,7 @@ const status = new Hono<AppEnv>().get(
 		const root = c.get('companyRoot')
 		const storage = c.get('storage')
 		const db = c.get('db')
-		const raw = (db as unknown as { $client: Database }).$client
+		const raw = (db as unknown as { $client: Client }).$client
 
 		const company = await loadCompany(root)
 
@@ -43,9 +43,8 @@ const status = new Hono<AppEnv>().get(
 
 		let userCount = 0
 		try {
-			const row = raw.prepare('SELECT COUNT(*) as count FROM user').get() as {
-				count: number
-			} | null
+			const result = await raw.execute('SELECT COUNT(*) as count FROM user')
+			const row = result.rows[0]
 			userCount = Number(row?.count ?? 0)
 		} catch {
 			// Auth tables may not exist yet during early startup

@@ -11,19 +11,14 @@ const validAgent = {
 }
 
 describe('AgentSchema provider field', () => {
-	test('defaults to claude-agent-sdk when provider not specified', () => {
+	test('defaults to tanstack-ai when provider not specified', () => {
 		const result = AgentSchema.parse(validAgent)
-		expect(result.provider).toBe('claude-agent-sdk')
+		expect(result.provider).toBe('tanstack-ai')
 	})
 
-	test('accepts claude-agent-sdk provider', () => {
-		const result = AgentSchema.parse({ ...validAgent, provider: 'claude-agent-sdk' })
-		expect(result.provider).toBe('claude-agent-sdk')
-	})
-
-	test('accepts codex-sdk provider', () => {
-		const result = AgentSchema.parse({ ...validAgent, provider: 'codex-sdk' })
-		expect(result.provider).toBe('codex-sdk')
+	test('accepts tanstack-ai provider', () => {
+		const result = AgentSchema.parse({ ...validAgent, provider: 'tanstack-ai' })
+		expect(result.provider).toBe('tanstack-ai')
 	})
 
 	test('rejects invalid provider', () => {
@@ -32,29 +27,44 @@ describe('AgentSchema provider field', () => {
 		).toThrow(ZodError)
 	})
 
-	test('AGENT_PROVIDERS constant has both providers', () => {
-		expect(AGENT_PROVIDERS).toContain('claude-agent-sdk')
-		expect(AGENT_PROVIDERS).toContain('codex-sdk')
-		expect(AGENT_PROVIDERS).toHaveLength(2)
+	test('AGENT_PROVIDERS constant has tanstack-ai', () => {
+		expect(AGENT_PROVIDERS).toContain('tanstack-ai')
+		expect(AGENT_PROVIDERS).toHaveLength(1)
 	})
 
-	test('accepts codex-sdk with GPT model', () => {
-		const result = AgentSchema.parse({
-			...validAgent,
-			provider: 'codex-sdk',
-			model: 'gpt-4o',
-		})
-		expect(result.provider).toBe('codex-sdk')
-		expect(result.model).toBe('gpt-4o')
+	test('defaults model to OpenRouter format', () => {
+		const result = AgentSchema.parse(validAgent)
+		expect(result.model).toBe('anthropic/claude-sonnet-4')
 	})
 
-	test('accepts codex-sdk with o4-mini model', () => {
+	test('accepts OpenRouter model format', () => {
 		const result = AgentSchema.parse({
 			...validAgent,
-			provider: 'codex-sdk',
-			model: 'o4-mini',
+			model: 'openai/gpt-4o',
 		})
-		expect(result.provider).toBe('codex-sdk')
-		expect(result.model).toBe('o4-mini')
+		expect(result.model).toBe('openai/gpt-4o')
+	})
+
+	test('accepts auto-router model', () => {
+		const result = AgentSchema.parse({
+			...validAgent,
+			model: 'openrouter/auto',
+		})
+		expect(result.model).toBe('openrouter/auto')
+	})
+
+	test('web_search defaults to false', () => {
+		const result = AgentSchema.parse(validAgent)
+		expect(result.web_search).toBe(false)
+	})
+
+	test('web_search accepts true', () => {
+		const result = AgentSchema.parse({ ...validAgent, web_search: true })
+		expect(result.web_search).toBe(true)
+	})
+
+	test('web_search accepts false explicitly', () => {
+		const result = AgentSchema.parse({ ...validAgent, web_search: false })
+		expect(result.web_search).toBe(false)
 	})
 })

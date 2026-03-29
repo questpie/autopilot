@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm'
-import { Database } from 'bun:sqlite'
+import type { Client } from '@libsql/client'
 import { searchIndex } from './schema'
 import type { AutopilotDb } from './index'
 import { createHash } from 'node:crypto'
@@ -18,8 +18,8 @@ function contentHash(content: string): string {
 	return createHash('sha256').update(content).digest('hex').slice(0, 16)
 }
 
-function getRawDb(db: AutopilotDb): Database {
-	return (db as unknown as { $client: Database }).$client
+function getRawDb(db: AutopilotDb): Client {
+	return (db as unknown as { $client: Client }).$client
 }
 
 /**
@@ -37,7 +37,7 @@ export async function indexEntity(
 	const now = new Date().toISOString()
 
 	// Check if entity exists with same hash (skip if unchanged)
-	const existing = db
+	const existing = await db
 		.select({ contentHash: searchIndex.contentHash })
 		.from(searchIndex)
 		.where(and(eq(searchIndex.entityType, type), eq(searchIndex.entityId, id)))
@@ -48,11 +48,11 @@ export async function indexEntity(
 	}
 
 	// Upsert: delete + insert (SQLite UPSERT with triggers needs delete first for FTS sync)
-	db.delete(searchIndex)
+	await db.delete(searchIndex)
 		.where(and(eq(searchIndex.entityType, type), eq(searchIndex.entityId, id)))
 		.run()
 
-	db.insert(searchIndex)
+	await db.insert(searchIndex)
 		.values({
 			entityType: type,
 			entityId: id,
@@ -76,7 +76,7 @@ export async function removeEntity(
 ): Promise<void> {
 	// Delete orphaned vectors BEFORE removing the search_index row (need the row id)
 	try {
-		const row = db
+		const row = await db
 			.select({ id: searchIndex.id })
 			.from(searchIndex)
 			.where(and(eq(searchIndex.entityType, type), eq(searchIndex.entityId, id)))
@@ -84,7 +84,7 @@ export async function removeEntity(
 		if (row) {
 			const raw = getRawDb(db)
 			try {
-				raw.prepare('DELETE FROM search_vec WHERE search_id = ?').run(row.id)
+				await raw.execute({ sql: 'DELETE FROM search_vec WHERE search_id = ?', args: [row.id] })
 			} catch {
 				// search_vec may not exist
 			}
@@ -93,7 +93,7 @@ export async function removeEntity(
 		// best-effort vector cleanup
 	}
 
-	db.delete(searchIndex)
+	await db.delete(searchIndex)
 		.where(and(eq(searchIndex.entityType, type), eq(searchIndex.entityId, id)))
 		.run()
 }
@@ -110,41 +110,38 @@ export async function searchFts(
 	const limit = opts?.limit ?? 20
 
 	try {
-		const params: (string | number | Buffer)[] = [query]
+		const args: (string | number)[] = [query]
 		let typeFilter = ''
 		if (opts?.type) {
 			typeFilter = 'AND si.entity_type = ?'
-			params.push(opts.type)
+			args.push(opts.type)
 		}
-		params.push(limit)
+		args.push(limit)
 
-		const rows = raw.prepare(`
-			SELECT
-				si.entity_type,
-				si.entity_id,
-				si.title,
-				snippet(search_fts, 1, '<b>', '</b>', '...', 40) as snippet,
-				search_fts.rank as score
-			FROM search_fts
-			JOIN search_index si ON si.id = search_fts.rowid
-			WHERE search_fts MATCH ?
-			${typeFilter}
-			ORDER BY search_fts.rank
-			LIMIT ?
-		`).all(...params) as Array<{
-			entity_type: string
-			entity_id: string
-			title: string | null
-			snippet: string
-			score: number
-		}>
+		const result = await raw.execute({
+			sql: `
+				SELECT
+					si.entity_type,
+					si.entity_id,
+					si.title,
+					snippet(search_fts, 1, '<b>', '</b>', '...', 40) as snippet,
+					search_fts.rank as score
+				FROM search_fts
+				JOIN search_index si ON si.id = search_fts.rowid
+				WHERE search_fts MATCH ?
+				${typeFilter}
+				ORDER BY search_fts.rank
+				LIMIT ?
+			`,
+			args,
+		})
 
-		return rows.map((r) => ({
+		return result.rows.map((r) => ({
 			entityType: r.entity_type as EntityType,
-			entityId: r.entity_id,
-			title: r.title,
-			snippet: r.snippet,
-			score: r.score,
+			entityId: r.entity_id as string,
+			title: r.title as string | null,
+			snippet: r.snippet as string,
+			score: r.score as number,
 		}))
 	} catch {
 		return []
@@ -152,7 +149,7 @@ export async function searchFts(
 }
 
 /**
- * Vector similarity search using sqlite-vec.
+ * Vector similarity search using vec0 virtual table.
  */
 export async function searchVec(
 	db: AutopilotDb,
@@ -165,39 +162,36 @@ export async function searchVec(
 	try {
 		const embeddingBuffer = Buffer.from(embedding.buffer)
 
-		const params: (string | number | Buffer)[] = [embeddingBuffer, limit]
+		const args: (string | number | Uint8Array)[] = [embeddingBuffer, limit]
 		let typeFilter = ''
 		if (opts?.type) {
 			typeFilter = 'AND si.entity_type = ?'
-			params.push(opts.type)
+			args.push(opts.type)
 		}
 
-		const rows = raw.prepare(`
-			SELECT
-				si.entity_type,
-				si.entity_id,
-				si.title,
-				substr(si.content, 1, 200) as snippet,
-				sv.distance as score
-			FROM search_vec sv
-			JOIN search_index si ON si.id = sv.search_id
-			WHERE sv.embedding MATCH ? AND sv.k = ?
-			${typeFilter}
-			ORDER BY sv.distance
-		`).all(...params) as Array<{
-			entity_type: string
-			entity_id: string
-			title: string | null
-			snippet: string
-			score: number
-		}>
+		const result = await raw.execute({
+			sql: `
+				SELECT
+					si.entity_type,
+					si.entity_id,
+					si.title,
+					substr(si.content, 1, 200) as snippet,
+					sv.distance as score
+				FROM search_vec sv
+				JOIN search_index si ON si.id = sv.search_id
+				WHERE sv.embedding MATCH ? AND sv.k = ?
+				${typeFilter}
+				ORDER BY sv.distance
+			`,
+			args,
+		})
 
-		return rows.map((r) => ({
+		return result.rows.map((r) => ({
 			entityType: r.entity_type as EntityType,
-			entityId: r.entity_id,
-			title: r.title,
-			snippet: r.snippet,
-			score: r.score,
+			entityId: r.entity_id as string,
+			title: r.title as string | null,
+			snippet: r.snippet as string,
+			score: r.score as number,
 		}))
 	} catch {
 		return []

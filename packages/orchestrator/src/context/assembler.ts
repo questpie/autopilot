@@ -243,18 +243,17 @@ You have these tools via the "autopilot" MCP server. Use them to interact with t
 - **pin**({ action: "remove", pin_id }) — Remove a pin.
 
 ### Search
-- **search**({ query, type?, scope? }) — Search across all entities (tasks, messages, knowledge, pins, agents, channels, skills).
+- **search_index**({ query, type?, scope? }) — Search the internal index across all entities (tasks, messages, knowledge, pins, agents, channels, skills).
 
 ### Knowledge & Artifacts
 - Use \`write_file("knowledge/...", content)\` to add/update knowledge docs (auto-indexed by watcher).
 - Use \`write_file("artifacts/{name}/...", ...)\` to create artifacts (watcher registers on .artifact.yaml).
 
 ### External
-- **http**({ method, url, secret_ref }) — Call an external API with secret injection.
+- **fetch**({ method, url, headers?, body?, secret_ref? }) — Fetch a URL or call an external API. Supports GET, POST, PUT, PATCH, DELETE with custom headers and body.
 
 ### Web
-- **search_web**({ query, max_results? }) — Search the web. Returns ranked results with title, URL, and snippet. Provider configurable (Brave/Tavily/SerpAPI).
-- **browse**({ url, extract?, screenshot? }) — Browse a web page. Returns page text content, optionally saves a screenshot. Supports JS-rendered pages via headless browser.
+- **web_search**({ query, max_results? }) — Search the web for current information. Returns results with titles, URLs, and content snippets.
 
 ### CRITICAL REMINDER
 After finishing ANY task, you MUST:

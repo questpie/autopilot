@@ -52,14 +52,13 @@ Results from both engines are merged and ranked using Reciprocal Rank Fusion (RR
 
 ### Embedding Service
 
-Vector embeddings power semantic search and knowledge retrieval. Primary and fallback providers:
+Vector embeddings power semantic search and knowledge retrieval. Automatic via OpenRouter — no extra keys needed:
 
-| Provider | Config Value | Model | Notes |
-|----------|-------------|-------|-------|
-| Gemini | `gemini` | `gemini-embedding-2-preview` | Multimodal. Requires `GEMINI_API_KEY`. |
-| Multilingual E5 | `multilingual-e5` | `Xenova/multilingual-e5-small` | Local. 100+ languages. |
-| Nomic Vision | `nomic` | `nomic-ai/nomic-embed-vision-v1.5` | Local image embeddings. |
-| None | `none` | -- | Default. FTS5 only. Graceful degradation. |
+| Model | Notes |
+|-------|-------|
+| `nvidia/llama-nemotron-embed-vl-1b-v2:free` | Default. Multimodal (text + vision). FREE. |
+
+Configurable via `settings.embeddings.model` in `company.yaml`. Uses the same `OPENROUTER_API_KEY`.
 
 ## Agent System
 
@@ -67,9 +66,9 @@ Vector embeddings power semantic search and knowledge retrieval. Primary and fal
 
 | Provider | Config Value | Features |
 |----------|-------------|----------|
-| Claude Agent SDK | `claude-agent-sdk` | Primary. File tools, MCP, sandboxing, hooks, sub-agents. Works with Claude Max. |
+| Claude Agent SDK | `tanstack-ai` | Primary. File tools, MCP, sandboxing, hooks, sub-agents. Works with Claude Max. |
 | Anthropic SDK | `anthropic` | Raw SDK with agentic tool-use loop. |
-| Codex SDK | `codex-sdk` | OpenAI Codex runtime for GPT models. |
+| Codex SDK | `tanstack-ai` | OpenAI Codex runtime for GPT models. |
 
 ### Persistent Memory
 

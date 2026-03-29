@@ -1,5 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { chat } from '@tanstack/ai'
+import { openRouterText } from '@tanstack/ai-openrouter'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { getUtilityModel } from './micro-agent'
 import { join, dirname } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import type { StorageBackend } from '../fs/storage'
@@ -16,6 +18,7 @@ export async function extractMemory(
 	agentId: string,
 	sessionId: string,
 	storage: StorageBackend,
+	utilityModel?: string,
 ): Promise<void> {
 	// 1. Read recent activity for this agent's session
 	const activities = await storage.readActivity({
@@ -29,11 +32,10 @@ export async function extractMemory(
 		.map((a) => `[${a.type}] ${a.summary}`)
 		.join('\n')
 
-	// 2. Call Haiku for extraction
-	const client = new Anthropic()
-	const response = await client.messages.create({
-		model: 'claude-haiku-4-5-20250514',
-		max_tokens: 2000,
+	// 2. Extract memory via utility model — same chat() API as agents
+	const model = utilityModel ?? await getUtilityModel(companyRoot)
+	const result = await chat({
+		adapter: openRouterText(model as Parameters<typeof openRouterText>[0]),
 		messages: [{
 			role: 'user',
 			content: `Extract structured memory from this agent session log. Return YAML with these sections:
@@ -49,15 +51,15 @@ ${sessionSummary}
 
 Return ONLY valid YAML, no markdown fences.`,
 		}],
-	})
+		stream: false,
+	}) as string
 
-	const textBlock = response.content.find((b) => b.type === 'text')
-	if (!textBlock || textBlock.type !== 'text') return
+	if (!result) return
 
 	// 3. Parse extracted memory
 	let extracted: Record<string, unknown>
 	try {
-		extracted = parseYaml(textBlock.text) as Record<string, unknown>
+		extracted = parseYaml(result) as Record<string, unknown>
 	} catch {
 		return // Haiku output wasn't valid YAML, skip
 	}

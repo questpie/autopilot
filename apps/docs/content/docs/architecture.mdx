@@ -98,11 +98,9 @@ Three agent providers are available. Configure per-agent or company-wide:
 
 | Provider | Config Value | Features |
 |----------|-------------|----------|
-| Claude Agent SDK | `claude-agent-sdk` | Primary. File tools, MCP, sandboxing, hooks, sub-agents. Works with Claude Max. |
-| Anthropic SDK | `anthropic` | Raw `@anthropic-ai/sdk` with agentic tool-use loop. Requires `ANTHROPIC_API_KEY`. |
-| Codex SDK | `codex-sdk` | OpenAI Codex runtime for GPT models. Requires `OPENAI_API_KEY`. |
+| TanStack AI + OpenRouter | `tanstack-ai` | Primary. 300+ models (Claude, GPT, Gemini, Llama). File tools, hooks, sub-agents. |
 
-The Claude Agent SDK provider gives agents built-in infrastructure -- file I/O, shell access, sub-agents, MCP support, and lifecycle hooks. Role-based filesystem scoping and deny patterns are enforced on top.
+The TanStack AI provider gives agents built-in file tools (read, write, edit, bash, glob, grep), web search, and the full autopilot tool set. Role-based filesystem scoping and deny patterns are enforced via middleware.
 
 ## Orchestrator Module Map
 

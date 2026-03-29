@@ -27,8 +27,8 @@ function makeAgent(overrides: Partial<Agent> & { id: string; role: string }): Ag
 	return {
 		name: overrides.name ?? overrides.id,
 		description: overrides.description ?? `${overrides.role} agent`,
-		provider: 'claude-agent-sdk',
-		model: 'claude-sonnet-4-20250514',
+		provider: 'tanstack-ai',
+		model: 'anthropic/claude-sonnet-4',
 		fs_scope: { read: ['**'], write: ['**'] },
 		tools: ['fs', 'terminal'],
 		mcps: [],
