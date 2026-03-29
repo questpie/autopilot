@@ -230,11 +230,22 @@ interface ToolEmbedProps {
   onRetry?: () => void
 }
 
+/** Renders the appropriate icon for a tool embed without creating a component during render. */
+function ToolIconDisplay({ tool, status }: { tool: string; status: ToolEmbedProps["status"] }) {
+  const Icon = status === "error" ? XCircleIcon : getToolIcon(tool)
+  return (
+    <Icon
+      size={14}
+      weight={status === "error" ? "fill" : "regular"}
+      className={cn("shrink-0", ICON_COLORS[status])}
+    />
+  )
+}
+
 /** Discord-style tool call embed with colored left border, status badge, and collapsible body. */
 const ToolEmbed = memo(function ToolEmbed({ tool, status, params, content, onRetry }: ToolEmbedProps) {
   const [expanded, setExpanded] = useState(false)
 
-  const ToolIcon = status === "error" ? XCircleIcon : getToolIcon(tool)
   const argsSummary = formatArgsSummary(params)
   const canExpand = !!content && content.length > 0
 
@@ -258,11 +269,7 @@ const ToolEmbed = memo(function ToolEmbed({ tool, status, params, content, onRet
           canExpand ? "cursor-pointer hover:bg-muted/20" : "cursor-default",
         )}
       >
-        <ToolIcon
-          size={14}
-          weight={status === "error" ? "fill" : "regular"}
-          className={cn("shrink-0", ICON_COLORS[status])}
-        />
+        <ToolIconDisplay tool={tool} status={status} />
         <span className="font-mono text-xs font-medium text-foreground/90">{tool}</span>
         {argsSummary && (
           <span className="truncate font-mono text-[11px] text-muted-foreground/60">
@@ -322,6 +329,12 @@ const ToolEmbed = memo(function ToolEmbed({ tool, status, params, content, onRet
  * Mini tool call embed for use in typing indicator.
  * Shows a compact version of the currently active tool.
  */
+/** Renders the appropriate icon for a mini tool embed. */
+function MiniToolIconDisplay({ tool }: { tool: string }) {
+  const Icon = getToolIcon(tool)
+  return <Icon size={12} className="shrink-0 text-primary" />
+}
+
 export const MiniToolEmbed = memo(function MiniToolEmbed({
   tool,
   params,
@@ -329,13 +342,12 @@ export const MiniToolEmbed = memo(function MiniToolEmbed({
   tool: string
   params?: Record<string, unknown>
 }) {
-  const ToolIcon = getToolIcon(tool)
   const argsSummary = formatArgsSummary(params)
 
   return (
     <div className="overflow-hidden rounded border-l-[3px] border-l-primary bg-muted/10">
       <div className="flex items-center gap-2 px-2 py-1">
-        <ToolIcon size={12} className="shrink-0 text-primary" />
+        <MiniToolIconDisplay tool={tool} />
         <span className="font-mono text-[11px] font-medium text-foreground/80">{tool}</span>
         {argsSummary && (
           <span className="truncate font-mono text-[10px] text-muted-foreground/50">

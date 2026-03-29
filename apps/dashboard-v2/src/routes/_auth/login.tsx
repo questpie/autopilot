@@ -21,11 +21,13 @@ const loginSchema = z.object({
 
 type LoginValues = z.infer<typeof loginSchema>
 
+const loginSearchSchema = z.object({
+  redirect: z.string().optional(),
+})
+
 export const Route = createFileRoute("/_auth/login")({
   component: LoginPage,
-  validateSearch: (search: Record<string, unknown>) => ({
-    redirect: (search.redirect as string) || undefined,
-  }),
+  validateSearch: loginSearchSchema,
 })
 
 type LoginState = {

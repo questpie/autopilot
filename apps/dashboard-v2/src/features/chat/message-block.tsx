@@ -272,6 +272,13 @@ export const MessageBlock = memo(function MessageBlock({
 		setEditingMessageId(null)
 	}, [setEditingMessageId])
 
+	// Extract file attachments from references (paths that look like files)
+	const fileAttachments = useMemo<FileAttachment[]>(() => {
+		return message.references
+			.filter((ref) => ref.includes('.') && !ref.startsWith('session-'))
+			.map((ref) => ({ path: ref }))
+	}, [message.references])
+
 	// System messages render centered
 	if (message.from === 'system') {
 		return <SystemMessage message={message} />
@@ -284,13 +291,6 @@ export const MessageBlock = memo(function MessageBlock({
 	const isOwn = message.from === currentUserId
 
 	const hasReplyRef = !!message.thread_id
-
-	// Extract file attachments from references (paths that look like files)
-	const fileAttachments = useMemo<FileAttachment[]>(() => {
-		return message.references
-			.filter((ref) => ref.includes('.') && !ref.startsWith('session-'))
-			.map((ref) => ({ path: ref }))
-	}, [message.references])
 
 	return (
 		<div

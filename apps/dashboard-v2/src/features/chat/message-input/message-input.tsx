@@ -172,7 +172,7 @@ export function MessageInput({
         handleSendOrSteer()
       }
     },
-    [autocompleteMode, handleSend, setAutocompleteIndex, dismissAutocomplete],
+    [autocompleteMode, handleSendOrSteer, setAutocompleteIndex, dismissAutocomplete],
   )
 
   function handleDragOver(e: React.DragEvent) {

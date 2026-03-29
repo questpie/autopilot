@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
+import { z } from "zod/v4"
 import { useState, useMemo, useCallback } from "react"
 import { PlusIcon, ListIcon, SquaresFourIcon } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
@@ -23,8 +24,8 @@ import type { SortOption, GroupOption } from "@/features/tasks/task-filters"
 
 export const Route = createFileRoute("/_app/tasks")({
   component: TasksPage,
-  validateSearch: (search: Record<string, unknown>) => ({
-    create: search.create === true || undefined,
+  validateSearch: z.object({
+    create: z.boolean().optional(),
   }),
   errorComponent: ({ error, reset }) => (
     <PageError description={error.message} onRetry={reset} />

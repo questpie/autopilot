@@ -11,6 +11,8 @@ interface DmSidebarProps {
   compact?: boolean
 }
 
+const EMPTY_AGENT_IDS: string[] = []
+
 interface Channel {
   id: string
   name: string
@@ -24,7 +26,7 @@ interface Channel {
 export function DmSidebar({
   activeChannelId,
   onSelectChannel,
-  workingAgentIds = [],
+  workingAgentIds = EMPTY_AGENT_IDS,
   compact = false,
 }: DmSidebarProps) {
   const { data: channels } = useQuery(channelsQuery)

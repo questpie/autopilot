@@ -70,19 +70,25 @@ function saveCollapsed(state: Record<string, boolean>) {
 const CategoryHeader = memo(function CategoryHeader({
   label,
   collapsed,
-  onToggle,
+  categoryKey,
+  onToggleCategory,
   action,
 }: {
   label: string
   collapsed: boolean
-  onToggle: () => void
+  categoryKey: string
+  onToggleCategory: (key: string) => void
   action?: React.ReactNode
 }) {
+  const handleToggle = useCallback(() => {
+    onToggleCategory(categoryKey)
+  }, [onToggleCategory, categoryKey])
+
   return (
     <div className="group flex items-center px-2 pt-4 pb-0.5">
       <button
         type="button"
-        onClick={onToggle}
+        onClick={handleToggle}
         className="flex flex-1 items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
       >
         <CaretDownIcon
@@ -244,11 +250,13 @@ const TaskChannelItem = memo(function TaskChannelItem({
 // Main sidebar component
 // ---------------------------------------------------------------------------
 
+const EMPTY_AGENT_IDS: string[] = []
+
 export function ChannelSidebar({
   channels,
   activeChannelId,
   onCreateChannel,
-  workingAgentIds = [],
+  workingAgentIds = EMPTY_AGENT_IDS,
 }: ChannelSidebarProps) {
   const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed)
@@ -344,7 +352,8 @@ export function ChannelSidebar({
               <CategoryHeader
                 label={t(cat.labelKey)}
                 collapsed={isCollapsed}
-                onToggle={() => toggleCategory(cat.key)}
+                categoryKey={cat.key}
+                onToggleCategory={toggleCategory}
                 action={
                   cat.key === "channels" ? (
                     <button
