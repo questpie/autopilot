@@ -48,7 +48,7 @@ export async function createDb(companyRoot: string, opts?: { embeddingDimensions
 	// (must be raw SQL — drizzle migrator cannot handle trigger semicolons)
 	await initSearchFts(client)
 
-	// Create vec0 virtual table (requires native vector support)
+	// Create vec0 virtual table for search_index (requires native vector support)
 	const dims = opts?.embeddingDimensions ?? 768
 	try {
 		await client.execute(`
@@ -60,6 +60,9 @@ export async function createDb(companyRoot: string, opts?: { embeddingDimensions
 	} catch {
 		// vec0 not available — vector search will be unavailable
 	}
+
+	// D25: FTS5 + vec0 virtual tables for chunks
+	await initChunksFts(client, dims)
 
 	// Cleanup expired rate limit entries on startup and every 5 minutes
 	try { await client.execute(`DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()`) } catch { /* table may not exist yet */ }
@@ -121,6 +124,50 @@ async function initSearchFts(client: Client): Promise<void> {
 	} catch {
 		// Triggers already exist
 	}
+}
+
+/**
+ * D25: Initialize FTS5 + vec0 virtual tables for chunks table.
+ */
+async function initChunksFts(client: Client, dims: number): Promise<void> {
+	try {
+		await client.execute(`
+			CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+				content,
+				content=chunks,
+				content_rowid=id,
+				tokenize='porter unicode61'
+			)
+		`)
+	} catch { /* already exists */ }
+
+	try {
+		await client.execute(`
+			CREATE TRIGGER IF NOT EXISTS chunks_fts_ai AFTER INSERT ON chunks BEGIN
+				INSERT INTO chunks_fts(rowid, content) VALUES (new.id, new.content);
+			END
+		`)
+		await client.execute(`
+			CREATE TRIGGER IF NOT EXISTS chunks_fts_ad AFTER DELETE ON chunks BEGIN
+				INSERT INTO chunks_fts(chunks_fts, rowid, content) VALUES('delete', old.id, old.content);
+			END
+		`)
+		await client.execute(`
+			CREATE TRIGGER IF NOT EXISTS chunks_fts_au AFTER UPDATE ON chunks BEGIN
+				INSERT INTO chunks_fts(chunks_fts, rowid, content) VALUES('delete', old.id, old.content);
+				INSERT INTO chunks_fts(rowid, content) VALUES (new.id, new.content);
+			END
+		`)
+	} catch { /* triggers exist */ }
+
+	try {
+		await client.execute(`
+			CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(
+				chunk_id INTEGER PRIMARY KEY,
+				embedding float[${dims}]
+			)
+		`)
+	} catch { /* vec0 not available */ }
 }
 
 /**

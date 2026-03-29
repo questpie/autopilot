@@ -193,6 +193,23 @@ export const pins = sqliteTable('pins', {
 	index('idx_pins_expires').on(table.expires_at),
 ])
 
+// ─── Chunks (D25: paragraph-level embedding chunks) ───────────────────────
+
+export const chunks = sqliteTable('chunks', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	entityType: text('entity_type').notNull(),
+	entityId: text('entity_id').notNull(),
+	chunkIndex: integer('chunk_index').notNull(),
+	content: text('content').notNull(),
+	contentHash: text('content_hash').notNull(),
+	metadata: text('metadata').default('{}'),
+	indexedAt: text('indexed_at').notNull(),
+}, (table) => [
+	index('idx_chunks_entity').on(table.entityType, table.entityId),
+	index('idx_chunks_entity_chunk').on(table.entityType, table.entityId, table.chunkIndex),
+	index('idx_chunks_hash').on(table.contentHash),
+])
+
 // ─── Rate Limiting ──────────────────────────────────────────────────────────
 
 // ─── Notifications ─────────────────────────────────────────────────────────
