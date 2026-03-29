@@ -6,7 +6,7 @@ import type { AutopilotDb } from './index'
 import { eq, and } from 'drizzle-orm'
 import type { Client } from '@libsql/client'
 import { indexEntity, removeEntity, type EntityType } from './search-index'
-import { chunkText } from './chunker'
+import { chunkText, chunkCode } from './chunker'
 import { schema } from './index'
 import { container, companyRootFactory } from '../container'
 import { dbFactory } from './index'
@@ -283,9 +283,14 @@ export class Indexer {
 		}
 	}
 
+	/** Code file extensions for D28 code-aware chunking. */
+	private static CODE_EXTENSIONS = new Set([
+		'ts', 'tsx', 'js', 'jsx', 'mts', 'mjs', 'py', 'go', 'rs', 'java', 'kt', 'rb', 'php',
+	])
+
 	/**
 	 * D26: Split content into chunks and store in the chunks table.
-	 * Uses content hashing to skip unchanged chunks.
+	 * D28: Uses code-aware chunking for code files.
 	 */
 	private async storeChunks(
 		type: EntityType,
@@ -293,7 +298,10 @@ export class Indexer {
 		content: string,
 	): Promise<void> {
 		try {
-			const textChunks = chunkText(content)
+			// D28: Use code-aware chunking for code files
+			const ext = id.split('.').pop()?.toLowerCase() ?? ''
+			const isCode = Indexer.CODE_EXTENSIONS.has(ext)
+			const textChunks = isCode ? chunkCode(content, id) : chunkText(content)
 			const now = new Date().toISOString()
 
 			// Delete existing chunks for this entity

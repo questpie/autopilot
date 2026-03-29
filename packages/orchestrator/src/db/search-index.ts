@@ -14,6 +14,13 @@ export interface SearchResult {
 	score: number
 }
 
+/** D29: Chunk-level search result with chunk metadata. */
+export interface ChunkSearchResult extends SearchResult {
+	chunkIndex: number
+	chunkContent: string
+	metadata?: Record<string, unknown>
+}
+
 function contentHash(content: string): string {
 	return createHash('sha256').update(content).digest('hex').slice(0, 16)
 }
@@ -249,4 +256,161 @@ export async function searchHybrid(
 		}))
 
 	return merged
+}
+
+// ─── D29: Chunk-level search ─────────────────────────────────────────────
+
+/**
+ * D29: Full-text search across chunks using chunks_fts.
+ */
+export async function searchChunksFts(
+	db: AutopilotDb,
+	query: string,
+	opts?: { type?: EntityType; limit?: number },
+): Promise<ChunkSearchResult[]> {
+	const raw = getRawDb(db)
+	const limit = opts?.limit ?? 20
+
+	try {
+		const args: (string | number)[] = [query]
+		let typeFilter = ''
+		if (opts?.type) {
+			typeFilter = 'AND c.entity_type = ?'
+			args.push(opts.type)
+		}
+		args.push(limit)
+
+		const result = await raw.execute({
+			sql: `
+				SELECT
+					c.entity_type,
+					c.entity_id,
+					c.chunk_index,
+					c.content as chunk_content,
+					c.metadata,
+					snippet(chunks_fts, 0, '<b>', '</b>', '...', 40) as snippet,
+					chunks_fts.rank as score
+				FROM chunks_fts
+				JOIN chunks c ON c.id = chunks_fts.rowid
+				WHERE chunks_fts MATCH ?
+				${typeFilter}
+				ORDER BY chunks_fts.rank
+				LIMIT ?
+			`,
+			args,
+		})
+
+		return result.rows.map((r) => ({
+			entityType: r.entity_type as EntityType,
+			entityId: r.entity_id as string,
+			title: null,
+			snippet: r.snippet as string,
+			score: r.score as number,
+			chunkIndex: r.chunk_index as number,
+			chunkContent: r.chunk_content as string,
+			metadata: r.metadata ? JSON.parse(r.metadata as string) : undefined,
+		}))
+	} catch {
+		return []
+	}
+}
+
+/**
+ * D29: Vector similarity search across chunks using chunks_vec.
+ */
+export async function searchChunksVec(
+	db: AutopilotDb,
+	embedding: Float32Array,
+	opts?: { type?: EntityType; limit?: number },
+): Promise<ChunkSearchResult[]> {
+	const raw = getRawDb(db)
+	const limit = opts?.limit ?? 20
+
+	try {
+		const embeddingBuffer = Buffer.from(embedding.buffer)
+		const args: (string | number | Uint8Array)[] = [embeddingBuffer, limit]
+		let typeFilter = ''
+		if (opts?.type) {
+			typeFilter = 'AND c.entity_type = ?'
+			args.push(opts.type)
+		}
+
+		const result = await raw.execute({
+			sql: `
+				SELECT
+					c.entity_type,
+					c.entity_id,
+					c.chunk_index,
+					c.content as chunk_content,
+					c.metadata,
+					substr(c.content, 1, 200) as snippet,
+					cv.distance as score
+				FROM chunks_vec cv
+				JOIN chunks c ON c.id = cv.chunk_id
+				WHERE cv.embedding MATCH ? AND cv.k = ?
+				${typeFilter}
+				ORDER BY cv.distance
+			`,
+			args,
+		})
+
+		return result.rows.map((r) => ({
+			entityType: r.entity_type as EntityType,
+			entityId: r.entity_id as string,
+			title: null,
+			snippet: r.snippet as string,
+			score: r.score as number,
+			chunkIndex: r.chunk_index as number,
+			chunkContent: r.chunk_content as string,
+			metadata: r.metadata ? JSON.parse(r.metadata as string) : undefined,
+		}))
+	} catch {
+		return []
+	}
+}
+
+/**
+ * D29: Hybrid chunk search — FTS + vector with RRF ranking.
+ * Returns chunk-level results for fine-grained context retrieval.
+ */
+export async function searchChunksHybrid(
+	db: AutopilotDb,
+	query: string,
+	embedding: Float32Array | null,
+	opts?: { type?: EntityType; limit?: number },
+): Promise<ChunkSearchResult[]> {
+	const limit = opts?.limit ?? 20
+	const k = 60
+
+	const ftsResults = await searchChunksFts(db, query, { type: opts?.type, limit: limit * 2 })
+
+	if (!embedding) {
+		return ftsResults.slice(0, limit)
+	}
+
+	const vecResults = await searchChunksVec(db, embedding, { type: opts?.type, limit: limit * 2 })
+
+	const scores = new Map<string, { score: number; result: ChunkSearchResult }>()
+
+	ftsResults.forEach((r, i) => {
+		const key = `${r.entityType}:${r.entityId}:${r.chunkIndex}`
+		const rrfScore = 1 / (k + i + 1)
+		scores.set(key, { score: rrfScore, result: r })
+	})
+
+	vecResults.forEach((r, i) => {
+		const key = `${r.entityType}:${r.entityId}:${r.chunkIndex}`
+		const rrfScore = 1 / (k + i + 1)
+		const existing = scores.get(key)
+		if (existing) {
+			existing.score += rrfScore
+		} else {
+			scores.set(key, { score: rrfScore, result: r })
+		}
+	})
+
+	return Array.from(scores.values())
+		.sort((a, b) => b.score - a.score)
+		.slice(0, limit)
+		.map((entry) => ({ ...entry.result, score: entry.score }))
 }

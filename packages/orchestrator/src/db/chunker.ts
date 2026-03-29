@@ -139,6 +139,123 @@ function chunkSection(text: string, maxChars: number, overlapChars: number): str
 }
 
 /**
+ * D28: Code-aware chunking — splits source code by function/class boundaries.
+ * Falls back to paragraph chunking if no code structures are found.
+ */
+export function chunkCode(code: string, filePath: string, options?: ChunkOptions): Chunk[] {
+	const maxChars = (options?.maxTokens ?? DEFAULT_MAX_TOKENS) * CHARS_PER_TOKEN
+
+	// Try to split by function/class definitions
+	const codeChunks = splitCodeBlocks(code, filePath)
+
+	if (codeChunks.length <= 1) {
+		// No code structures found — fall back to text chunking with file path context
+		return chunkText(code, options).map((c) => ({
+			...c,
+			section: filePath,
+		}))
+	}
+
+	const result: Chunk[] = []
+	for (const block of codeChunks) {
+		if (block.content.length <= maxChars) {
+			result.push({
+				index: result.length,
+				content: block.content,
+				section: `${filePath}:${block.name}`,
+			})
+		} else {
+			// Large function — sub-chunk it
+			const subChunks = chunkText(block.content, options)
+			for (const sub of subChunks) {
+				result.push({
+					index: result.length,
+					content: sub.content,
+					section: `${filePath}:${block.name}`,
+				})
+			}
+		}
+	}
+
+	return result
+}
+
+interface CodeBlock {
+	name: string
+	content: string
+}
+
+/**
+ * Extract function/class/method blocks from source code.
+ * Supports TypeScript, JavaScript, Python, Go, Rust patterns.
+ */
+function splitCodeBlocks(code: string, filePath: string): CodeBlock[] {
+	const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
+	const lines = code.split('\n')
+	const blocks: CodeBlock[] = []
+
+	// Regex patterns for function/class starts
+	const patterns: RegExp[] = []
+
+	if (['ts', 'tsx', 'js', 'jsx', 'mts', 'mjs'].includes(ext)) {
+		patterns.push(
+			/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/,
+			/^(?:export\s+)?(?:class|interface|type|enum)\s+(\w+)/,
+			/^(?:export\s+)?const\s+(\w+)\s*[:=]/,
+		)
+	} else if (ext === 'py') {
+		patterns.push(
+			/^(?:async\s+)?def\s+(\w+)/,
+			/^class\s+(\w+)/,
+		)
+	} else if (ext === 'go') {
+		patterns.push(
+			/^func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)/,
+			/^type\s+(\w+)\s+struct/,
+		)
+	} else if (ext === 'rs') {
+		patterns.push(
+			/^(?:pub\s+)?(?:async\s+)?fn\s+(\w+)/,
+			/^(?:pub\s+)?(?:struct|enum|trait|impl)\s+(\w+)/,
+		)
+	}
+
+	if (patterns.length === 0) return []
+
+	let currentBlock: CodeBlock | null = null
+	let currentLines: string[] = []
+
+	for (const line of lines) {
+		let matched = false
+		for (const pattern of patterns) {
+			const match = line.match(pattern)
+			if (match) {
+				// Flush previous block
+				if (currentBlock) {
+					currentBlock.content = currentLines.join('\n')
+					if (currentBlock.content.trim()) blocks.push(currentBlock)
+				}
+				currentBlock = { name: match[1] ?? 'anonymous', content: '' }
+				currentLines = [line]
+				matched = true
+				break
+			}
+		}
+		if (!matched) {
+			currentLines.push(line)
+		}
+	}
+
+	// Flush final block
+	if (currentBlock) {
+		currentBlock.content = currentLines.join('\n')
+		if (currentBlock.content.trim()) blocks.push(currentBlock)
+	}
+
+	return blocks
+}
+
+/**
  * Fallback: split by sentences when a paragraph exceeds max chunk size.
  */
 function splitBySentence(text: string, maxChars: number, overlapChars: number): string[] {
