@@ -269,4 +269,109 @@ describe('SqliteBackend', () => {
 			expect(limited.length).toBe(3)
 		})
 	})
+
+	// ─── Channels ────────────────────────────────────────────────────────
+
+	describe('channels', () => {
+		it('should create and read a channel', async () => {
+			await setup()
+			const channel = await backend.createChannel({
+				id: 'general', name: 'General', type: 'group',
+				created_by: 'admin', created_at: now(), updated_at: now(), metadata: {},
+			})
+			expect(channel.id).toBe('general')
+
+			const read = await backend.readChannel('general')
+			expect(read).not.toBeNull()
+			expect(read!.name).toBe('General')
+		})
+
+		it('should return null for non-existent channel', async () => {
+			await setup()
+			expect(await backend.readChannel('ghost')).toBeNull()
+		})
+
+		it('should list channels', async () => {
+			await setup()
+			await backend.createChannel({ id: 'c1', name: 'C1', type: 'group', created_by: 'admin', created_at: now(), updated_at: now(), metadata: {} })
+			await backend.createChannel({ id: 'c2', name: 'C2', type: 'direct', created_by: 'admin', created_at: now(), updated_at: now(), metadata: {} })
+
+			const all = await backend.listChannels()
+			expect(all.length).toBe(2)
+		})
+
+		it('should delete a channel', async () => {
+			await setup()
+			await backend.createChannel({ id: 'del', name: 'Delete Me', type: 'group', created_by: 'admin', created_at: now(), updated_at: now(), metadata: {} })
+			await backend.deleteChannel('del')
+			expect(await backend.readChannel('del')).toBeNull()
+		})
+	})
+
+	// ─── Channel Members ─────────────────────────────────────────────────
+
+	describe('channel members', () => {
+		it('should add and list members', async () => {
+			await setup()
+			await backend.createChannel({ id: 'ch', name: 'Ch', type: 'group', created_by: 'admin', created_at: now(), updated_at: now(), metadata: {} })
+			await backend.addChannelMember('ch', 'dev', 'agent', 'member')
+			await backend.addChannelMember('ch', 'ops', 'agent', 'member')
+
+			const members = await backend.getChannelMembers('ch')
+			expect(members.length).toBe(2)
+			expect(members.map(m => m.actor_id).sort()).toEqual(['dev', 'ops'])
+		})
+
+		it('should remove a member', async () => {
+			await setup()
+			await backend.createChannel({ id: 'ch2', name: 'Ch2', type: 'group', created_by: 'admin', created_at: now(), updated_at: now(), metadata: {} })
+			await backend.addChannelMember('ch2', 'dev', 'agent', 'member')
+			await backend.removeChannelMember('ch2', 'dev')
+
+			const members = await backend.getChannelMembers('ch2')
+			expect(members.length).toBe(0)
+		})
+
+		it('should check membership', async () => {
+			await setup()
+			await backend.createChannel({ id: 'ch3', name: 'Ch3', type: 'group', created_by: 'admin', created_at: now(), updated_at: now(), metadata: {} })
+			await backend.addChannelMember('ch3', 'dev', 'agent', 'member')
+
+			expect(await backend.isChannelMember('ch3', 'dev')).toBe(true)
+			expect(await backend.isChannelMember('ch3', 'stranger')).toBe(false)
+		})
+	})
+
+	// ─── Direct Messages (DM) ────────────────────────────────────────────
+
+	describe('DM channels', () => {
+		it('getOrCreateDirectChannel creates new DM', async () => {
+			await setup()
+			const channel = await backend.getOrCreateDirectChannel('user-1', 'agent-dev')
+			expect(channel.type).toBe('direct')
+			expect(channel.id).toContain('--')
+		})
+
+		it('getOrCreateDirectChannel returns existing DM', async () => {
+			await setup()
+			const first = await backend.getOrCreateDirectChannel('user-1', 'agent-dev')
+			const second = await backend.getOrCreateDirectChannel('user-1', 'agent-dev')
+			expect(first.id).toBe(second.id)
+		})
+
+		it('getOrCreateDirectChannel is order-independent', async () => {
+			await setup()
+			const ab = await backend.getOrCreateDirectChannel('aaa', 'zzz')
+			const ba = await backend.getOrCreateDirectChannel('zzz', 'aaa')
+			expect(ab.id).toBe(ba.id) // sorted internally
+		})
+
+		it('DM channel has both members', async () => {
+			await setup()
+			const channel = await backend.getOrCreateDirectChannel('alice', 'bob')
+			const members = await backend.getChannelMembers(channel.id)
+			expect(members.length).toBe(2)
+			expect(members.map(m => m.actor_id).sort()).toEqual(['alice', 'bob'])
+		})
+	})
 })
