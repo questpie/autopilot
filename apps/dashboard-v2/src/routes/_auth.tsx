@@ -33,7 +33,7 @@ function AuthLayout() {
         </div>
 
         <m.div
-          className={`my-auto flex w-full flex-col ${isSetup ? "max-w-[640px]" : "max-w-[420px]"}`}
+          className={cn(`sm:my-auto flex w-full flex-col ${isSetup ? "max-w-[640px]" : "max-w-[420px]"}`)}
           {...variants(fadeInUp)}
           transition={{
             duration: shouldReduce ? 0 : DURATION.slow,
