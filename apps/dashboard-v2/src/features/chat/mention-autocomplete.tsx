@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { UserIcon, RobotIcon } from "@phosphor-icons/react"
 import { useTranslation } from "@/lib/i18n"
 import { agentsQuery } from "@/features/team/team.queries"
@@ -22,7 +22,7 @@ export function MentionAutocomplete({
   onSelect,
 }: MentionAutocompleteProps) {
   const { t } = useTranslation()
-  const { data: agents } = useQuery(agentsQuery)
+  const { data: agents } = useSuspenseQuery(agentsQuery)
 
   const items: AgentItem[] = (
     (agents ?? []) as Array<{ id: string; name: string }>

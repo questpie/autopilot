@@ -1,7 +1,7 @@
 import { useForm, FormProvider } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useSuspenseQuery, useQueryClient } from "@tanstack/react-query"
 import { FloppyDiskIcon } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
@@ -88,8 +88,9 @@ export function CompanyProfileForm() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const { data: content, isLoading } = useQuery({
-    ...fileContentQuery("company.yaml"),
+  const { enabled: _, ...profileFileQuery } = fileContentQuery("company.yaml")
+  const { data: content } = useSuspenseQuery({
+    ...profileFileQuery,
     queryKey: [...queryKeys.company.detail("company.yaml")] as string[],
   })
 
@@ -110,10 +111,6 @@ export function CompanyProfileForm() {
       toast.error((err as Error).message)
     },
   })
-
-  if (isLoading) {
-    return <CompanyProfileSkeleton />
-  }
 
   const initialValues = parseCompanyYaml(content ?? "")
 

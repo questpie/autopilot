@@ -23,6 +23,7 @@
 		"@better-auth/drizzle-adapter": "^1.5.6",
 		"@drepkovsky/tinydi": "^2.3.0",
 		"@durable-streams/client": "^0.2.3",
+		"@durable-streams/server": "^0.2.3",
 		"@durable-streams/tanstack-ai-transport": "^0.0.2",
 		"@hono/standard-validator": "^0.2.2",
 		"@libsql/client": "^0.17.2",

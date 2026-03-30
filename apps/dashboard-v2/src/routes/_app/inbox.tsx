@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { AnimatePresence, m } from "framer-motion"
 import {
@@ -14,7 +14,6 @@ import { EmptyState } from "@/components/feedback/empty-state"
 import { useTranslation } from "@/lib/i18n"
 import { inboxQuery } from "@/features/inbox/inbox.queries"
 import { TaskInboxCard, PinInboxCard } from "@/features/inbox/inbox-card"
-import { InboxSkeleton } from "@/features/inbox/inbox-skeleton"
 import { PageTransition } from "@/components/layouts/page-transition"
 import type { Task, Pin } from "@/features/inbox/inbox-card"
 
@@ -29,13 +28,9 @@ type FilterType = "all" | "merge" | "approve" | "deploy" | "review"
 
 function InboxPage() {
   const { t } = useTranslation()
-  const { data, isLoading } = useQuery(inboxQuery)
+  const { data } = useSuspenseQuery(inboxQuery)
   const [filter, setFilter] = useState<FilterType>("all")
   const [resolvedOpen, setResolvedOpen] = useState(false)
-
-  if (isLoading) {
-    return <InboxSkeleton />
-  }
 
   const inbox = data ?? { tasks: [], pins: [] }
   const tasks = inbox.tasks as Task[]

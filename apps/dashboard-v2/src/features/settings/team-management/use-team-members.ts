@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
@@ -6,7 +6,7 @@ import { API_BASE } from "@/lib/api"
 import type { TeamMember } from "./team-types"
 
 export function useTeamMembers() {
-  return useQuery({
+  return useSuspenseQuery({
     queryKey: queryKeys.team.list(),
     queryFn: async (): Promise<TeamMember[]> => {
       const res = await fetch(`${API_BASE}/api/auth/admin/list-users`, { credentials: "include" })

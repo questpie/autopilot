@@ -1,6 +1,8 @@
+import { Suspense } from "react"
 import { createFileRoute, Outlet } from "@tanstack/react-router"
 import { SettingsNav } from "@/features/settings/settings-nav"
 import { PageError } from "@/components/feedback"
+import { QuestPieSpinner } from "@/components/brand"
 
 export const Route = createFileRoute("/_app/settings")({
   component: SettingsLayout,
@@ -24,7 +26,15 @@ function SettingsLayout() {
 
       {/* Main content area */}
       <div className="flex min-w-0 flex-1 flex-col overflow-auto">
-        <Outlet />
+        <Suspense
+          fallback={
+            <div className="flex flex-1 items-center justify-center p-12">
+              <QuestPieSpinner size={24} />
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query"
+import { Suspense } from "react"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { m } from "framer-motion"
 import { dashboardGroupsQuery } from "./dashboard.queries"
 import { AlertsSection } from "./alerts-section"
@@ -6,6 +7,7 @@ import { AgentsSection } from "./agents-section"
 import { PinsSection } from "./pins-section"
 import { ActivitySection } from "./activity-section"
 import { WidgetLoader } from "./widget-loader"
+import { Skeleton } from "@/components/feedback/skeleton"
 import { EASING, DURATION, clampedDelay, useMotionPreference } from "@/lib/motion"
 
 /** Built-in sections that are always available. */
@@ -45,9 +47,16 @@ function StaggerSection({
 }
 
 export function DashboardGroups() {
-  const { data } = useQuery(dashboardGroupsQuery)
+  const { data } = useSuspenseQuery(dashboardGroupsQuery)
   const { shouldReduce } = useMotionPreference()
   const groups = (data as { groups: Array<{ id: string; title: string; position: number }> })?.groups ?? []
+
+  const sectionFallback = (
+    <div className="flex flex-col gap-3">
+      <Skeleton className="h-4 w-32" />
+      <Skeleton className="h-20 w-full" />
+    </div>
+  )
 
   // If no groups defined, render default order
   if (groups.length === 0) {
@@ -56,7 +65,9 @@ export function DashboardGroups() {
       <div className="flex flex-col gap-8">
         {defaults.map((Section, i) => (
           <StaggerSection key={i} index={i} shouldReduce={shouldReduce}>
-            <Section />
+            <Suspense fallback={sectionFallback}>
+              <Section />
+            </Suspense>
           </StaggerSection>
         ))}
       </div>
@@ -73,14 +84,18 @@ export function DashboardGroups() {
         if (BuiltIn) {
           return (
             <StaggerSection key={group.id} index={i} shouldReduce={shouldReduce}>
-              <BuiltIn />
+              <Suspense fallback={sectionFallback}>
+                <BuiltIn />
+              </Suspense>
             </StaggerSection>
           )
         }
         return null
       })}
       <StaggerSection index={sorted.length} shouldReduce={shouldReduce}>
-        <WidgetLoader />
+        <Suspense fallback={sectionFallback}>
+          <WidgetLoader />
+        </Suspense>
       </StaggerSection>
     </div>
   )

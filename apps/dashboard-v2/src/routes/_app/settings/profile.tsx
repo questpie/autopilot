@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useForm, FormProvider } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { FloppyDiskIcon, DesktopIcon, SignOutIcon } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
@@ -119,7 +119,7 @@ function SessionsList() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const { data: sessionsData, isLoading } = useQuery({
+  const { data: sessions } = useSuspenseQuery({
     queryKey: queryKeys.userSessions.list(),
     queryFn: async () => {
       const res = await authClient.listSessions()
@@ -128,7 +128,6 @@ function SessionsList() {
     },
     staleTime: 30_000,
   })
-  const sessions = sessionsData
 
   const revokeMutation = useMutation({
     mutationFn: async (sessionToken: string) => {
@@ -143,17 +142,6 @@ function SessionsList() {
       toast.error((err as Error).message)
     },
   })
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-4 w-32" />
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    )
-  }
 
   return (
     <FormSection title={t("settings.active_sessions")}>

@@ -1,10 +1,9 @@
 import { createFileRoute, Outlet, useParams } from "@tanstack/react-router"
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { useTranslation } from "@/lib/i18n"
 import { channelsQuery } from "@/features/chat/chat.queries"
 import { ChannelSidebar } from "@/features/chat/channel-sidebar"
-import { ChannelListSkeleton } from "@/features/chat/chat-skeletons"
 import { ChannelListEmpty } from "@/features/chat/chat-empty-states"
 import { ChannelCreateDialog } from "@/features/chat/channel-create-dialog"
 import { PageError } from "@/components/feedback"
@@ -31,7 +30,7 @@ function ChatLayout() {
   const { t } = useTranslation()
   const [createOpen, setCreateOpen] = useState(false)
 
-  const { data, isLoading } = useQuery(channelsQuery)
+  const { data } = useSuspenseQuery(channelsQuery)
   const channels = (data ?? []) as Channel[]
 
   // Get active channel from nested route params
@@ -42,9 +41,7 @@ function ChatLayout() {
     <div className="flex flex-1 overflow-hidden">
       {/* Secondary left panel: channel list */}
       <aside className="flex w-[240px] shrink-0 flex-col border-r border-border bg-sidebar">
-        {isLoading ? (
-          <ChannelListSkeleton />
-        ) : channels.length === 0 ? (
+        {channels.length === 0 ? (
           <ChannelListEmpty />
         ) : (
           <ChannelSidebar

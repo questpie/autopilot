@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   TreeStructureIcon,
   PencilSimpleIcon,
@@ -90,7 +90,7 @@ export function WorkflowEditor() {
   const [newDialogOpen, setNewDialogOpen] = useState(false)
   const [newName, setNewName] = useState("")
 
-  const { data: workflowFiles, isLoading } = useQuery({
+  const { data: workflowFiles } = useSuspenseQuery({
     ...directoryQuery("workflows"),
     queryKey: [...queryKeys.workflows.list(), "directory"],
   })
@@ -184,16 +184,6 @@ export function WorkflowEditor() {
     setYamlError(null)
     saveMutation.mutate({ filename: selected, content: yamlContent })
   }, [selected, yamlContent, saveMutation, t])
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full" />
-        ))}
-      </div>
-    )
-  }
 
   const workflowList = summaries ?? []
 

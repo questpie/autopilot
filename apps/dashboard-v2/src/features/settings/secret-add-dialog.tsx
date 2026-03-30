@@ -2,7 +2,7 @@ import { useForm, FormProvider, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useState } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { EyeIcon, EyeSlashIcon, PlusIcon } from "@phosphor-icons/react"
 import { m, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
@@ -53,7 +53,7 @@ export function SecretAddDialog({ open, onOpenChange }: SecretAddDialogProps) {
   const queryClient = useQueryClient()
   const [showValue, setShowValue] = useState(false)
 
-  const { data: agents } = useQuery(agentsQuery)
+  const { data: agents } = useSuspenseQuery(agentsQuery)
 
   const methods = useForm<SecretFormValues>({
     resolver: zodResolver(secretSchema),

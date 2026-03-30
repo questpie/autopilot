@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query"
 import { UserIcon, RobotIcon, XIcon, PlusIcon } from "@phosphor-icons/react"
 import {
   Sheet,
@@ -33,7 +33,7 @@ export function ChannelMembers({
 }: ChannelMembersProps) {
   const { t } = useTranslation()
   const { data: members } = useQuery(channelMembersQuery(channelId))
-  const { data: agents } = useQuery(agentsQuery)
+  const { data: agents } = useSuspenseQuery(agentsQuery)
   const manageMembers = useManageMembers(channelId)
   const [showAddMenu, setShowAddMenu] = useState(false)
 

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useSuspenseQuery, useQueryClient } from "@tanstack/react-query"
 import { useState, useCallback } from "react"
 import { DndContext, DragOverlay, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core"
 import { UploadSimpleIcon } from "@phosphor-icons/react"
@@ -6,7 +6,6 @@ import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Skeleton } from "@/components/ui/skeleton"
 import { queryKeys } from "@/lib/query-keys"
 import { directoryQuery } from "./files.queries"
 import { FileTreeBookmarks } from "./file-tree-bookmarks"
@@ -27,7 +26,7 @@ interface FileTreeProps {
 export function FileTree({ className, onUploadClick }: FileTreeProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const { data: rootEntries, isLoading } = useQuery(directoryQuery(""))
+  const { data: rootEntries } = useSuspenseQuery(directoryQuery(""))
   const moveFile = useMoveFile()
 
   // Native drag-drop upload handling
@@ -107,22 +106,14 @@ export function FileTree({ className, onUploadClick }: FileTreeProps) {
 
         <ScrollArea className="flex-1">
           <div className="pb-2">
-            {isLoading && (
-              <div className="flex flex-col gap-1 px-2">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-6 w-full rounded-none" />
-                ))}
-              </div>
-            )}
-            {!isLoading &&
-              sortedEntries.map((entry) => (
-                <FileTreeItem
-                  key={entry.name}
-                  entry={entry}
-                  parentPath=""
-                  depth={0}
-                />
-              ))}
+            {sortedEntries.map((entry) => (
+              <FileTreeItem
+                key={entry.name}
+                entry={entry}
+                parentPath=""
+                depth={0}
+              />
+            ))}
           </div>
         </ScrollArea>
 

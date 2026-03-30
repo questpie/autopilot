@@ -1,5 +1,10 @@
 import { createFileRoute, Outlet, redirect, useMatches } from "@tanstack/react-router"
 import { checkAuthServer } from "@/lib/auth.fn"
+import { AuthBrandPanel } from "@/components/brand"
+import { SquareBuildLogo } from "@/components/brand"
+import { m } from "framer-motion"
+import { fadeInUp, EASING, DURATION } from "@/lib/motion"
+import { useMotionPreference } from "@/lib/motion"
 
 export const Route = createFileRoute("/_auth")({
   beforeLoad: async () => {
@@ -14,39 +19,35 @@ export const Route = createFileRoute("/_auth")({
   component: AuthLayout,
 })
 
-/**
- * Auth layout -- centered card with QUESTPIE branding.
- * Used for login, signup, 2FA, and setup screens.
- * Setup wizard gets a wider card (640px) vs regular auth (400px).
- */
 function AuthLayout() {
   const matches = useMatches()
-
-  // Check if we're on the setup route for wider layout
   const isSetup = matches.some((m) => m.routeId.includes("setup"))
+  const { shouldReduce, variants } = useMotionPreference()
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-8">
-      {/* Brand header -- only show for non-setup routes (setup has its own header) */}
-      {/* {!isSetup && (
-        <div className="mb-8 flex flex-col items-center gap-3">
-          <SquareBuildLogo size={48} />
+    <div className="flex min-h-dvh bg-background">
+      {/* Left: Brand panel (md+ only) */}
+      <AuthBrandPanel />
+
+      {/* Right: Form area */}
+      <div className="flex flex-1 flex-col items-center overflow-y-auto px-6 py-8 md:px-12 lg:px-16">
+        {/* Mobile-only logo (brand panel hidden below md) */}
+        <div className="mb-8 flex justify-center md:hidden">
+          <SquareBuildLogo size={40} />
         </div>
-      )} */}
 
-      {/* Content card */}
-      <div
-        className={`w-full border border-border bg-card p-6 ${
-          isSetup ? "max-w-[640px]" : "max-w-[400px]"
-        }`}
-      >
-        <Outlet />
+        {/* Form content — vertically centered, scrollable when tall */}
+        <m.div
+          className={`my-auto w-full ${isSetup ? "max-w-[640px]" : "max-w-[420px]"}`}
+          {...variants(fadeInUp)}
+          transition={{
+            duration: shouldReduce ? 0 : DURATION.slow,
+            ease: EASING.enter,
+          }}
+        >
+          <Outlet />
+        </m.div>
       </div>
-
-      {/* Footer */}
-      {/* <p className="mt-6 text-xs text-muted-foreground">
-        {t("app.name")} {t("app.version")}
-      </p> */}
     </div>
   )
 }

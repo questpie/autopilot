@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { AnimatePresence, m } from "framer-motion"
 import {
   CheckCircleIcon,
@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/lib/i18n"
 import { pinsQuery, dashboardGroupsQuery } from "@/features/dashboard/dashboard.queries"
-import { PinsSkeleton } from "./dashboard-skeleton"
 import { cn } from "@/lib/utils"
 
 type PinType = "success" | "info" | "warning" | "error" | "progress"
@@ -157,15 +156,11 @@ function PinCard({ pin }: { pin: PinData }) {
 
 export function PinsSection() {
   const { t } = useTranslation()
-  const pinsResult = useQuery(pinsQuery)
-  const groupsResult = useQuery(dashboardGroupsQuery)
+  const { data: pinsData } = useSuspenseQuery(pinsQuery)
+  const { data: groupsData } = useSuspenseQuery(dashboardGroupsQuery)
 
-  if (pinsResult.isLoading) {
-    return <PinsSkeleton />
-  }
-
-  const pins = (pinsResult.data ?? []) as PinData[]
-  const groups = (groupsResult.data as { groups: Array<{ id: string; title: string; position: number }> })?.groups ?? []
+  const pins = (pinsData ?? []) as PinData[]
+  const groups = (groupsData as { groups: Array<{ id: string; title: string; position: number }> })?.groups ?? []
 
   // Filter out alert pins (already shown in alerts section) and expired ones
   const displayPins = pins.filter(

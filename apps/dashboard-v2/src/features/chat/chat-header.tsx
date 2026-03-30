@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query"
 import { agentsQuery } from "@/features/team/team.queries"
 import { pinnedMessagesQuery } from "./chat.queries"
 import { useChatUIStore } from "./chat-ui.store"
@@ -27,7 +27,7 @@ export function ChatHeader({
   isWorking = false,
   compact = false,
 }: ChatHeaderProps) {
-  const { data: agents } = useQuery(agentsQuery)
+  const { data: agents } = useSuspenseQuery(agentsQuery)
   const { data: pins } = useQuery(pinnedMessagesQuery(channelId ?? ''))
   const setPinnedPanelOpen = useChatUIStore((s) => s.setPinnedPanelOpen)
   const pinnedPanelOpen = useChatUIStore((s) => s.pinnedPanelOpen)

@@ -2,13 +2,12 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useForm, FormProvider } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { FloppyDiskIcon } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { FormField, FormSection, FormActions } from "@/components/forms"
@@ -19,8 +18,9 @@ import { api } from "@/lib/api"
 export const Route = createFileRoute("/_app/settings/git")({
   component: SettingsGitPage,
   loader: async ({ context }) => {
+    const { enabled: _, ...fileQuery } = fileContentQuery("company.yaml")
     await context.queryClient.ensureQueryData({
-      ...fileContentQuery("company.yaml"),
+      ...fileQuery,
       queryKey: [...queryKeys.company.detail("git")] as string[],
     })
   },
@@ -90,8 +90,9 @@ function SettingsGitPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const { data: content, isLoading } = useQuery({
-    ...fileContentQuery("company.yaml"),
+  const { enabled: _e, ...gitFileQuery } = fileContentQuery("company.yaml")
+  const { data: content } = useSuspenseQuery({
+    ...gitFileQuery,
     queryKey: [...queryKeys.company.detail("git")] as string[],
   })
 
@@ -109,21 +110,6 @@ function SettingsGitPage() {
     },
     onError: (err) => toast.error((err as Error).message),
   })
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-1 flex-col">
-        <SettingsPageHeader title={t("settings.git")} description={t("settings.git_description")} />
-        <div className="p-6">
-          <div className="flex max-w-lg flex-col gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   const existing = content ?? ""
   const initialValues = parseGitConfig(existing)

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { UserPlusIcon } from "@phosphor-icons/react"
 import { Badge } from "@/components/ui/badge"
 import { useTranslation } from "@/lib/i18n"
@@ -46,11 +46,7 @@ function HumanCard({ name, role, pendingCount }: { name: string; role: string; p
 
 export function AgentGrid() {
   const { t } = useTranslation()
-  const { data: agents, isLoading } = useQuery(agentsQuery)
-
-  if (isLoading) {
-    return <AgentGridSkeleton />
-  }
+  const { data: agents } = useSuspenseQuery(agentsQuery)
 
   const agentList = agents ?? []
 

@@ -1,12 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useState, useEffect, useCallback } from "react"
 import { BellIcon, MoonIcon } from "@phosphor-icons/react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
 import { SettingsPageHeader } from "@/features/settings/settings-page-header"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
 import { isPushSubscribed, registerPush, unregisterPush } from "@/lib/push"
@@ -70,7 +69,7 @@ function NotificationSettingsPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const { data: settingsData, isLoading } = useQuery({
+  const { data: settingsData } = useSuspenseQuery({
     queryKey: [...queryKeys.notifications.detail("settings")] as string[],
     queryFn: async () => {
       const res = await api.api.settings.$get()
@@ -79,24 +78,6 @@ function NotificationSettingsPage() {
       return json.settings as Record<string, unknown>
     },
   })
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-1 flex-col">
-        <SettingsPageHeader
-          title={t("notifications.settings_title")}
-          description={t("notifications.settings_description")}
-        />
-        <div className="p-6">
-          <div className="flex max-w-2xl flex-col gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   const loadedRouting = settingsData?.notification_routing as RoutingMatrix | undefined
   const loadedQuietHours = settingsData?.quiet_hours as QuietHours | undefined

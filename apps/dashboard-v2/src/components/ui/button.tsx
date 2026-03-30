@@ -71,7 +71,7 @@ function Button({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="inline-flex items-center gap-1.5"
+            className="inline-flex items-center gap-2"
           >
             <Spinner size={size === "xs" || size === "sm" ? "sm" : "default"} />
             {children}

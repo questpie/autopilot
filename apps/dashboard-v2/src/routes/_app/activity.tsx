@@ -3,11 +3,10 @@ import { PageTransition } from '@/components/layouts/page-transition'
 import { Button } from '@/components/ui/button'
 import { ActivityItemRow } from '@/features/activity/activity-item'
 import { activityQuery } from '@/features/activity/activity.queries'
-import { ActivitySkeleton } from '@/features/dashboard/dashboard-skeleton'
 import { agentsQuery } from '@/features/team/team.queries'
 import { useTranslation } from '@/lib/i18n'
 import { FunnelIcon, LightningIcon } from '@phosphor-icons/react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useState } from 'react'
@@ -49,7 +48,7 @@ function ActivityPage() {
 	const { data: activityData, isLoading: activityLoading } = useQuery(
 		activityQuery({ agent: agentFilter, limit }),
 	)
-	const { data: agents } = useQuery(agentsQuery)
+	const { data: agents } = useSuspenseQuery(agentsQuery)
 
 	const loadMore = useCallback(() => {
 		setLimit((prev) => prev + 50)
@@ -58,7 +57,11 @@ function ActivityPage() {
 	if (activityLoading) {
 		return (
 			<div className="p-6">
-				<ActivitySkeleton />
+				<div className="flex flex-col gap-3">
+					{Array.from({ length: 5 }).map((_, i) => (
+						<div key={i} className="h-10 w-full animate-pulse bg-muted" />
+					))}
+				</div>
 			</div>
 		)
 	}

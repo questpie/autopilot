@@ -1,5 +1,5 @@
 import { useCallback } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
@@ -16,8 +16,9 @@ export function useTeamInvites() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const { data: invitesContent } = useQuery({
-    ...fileContentQuery(".auth/invites.yaml"),
+  const { enabled: _, ...inviteFileQuery } = fileContentQuery(".auth/invites.yaml")
+  const { data: invitesContent } = useSuspenseQuery({
+    ...inviteFileQuery,
     queryKey: [...queryKeys.team.detail("invites"), "content"],
   })
 

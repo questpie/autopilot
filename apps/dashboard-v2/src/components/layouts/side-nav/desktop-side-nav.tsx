@@ -1,7 +1,7 @@
 import { useEffect } from "react"
 import { useMatches } from "@tanstack/react-router"
 import { SidebarIcon } from "@phosphor-icons/react"
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { m, AnimatePresence } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
@@ -21,7 +21,7 @@ export function DesktopSideNav() {
   const toggleSidebarCollapsed = useAppStore((s) => s.toggleSidebarCollapsed)
   const matches = useMatches()
   const { d } = useMotionPreference()
-  const { data: status } = useQuery(statusQuery)
+  const { data: status } = useSuspenseQuery(statusQuery)
   const companyName = (status as { company?: string })?.company
 
   const currentPath = matches[matches.length - 1]?.pathname ?? "/"

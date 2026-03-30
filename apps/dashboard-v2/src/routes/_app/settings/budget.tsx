@@ -2,13 +2,12 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useForm, FormProvider, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { FloppyDiskIcon } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { FormSection, FormActions } from "@/components/forms"
@@ -19,8 +18,9 @@ import { api } from "@/lib/api"
 export const Route = createFileRoute("/_app/settings/budget")({
   component: SettingsBudgetPage,
   loader: async ({ context }) => {
+    const { enabled: _, ...fileQuery } = fileContentQuery("company.yaml")
     await context.queryClient.ensureQueryData({
-      ...fileContentQuery("company.yaml"),
+      ...fileQuery,
       queryKey: [...queryKeys.company.detail("budget")] as string[],
     })
   },
@@ -79,8 +79,9 @@ function SettingsBudgetPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const { data: content, isLoading } = useQuery({
-    ...fileContentQuery("company.yaml"),
+  const { enabled: _, ...fileQuery } = fileContentQuery("company.yaml")
+  const { data: content } = useSuspenseQuery({
+    ...fileQuery,
     queryKey: [...queryKeys.company.detail("budget")] as string[],
   })
 
@@ -98,17 +99,6 @@ function SettingsBudgetPage() {
     },
     onError: (err) => toast.error((err as Error).message),
   })
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-1 flex-col">
-        <SettingsPageHeader title={t("settings.budget")} description={t("settings.budget_description")} />
-        <div className="p-6">
-          <Skeleton className="h-40 max-w-lg" />
-        </div>
-      </div>
-    )
-  }
 
   const existing = content ?? ""
   const initialValues = parseBudgetConfig(existing)

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { AnimatePresence, m } from "framer-motion"
 import {
   WarningIcon,
@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/lib/i18n"
 import { pinsQuery, inboxQuery } from "@/features/dashboard/dashboard.queries"
 import { useApproveTask, useRejectTask } from "@/features/inbox/inbox.mutations"
-import { AlertsSkeleton } from "./dashboard-skeleton"
 import { cn } from "@/lib/utils"
 
 interface AlertItem {
@@ -121,17 +120,10 @@ function AlertItemCard({ item }: { item: AlertItem }) {
 
 export function AlertsSection() {
   const { t } = useTranslation()
-  const pinsResult = useQuery(pinsQuery)
-  const inboxResult = useQuery(inboxQuery)
+  const { data: pins } = useSuspenseQuery(pinsQuery)
+  const { data: inboxData } = useSuspenseQuery(inboxQuery)
 
-  const isLoading = pinsResult.isLoading || inboxResult.isLoading
-
-  if (isLoading) {
-    return <AlertsSkeleton />
-  }
-
-  const pins = pinsResult.data ?? []
-  const inbox = inboxResult.data ?? { tasks: [], pins: [] }
+  const inbox = inboxData ?? { tasks: [], pins: [] }
 
   // Build alert items from warning/error pins with actions
   const pinAlerts: AlertItem[] = pins

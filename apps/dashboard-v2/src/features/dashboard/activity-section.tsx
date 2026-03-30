@@ -1,10 +1,9 @@
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { AnimatePresence, m } from "framer-motion"
 import { ArrowRightIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { useTranslation } from "@/lib/i18n"
 import { activityQuery } from "@/features/dashboard/dashboard.queries"
-import { ActivitySkeleton } from "./dashboard-skeleton"
 
 interface ActivityEntry {
   at: string
@@ -51,13 +50,9 @@ function ActivityItem({ entry }: { entry: ActivityEntry }) {
 
 export function ActivitySection() {
   const { t } = useTranslation()
-  const activityResult = useQuery(activityQuery({ limit: 10 }))
+  const { data } = useSuspenseQuery(activityQuery({ limit: 10 }))
 
-  if (activityResult.isLoading) {
-    return <ActivitySkeleton />
-  }
-
-  const entries = (activityResult.data ?? []) as ActivityEntry[]
+  const entries = (data ?? []) as ActivityEntry[]
 
   // Hide section when no activity — no empty state on dashboard
   if (entries.length === 0) return null

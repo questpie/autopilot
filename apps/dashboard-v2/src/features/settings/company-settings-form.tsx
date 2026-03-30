@@ -3,7 +3,7 @@
  * micro_agents, auth settings, agent_http_allowlist.
  * D48: Company-level model/provider defaults.
  */
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState, useEffect } from "react"
 import { api } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
@@ -23,7 +23,7 @@ interface CompanySettings {
 export function CompanySettingsForm() {
   const queryClient = useQueryClient()
 
-  const { data: rawSettings, isLoading } = useQuery({
+  const { data: rawSettings } = useSuspenseQuery({
     queryKey: queryKeys.company.detail("settings"),
     queryFn: async () => {
       const res = await api.api.settings.$get()
@@ -59,10 +59,6 @@ export function CompanySettingsForm() {
       toast.error(err.message)
     },
   })
-
-  if (isLoading) {
-    return <div className="animate-pulse space-y-4 p-6"><div className="h-8 w-48 bg-muted rounded" /><div className="h-32 bg-muted rounded" /></div>
-  }
 
   return (
     <div className="space-y-6">

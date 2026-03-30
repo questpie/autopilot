@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import {
   Select,
   SelectContent,
@@ -44,7 +44,7 @@ export function ChatPanel() {
   }
   prevContextVisible.current = context.visible
 
-  const { data } = useQuery(channelsQuery)
+  const { data } = useSuspenseQuery(channelsQuery)
   const channels = (data ?? []) as Channel[]
 
   // Group channels by type

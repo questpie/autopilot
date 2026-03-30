@@ -1,6 +1,8 @@
+import { Suspense } from "react"
 import { m, AnimatePresence, useReducedMotion } from "framer-motion"
 import { useAppStore } from "@/stores/app.store"
 import { ChatPanel } from "@/features/chat/chat-panel"
+import { QuestPieSpinner } from "@/components/brand"
 
 const SIDEBAR_WIDTH = 360
 
@@ -26,7 +28,11 @@ export function RightSidebar() {
           }}
           className="hidden shrink-0 overflow-hidden border-l border-border bg-background lg:flex lg:flex-col"
         >
-          {rightPanel.mode === "chat" && <ChatPanel />}
+          {rightPanel.mode === "chat" && (
+            <Suspense fallback={<div className="flex flex-1 items-center justify-center"><QuestPieSpinner size={20} /></div>}>
+              <ChatPanel />
+            </Suspense>
+          )}
         </m.aside>
       )}
     </AnimatePresence>

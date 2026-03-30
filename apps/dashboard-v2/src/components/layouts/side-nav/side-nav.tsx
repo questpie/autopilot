@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { DesktopSideNav } from "./desktop-side-nav"
 import { MobileSideNav } from "./mobile-side-nav"
 
@@ -8,7 +9,9 @@ import { MobileSideNav } from "./mobile-side-nav"
 export function SideNav() {
   return (
     <>
-      <DesktopSideNav />
+      <Suspense fallback={<div className="hidden w-[56px] shrink-0 border-r border-border bg-sidebar md:block" />}>
+        <DesktopSideNav />
+      </Suspense>
       <MobileSideNav />
     </>
   )

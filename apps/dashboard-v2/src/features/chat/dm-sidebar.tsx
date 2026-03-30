@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { channelsQuery } from "./chat.queries"
 import { cn } from "@/lib/utils"
 import { CircleIcon, CircleNotchIcon } from "@phosphor-icons/react"
@@ -29,7 +29,7 @@ export function DmSidebar({
   workingAgentIds = EMPTY_AGENT_IDS,
   compact = false,
 }: DmSidebarProps) {
-  const { data: channels } = useQuery(channelsQuery)
+  const { data: channels } = useSuspenseQuery(channelsQuery)
 
   // Filter to DM channels only, sort by recent activity
   const dmChannels = ((channels ?? []) as Channel[])

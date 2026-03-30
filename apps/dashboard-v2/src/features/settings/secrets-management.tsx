@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   KeyIcon,
   TrashIcon,
@@ -51,7 +51,7 @@ export function SecretsManagement() {
   const queryClient = useQueryClient()
   const [addDialogOpen, setAddDialogOpen] = useState(false)
 
-  const { data: secretFiles, isLoading } = useQuery({
+  const { data: secretFiles } = useSuspenseQuery({
     ...directoryQuery("secrets"),
     queryKey: [...queryKeys.secrets.list(), "directory"],
   })
@@ -102,11 +102,7 @@ export function SecretsManagement() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        {isLoading ? (
-          Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 w-full" />
-          ))
-        ) : secrets.length === 0 ? (
+        {secrets.length === 0 ? (
           <p className="text-xs text-muted-foreground">{t("common.empty")}</p>
         ) : (
           secrets.map((secret) => (

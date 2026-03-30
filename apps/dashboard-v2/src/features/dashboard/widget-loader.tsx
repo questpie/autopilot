@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { ErrorBoundary } from "@/components/feedback/error-boundary"
 import { dashboardWidgetsQuery } from "./dashboard.queries"
 import { WidgetErrorCard } from "./widget-error-card"
@@ -91,16 +91,7 @@ function WidgetContainer({ widget }: { widget: WidgetSummary }) {
 }
 
 export function WidgetLoader() {
-  const { data, isLoading } = useQuery(dashboardWidgetsQuery)
-
-  if (isLoading) {
-    return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <WidgetSkeleton />
-        <WidgetSkeleton />
-      </div>
-    )
-  }
+  const { data } = useSuspenseQuery(dashboardWidgetsQuery)
 
   const widgets = data?.widgets ?? []
 

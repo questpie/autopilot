@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   PencilSimpleIcon,
   FloppyDiskIcon,
@@ -22,7 +22,7 @@ import { api } from "@/lib/api"
 export function AgentEditor() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const { data: agents, isLoading } = useQuery(agentsQuery)
+  const { data: agents } = useSuspenseQuery(agentsQuery)
   const [editing, setEditing] = useState(false)
   const [yamlContent, setYamlContent] = useState("")
   const [yamlError, setYamlError] = useState<string | null>(null)
@@ -68,10 +68,6 @@ export function AgentEditor() {
     } catch (e) {
       setYamlError((e as Error).message)
     }
-  }
-
-  if (isLoading) {
-    return <AgentEditorSkeleton />
   }
 
   // Edit mode: YAML editor

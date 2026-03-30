@@ -1,10 +1,9 @@
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { RowsIcon, SquaresFourIcon, PaintBrushIcon } from "@phosphor-icons/react"
 import { m } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/empty-state"
 import { artifactsListQuery } from "./artifacts.queries"
 import { ArtifactCard } from "./artifact-card"
@@ -18,24 +17,8 @@ type ViewMode = "grid" | "list"
 export function ArtifactGallery() {
   const { t } = useTranslation()
   const [view, setView] = useState<ViewMode>("grid")
-  const { data: artifacts, isLoading } = useQuery(artifactsListQuery())
+  const { data: artifacts } = useSuspenseQuery(artifactsListQuery())
   const { shouldReduce } = useMotionPreference()
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-4 p-6">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-6 w-32 rounded-none" />
-          <Skeleton className="h-8 w-20 rounded-none" />
-        </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-[16/10] rounded-none" />
-          ))}
-        </div>
-      </div>
-    )
-  }
 
   if (!artifacts || artifacts.length === 0) {
     return (

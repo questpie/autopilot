@@ -201,7 +201,7 @@ export class Orchestrator {
 		})
 		try {
 			await this.watcher.start()
-			logger.info('orchestrator', 'watcher started (watching tasks/, comms/, dashboard/, team/, knowledge/, artifacts/)')
+			logger.info('orchestrator', 'watcher started (watching dashboard/, team/, knowledge/, artifacts/, company.yaml)')
 		} catch (err) {
 			logger.error('orchestrator', 'failed to start watcher', { error: err instanceof Error ? err.message : String(err) })
 		}

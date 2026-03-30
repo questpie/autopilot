@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { m } from "framer-motion"
 import { CircleIcon, PlayIcon, UsersIcon } from "@phosphor-icons/react"
 import { Link, useNavigate } from "@tanstack/react-router"
@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/lib/i18n"
 import { agentsQuery } from "@/features/team/team.queries"
 import { statusQuery } from "@/features/dashboard/dashboard.queries"
-import { AgentsSkeleton } from "./dashboard-skeleton"
 import { cn } from "@/lib/utils"
 
 interface AgentStatus {
@@ -83,15 +82,8 @@ function AgentStatusCard({ agent }: { agent: AgentStatus }) {
 
 export function AgentsSection() {
   const { t } = useTranslation()
-  const agentsResult = useQuery(agentsQuery)
-  const statusResult = useQuery(statusQuery)
-
-  if (agentsResult.isLoading) {
-    return <AgentsSkeleton />
-  }
-
-  const agents = agentsResult.data ?? []
-  const status = statusResult.data
+  const { data: agents } = useSuspenseQuery(agentsQuery)
+  const { data: status } = useSuspenseQuery(statusQuery)
 
   if (agents.length === 0) {
     return (

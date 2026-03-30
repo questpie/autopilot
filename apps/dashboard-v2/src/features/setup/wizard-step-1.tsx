@@ -135,21 +135,21 @@ function EmailVerificationPhase({
         </p>
       </div>
 
-      {checkError && (
-        <Alert variant="destructive">
-          <WarningCircleIcon className="size-4" />
-          <AlertDescription>{t("setup.step_1_verify_not_yet")}</AlertDescription>
-        </Alert>
-      )}
+      <div className="flex flex-col gap-2 text-center">
+        {checkError && (
+          <p className="text-xs text-muted-foreground/70">
+            <WarningCircleIcon className="mr-1 inline size-3.5 align-[-2px] text-destructive/60" />
+            {t("setup.step_1_verify_not_yet")}
+          </p>
+        )}
 
-      {deploymentMode && deploymentMode !== "cloud" && (
-        <Alert>
-          <TerminalWindowIcon className="size-4" />
-          <AlertDescription>
+        {deploymentMode && deploymentMode !== "cloud" && (
+          <p className="text-xs text-muted-foreground/60">
+            <TerminalWindowIcon className="mr-1 inline size-3.5 align-[-2px]" />
             {t("setup.step_1_verify_console_hint")}
-          </AlertDescription>
-        </Alert>
-      )}
+          </p>
+        )}
+      </div>
 
       <div className="flex gap-2">
         <Button

@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useForm, FormProvider, useFormContext, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useSuspenseQuery, useQueryClient } from "@tanstack/react-query"
 import {
   EyeIcon,
   EyeSlashIcon,
@@ -44,9 +44,9 @@ const EMBEDDINGS_OPTIONS = [
  */
 export function ProviderForm() {
   const { t } = useTranslation()
-  const { data: deploymentMode, isLoading: isLoadingMode } = useDeploymentMode()
+  const { data: deploymentMode } = useDeploymentMode()
 
-  const { data: providerStatus } = useQuery({
+  const { data: providerStatus } = useSuspenseQuery({
     queryKey: ["settings", "providers"],
     queryFn: async () => {
       const res = await api.api.settings.providers.$get()
@@ -62,8 +62,6 @@ export function ProviderForm() {
       embeddingsProvider: "none",
     },
   })
-
-  if (isLoadingMode) return null
 
   if (deploymentMode === "cloud") {
     return (
