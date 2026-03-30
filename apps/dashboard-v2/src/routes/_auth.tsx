@@ -5,6 +5,7 @@ import { SquareBuildLogo } from "@/components/brand"
 import { m } from "framer-motion"
 import { fadeInUp, EASING, DURATION } from "@/lib/motion"
 import { useMotionPreference } from "@/lib/motion"
+import { cn } from "@/lib/utils"
 
 export const Route = createFileRoute("/_auth")({
   beforeLoad: async () => {
@@ -28,12 +29,11 @@ function AuthLayout() {
 
       {/* Right: Form area — full height flex so children can use justify-between */}
       <div className="flex min-h-dvh flex-1 flex-col items-center overflow-y-auto px-4 py-6 sm:px-6 md:px-12 md:py-8 lg:px-16">
-        <div className="mb-6 flex justify-center sm:mb-8 md:hidden">
-          <SquareBuildLogo size={40} />
-        </div>
 
         <m.div
-          className={cn(`sm:my-auto flex w-full flex-col ${isSetup ? "max-w-[640px]" : "max-w-[420px]"}`)}
+          className={cn(`my-auto flex w-full flex-col`,
+            isSetup? 'max-w-160' : 'max-w-105'
+          )}
           {...variants(fadeInUp)}
           transition={{
             duration: shouldReduce ? 0 : DURATION.slow,
@@ -41,6 +41,9 @@ function AuthLayout() {
           }}
         >
           <Outlet />
+          <div className="mt-32 flex justify-center sm:mb-8 md:hidden">
+            <SquareBuildLogo size={40} />
+          </div>
         </m.div>
       </div>
     </div>

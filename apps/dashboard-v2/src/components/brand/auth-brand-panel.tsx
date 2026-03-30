@@ -87,7 +87,7 @@ export function AuthBrandPanel() {
           <span className="font-heading text-2xl font-bold tracking-[-0.05em] text-foreground">
             QUESTPIE
           </span>
-          <p className="font-heading text-xs tracking-widest text-muted-foreground/60 uppercase">
+          <p className="font-heading px-6 text-center text-balance text-xs tracking-widest text-muted-foreground/60 uppercase">
             Build apps · Run companies · One platform
           </p>
         </div>

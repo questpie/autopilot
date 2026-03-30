@@ -257,14 +257,12 @@ function LoginPage() {
       return
     }
 
-    const target = result.data?.redirect
+    const needs2FA = (result.data as Record<string, unknown>)?.twoFactorRedirect === true
+    const target = needs2FA
       ? "/login/2fa"
       : isValidRedirect(redirect) ? redirect : "/"
 
-    // Invalidate cached route data (auth state changed), then navigate.
-    // invalidate() may throw if a beforeLoad fires a redirect — that's fine,
-    // the router handles it. We navigate as fallback.
-    try { await router.invalidate() } catch { /* redirect thrown by beforeLoad */ }
+    try { await router.invalidate() } catch {}
     await router.navigate({ to: target })
   }
 
