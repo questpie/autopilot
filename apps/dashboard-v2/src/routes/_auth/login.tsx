@@ -256,12 +256,12 @@ function LoginPage() {
       return
     }
 
-    if (result.data?.redirect) {
-      void router.invalidate().then(() => router.navigate({ to: "/login/2fa" }))
-      return
-    }
+    const target = result.data?.redirect
+      ? "/login/2fa"
+      : isValidRedirect(redirect) ? redirect : "/"
 
-    void router.invalidate().then(() => router.navigate({ to: isValidRedirect(redirect) ? redirect : "/" }))
+    await router.invalidate()
+    await router.navigate({ to: target })
   }
 
   const isRateLimited = rateLimitCountdown > 0
