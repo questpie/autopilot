@@ -262,7 +262,6 @@ function LoginPage() {
       ? "/login/2fa"
       : isValidRedirect(redirect) ? redirect : "/"
 
-    try { await router.invalidate() } catch {}
     await router.navigate({ to: target })
   }
 
