@@ -149,6 +149,11 @@ const agents = new Hono<AppEnv>()
 			web_search: z.boolean().optional(),
 		})),
 		async (c) => {
+			const actor = c.get('actor')
+			if (!actor || (actor.role !== 'admin' && actor.role !== 'owner')) {
+				return c.json({ error: 'only admin or owner can modify agents' }, 403)
+			}
+
 			const root = c.get('companyRoot')
 			const { id } = c.req.valid('param')
 			const updates = c.req.valid('json')

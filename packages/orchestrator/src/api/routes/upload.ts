@@ -29,16 +29,48 @@ const upload = new Hono<AppEnv>().post(
 
 		if (!file) return c.json({ error: 'no file provided' }, 400)
 
+		// ── File size check (50 MB max) ──────────────────────────────────
+		const MAX_FILE_SIZE = 50 * 1024 * 1024
+		if (file.size > MAX_FILE_SIZE) {
+			return c.json({ error: 'file too large (max 50 MB)' }, 400)
+		}
+
+		// ── Sanitize filename ────────────────────────────────────────────
+		let sanitizedName = file.name
+			.replace(/\0/g, '')        // null bytes
+			.replace(/\.\./g, '')      // parent traversal
+			.replace(/[\/\\]/g, '')    // path separators
+			.replace(/^\.+/, '')       // leading dots (hidden files)
+			|| 'unnamed'
+
+		// ── Max filename length ──────────────────────────────────────────
+		if (sanitizedName.length > 255) {
+			sanitizedName = sanitizedName.slice(0, 255)
+		}
+
+		// ── Blocked extensions ───────────────────────────────────────────
+		const BLOCKED_EXTENSIONS = ['.exe', '.bat', '.cmd', '.sh', '.ps1', '.msi']
+		const extMatch = sanitizedName.match(/\.[^.]+$/)
+		if (extMatch && BLOCKED_EXTENSIONS.includes(extMatch[0].toLowerCase())) {
+			return c.json({ error: 'file type not allowed' }, 400)
+		}
+
 		const fullDir = resolve(root, targetDir)
 		if (!fullDir.startsWith(resolve(root))) {
 			return c.json({ error: 'forbidden' }, 403)
 		}
 
 		await mkdir(fullDir, { recursive: true })
-		const fullPath = join(fullDir, file.name)
+		const fullPath = join(fullDir, sanitizedName)
+
+		// CRITICAL: validate resolved path is still under company root
+		if (!resolve(fullPath).startsWith(resolve(root))) {
+			return c.json({ error: 'forbidden' }, 403)
+		}
+
 		// Stream to disk — avoids buffering entire file in RAM
 		await Bun.write(fullPath, file.stream())
-		return c.json({ ok: true as const, path: join(targetDir, file.name) }, 200)
+		return c.json({ ok: true as const, path: join(targetDir, sanitizedName) }, 200)
 	},
 )
 

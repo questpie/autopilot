@@ -32,6 +32,45 @@ function getActorId(c: Context<AppEnv>): string {
 	return c.get('actor')?.id ?? 'anonymous'
 }
 
+// ─── Channel membership guards ─────────────────────────────────────────────
+
+/** Returns a 403 response if the actor is not a member of the channel. Admin/owner roles bypass. */
+async function requireMember(c: Context<AppEnv>, channelId: string): Promise<Response | null> {
+	const actor = c.get('actor')
+	if (!actor) return c.json({ error: 'unauthorized' }, 401)
+
+	// Admin/owner bypass — they can access any channel
+	if (actor.role === 'admin' || actor.role === 'owner') return null
+
+	const storage = c.get('storage')
+	const isMember = await storage.isChannelMember(channelId, actor.id)
+	if (!isMember) return c.json({ error: 'not a channel member' }, 403)
+
+	return null
+}
+
+/** Returns a 403 response if the actor cannot manage channel members. Requires admin/owner role, channel creator, or channel-level owner role. */
+async function requireChannelAdmin(c: Context<AppEnv>, channelId: string): Promise<Response | null> {
+	const actor = c.get('actor')
+	if (!actor) return c.json({ error: 'unauthorized' }, 401)
+
+	// Global admin/owner bypass
+	if (actor.role === 'admin' || actor.role === 'owner') return null
+
+	const storage = c.get('storage')
+	const channel = await storage.readChannel(channelId)
+	if (!channel) return c.json({ error: 'channel not found' }, 404)
+
+	// Channel creator can manage members
+	if (channel.created_by === actor.id) return null
+
+	// Channel-level owner role can manage members
+	const membership = channel.members.find((m) => m.actor_id === actor.id)
+	if (membership?.role === 'owner') return null
+
+	return c.json({ error: 'insufficient channel permissions' }, 403)
+}
+
 const channels = new Hono<AppEnv>()
 	// GET /channels — list channels
 	.get(
@@ -133,6 +172,10 @@ const channels = new Hono<AppEnv>()
 		async (c) => {
 			const storage = c.get('storage')
 			const { id } = c.req.valid('param')
+
+			const denied = await requireMember(c, id)
+			if (denied) return denied
+
 			const channel = await storage.readChannel(id)
 			if (!channel) return c.json({ error: 'channel not found' }, 404)
 			return c.json(channel)
@@ -183,6 +226,10 @@ const channels = new Hono<AppEnv>()
 		async (c) => {
 			const storage = c.get('storage')
 			const { id } = c.req.valid('param')
+
+			const denied = await requireMember(c, id)
+			if (denied) return denied
+
 			const { limit, thread_id } = c.req.valid('query')
 
 			const messages = await storage.readMessages({
@@ -224,6 +271,9 @@ const channels = new Hono<AppEnv>()
 			const root = c.get('companyRoot')
 			const { id: channelId } = c.req.valid('param')
 			const body = c.req.valid('json')
+
+			const denied = await requireMember(c, channelId)
+			if (denied) return denied
 
 			const channel = await storage.readChannel(channelId)
 			if (!channel) return c.json({ error: 'channel not found' }, 404)
@@ -318,6 +368,9 @@ const channels = new Hono<AppEnv>()
 			const { id } = c.req.valid('param')
 			const body = c.req.valid('json')
 
+			const denied = await requireChannelAdmin(c, id)
+			if (denied) return denied
+
 			const channel = await storage.readChannel(id)
 			if (!channel) return c.json({ error: 'channel not found' }, 404)
 
@@ -357,6 +410,10 @@ const channels = new Hono<AppEnv>()
 		async (c) => {
 			const storage = c.get('storage')
 			const { id } = c.req.valid('param')
+
+			const denied = await requireMember(c, id)
+			if (denied) return denied
+
 			const members = await storage.getChannelMembers(id)
 			return c.json(members)
 		},
@@ -380,8 +437,11 @@ const channels = new Hono<AppEnv>()
 		zValidator('json', z.object({ content: z.string().min(1) })),
 		async (c) => {
 			const storage = c.get('storage')
-			const { msgId } = c.req.valid('param')
+			const { id, msgId } = c.req.valid('param')
 			const { content } = c.req.valid('json')
+
+			const denied = await requireMember(c, id)
+			if (denied) return denied
 
 			const existing = await storage.readMessage(msgId)
 			if (!existing) return c.json({ error: 'message not found' }, 404)
@@ -413,7 +473,10 @@ const channels = new Hono<AppEnv>()
 		zValidator('param', MessageParam),
 		async (c) => {
 			const storage = c.get('storage')
-			const { msgId } = c.req.valid('param')
+			const { id, msgId } = c.req.valid('param')
+
+			const denied = await requireMember(c, id)
+			if (denied) return denied
 
 			const existing = await storage.readMessage(msgId)
 			if (!existing) return c.json({ error: 'message not found' }, 404)
@@ -445,6 +508,9 @@ const channels = new Hono<AppEnv>()
 			const storage = c.get('storage')
 			const { id: channelId, msgId } = c.req.valid('param')
 
+			const denied = await requireMember(c, channelId)
+			if (denied) return denied
+
 			const pin = await storage.pinMessage(channelId, msgId, getActorId(c))
 			return c.json(pin, 201)
 		},
@@ -466,6 +532,9 @@ const channels = new Hono<AppEnv>()
 		async (c) => {
 			const storage = c.get('storage')
 			const { id: channelId, msgId } = c.req.valid('param')
+
+			const denied = await requireMember(c, channelId)
+			if (denied) return denied
 
 			await storage.unpinMessage(channelId, msgId)
 			return c.json({ ok: true as const })
@@ -489,6 +558,9 @@ const channels = new Hono<AppEnv>()
 			const storage = c.get('storage')
 			const { id: channelId } = c.req.valid('param')
 
+			const denied = await requireMember(c, channelId)
+			if (denied) return denied
+
 			const pins = await storage.getPinnedMessages(channelId)
 			return c.json(pins)
 		},
@@ -510,8 +582,11 @@ const channels = new Hono<AppEnv>()
 		zValidator('json', z.object({ emoji: z.string() })),
 		async (c) => {
 			const storage = c.get('storage')
-			const { msgId } = c.req.valid('param')
+			const { id, msgId } = c.req.valid('param')
 			const { emoji } = c.req.valid('json')
+
+			const denied = await requireMember(c, id)
+			if (denied) return denied
 
 			const reaction = await storage.addReaction(msgId, emoji, getActorId(c))
 			return c.json(reaction, 201)
@@ -534,8 +609,11 @@ const channels = new Hono<AppEnv>()
 		zValidator('json', z.object({ emoji: z.string() })),
 		async (c) => {
 			const storage = c.get('storage')
-			const { msgId } = c.req.valid('param')
+			const { id, msgId } = c.req.valid('param')
 			const { emoji } = c.req.valid('json')
+
+			const denied = await requireMember(c, id)
+			if (denied) return denied
 
 			await storage.removeReaction(msgId, emoji, getActorId(c))
 			return c.json({ ok: true as const })
@@ -557,6 +635,9 @@ const channels = new Hono<AppEnv>()
 		zValidator('param', ChannelIdParam),
 		async (c) => {
 			const { id: channelId } = c.req.valid('param')
+
+			const denied = await requireMember(c, channelId)
+			if (denied) return denied
 
 			eventBus.emit({
 				type: 'user_typing',
@@ -584,7 +665,10 @@ const channels = new Hono<AppEnv>()
 		zValidator('param', MessageParam),
 		async (c) => {
 			const storage = c.get('storage')
-			const { msgId } = c.req.valid('param')
+			const { id, msgId } = c.req.valid('param')
+
+			const denied = await requireMember(c, id)
+			if (denied) return denied
 
 			const reactions = await storage.getReactions(msgId)
 			return c.json(reactions)

@@ -379,7 +379,7 @@ export function getRequiredPermission(
 		return { resource: 'knowledge', action: method === 'GET' ? 'read' : 'write' }
 
 	// Chat
-	if (path.startsWith('/api/chat')) return { resource: 'chat', action: 'write' }
+	if (path.startsWith('/api/chat')) return { resource: 'chat', action: method === 'GET' ? 'read' : 'write' }
 
 	// Integrations
 	if (path.startsWith('/api/integrations')) {

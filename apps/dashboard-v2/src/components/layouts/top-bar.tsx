@@ -3,12 +3,21 @@ import {
   MagnifyingGlassIcon,
   ChatCircleIcon,
   UserIcon,
+  SignOutIcon,
 } from "@phosphor-icons/react"
 import { m } from "framer-motion"
+import { useRouter } from "@tanstack/react-router"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
 import { useHapticPattern } from "@/hooks/use-haptic"
 import { NotificationBell } from "@/features/notifications/notification-bell"
+import { authClient } from "@/lib/auth"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
 
 /** Hover/tap scale for icon buttons */
 const iconMotion = {
@@ -25,12 +34,19 @@ const iconMotion = {
  */
 export function TopBar() {
   const { t } = useTranslation()
+  const router = useRouter()
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
   const rightPanel = useAppStore((s) => s.rightPanel)
   const setRightPanel = useAppStore((s) => s.setRightPanel)
   const closeRightPanel = useAppStore((s) => s.closeRightPanel)
   const { trigger } = useHapticPattern()
+
+  const handleLogout = async () => {
+    await authClient.signOut()
+    router.invalidate()
+    void router.navigate({ to: "/login" })
+  }
 
   const chatOpen = rightPanel.open && rightPanel.mode === "chat"
 
@@ -102,14 +118,26 @@ export function TopBar() {
       </m.button>
 
       {/* User menu */}
-      <m.button
-        type="button"
-        {...iconMotion}
-        className="relative flex min-h-[44px] min-w-[44px] items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-        aria-label={t("nav.user_menu")}
-      >
-        <UserIcon size={18} aria-hidden="true" />
-      </m.button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <m.button
+              type="button"
+              {...iconMotion}
+              className="relative flex min-h-[44px] min-w-[44px] items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={t("nav.user_menu")}
+            />
+          }
+        >
+          <UserIcon size={18} aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" side="bottom" sideOffset={4}>
+          <DropdownMenuItem onClick={handleLogout}>
+            <SignOutIcon size={14} aria-hidden="true" />
+            {t("auth.sign_out")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   )
 }

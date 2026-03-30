@@ -127,9 +127,9 @@ export function ipRateLimit() {
 
 /**
  * Actor-based rate limiting — applied AFTER auth middleware.
- * Only webhook source is exempt.
  * Human limits: 300/min general, 10/min search, 20/min chat.
  * Agent limits: 600/min general, 50/min search, 100/min chat.
+ * Webhook limits: 60/min per webhook path.
  */
 export function actorRateLimit() {
 	return createMiddleware<AppEnv>(async (c, next) => {
@@ -138,11 +138,26 @@ export function actorRateLimit() {
 		// No actor = unauthenticated (already rate-limited by ipRateLimit)
 		if (!actor) return next()
 
-		// Only webhooks are exempt (not agents)
-		if (actor.source === 'webhook') return next()
-
 		const path = new URL(c.req.url).pathname
 		const db = c.get('db')
+
+		// Webhooks get a per-path rate limit instead of being fully exempt
+		if (actor.source === 'webhook') {
+			const webhookKey = `webhook:${path}`
+			const webhookMax = 60
+			const result = await checkRateLimit(db, webhookKey, 60, webhookMax)
+
+			c.header('X-RateLimit-Limit', String(webhookMax))
+			c.header('X-RateLimit-Remaining', String(result.remaining))
+			c.header('X-RateLimit-Reset', String(result.resetAt))
+
+			if (!result.allowed) {
+				return c.json({ error: 'Rate limit exceeded' }, 429)
+			}
+
+			return next()
+		}
+
 		const isAgent = actor.type === 'agent'
 
 		let key: string

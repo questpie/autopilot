@@ -51,6 +51,35 @@ const search = new Hono<AppEnv>().get(
 			results = await searchHybrid(db, q, embedding, { type: typeFilter, limit })
 		}
 
+		// Filter message results by channel membership (non-admin/owner only)
+		const actor = c.get('actor')
+		if (actor && actor.role !== 'admin' && actor.role !== 'owner') {
+			const messageResults = results.filter((r) => r.entityType === 'message')
+			if (messageResults.length > 0) {
+				const storage = c.get('storage')
+				// Get all channels where the actor is a member
+				const allChannels = await storage.listChannels()
+				const memberChannelIds = new Set<string>()
+				for (const ch of allChannels) {
+					if (await storage.isChannelMember(ch.id, actor.id)) {
+						memberChannelIds.add(ch.id)
+					}
+				}
+				// Look up each message's channel and filter
+				const allowedMessageIds = new Set<string>()
+				for (const r of messageResults) {
+					const msg = await storage.readMessage(r.entityId)
+					if (msg && msg.channel && memberChannelIds.has(msg.channel)) {
+						allowedMessageIds.add(r.entityId)
+					}
+				}
+				results = results.filter((r) => {
+					if (r.entityType === 'message') return allowedMessageIds.has(r.entityId)
+					return true
+				})
+			}
+		}
+
 		return c.json({
 			results,
 			query: q,

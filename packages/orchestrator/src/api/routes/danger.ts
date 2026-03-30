@@ -31,6 +31,12 @@ const danger = new Hono<AppEnv>()
 			},
 		}),
 		async (c) => {
+			// Only owner or admin can export all data
+			const actor = c.get('actor')
+			if (!actor || (actor.role !== 'owner' && actor.role !== 'admin')) {
+				return c.json({ error: 'only owner or admin can perform this action' }, 403)
+			}
+
 			try {
 				const storage = c.get('storage')
 				const companyRoot = c.get('companyRoot')
@@ -116,6 +122,12 @@ const danger = new Hono<AppEnv>()
 		}),
 		zValidator('json', ConfirmSchema),
 		async (c) => {
+			// Only owner or admin can reset runtime data
+			const actor = c.get('actor')
+			if (!actor || (actor.role !== 'owner' && actor.role !== 'admin')) {
+				return c.json({ error: 'only owner or admin can perform this action' }, 403)
+			}
+
 			const body = c.req.valid('json' as never) as z.infer<typeof ConfirmSchema>
 			if (body.confirm !== true) {
 				return c.json({ error: 'Missing confirmation. Send { "confirm": true }' }, 400)

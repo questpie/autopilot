@@ -9,9 +9,23 @@ import {
 	OkResponseSchema,
 } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
+import type { Actor } from '../../auth/types'
 import { eventBus } from '../../events/event-bus'
 import { container } from '../../container'
 import { indexerFactory } from '../../db/indexer'
+
+/** Check whether an actor can access a given task (view, update). */
+function canAccessTask(actor: Actor, task: { created_by?: string; assigned_to?: string }): boolean {
+	if (actor.role === 'admin' || actor.role === 'owner') return true
+	if (task.created_by === actor.id) return true
+	if (task.assigned_to === actor.id) return true
+	return false
+}
+
+/** Check whether an actor has privileged (admin/owner) access. */
+function isPrivileged(actor: Actor): boolean {
+	return actor.role === 'admin' || actor.role === 'owner'
+}
 
 /** Best-effort resolve the indexer for real-time index updates. */
 async function getIndexer() {
@@ -40,6 +54,7 @@ const tasks = new Hono<AppEnv>()
 		zValidator('query', TaskQuerySchema),
 		async (c) => {
 			const storage = c.get('storage')
+			const actor = c.get('actor')
 			const { status, agent, project } = c.req.valid('query')
 
 			const filter: Record<string, string> = {}
@@ -48,6 +63,13 @@ const tasks = new Hono<AppEnv>()
 			if (project) filter.project = project
 
 			const result = await storage.listTasks(filter)
+
+			// Non-privileged actors only see tasks they created or are assigned to
+			if (actor && !isPrivileged(actor)) {
+				const filtered = result.filter((task) => canAccessTask(actor, task))
+				return c.json(filtered, 200)
+			}
+
 			return c.json(result, 200)
 		},
 	)
@@ -100,9 +122,13 @@ const tasks = new Hono<AppEnv>()
 		zValidator('param', z.object({ id: z.string() })),
 		async (c) => {
 			const storage = c.get('storage')
+			const actor = c.get('actor')
 			const { id } = c.req.valid('param')
 			const task = await storage.readTask(id)
 			if (!task) return c.json({ error: 'task not found' }, 404)
+			if (actor && !canAccessTask(actor, task)) {
+				return c.json({ error: 'task not found' }, 404)
+			}
 			return c.json(task, 200)
 		},
 	)
@@ -127,10 +153,14 @@ const tasks = new Hono<AppEnv>()
 		),
 		async (c) => {
 			const storage = c.get('storage')
+			const actor = c.get('actor')
 			const { id } = c.req.valid('param')
 			const body = c.req.valid('json')
 			const task = await storage.readTask(id)
 			if (!task) return c.json({ error: 'task not found' }, 404)
+			if (actor && !canAccessTask(actor, task)) {
+				return c.json({ error: 'task not found' }, 404)
+			}
 
 			let result: typeof task
 
@@ -182,7 +212,13 @@ const tasks = new Hono<AppEnv>()
 		zValidator('param', z.object({ id: z.string() })),
 		async (c) => {
 			const storage = c.get('storage')
+			const actor = c.get('actor')
 			const { id } = c.req.valid('param')
+
+			if (actor && !isPrivileged(actor)) {
+				return c.json({ error: 'only admin or owner can approve tasks' }, 403)
+			}
+
 			const task = await storage.readTask(id)
 			if (!task) return c.json({ error: 'task not found' }, 404)
 
@@ -218,8 +254,14 @@ const tasks = new Hono<AppEnv>()
 		zValidator('json', TaskRejectRequestSchema),
 		async (c) => {
 			const storage = c.get('storage')
+			const actor = c.get('actor')
 			const { id } = c.req.valid('param')
 			const { reason } = c.req.valid('json')
+
+			if (actor && !isPrivileged(actor)) {
+				return c.json({ error: 'only admin or owner can reject tasks' }, 403)
+			}
+
 			const task = await storage.readTask(id)
 			if (!task) return c.json({ error: 'task not found' }, 404)
 

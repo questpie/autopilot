@@ -22,8 +22,16 @@ const loginSchema = z.object({
 type LoginValues = z.infer<typeof loginSchema>
 
 const loginSearchSchema = z.object({
-  redirect: z.string().optional(),
+  redirect: z.string()
+    .refine(u => u.startsWith('/') && !u.startsWith('//'), 'Invalid redirect')
+    .optional(),
 })
+
+function isValidRedirect(url: string | undefined): url is string {
+  if (!url) return false
+  // Must start with / and not // (prevent protocol-relative URLs)
+  return url.startsWith('/') && !url.startsWith('//')
+}
 
 export const Route = createFileRoute("/_auth/login")({
   component: LoginPage,
@@ -146,8 +154,8 @@ function LoginPage() {
       return
     }
 
-    // Success: redirect
-    void router.invalidate().then(() => router.navigate({ to: redirect ?? "/" }))
+    // Success: redirect (validated to prevent open redirects)
+    void router.invalidate().then(() => router.navigate({ to: isValidRedirect(redirect) ? redirect : "/" }))
   }
 
   const isRateLimited = rateLimitCountdown > 0
