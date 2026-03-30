@@ -156,23 +156,3 @@ export function AgentEditor() {
     </div>
   )
 }
-
-function AgentEditorSkeleton() {
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="h-4 w-16 animate-pulse bg-muted" />
-        <div className="h-8 w-16 animate-pulse bg-muted" />
-      </div>
-      <div className="grid grid-cols-2 gap-0 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="flex flex-col items-center gap-2 border border-border p-4">
-            <div className="h-12 w-12 animate-pulse bg-muted" />
-            <div className="h-3 w-16 animate-pulse bg-muted" />
-            <div className="h-4 w-12 animate-pulse bg-muted" />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}

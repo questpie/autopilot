@@ -5,22 +5,6 @@ import { useTranslation } from "@/lib/i18n"
 import { agentsQuery } from "./team.queries"
 import { AgentCard } from "./agent-card"
 
-function AgentGridSkeleton() {
-  return (
-    <div className="grid grid-cols-2 gap-0 md:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="flex flex-col items-center gap-2 border border-border p-4">
-          <div className="h-12 w-12 animate-pulse bg-muted" />
-          <div className="h-3 w-16 animate-pulse bg-muted" />
-          <div className="h-4 w-12 animate-pulse bg-muted" />
-          <div className="h-2 w-10 animate-pulse bg-muted" />
-          <div className="h-2 w-14 animate-pulse bg-muted" />
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function HumanCard({ name, role, pendingCount }: { name: string; role: string; pendingCount: number }) {
   const initial = name.charAt(0).toUpperCase()
 

@@ -11,7 +11,7 @@ export const PATHS = {
 	HUMANS: '/team/humans.yaml',
 	ROLES_DIR: '/team/roles',
 	WORKFLOWS_DIR: '/team/workflows',
-	SCHEDULES: '/team/schedules.yaml',
+	SCHEDULES_DIR: '/team/schedules',
 	WEBHOOKS: '/team/webhooks.yaml',
 	WATCHERS: '/team/watchers.yaml',
 	THRESHOLDS: '/team/thresholds.yaml',
@@ -122,3 +122,9 @@ export const pinPath = (id: string) => `${PATHS.PINS_DIR}/${id}.yaml`
  * @param role - Role identifier (e.g. 'developer', 'data-scientist')
  */
 export const rolePath = (role: string) => `${PATHS.ROLES_DIR}/${role}.md`
+
+/**
+ * Returns the filesystem path for a schedule YAML file.
+ * @param id - Unique schedule identifier
+ */
+export const schedulePath = (id: string) => `${PATHS.SCHEDULES_DIR}/${id}.yaml`

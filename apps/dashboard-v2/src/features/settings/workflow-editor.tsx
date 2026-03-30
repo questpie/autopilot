@@ -13,7 +13,6 @@ import { useTranslation } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,

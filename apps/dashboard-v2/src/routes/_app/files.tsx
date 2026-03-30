@@ -1,8 +1,9 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router"
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import { useTranslation } from "@/lib/i18n"
 import { FileTree } from "@/features/files/file-tree"
 import { FileUpload } from "@/components/file-upload"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
@@ -31,7 +32,17 @@ function FilesLayout() {
     <div className="flex h-full min-h-0">
       {/* Secondary sidebar: file tree (hidden on mobile) */}
       <div className="hidden md:block">
-        <FileTree onUploadClick={() => setUploadOpen(true)} />
+        <Suspense
+          fallback={
+            <div className="flex w-[240px] flex-col gap-1 border-r border-border bg-sidebar p-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-6 w-full rounded-none" />
+              ))}
+            </div>
+          }
+        >
+          <FileTree onUploadClick={() => setUploadOpen(true)} />
+        </Suspense>
       </div>
 
       {/* Main content area */}

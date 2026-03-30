@@ -81,19 +81,19 @@ function SetupPage() {
 
   return (
     <div className="flex flex-col">
-      {/* Step counter */}
-      <div className="mb-2 text-center">
+      {/* Step counter + progress */}
+      <div className="mb-6 flex flex-col items-center gap-2">
         <span className="font-heading text-xs text-muted-foreground">
           {currentStep}/{WIZARD_TOTAL_STEPS}
         </span>
+        <WizardProgress />
       </div>
 
-      <WizardProgress />
-
-      {/* Step content */}
+      {/* Step content — flex-1 so WizardStepLayout can use full height */}
       <AnimatePresence mode="wait">
         <m.div
           key={currentStep}
+          className="flex flex-col"
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}

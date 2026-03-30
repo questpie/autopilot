@@ -117,39 +117,39 @@ function EmailVerificationPhase({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="font-heading text-lg font-semibold">
-          {t("setup.step_1_verify_title")}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("setup.step_1_verify_description")}
-        </p>
-      </div>
+      <h2 className="font-heading text-xl font-semibold">
+        {t("setup.step_1_verify_title")}
+      </h2>
 
-      <div className="flex flex-col items-center gap-4 py-4">
-        <div className="flex size-14 items-center justify-center rounded-none bg-primary/10">
-          <EnvelopeSimpleIcon className="size-7 text-primary" />
+      <div className="flex flex-col items-center gap-4 py-6">
+        <div className="flex size-16 items-center justify-center border border-primary/25 bg-primary/[0.08]">
+          <EnvelopeSimpleIcon className="size-8 text-primary" />
         </div>
-        <p className="text-center text-sm">
-          {t("setup.step_1_verify_sent_to", { email })}
-        </p>
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">
+            {t("setup.step_1_verify_sent_to", { email: "" })}
+          </p>
+          <p className="font-heading text-sm font-medium text-foreground">
+            {email}
+          </p>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-2 text-center">
-        {checkError && (
-          <p className="text-xs text-muted-foreground/70">
-            <WarningCircleIcon className="mr-1 inline size-3.5 align-[-2px] text-destructive/60" />
-            {t("setup.step_1_verify_not_yet")}
-          </p>
-        )}
+      {checkError && (
+        <Alert variant="warning">
+          <WarningCircleIcon className="size-4" />
+          <AlertDescription>{t("setup.step_1_verify_not_yet")}</AlertDescription>
+        </Alert>
+      )}
 
-        {deploymentMode && deploymentMode !== "cloud" && (
-          <p className="text-xs text-muted-foreground/60">
-            <TerminalWindowIcon className="mr-1 inline size-3.5 align-[-2px]" />
+      {deploymentMode && deploymentMode !== "cloud" && (
+        <Alert variant="info">
+          <TerminalWindowIcon className="size-4" />
+          <AlertDescription>
             {t("setup.step_1_verify_console_hint")}
-          </p>
-        )}
-      </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="flex gap-2">
         <Button
@@ -232,7 +232,7 @@ export function WizardStep1({ onComplete }: WizardStep1Props) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="font-heading text-lg font-semibold">
+        <h2 className="font-heading text-xl font-semibold">
           {t("setup.step_1_title")}
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">

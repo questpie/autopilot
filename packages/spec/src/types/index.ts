@@ -40,7 +40,6 @@ export type WorkflowChangePolicy = z.infer<typeof schemas.WorkflowChangePolicySc
 
 // Schedules
 export type Schedule = z.infer<typeof schemas.ScheduleSchema>
-export type SchedulesFile = z.infer<typeof schemas.SchedulesFileSchema>
 
 // Webhooks
 export type Webhook = z.infer<typeof schemas.WebhookSchema>

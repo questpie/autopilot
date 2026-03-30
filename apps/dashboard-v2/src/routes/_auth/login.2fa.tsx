@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { WarningCircleIcon, ShieldCheckIcon } from "@phosphor-icons/react"
+import { WarningCircleIcon } from "@phosphor-icons/react"
 import { useReducer, useRef, useCallback } from "react"
 import { m, AnimatePresence } from "framer-motion"
 
@@ -187,9 +187,8 @@ function TwoFactorPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col items-center gap-2">
-        <ShieldCheckIcon className="size-8 text-primary" />
-        <h2 className="font-heading text-lg font-semibold">
+      <div className="flex flex-col gap-2">
+        <h2 className="font-heading text-xl font-semibold">
           {t("auth.two_factor_title")}
         </h2>
         <p className="text-center text-sm text-muted-foreground">
@@ -218,7 +217,7 @@ function TwoFactorPage() {
 
       {/* Prompt to use backup after 3 failures */}
       {failCount >= 3 && !useBackup && (
-        <Alert>
+        <Alert variant="warning">
           <WarningCircleIcon className="size-4" />
           <AlertDescription>
             {t("auth.two_factor_failed_attempts")}
@@ -259,7 +258,7 @@ function TwoFactorPage() {
       ) : (
         /* TOTP 6-digit input */
         <div className="flex flex-col gap-4">
-          <div className="flex justify-center gap-2" onPaste={handleDigitPaste}>
+          <div className="flex justify-center gap-2.5" onPaste={handleDigitPaste}>
             {digits.map((digit, i) => (
               <input
                 key={`totp-slot-${["a", "b", "c", "d", "e", "f"][i]}`}
@@ -273,7 +272,7 @@ function TwoFactorPage() {
                 disabled={isSubmitting}
                 onChange={(e) => handleDigitChange(i, e.target.value)}
                 onKeyDown={(e) => handleDigitKeyDown(i, e)}
-                className="flex size-10 items-center justify-center border border-input bg-transparent text-center font-heading text-lg outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring/50 disabled:opacity-50"
+                className="flex size-12 items-center justify-center border border-input bg-transparent text-center font-heading text-xl outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring/50 focus:bg-secondary/50 disabled:opacity-50"
                 aria-label={t("a11y.digit_n", { n: i + 1 })}
               />
             ))}

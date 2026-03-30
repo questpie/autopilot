@@ -66,7 +66,6 @@ const DEFAULT_QUIET_HOURS: QuietHours = {
 // ── Component ───────────────────────────────────────────────────────────────
 
 function NotificationSettingsPage() {
-  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const { data: settingsData } = useSuspenseQuery({

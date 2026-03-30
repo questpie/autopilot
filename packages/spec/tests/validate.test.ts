@@ -45,8 +45,6 @@ cron: "0 9 * * *"
 
 		const result = await loadAndValidate(filePath, ScheduleSchema)
 		expect(result.id).toBe('daily-check')
-		expect(result.timeout).toBe('5m')
-		expect(result.on_failure).toBe('alert_human')
 		expect(result.enabled).toBe(true)
 		expect(result.create_task).toBe(false)
 

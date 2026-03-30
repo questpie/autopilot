@@ -68,7 +68,7 @@ export function WizardStep3({ onComplete, onBack }: WizardStep3Props) {
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <h2 className="font-heading text-lg font-semibold">
+          <h2 className="font-heading text-xl font-semibold">
             {t("setup.step_3_title")}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -112,7 +112,7 @@ export function WizardStep3({ onComplete, onBack }: WizardStep3Props) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="font-heading text-lg font-semibold">
+        <h2 className="font-heading text-xl font-semibold">
           {t("setup.step_3_title")}
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">

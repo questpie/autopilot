@@ -7,7 +7,6 @@ import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { FormField, FormTextarea, FormSelect, FormSection, FormActions } from "@/components/forms"
 import { fileContentQuery } from "@/features/files/files.queries"
 import { api } from "@/lib/api"
@@ -170,18 +169,5 @@ function CompanyProfileFormInner({
         </FormActions>
       </form>
     </FormProvider>
-  )
-}
-
-function CompanyProfileSkeleton() {
-  return (
-    <div className="flex max-w-lg flex-col gap-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="flex flex-col gap-1.5">
-          <Skeleton className="h-3 w-20" />
-          <Skeleton className="h-9 w-full" />
-        </div>
-      ))}
-    </div>
   )
 }

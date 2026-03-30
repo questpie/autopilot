@@ -1,11 +1,11 @@
 import { join } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import {
 	CompanySchema,
 	AgentsFileSchema,
 	HumansFileSchema,
 	WorkflowSchema,
-	SchedulesFileSchema,
+	ScheduleSchema,
 	WebhooksFileSchema,
 	PATHS,
 	workflowPath,
@@ -51,10 +51,22 @@ export async function loadWorkflow(companyRoot: string, id: string) {
 	return readYaml(resolvePath(companyRoot, workflowPath(id)), WorkflowSchema)
 }
 
-/** Read `schedules.yaml` and return the `schedules` array. */
+/** Read `team/schedules/*.yaml` and return an array of validated schedules. */
 export async function loadSchedules(companyRoot: string) {
-	const file = await readYaml(resolvePath(companyRoot, PATHS.SCHEDULES), SchedulesFileSchema)
-	return file.schedules
+	const schedulesDir = resolvePath(companyRoot, PATHS.SCHEDULES_DIR)
+	if (!existsSync(schedulesDir)) return []
+
+	const files = readdirSync(schedulesDir).filter((f) => f.endsWith('.yaml'))
+	const schedules = []
+	for (const file of files) {
+		try {
+			const schedule = await readYaml(join(schedulesDir, file), ScheduleSchema)
+			schedules.push(schedule)
+		} catch (err) {
+			logger.warn('autopilot', `failed to parse schedule ${file}: ${err instanceof Error ? err.message : String(err)}`)
+		}
+	}
+	return schedules
 }
 
 /** Read `webhooks.yaml` and return the `webhooks` array. */

@@ -6,12 +6,12 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { authClient } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Spinner } from "@/components/ui/spinner"
 import { EyeIcon, EyeSlashIcon, WarningCircleIcon, EnvelopeSimpleIcon, ArrowCounterClockwiseIcon, TerminalWindowIcon } from "@phosphor-icons/react"
 import { useReducer, useRef, useCallback, useEffect, useState } from "react"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { useDeploymentMode } from "@/hooks/use-deployment-mode"
 import { m, AnimatePresence } from "framer-motion"
+import { EASING } from "@/lib/motion"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
@@ -31,7 +31,6 @@ const loginSearchSchema = z.object({
 
 function isValidRedirect(url: string | undefined): url is string {
   if (!url) return false
-  // Must start with / and not // (prevent protocol-relative URLs)
   return url.startsWith('/') && !url.startsWith('//')
 }
 
@@ -90,12 +89,18 @@ function loginReducer(state: LoginState, action: LoginAction): LoginState {
   }
 }
 
+const screenTransition = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0 },
+  transition: { duration: 0.2, ease: EASING.enter },
+}
+
 function EmailVerificationScreen({ email, onBack }: { email: string; onBack: () => void }) {
   const { t } = useTranslation()
   const router = useRouter()
   const { data: deploymentMode } = useDeploymentMode()
 
-  // Poll session every 5s — auto-navigate when verified
   const { error: checkError, refetch, isFetching: isChecking } = useQuery({
     queryKey: ["login-email-verification-poll", email],
     queryFn: async () => {
@@ -118,43 +123,39 @@ function EmailVerificationScreen({ email, onBack }: { email: string; onBack: () 
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex justify-center">
-        <SquareBuildLogo size={48} />
-      </div>
+      <h2 className="font-heading text-xl font-semibold">
+        {t("setup.step_1_verify_title")}
+      </h2>
 
-      <div className="text-center">
-        <h2 className="font-heading text-lg font-semibold">
-          {t("setup.step_1_verify_title")}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("setup.step_1_verify_description")}
-        </p>
-      </div>
-
-      <div className="flex flex-col items-center gap-4 py-4">
-        <div className="flex size-14 items-center justify-center rounded-none bg-primary/10">
-          <EnvelopeSimpleIcon className="size-7 text-primary" />
+      <div className="flex flex-col items-center gap-4 py-6">
+        <div className="flex size-16 items-center justify-center border border-primary/25 bg-primary/[0.08]">
+          <EnvelopeSimpleIcon className="size-8 text-primary" />
         </div>
-        <p className="text-center text-sm">
-          {t("setup.step_1_verify_sent_to", { email })}
-        </p>
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">
+            {t("setup.step_1_verify_sent_to", { email: "" })}
+          </p>
+          <p className="font-heading text-sm font-medium text-foreground">
+            {email}
+          </p>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-2 text-center">
-        {checkError && (
-          <p className="text-xs text-muted-foreground/70">
-            <WarningCircleIcon className="mr-1 inline size-3.5 align-[-2px] text-destructive/60" />
-            {t("setup.step_1_verify_not_yet")}
-          </p>
-        )}
+      {checkError && (
+        <Alert variant="warning">
+          <WarningCircleIcon className="size-4" />
+          <AlertDescription>{t("setup.step_1_verify_not_yet")}</AlertDescription>
+        </Alert>
+      )}
 
-        {deploymentMode && deploymentMode !== "cloud" && (
-          <p className="text-xs text-muted-foreground/60">
-            <TerminalWindowIcon className="mr-1 inline size-3.5 align-[-2px]" />
+      {deploymentMode && deploymentMode !== "cloud" && (
+        <Alert variant="info">
+          <TerminalWindowIcon className="size-4" />
+          <AlertDescription>
             {t("setup.step_1_verify_console_hint")}
-          </p>
-        )}
-      </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="flex gap-2">
         <Button
@@ -236,7 +237,6 @@ function LoginPage() {
     })
 
     if (result.error) {
-      // Detect "email not verified" and switch to verification flow
       const msg = result.error.message?.toLowerCase() ?? ""
       if (msg.includes("email") && msg.includes("verified")) {
         setVerifyEmail(values.email)
@@ -257,168 +257,150 @@ function LoginPage() {
       return
     }
 
-    // Check if 2FA is needed -- Better Auth returns redirect=true for 2FA
     if (result.data?.redirect) {
       void router.invalidate().then(() => router.navigate({ to: "/login/2fa" }))
       return
     }
 
-    // Success: redirect (validated to prevent open redirects)
     void router.invalidate().then(() => router.navigate({ to: isValidRedirect(redirect) ? redirect : "/" }))
   }
 
   const isRateLimited = rateLimitCountdown > 0
 
-  if (verifyEmail) {
-    return <EmailVerificationScreen email={verifyEmail} onBack={() => setVerifyEmail(null)} />
-  }
-
   return (
-    <div className="flex flex-col gap-6">
-      {/* Brand logo */}
-      <div className="flex justify-center">
-        <SquareBuildLogo size={48} />
-      </div>
+    <AnimatePresence mode="wait">
+      {verifyEmail ? (
+        <m.div key="verify" {...screenTransition}>
+          <EmailVerificationScreen email={verifyEmail} onBack={() => setVerifyEmail(null)} />
+        </m.div>
+      ) : (
+        <m.div key="login" {...screenTransition}>
+          <div className="flex flex-col gap-6">
+            <h2 className="font-heading text-xl font-semibold">
+              {t("auth.sign_in")}
+            </h2>
 
-      {/* Title */}
-      <div className="text-center">
-        <h2 className="font-heading text-lg font-semibold">
-          {t("app.name")}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("auth.sign_in_description")}
-        </p>
-      </div>
-
-      {/* Error alert */}
-      <AnimatePresence>
-        {showError && error && (
-          <m.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, x: { type: "spring", stiffness: 300, damping: 15 } }}
-          >
-            <Alert variant="destructive">
-              <WarningCircleIcon className="size-4" />
-              <AlertDescription>
-                {isRateLimited
-                  ? t("auth.error_too_many_attempts", { seconds: rateLimitCountdown })
-                  : error}
-              </AlertDescription>
-            </Alert>
-          </m.div>
-        )}
-      </AnimatePresence>
-
-      {/* Login form */}
-      <FormProvider {...form}>
-        <form
-          onSubmit={form.handleSubmit(onSubmit)}
-          className="flex flex-col gap-4"
-          noValidate
-        >
-          {/* Email */}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email" className="font-heading text-xs font-medium">
-              {t("auth.email")}
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@company.com"
-              disabled={form.formState.isSubmitting || isRateLimited}
-              aria-invalid={!!form.formState.errors.email}
-              {...form.register("email")}
-              ref={(el) => {
-                form.register("email").ref(el)
-                emailInputRef.current = el
-              }}
-            />
             <AnimatePresence>
-              {form.formState.errors.email && (
-                <m.p
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.15 }}
-                  className="text-xs text-destructive"
+              {showError && error && (
+                <m.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3, x: { type: "spring", stiffness: 300, damping: 15 } }}
                 >
-                  {form.formState.errors.email.message}
-                </m.p>
+                  <Alert variant="destructive">
+                    <WarningCircleIcon className="size-4" />
+                    <AlertDescription>
+                      {isRateLimited
+                        ? t("auth.error_too_many_attempts", { seconds: rateLimitCountdown })
+                        : error}
+                    </AlertDescription>
+                  </Alert>
+                </m.div>
               )}
             </AnimatePresence>
-          </div>
 
-          {/* Password */}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="password" className="font-heading text-xs font-medium">
-              {t("auth.password")}
-            </Label>
-            <div className="relative">
-              <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                disabled={form.formState.isSubmitting || isRateLimited}
-                aria-invalid={!!form.formState.errors.password}
-                className="pr-9"
-                {...form.register("password")}
-              />
-              <button
-                type="button"
-                tabIndex={-1}
-                className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => dispatch({ type: "TOGGLE_PASSWORD" })}
-                aria-label={showPassword ? t("a11y.hide_password") : t("a11y.show_password")}
+            <FormProvider {...form}>
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="flex flex-col gap-4"
+                noValidate
               >
-                <AnimatePresence mode="wait" initial={false}>
-                  <m.span
-                    key={showPassword ? "hide" : "show"}
-                    initial={{ opacity: 0, rotate: -90 }}
-                    animate={{ opacity: 1, rotate: 0 }}
-                    exit={{ opacity: 0, rotate: 90 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    {showPassword ? <EyeSlashIcon className="size-4" /> : <EyeIcon className="size-4" />}
-                  </m.span>
-                </AnimatePresence>
-              </button>
-            </div>
-            <AnimatePresence>
-              {form.formState.errors.password && (
-                <m.p
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.15 }}
-                  className="text-xs text-destructive"
-                >
-                  {form.formState.errors.password.message}
-                </m.p>
-              )}
-            </AnimatePresence>
-          </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="email" className="font-heading text-xs font-medium">
+                    {t("auth.email")}
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@company.com"
+                    disabled={form.formState.isSubmitting || isRateLimited}
+                    aria-invalid={!!form.formState.errors.email}
+                    {...form.register("email")}
+                    ref={(el) => {
+                      form.register("email").ref(el)
+                      emailInputRef.current = el
+                    }}
+                  />
+                  <AnimatePresence>
+                    {form.formState.errors.email && (
+                      <m.p
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.15 }}
+                        className="text-xs text-destructive"
+                      >
+                        {form.formState.errors.email.message}
+                      </m.p>
+                    )}
+                  </AnimatePresence>
+                </div>
 
-          {/* Submit */}
-          <Button
-            type="submit"
-            size="lg"
-            className="w-full"
-            disabled={form.formState.isSubmitting || isRateLimited}
-          >
-            {form.formState.isSubmitting ? (
-              <>
-                <Spinner size="sm" />
-                {t("auth.signing_in")}
-              </>
-            ) : (
-              t("auth.sign_in")
-            )}
-          </Button>
-        </form>
-      </FormProvider>
-    </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="password" className="font-heading text-xs font-medium">
+                    {t("auth.password")}
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      disabled={form.formState.isSubmitting || isRateLimited}
+                      aria-invalid={!!form.formState.errors.password}
+                      className="pr-9"
+                      {...form.register("password")}
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      onClick={() => dispatch({ type: "TOGGLE_PASSWORD" })}
+                      aria-label={showPassword ? t("a11y.hide_password") : t("a11y.show_password")}
+                    >
+                      <AnimatePresence mode="wait" initial={false}>
+                        <m.span
+                          key={showPassword ? "hide" : "show"}
+                          initial={{ opacity: 0, rotate: -90 }}
+                          animate={{ opacity: 1, rotate: 0 }}
+                          exit={{ opacity: 0, rotate: 90 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          {showPassword ? <EyeSlashIcon className="size-4" /> : <EyeIcon className="size-4" />}
+                        </m.span>
+                      </AnimatePresence>
+                    </button>
+                  </div>
+                  <AnimatePresence>
+                    {form.formState.errors.password && (
+                      <m.p
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.15 }}
+                        className="text-xs text-destructive"
+                      >
+                        {form.formState.errors.password.message}
+                      </m.p>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full"
+                  disabled={form.formState.isSubmitting || isRateLimited}
+                  loading={form.formState.isSubmitting}
+                >
+                  {t("auth.sign_in")}
+                </Button>
+              </form>
+            </FormProvider>
+          </div>
+        </m.div>
+      )}
+    </AnimatePresence>
   )
 }

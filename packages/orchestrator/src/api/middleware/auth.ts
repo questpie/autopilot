@@ -19,17 +19,13 @@ let _masterKey: CryptoKey | null = null
  * 2. Permission check against the RBAC matrix
  * 3. Audit logging (denied + success)
  *
- * Paths handled *before* this middleware (/api/auth/*) are never reached here
- * because Hono short-circuits on the first matching handler.
+ * Public routes (/api/auth/*, /api/status, /api/settings/deployment-mode)
+ * are mounted before this middleware in app.ts, so they are handled by Hono
+ * before this middleware runs — no hardcoded path exceptions needed here.
  */
 export function authMiddleware() {
 	return createMiddleware<AppEnv>(async (c, next) => {
 		const path = new URL(c.req.url).pathname
-
-		// /api/auth/* is handled by the Better Auth passthrough — skip
-		if (path.startsWith('/api/auth')) {
-			return next()
-		}
 
 		// Resolve actor
 		const result = await resolveActor(c.req.raw, {
@@ -44,11 +40,6 @@ export function authMiddleware() {
 
 		const actor = result
 		c.set('actor', actor)
-
-		// /api/status is a public health-check — allow even without an actor
-		if (path === '/api/status') {
-			return next()
-		}
 
 		if (!actor) {
 			return c.json({ error: 'Unauthorized' }, 401)

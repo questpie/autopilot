@@ -10,6 +10,8 @@ import { PageError } from "@/components/feedback"
 import { useSSE } from "@/hooks/use-sse"
 import { useGlobalShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { useAppStore } from "@/stores/app.store"
+import { statusQuery } from "@/features/dashboard/dashboard.queries"
+import { agentsQuery } from "@/features/team/team.queries"
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: async ({ location }) => {
@@ -37,6 +39,13 @@ export const Route = createFileRoute("/_app")({
 
     // Pass user to context for child routes
     return { user: result.user }
+  },
+  loader: async ({ context }) => {
+    // Pre-fetch commonly needed data so useSuspenseQuery calls don't suspend
+    void Promise.all([
+      context.queryClient.ensureQueryData(statusQuery),
+      context.queryClient.ensureQueryData(agentsQuery),
+    ])
   },
   pendingComponent: AuthPending,
   errorComponent: ({ error, reset }) => (

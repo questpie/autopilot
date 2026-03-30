@@ -309,6 +309,11 @@
   animation: check-scale-in 150ms ease-out;
 }
 
+@keyframes auth-grid-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 40px 40px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-shimmer,
   .animate-new-item,

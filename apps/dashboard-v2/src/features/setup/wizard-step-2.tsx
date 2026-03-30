@@ -5,7 +5,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
 import {
   WarningCircleIcon,
   CopyIcon,
@@ -16,6 +15,7 @@ import {
 import { useState, useRef, useCallback } from "react"
 import { m, AnimatePresence } from "framer-motion"
 import { useWizardState } from "./use-wizard-state"
+import { WizardStepLayout } from "./wizard-step-layout"
 import { toast } from "sonner"
 
 interface WizardStep2Props {
@@ -27,7 +27,6 @@ export function WizardStep2({ onComplete, onBack }: WizardStep2Props) {
   const { t } = useTranslation()
   const { completeStep } = useWizardState()
 
-  // Phase: "password" -> "qr" -> "verify" -> "backup"
   const [phase, setPhase] = useState<"password" | "qr" | "verify" | "backup">("password")
   const [password, setPassword] = useState("")
   const [totpURI, setTotpURI] = useState<string | null>(null)
@@ -135,31 +134,53 @@ export function WizardStep2({ onComplete, onBack }: WizardStep2Props) {
     onComplete()
   }, [completeStep, onComplete])
 
-  // Extract manual key from TOTP URI
   const manualKey = totpURI
     ? new URLSearchParams(totpURI.split("?")[1] ?? "").get("secret")
     : null
 
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="font-heading text-lg font-semibold">
-          {t("setup.step_2_title")}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("setup.step_2_description")}
-        </p>
-      </div>
-
+  const headerBlock = (
+    <div>
+      <h2 className="font-heading text-xl font-semibold">
+        {t("setup.step_2_title")}
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {t("setup.step_2_description")}
+      </p>
       {error && (
-        <Alert variant="destructive">
-          <WarningCircleIcon className="size-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <div className="mt-4">
+          <Alert variant="destructive">
+            <WarningCircleIcon className="size-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </div>
       )}
+    </div>
+  )
 
-      {phase === "password" && (
-        <>
+  if (phase === "password") {
+    return (
+      <WizardStepLayout
+        header={headerBlock}
+        footer={
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="lg" onClick={onBack}>
+              <ArrowLeftIcon className="size-4" />
+              {t("common.back")}
+            </Button>
+            <Button
+              type="button"
+              size="lg"
+              className="flex-1"
+              disabled={!password || isLoading}
+              onClick={() => void handleEnable()}
+              loading={isLoading}
+            >
+              {t("common.continue")}
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex w-full flex-col gap-4">
           <p className="text-sm text-muted-foreground">
             {t("settings.tfa_enable_confirm")}
           </p>
@@ -179,47 +200,43 @@ export function WizardStep2({ onComplete, onBack }: WizardStep2Props) {
               }}
             />
           </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="lg" onClick={onBack}>
-              <ArrowLeftIcon className="size-4" />
-              {t("common.back")}
-            </Button>
-            <Button
-              type="button"
-              size="lg"
-              className="flex-1"
-              disabled={!password || isLoading}
-              onClick={() => void handleEnable()}
-            >
-              {isLoading ? <Spinner size="sm" /> : t("common.continue")}
-            </Button>
-          </div>
-        </>
-      )}
+        </div>
+      </WizardStepLayout>
+    )
+  }
 
-      {phase === "qr" && (
-        <>
-          {/* QR Code */}
+  if (phase === "qr") {
+    return (
+      <WizardStepLayout
+        header={headerBlock}
+        footer={
+          <Button
+            type="button"
+            size="lg"
+            className="w-full"
+            onClick={() => setPhase("verify")}
+          >
+            {t("common.continue")}
+          </Button>
+        }
+      >
+        <div className="flex flex-col items-center gap-4">
           {totpURI && (
-            <div className="flex flex-col items-center gap-3">
-              <div className="border border-border bg-white p-3">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(totpURI)}`}
-                  alt="2FA QR Code"
-                  width={180}
-                  height={180}
-                  className="block"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("setup.step_2_scan_qr")}
-              </p>
+            <div className="border border-border bg-white p-2">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(totpURI)}`}
+                alt="2FA QR Code"
+                width={160}
+                height={160}
+                className="block"
+              />
             </div>
           )}
-
-          {/* Manual key */}
+          <p className="text-xs text-muted-foreground">
+            {t("setup.step_2_scan_qr")}
+          </p>
           {manualKey && (
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center gap-2">
               <code className="border border-border bg-muted px-2 py-1 font-heading text-xs">
                 {manualKey}
               </code>
@@ -248,47 +265,16 @@ export function WizardStep2({ onComplete, onBack }: WizardStep2Props) {
               </button>
             </div>
           )}
+        </div>
+      </WizardStepLayout>
+    )
+  }
 
-          <Button
-            type="button"
-            size="lg"
-            className="w-full"
-            onClick={() => setPhase("verify")}
-          >
-            {t("common.continue")}
-          </Button>
-        </>
-      )}
-
-      {phase === "verify" && (
-        <>
-          {/* 6-digit verification */}
-          <div className="flex flex-col gap-3">
-            <Label className="font-heading text-xs font-medium">
-              {t("setup.step_2_enter_code")}
-            </Label>
-            <div className="flex justify-center gap-2" onPaste={handleDigitPaste}>
-              {digits.map((digit, i) => (
-                <input
-                  key={i}
-                  ref={(el) => {
-                    inputRefs.current[i] = el
-                  }}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  autoFocus={i === 0}
-                  disabled={isLoading}
-                  onChange={(e) => handleDigitChange(i, e.target.value)}
-                  onKeyDown={(e) => handleDigitKeyDown(i, e)}
-                  className="flex size-10 items-center justify-center border border-input bg-transparent text-center font-heading text-lg outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring/50 disabled:opacity-50"
-                  aria-label={t("a11y.digit_n", { n: i + 1 })}
-                />
-              ))}
-            </div>
-          </div>
-
+  if (phase === "verify") {
+    return (
+      <WizardStepLayout
+        header={headerBlock}
+        footer={
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="lg" onClick={() => setPhase("qr")}>
               <ArrowLeftIcon className="size-4" />
@@ -300,51 +286,48 @@ export function WizardStep2({ onComplete, onBack }: WizardStep2Props) {
               className="flex-1"
               disabled={digits.join("").length !== 6 || isLoading}
               onClick={() => void handleVerify()}
+              loading={isLoading}
             >
-              {isLoading ? (
-                <>
-                  <Spinner size="sm" />
-                  {t("auth.verifying")}
-                </>
-              ) : (
-                t("auth.verify")
-              )}
+              {t("auth.verify")}
             </Button>
           </div>
-        </>
-      )}
-
-      {phase === "backup" && (
-        <>
-          <Alert>
-            <WarningCircleIcon className="size-4" />
-            <AlertDescription>
-              {t("setup.step_2_backup_warning")}
-            </AlertDescription>
-          </Alert>
-
-          <div className="grid grid-cols-2 gap-2">
-            {backupCodes.map((code, i) => (
-              <code
+        }
+      >
+        <div className="flex flex-col items-center gap-3">
+          <Label className="font-heading text-xs font-medium">
+            {t("setup.step_2_enter_code")}
+          </Label>
+          <div className="flex justify-center gap-2.5" onPaste={handleDigitPaste}>
+            {digits.map((digit, i) => (
+              <input
                 key={i}
-                className="border border-border bg-muted px-2 py-1.5 text-center font-heading text-xs"
-              >
-                {code}
-              </code>
+                ref={(el) => {
+                  inputRefs.current[i] = el
+                }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={digit}
+                autoFocus={i === 0}
+                disabled={isLoading}
+                onChange={(e) => handleDigitChange(i, e.target.value)}
+                onKeyDown={(e) => handleDigitKeyDown(i, e)}
+                className="flex size-12 items-center justify-center border border-input bg-transparent text-center font-heading text-xl outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring/50 focus:bg-secondary/50 disabled:opacity-50"
+                aria-label={t("a11y.digit_n", { n: i + 1 })}
+              />
             ))}
           </div>
+        </div>
+      </WizardStepLayout>
+    )
+  }
 
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={handleCopyAll}>
-              <CopyIcon className="size-3.5" />
-              {t("setup.step_2_copy_all")}
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={handleDownload}>
-              <DownloadSimpleIcon className="size-3.5" />
-              {t("setup.step_2_download")}
-            </Button>
-          </div>
-
+  // phase === "backup"
+  return (
+    <WizardStepLayout
+      header={headerBlock}
+      footer={
+        <>
           <div className="flex items-center gap-2">
             <Checkbox
               checked={savedBackup}
@@ -355,12 +338,6 @@ export function WizardStep2({ onComplete, onBack }: WizardStep2Props) {
               {t("setup.step_2_backup_saved")}
             </Label>
           </div>
-
-          {/* CLI hint */}
-          <p className="text-xs text-muted-foreground/60">
-            {t("setup.cli_hint")}: autopilot auth 2fa enable
-          </p>
-
           <Button
             type="button"
             size="lg"
@@ -371,7 +348,42 @@ export function WizardStep2({ onComplete, onBack }: WizardStep2Props) {
             {t("common.continue")}
           </Button>
         </>
-      )}
-    </div>
+      }
+    >
+      <div className="flex w-full flex-col gap-4">
+        <Alert>
+          <WarningCircleIcon className="size-4" />
+          <AlertDescription>
+            {t("setup.step_2_backup_warning")}
+          </AlertDescription>
+        </Alert>
+
+        <div className="grid grid-cols-2 gap-2">
+          {backupCodes.map((code, i) => (
+            <code
+              key={i}
+              className="border border-border bg-muted px-2 py-1.5 text-center font-heading text-xs"
+            >
+              {code}
+            </code>
+          ))}
+        </div>
+
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={handleCopyAll}>
+            <CopyIcon className="size-3.5" />
+            {t("setup.step_2_copy_all")}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={handleDownload}>
+            <DownloadSimpleIcon className="size-3.5" />
+            {t("setup.step_2_download")}
+          </Button>
+        </div>
+
+        <p className="text-xs text-muted-foreground/60">
+          {t("setup.cli_hint")}: autopilot auth 2fa enable
+        </p>
+      </div>
+    </WizardStepLayout>
   )
 }

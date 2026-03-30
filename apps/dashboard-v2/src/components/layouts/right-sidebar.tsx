@@ -29,7 +29,7 @@ export function RightSidebar() {
           className="hidden shrink-0 overflow-hidden border-l border-border bg-background lg:flex lg:flex-col"
         >
           {rightPanel.mode === "chat" && (
-            <Suspense fallback={<div className="flex flex-1 items-center justify-center"><QuestPieSpinner size={20} /></div>}>
+            <Suspense fallback={<div className="flex flex-1 items-center justify-center"><QuestPieSpinner size={24} /></div>}>
               <ChatPanel />
             </Suspense>
           )}

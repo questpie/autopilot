@@ -439,7 +439,7 @@ export class Orchestrator {
 			}
 
 			// Valid config — proceed with reload
-			if (file === 'schedules.yaml' && this.scheduler) {
+			if (file.startsWith('schedules/') && this.scheduler) {
 				logger.info('orchestrator', 'reloading scheduler...')
 				await this.scheduler.reload()
 			}

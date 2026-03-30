@@ -136,6 +136,29 @@ function removeEnvVar(content: string, key: string): string {
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 
+/**
+ * Public settings route — deployment mode only, no auth required.
+ * Mounted before auth middleware in app.ts.
+ */
+const settingsPublic = new Hono<AppEnv>()
+	.get(
+		'/deployment-mode',
+		describeRoute({
+			tags: ['settings'],
+			description: 'Return the current deployment mode (selfhosted or cloud)',
+			responses: {
+				200: {
+					description: 'Deployment mode',
+					content: { 'application/json': { schema: resolver(DeploymentModeResponseSchema) } },
+				},
+			},
+		}),
+		(c) => {
+			const mode: DeploymentMode = process.env.DEPLOYMENT_MODE === 'cloud' ? 'cloud' : 'selfhosted'
+			return c.json({ mode }, 200)
+		},
+	)
+
 const settings = new Hono<AppEnv>()
 	// ── GET /settings — read company config as JSON ──────────────────
 	.get(
@@ -298,23 +321,4 @@ const settings = new Hono<AppEnv>()
 		},
 	)
 
-	// ── GET /settings/deployment-mode — resolve deployment mode from env ──
-	.get(
-		'/deployment-mode',
-		describeRoute({
-			tags: ['settings'],
-			description: 'Return the current deployment mode (selfhosted or cloud)',
-			responses: {
-				200: {
-					description: 'Deployment mode',
-					content: { 'application/json': { schema: resolver(DeploymentModeResponseSchema) } },
-				},
-			},
-		}),
-		(c) => {
-			const mode: DeploymentMode = process.env.DEPLOYMENT_MODE === 'cloud' ? 'cloud' : 'selfhosted'
-			return c.json({ mode }, 200)
-		},
-	)
-
-export { settings }
+export { settings, settingsPublic }

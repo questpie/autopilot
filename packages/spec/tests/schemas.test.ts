@@ -338,20 +338,22 @@ describe('ScheduleSchema', () => {
 		const result = ScheduleSchema.parse(validSchedule)
 		expect(result.description).toBe('')
 		expect(result.create_task).toBe(false)
-		expect(result.timeout).toBe('5m')
-		expect(result.on_failure).toBe('alert_human')
 		expect(result.enabled).toBe(true)
+	})
+
+	test('accepts optional workflow field', () => {
+		const result = ScheduleSchema.parse({ ...validSchedule, workflow: 'deploy-pipeline' })
+		expect(result.workflow).toBe('deploy-pipeline')
+	})
+
+	test('accepts optional workflow_inputs field', () => {
+		const result = ScheduleSchema.parse({ ...validSchedule, workflow: 'deploy', workflow_inputs: { env: 'prod' } })
+		expect(result.workflow_inputs).toEqual({ env: 'prod' })
 	})
 
 	test('rejects missing agent', () => {
 		expect(() =>
 			ScheduleSchema.parse({ id: 'test', cron: '* * * * *' }),
-		).toThrow(ZodError)
-	})
-
-	test('rejects invalid on_failure value', () => {
-		expect(() =>
-			ScheduleSchema.parse({ ...validSchedule, on_failure: 'crash' }),
 		).toThrow(ZodError)
 	})
 })

@@ -46,6 +46,7 @@ import {
 	agentSessions,
 	usage,
 	settings,
+	settingsPublic,
 	skills,
 	status,
 	tasks,
@@ -80,9 +81,10 @@ export interface AppConfig {
  * 3.5. IP Allowlist
  * 3.6. IP Rate Limit (20 req/min by IP)
  * 4. Better Auth passthrough on `/api/auth/*`
- * 5. Auth middleware on `/api/*`
+ * 4.5. Public API routes (no auth): /api/status, /api/settings/deployment-mode
+ * 5. Auth middleware on `/api/*` (only reaches non-public routes)
  * 5.5. Actor Rate Limit (per-actor limits)
- * 6. All API routes
+ * 6. Authenticated API routes
  * 7. Documentation (Scalar UI + OpenAPI spec)
  * 8. Filesystem browser
  */
@@ -165,15 +167,18 @@ export function createApp(config: AppConfig) {
 		return auth.handler(c.req.raw)
 	})
 
+	// ── 4.5. Public API routes (no auth required) ────────────────────────
+	app.route('/api/status', status)
+	app.route('/api/settings', settingsPublic)
+
 	// ── 5. Auth middleware on /api/* ──────────────────────────────────────
 	app.use('/api/*', authMiddleware())
 
 	// ── 5.5. Actor Rate Limit ───────────────────────────────────────────
 	app.use('/api/*', actorRateLimit())
 
-	// ── 6. API routes (chained for RPC type inference) ───────────────────
+	// ── 6. API routes — authenticated (chained for RPC type inference) ───
 	const typedApp = app
-		.route('/api/status', status)
 		.route('/api/tasks', tasks)
 		.route('/api/agents', agents)
 		.route('/api/pins', pins)

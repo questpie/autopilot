@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { join } from 'node:path'
+import { mkdir } from 'node:fs/promises'
 import { Scheduler } from '../src/scheduler/scheduler'
 import { createTestCompany } from './helpers'
 import { writeYaml } from '../src/fs/yaml'
@@ -18,24 +19,24 @@ describe('Scheduler', () => {
 		await cleanup()
 	})
 
+	async function writeSchedule(id: string, data: Record<string, unknown>) {
+		const dir = join(companyRoot, 'team', 'schedules')
+		await mkdir(dir, { recursive: true })
+		await writeYaml(join(dir, `${id}.yaml`), { id, ...data })
+	}
+
 	test('start loads schedules and creates jobs', async () => {
-		await writeYaml(join(companyRoot, 'team', 'schedules.yaml'), {
-			schedules: [
-				{
-					id: 'daily-standup',
-					agent: 'project-manager',
-					cron: '0 9 * * *',
-					description: 'Daily standup',
-					enabled: true,
-				},
-				{
-					id: 'weekly-review',
-					agent: 'project-manager',
-					cron: '0 17 * * 5',
-					description: 'Weekly review',
-					enabled: true,
-				},
-			],
+		await writeSchedule('daily-standup', {
+			agent: 'project-manager',
+			cron: '0 9 * * *',
+			description: 'Daily standup',
+			enabled: true,
+		})
+		await writeSchedule('weekly-review', {
+			agent: 'project-manager',
+			cron: '0 17 * * 5',
+			description: 'Weekly review',
+			enabled: true,
 		})
 
 		const triggered: string[] = []
@@ -57,15 +58,10 @@ describe('Scheduler', () => {
 	})
 
 	test('stop clears all jobs', async () => {
-		await writeYaml(join(companyRoot, 'team', 'schedules.yaml'), {
-			schedules: [
-				{
-					id: 'test-job',
-					agent: 'dev',
-					cron: '* * * * *',
-					enabled: true,
-				},
-			],
+		await writeSchedule('test-job', {
+			agent: 'dev',
+			cron: '* * * * *',
+			enabled: true,
 		})
 
 		const scheduler = new Scheduler({
@@ -81,15 +77,10 @@ describe('Scheduler', () => {
 	})
 
 	test('reload clears old jobs and loads new ones', async () => {
-		await writeYaml(join(companyRoot, 'team', 'schedules.yaml'), {
-			schedules: [
-				{
-					id: 'old-job',
-					agent: 'dev',
-					cron: '0 9 * * *',
-					enabled: true,
-				},
-			],
+		await writeSchedule('old-job', {
+			agent: 'dev',
+			cron: '0 9 * * *',
+			enabled: true,
 		})
 
 		const scheduler = new Scheduler({
@@ -100,15 +91,13 @@ describe('Scheduler', () => {
 		await scheduler.start()
 		expect(scheduler.getActiveJobs()).toEqual(['old-job'])
 
-		await writeYaml(join(companyRoot, 'team', 'schedules.yaml'), {
-			schedules: [
-				{
-					id: 'new-job',
-					agent: 'dev',
-					cron: '0 10 * * *',
-					enabled: true,
-				},
-			],
+		// Remove old and add new
+		const { rm } = await import('node:fs/promises')
+		await rm(join(companyRoot, 'team', 'schedules', 'old-job.yaml'))
+		await writeSchedule('new-job', {
+			agent: 'dev',
+			cron: '0 10 * * *',
+			enabled: true,
 		})
 
 		await scheduler.reload()
@@ -118,21 +107,15 @@ describe('Scheduler', () => {
 	})
 
 	test('disabled schedules are skipped', async () => {
-		await writeYaml(join(companyRoot, 'team', 'schedules.yaml'), {
-			schedules: [
-				{
-					id: 'enabled-job',
-					agent: 'dev',
-					cron: '0 9 * * *',
-					enabled: true,
-				},
-				{
-					id: 'disabled-job',
-					agent: 'dev',
-					cron: '0 10 * * *',
-					enabled: false,
-				},
-			],
+		await writeSchedule('enabled-job', {
+			agent: 'dev',
+			cron: '0 9 * * *',
+			enabled: true,
+		})
+		await writeSchedule('disabled-job', {
+			agent: 'dev',
+			cron: '0 10 * * *',
+			enabled: false,
 		})
 
 		const scheduler = new Scheduler({
@@ -147,9 +130,8 @@ describe('Scheduler', () => {
 	})
 
 	test('getActiveJobs returns empty array when no schedules', async () => {
-		await writeYaml(join(companyRoot, 'team', 'schedules.yaml'), {
-			schedules: [],
-		})
+		// Create empty schedules directory
+		await mkdir(join(companyRoot, 'team', 'schedules'), { recursive: true })
 
 		const scheduler = new Scheduler({
 			companyRoot,
@@ -162,8 +144,8 @@ describe('Scheduler', () => {
 		scheduler.stop()
 	})
 
-	test('handles missing schedules.yaml gracefully', async () => {
-		// No schedules.yaml written
+	test('handles missing schedules directory gracefully', async () => {
+		// No schedules directory created
 		const scheduler = new Scheduler({
 			companyRoot,
 			onTrigger: async () => {},
@@ -186,13 +168,9 @@ describe('Scheduler', () => {
 	})
 
 	test('multiple enabled schedules for different agents', async () => {
-		await writeYaml(join(companyRoot, 'team', 'schedules.yaml'), {
-			schedules: [
-				{ id: 'dev-check', agent: 'developer', cron: '0 9 * * *', enabled: true },
-				{ id: 'ops-check', agent: 'devops', cron: '0 10 * * *', enabled: true },
-				{ id: 'ceo-review', agent: 'ceo', cron: '0 17 * * 5', enabled: true },
-			],
-		})
+		await writeSchedule('dev-check', { agent: 'developer', cron: '0 9 * * *', enabled: true })
+		await writeSchedule('ops-check', { agent: 'devops', cron: '0 10 * * *', enabled: true })
+		await writeSchedule('ceo-review', { agent: 'ceo', cron: '0 17 * * 5', enabled: true })
 
 		const scheduler = new Scheduler({
 			companyRoot,

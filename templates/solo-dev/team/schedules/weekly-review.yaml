@@ -1,0 +1,4 @@
+id: weekly-review
+agent: ceo
+cron: "0 10 * * 1"
+description: "Weekly company review — metrics, blockers, priorities"

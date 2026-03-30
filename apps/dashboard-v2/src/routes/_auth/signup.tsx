@@ -143,7 +143,7 @@ function SignupPage() {
       <div className="flex flex-col items-center gap-6 text-center">
         <ShieldWarningIcon className="size-10 text-muted-foreground" />
         <div>
-          <h2 className="font-heading text-lg font-semibold">
+          <h2 className="font-heading text-xl font-semibold">
             {t("auth.sign_up")}
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -163,8 +163,8 @@ function SignupPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Title */}
-      <div className="text-center">
-        <h2 className="font-heading text-lg font-semibold">
+      <div>
+        <h2 className="font-heading text-xl font-semibold">
           {t("auth.create_account")}
         </h2>
       </div>

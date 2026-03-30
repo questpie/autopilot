@@ -76,7 +76,7 @@ export function WizardStep5({ onComplete, onBack, onSkip }: WizardStep5Props) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="font-heading text-lg font-semibold">
+        <h2 className="font-heading text-xl font-semibold">
           {t("setup.step_5_title")}
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">

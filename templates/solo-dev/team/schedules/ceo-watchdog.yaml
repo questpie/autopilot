@@ -1,0 +1,5 @@
+id: ceo-watchdog
+agent: ceo
+cron: "*/10 * * * *"
+description: "Monitor company health — check stuck tasks, idle agents, stale work"
+enabled: true
