@@ -116,7 +116,8 @@ function TwoFactorPage() {
         return
       }
 
-      void router.invalidate().then(() => router.navigate({ to: "/" }))
+      await router.invalidate()
+      await router.navigate({ to: "/" })
     },
     [router, t, trustDevice, useBackup]
   )

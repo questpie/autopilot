@@ -134,7 +134,8 @@ function SignupPage() {
       return
     }
 
-    void router.invalidate().then(() => router.navigate({ to: "/" }))
+    await router.invalidate()
+    await router.navigate({ to: "/" })
   }
 
   // No invite token -- show invite-only message

@@ -107,7 +107,8 @@ function EmailVerificationScreen({ email, password, onBack }: { email: string; p
     queryFn: async () => {
       const result = await authClient.signIn.email({ email, password })
       if (result.error) throw new Error("not_verified")
-      void router.invalidate().then(() => router.navigate({ to: "/" }))
+      await router.invalidate()
+      await router.navigate({ to: "/" })
       return true
     },
     refetchInterval: 5000,
@@ -260,7 +261,10 @@ function LoginPage() {
       ? "/login/2fa"
       : isValidRedirect(redirect) ? redirect : "/"
 
-    await router.invalidate()
+    // Invalidate cached route data (auth state changed), then navigate.
+    // invalidate() may throw if a beforeLoad fires a redirect — that's fine,
+    // the router handles it. We navigate as fallback.
+    try { await router.invalidate() } catch { /* redirect thrown by beforeLoad */ }
     await router.navigate({ to: target })
   }
 

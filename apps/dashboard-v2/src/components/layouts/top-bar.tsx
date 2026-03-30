@@ -44,8 +44,8 @@ export function TopBar() {
 
   const handleLogout = async () => {
     await authClient.signOut()
-    router.invalidate()
-    void router.navigate({ to: "/login" })
+    await router.invalidate()
+    await router.navigate({ to: "/login" })
   }
 
   const chatOpen = rightPanel.open && rightPanel.mode === "chat"

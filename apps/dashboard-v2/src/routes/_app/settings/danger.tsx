@@ -70,8 +70,9 @@ function SettingsDangerPage() {
       const res = await api.api["delete-company"].$post({ json: { confirm: "DELETE" as const } })
       if (!res.ok) throw new Error(t("errors.delete_not_available"))
     },
-    onSuccess: () => {
-      void router.invalidate().then(() => router.navigate({ to: "/" }))
+    onSuccess: async () => {
+      await router.invalidate()
+      await router.navigate({ to: "/" })
     },
     onError: (err) => toast.error((err as Error).message),
   })
