@@ -96,20 +96,19 @@ const screenTransition = {
   transition: { duration: 0.2, ease: EASING.enter },
 }
 
-function EmailVerificationScreen({ email, onBack }: { email: string; onBack: () => void }) {
+function EmailVerificationScreen({ email, password, onBack }: { email: string; password: string; onBack: () => void }) {
   const { t } = useTranslation()
   const router = useRouter()
   const { data: deploymentMode } = useDeploymentMode()
 
+  // Poll: try sign-in every 5s — succeeds only after email is verified
   const { error: checkError, refetch, isFetching: isChecking } = useQuery({
     queryKey: ["login-email-verification-poll", email],
     queryFn: async () => {
-      const session = await authClient.getSession()
-      if (session.data?.user) {
-        void router.invalidate().then(() => router.navigate({ to: "/" }))
-        return true
-      }
-      throw new Error("not_verified")
+      const result = await authClient.signIn.email({ email, password })
+      if (result.error) throw new Error("not_verified")
+      void router.invalidate().then(() => router.navigate({ to: "/" }))
+      return true
     },
     refetchInterval: 5000,
     retry: false,
@@ -198,7 +197,7 @@ function LoginPage() {
   const redirect = search.redirect
 
   const [state, dispatch] = useReducer(loginReducer, loginInitialState)
-  const [verifyEmail, setVerifyEmail] = useState<string | null>(null)
+  const [verifyCredentials, setVerifyCredentials] = useState<{ email: string; password: string } | null>(null)
 
   const { showPassword, error, showError, failCount, rateLimitCountdown } = state
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -239,7 +238,7 @@ function LoginPage() {
     if (result.error) {
       const msg = result.error.message?.toLowerCase() ?? ""
       if (msg.includes("email") && msg.includes("verified")) {
-        setVerifyEmail(values.email)
+        setVerifyCredentials({ email: values.email, password: values.password })
         return
       }
 
@@ -269,9 +268,9 @@ function LoginPage() {
 
   return (
     <AnimatePresence mode="wait">
-      {verifyEmail ? (
+      {verifyCredentials ? (
         <m.div key="verify" {...screenTransition}>
-          <EmailVerificationScreen email={verifyEmail} onBack={() => setVerifyEmail(null)} />
+          <EmailVerificationScreen email={verifyCredentials.email} password={verifyCredentials.password} onBack={() => setVerifyCredentials(null)} />
         </m.div>
       ) : (
         <m.div key="login" {...screenTransition}>

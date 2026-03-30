@@ -86,24 +86,24 @@ function PasswordStrengthMeter({ score }: { score: number }) {
 
 function EmailVerificationPhase({
   email,
+  password,
   onVerified,
 }: {
   email: string
+  password: string
   onVerified: () => void
 }) {
   const { t } = useTranslation()
   const { data: deploymentMode } = useDeploymentMode()
 
-  // Poll session every 5s — auto-advance when verified
+  // Poll: try to sign in every 5s — succeeds only after email is verified
   const { error: checkError, refetch, isFetching: isChecking } = useQuery({
     queryKey: ["email-verification-poll", email],
     queryFn: async () => {
-      const session = await authClient.getSession()
-      if (session.data?.user) {
-        onVerified()
-        return true
-      }
-      throw new Error("not_verified")
+      const result = await authClient.signIn.email({ email, password })
+      if (result.error) throw new Error("not_verified")
+      onVerified()
+      return true
     },
     refetchInterval: 5000,
     retry: false,
@@ -181,7 +181,7 @@ export function WizardStep1({ onComplete }: WizardStep1Props) {
   const { setAccountData, completeStep } = useWizardState()
   const [showPassword, setShowPassword] = useState(false)
   const [phase, setPhase] = useState<"form" | "verify-email">("form")
-  const [signupEmail, setSignupEmail] = useState("")
+  const [signupCredentials, setSignupCredentials] = useState<{ email: string; password: string } | null>(null)
 
   const form = useForm<AccountValues>({
     resolver: zodResolver(accountSchema),
@@ -213,14 +213,15 @@ export function WizardStep1({ onComplete }: WizardStep1Props) {
     }
 
     setAccountData({ name: values.name, email: values.email })
-    setSignupEmail(values.email)
+    setSignupCredentials({ email: values.email, password: values.password })
     setPhase("verify-email")
   }
 
-  if (phase === "verify-email") {
+  if (phase === "verify-email" && signupCredentials) {
     return (
       <EmailVerificationPhase
-        email={signupEmail}
+        email={signupCredentials.email}
+        password={signupCredentials.password}
         onVerified={() => {
           completeStep(1)
           onComplete()
