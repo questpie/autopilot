@@ -12,7 +12,9 @@ import type { AutopilotEvent } from '../events'
 import type { AutopilotDb } from '../db'
 import { readYamlUnsafe, fileExists } from '../fs/yaml'
 import { sendPushToUser } from './transports/push'
-import { classify as llmClassify, getUtilityModel, NOTIFICATION_CLASSIFIER } from '../agent/micro-agent'
+import { classify as llmClassify, NOTIFICATION_CLASSIFIER } from '../agent/micro-agent'
+import { aiProviderFactory } from '../ai'
+import { container } from '../container'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -258,9 +260,9 @@ export class NotificationDispatcher {
 
 		// Try AI enhancement for priority + summary
 		try {
-			const model = await getUtilityModel(this.companyRoot)
+			const { aiProvider } = await container.resolveAsync([aiProviderFactory])
 			const input = JSON.stringify({ eventType: event.type, ...event })
-			const result = await llmClassify(NOTIFICATION_CLASSIFIER, input, model)
+			const result = await llmClassify(aiProvider, NOTIFICATION_CLASSIFIER, input)
 			if (result) {
 				// Map AI priority ('critical' → 'urgent') to our NotificationPriority
 				const priorityMap: Record<string, NotificationPriority> = {

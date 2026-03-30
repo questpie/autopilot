@@ -45,7 +45,7 @@ export interface AgentSessionResult {
  * Implement this to add support for new LLM providers.
  *
  * Built-in implementations:
- * - {@link TanStackAIProvider} (default, uses `@tanstack/ai` + OpenRouter)
+ * - {@link OpenRouterAIProvider} (default, uses `@tanstack/ai` + OpenRouter)
  */
 export interface AgentProvider {
 	readonly name: string

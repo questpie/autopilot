@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { StorageBackend } from '../fs/storage'
 import type { EventBus } from '../events/event-bus'
+import type { AIProvider } from '../ai/provider'
 import { createTaskTool } from './tools/task'
 import { createMessageTool } from './tools/message'
 import { createPinTool } from './tools/pin'
@@ -46,7 +47,7 @@ export interface AutopilotToolOptions {
  *
  * Includes: `task`, `message`, `pin`, `search_index`, `fetch`, `web_search`.
  */
-export function createAutopilotTools(companyRoot: string, storage: StorageBackend, options?: AutopilotToolOptions): ToolDefinition[] {
+export function createAutopilotTools(companyRoot: string, storage: StorageBackend, aiProvider: AIProvider, options?: AutopilotToolOptions): ToolDefinition[] {
 	// biome-ignore lint: generic variance is intentional
 	const tools: Array<ToolDefinition<any>> = [
 		createTaskTool(storage),
@@ -54,7 +55,7 @@ export function createAutopilotTools(companyRoot: string, storage: StorageBacken
 		createPinTool(companyRoot),
 		createSearchTool(companyRoot),
 		createHttpTool(companyRoot, options),
-		createSearchWebTool(companyRoot),
+		createSearchWebTool(aiProvider),
 	]
 
 	return tools

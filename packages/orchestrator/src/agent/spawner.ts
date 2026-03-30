@@ -5,54 +5,15 @@ import type { StorageBackend } from '../fs/storage'
 import { createAutopilotTools } from './tools'
 import { createFileTools } from './tools/file-tools'
 import type { ToolContext } from './tools'
-import type { AgentProvider, AgentEvent } from './provider'
-import { TanStackAIProvider } from './providers/tanstack-ai'
+import type { AgentEvent } from './provider'
+import { aiProviderFactory } from '../ai'
 import { eventBus } from '../events'
 import { container, companyRootFactory } from '../container'
 import { dbFactory } from '../db'
 import { streamManagerFactory } from '../session/stream'
 import { logger } from '../logger'
 
-/** Registry of available agent providers, keyed by name. */
-const providers: Map<string, AgentProvider> = new Map()
-
-/**
- * Register an {@link AgentProvider} so it can be resolved by name.
- *
- * Built-in providers are registered at module load time.
- */
-export function registerProvider(provider: AgentProvider): void {
-	providers.set(provider.name, provider)
-}
-
-const DEFAULT_PROVIDER = 'tanstack-ai'
-
-/** Default model per provider so bare agent configs get a sensible fallback. */
-const DEFAULT_MODELS: Record<string, string> = {
-	'tanstack-ai': 'anthropic/claude-sonnet-4',
-}
-
-/**
- * Look up a registered provider by name.
- *
- * Falls back to the default provider (`tanstack-ai`) with a warning
- * when the requested provider is not registered.
- */
-export function getProvider(name: string): AgentProvider {
-	const provider = providers.get(name)
-	if (!provider) {
-		logger.warn('agent', `unknown agent provider: "${name}"`, {
-			available: [...providers.keys()].join(', '),
-			fallback: DEFAULT_PROVIDER,
-		})
-		return providers.get(DEFAULT_PROVIDER)!
-	}
-	return provider
-}
-
-// Register built-in provider
-// TanStack AI + OpenRouter for multi-model access (Anthropic, OpenAI, Google, etc.)
-registerProvider(new TanStackAIProvider())
+const DEFAULT_MODEL = 'anthropic/claude-sonnet-4'
 
 /** D10: Session mode — chat (streaming to user) vs autonomous (background). */
 export type SpawnMode = 'autonomous' | 'chat'
@@ -85,7 +46,7 @@ export interface SpawnResult {
  * Spawn a single agent session end-to-end.
  *
  * Steps:
- * 1. Resolve the LLM provider from the agent or company config.
+ * 1. Resolve the AIProvider from DI container.
  * 2. Assemble a multi-layer system prompt via {@link assembleContext}.
  * 3. Create the autopilot tool-set.
  * 4. Open a session stream for real-time `attach` subscriptions.
@@ -130,11 +91,8 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		}
 	}
 
-	// 1. Resolve provider (from agent definition or company default)
-	const agentProvider = (agent as Record<string, unknown>).provider as string | undefined
-	const companySettings = (company as Record<string, unknown>).settings as Record<string, unknown> | undefined
-	const providerName = agentProvider ?? (companySettings?.agent_provider as string | undefined) ?? DEFAULT_PROVIDER
-	const provider = getProvider(providerName)
+	// 1. Resolve AIProvider from DI
+	const { aiProvider } = await container.resolveAsync([aiProviderFactory])
 
 	// 2. Assemble context (4-layer system prompt)
 	const context = await assembleContext({
@@ -147,7 +105,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	})
 
 	// 3. Create custom tools + file tools
-	let autopilotTools = createAutopilotTools(companyRoot, storage)
+	let autopilotTools = createAutopilotTools(companyRoot, storage, aiProvider)
 	// D10: In chat mode, exclude message() tool — agent streams text directly to user
 	if (mode === 'chat') {
 		autopilotTools = autopilotTools.filter((t) => t.name !== 'message')
@@ -182,8 +140,8 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		at: new Date().toISOString(),
 		agent: agent.id,
 		type: 'session_start',
-		summary: `Session started: ${task?.title ?? trigger.type} [${provider.name}/${agent.model}] (${mode})`,
-		details: { sessionId, trigger, taskId: task?.id, provider: provider.name, model: agent.model, mode, channelId },
+		summary: `Session started: ${task?.title ?? trigger.type} [${aiProvider.name}/${agent.model}] (${mode})`,
+		details: { sessionId, trigger, taskId: task?.id, provider: aiProvider.name, model: agent.model, mode, channelId },
 	})
 	eventBus.emit({ type: 'agent_session', agentId: agent.id, status: 'started', sessionId })
 	// D9: Emit typing started
@@ -213,11 +171,11 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	let sessionResult: { result?: string; toolCalls: number; error?: string }
 
 	try {
-		sessionResult = await provider.spawn(
+		sessionResult = await aiProvider.spawn(
 			{
 				systemPrompt,
 				prompt,
-				model: agent.model || DEFAULT_MODELS[providerName] || 'claude-sonnet-4-6',
+				model: agent.model || DEFAULT_MODEL,
 				tools: allTools,
 				toolContext,
 				maxTurns: 50,
@@ -273,13 +231,13 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 
 		// Extract and persist memory from this session (best-effort, 1 retry)
 		try {
-			await extractMemory(companyRoot, agent.id, sessionId, storage)
+			await extractMemory(companyRoot, agent.id, sessionId, storage, aiProvider)
 		} catch (firstErr) {
 			logger.warn('agent', `memory extraction failed for ${agent.id}/${sessionId}, retrying`, {
 				error: firstErr instanceof Error ? firstErr.message : String(firstErr),
 			})
 			try {
-				await extractMemory(companyRoot, agent.id, sessionId, storage)
+				await extractMemory(companyRoot, agent.id, sessionId, storage, aiProvider)
 			} catch (retryErr) {
 				logger.error('agent', `memory extraction failed after retry for ${agent.id}/${sessionId}`, {
 					error: retryErr instanceof Error ? retryErr.message : String(retryErr),

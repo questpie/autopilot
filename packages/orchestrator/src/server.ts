@@ -18,7 +18,8 @@ import { telegramWebhookHandler } from './webhook'
 import { advanceWorkflow, evaluateTransition } from './workflow'
 import { WorkflowLoader } from './workflow'
 
-import { classify, getUtilityModel, BLOCKED_TASK_CLASSIFIER } from './agent/micro-agent'
+import { classify, BLOCKED_TASK_CLASSIFIER } from './agent/micro-agent'
+import { aiProviderFactory } from './ai'
 import { logger } from './logger'
 import { authFactory } from './auth'
 import { configureContainer, container } from './container'
@@ -806,15 +807,15 @@ export class Orchestrator {
 		if (blockedMinutes < threshold) return
 
 		try {
-			const model = await getUtilityModel(this.options.companyRoot)
-			const result = await classify(BLOCKED_TASK_CLASSIFIER, JSON.stringify({
+			const { aiProvider } = await container.resolveAsync([aiProviderFactory])
+			const result = await classify(aiProvider, BLOCKED_TASK_CLASSIFIER, JSON.stringify({
 				taskId: task.id,
 				title: task.title,
 				status: task.status,
 				blockedMinutes: Math.round(blockedMinutes),
 				blockers: task.blockers,
 				assignedTo: task.assigned_to,
-			}), model)
+			}))
 
 			if (!result) return // AI unavailable — do nothing
 

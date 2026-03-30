@@ -100,8 +100,7 @@ const upload = new Hono<AppEnv>().post(
 			return c.json({ error: 'forbidden' }, 403)
 		}
 
-		// Stream to disk — avoids buffering entire file in RAM
-		await Bun.write(fullPath, file.stream())
+		await Bun.write(fullPath, file)
 		return c.json({ ok: true as const, path: join(targetDir, sanitizedName) }, 200)
 	},
 )

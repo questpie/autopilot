@@ -1,9 +1,7 @@
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
-import { chat } from '@tanstack/ai'
-import { openRouterText } from '@tanstack/ai-openrouter'
+import type { AIProvider } from '../ai/provider'
 import { logger } from '../logger'
-import { loadCompany } from '../fs/company'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,8 +14,6 @@ export interface ClassifyConfig<T = unknown> {
 	outputSchema: z.ZodType<T>
 	maxTokens: number
 }
-
-const DEFAULT_UTILITY_MODEL = 'google/gemma-3-4b-it:free'
 
 // ---------------------------------------------------------------------------
 // Cache (5-minute TTL)
@@ -52,44 +48,34 @@ function cacheSet(key: string, value: unknown): void {
 }
 
 // ---------------------------------------------------------------------------
-// Core: classify — one function, uses chat() directly
+// Core: classify — delegates to AIProvider
 // ---------------------------------------------------------------------------
 
 /**
- * Classify an input using the utility model via TanStack AI chat().
+ * Classify an input using the utility model via AIProvider.
  *
- * Same API as agent sessions — just different model + no tools.
  * Returns `T` on success, `null` on any error. Never throws.
  */
 export async function classify<T>(
+	aiProvider: AIProvider,
 	config: ClassifyConfig<T>,
 	input: string,
-	model?: string,
 ): Promise<T | null> {
 	try {
 		const key = cacheKey(config.id, input)
 		const cached = cacheGet<T>(key)
 		if (cached !== undefined) return cached
 
-		if (!process.env.OPENROUTER_API_KEY) {
-			return null
-		}
+		const result = await aiProvider.classify({
+			id: config.id,
+			input,
+			systemPrompt: config.systemPrompt,
+			schema: config.outputSchema,
+			maxTokens: config.maxTokens,
+		})
 
-		const m = model ?? DEFAULT_UTILITY_MODEL
-		const result = await chat({
-			adapter: openRouterText(m as Parameters<typeof openRouterText>[0]),
-			messages: [{
-				role: 'user',
-				content: `${config.systemPrompt}\n\nInput:\n${input}\n\nRespond with ONLY valid JSON, no markdown fences.`,
-			}],
-			stream: false,
-		}) as string
-
-		if (!result) return null
-
-		const parsed = parseAndValidate(config, result)
-		if (parsed !== null) cacheSet(key, parsed)
-		return parsed
+		if (result !== null) cacheSet(key, result)
+		return result
 	} catch (err) {
 		logger.error('classify', `${config.id} failed`, {
 			error: err instanceof Error ? err.message : String(err),
@@ -98,50 +84,8 @@ export async function classify<T>(
 	}
 }
 
-/**
- * Get the utility model name from company config.
- * Falls back to DEFAULT_UTILITY_MODEL if not configured.
- */
-export async function getUtilityModel(companyRoot: string): Promise<string> {
-	try {
-		const company = await loadCompany(companyRoot)
-		const settings = company.settings as Record<string, unknown>
-		if (typeof settings.utility_model === 'string') return settings.utility_model
-
-		const microConfig = settings.micro_agents as { cache_ttl?: number } | undefined
-		if (microConfig?.cache_ttl) CACHE_TTL_MS = microConfig.cache_ttl * 1000
-	} catch {
-		// defaults
-	}
-	return DEFAULT_UTILITY_MODEL
-}
-
 // ---------------------------------------------------------------------------
-// JSON parsing + Zod validation
-// ---------------------------------------------------------------------------
-
-function parseAndValidate<T>(config: ClassifyConfig<T>, raw: string): T | null {
-	try {
-		const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
-		const parsed = JSON.parse(cleaned)
-		const result = config.outputSchema.safeParse(parsed)
-		if (!result.success) {
-			logger.warn('classify', `${config.id} schema validation failed`, {
-				errors: result.error.issues.map((i) => i.message),
-			})
-			return null
-		}
-		return result.data
-	} catch (err) {
-		logger.warn('classify', `${config.id} JSON parse failed`, {
-			error: err instanceof Error ? err.message : String(err),
-		})
-		return null
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Pre-defined configs (same as before, just exported)
+// Pre-defined classifier configs
 // ---------------------------------------------------------------------------
 
 export const NOTIFICATION_CLASSIFIER: ClassifyConfig<{
