@@ -17,6 +17,11 @@ services:
       - AUTOPILOT_MASTER_KEY=${AUTOPILOT_MASTER_KEY:-}
       - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
       - CORS_ORIGIN=${CORS_ORIGIN:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-autopilot@localhost}
       - NODE_ENV=production
     restart: unless-stopped
     healthcheck:
@@ -34,6 +39,15 @@ services:
     environment:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_POLL_INTERVAL=300
+    restart: unless-stopped
+
+  # Local mail server — enable with: docker compose --profile mail up
+  mailpit:
+    image: axllent/mailpit
+    profiles: ["mail", "dev"]
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
     restart: unless-stopped
 
   # Dev mode — enable with: docker compose --profile dev up
@@ -56,5 +70,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - AUTOPILOT_MASTER_KEY=${AUTOPILOT_MASTER_KEY:-}
       - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
+      - SMTP_HOST=${SMTP_HOST:-mailpit}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_FROM=${SMTP_FROM:-autopilot@localhost}
       - NODE_ENV=development
     command: ["bun", "run", "dev"]

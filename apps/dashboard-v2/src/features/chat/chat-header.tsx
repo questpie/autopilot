@@ -52,7 +52,7 @@ export function ChatHeader({
             {isWorking ? (
               <CircleNotchIcon size={14} className="animate-spin text-primary" />
             ) : (
-              <CircleIcon size={14} weight="fill" className="text-green-500/70" />
+              <CircleIcon size={14} weight="fill" className="text-success/70" />
             )}
           </span>
         )}

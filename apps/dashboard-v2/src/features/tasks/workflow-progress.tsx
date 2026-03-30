@@ -111,7 +111,7 @@ export function WorkflowProgress({
               <CheckCircleIcon
                 size={16}
                 weight="fill"
-                className="shrink-0 text-green-500"
+                className="shrink-0 text-success"
               />
             )}
             {step.state === "active" && (
@@ -149,7 +149,7 @@ export function WorkflowProgress({
             <span
               className={cn(
                 "shrink-0 font-heading text-[10px]",
-                step.state === "done" && "text-green-500",
+                step.state === "done" && "text-success",
                 step.state === "active" && "text-primary",
                 step.state === "waiting" && "text-muted-foreground/40",
               )}

@@ -1,4 +1,6 @@
-import { CopyIcon } from "@phosphor-icons/react"
+import { useState } from "react"
+import { m, AnimatePresence } from "framer-motion"
+import { CopyIcon, CheckIcon } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -11,6 +13,15 @@ interface QrDisplayProps {
 
 export function QrDisplay({ totpURI, manualKey, onContinue }: QrDisplayProps) {
   const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+
+  const handleCopyKey = () => {
+    if (!manualKey) return
+    void navigator.clipboard.writeText(manualKey)
+    toast.success(t("common.copied"))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
     <div className="flex max-w-lg flex-col gap-4">
@@ -38,13 +49,21 @@ export function QrDisplay({ totpURI, manualKey, onContinue }: QrDisplayProps) {
           </code>
           <button
             type="button"
-            onClick={() => {
-              void navigator.clipboard.writeText(manualKey)
-              toast.success(t("common.copied"))
-            }}
+            onClick={handleCopyKey}
             className="text-muted-foreground hover:text-foreground"
           >
-            <CopyIcon className="size-3.5" />
+            <AnimatePresence mode="wait" initial={false}>
+              <m.span
+                key={copied ? "check" : "copy"}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.15 }}
+                className="inline-flex"
+              >
+                {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+              </m.span>
+            </AnimatePresence>
           </button>
         </div>
       )}

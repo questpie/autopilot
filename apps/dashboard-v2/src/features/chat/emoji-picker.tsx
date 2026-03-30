@@ -41,7 +41,7 @@ export const EmojiPicker = memo(function EmojiPicker({ onSelect, trigger }: Emoj
           ) : (
             <button
               type="button"
-              className="flex size-6 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+              className="flex size-6 items-center justify-center border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
             >
               <PlusIcon size={12} />
             </button>

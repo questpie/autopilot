@@ -72,7 +72,7 @@ export function DmSidebar({
               {isWorking ? (
                 <CircleNotchIcon size={10} className="animate-spin text-primary" />
               ) : (
-                <CircleIcon size={8} weight="fill" className="text-green-500/50" />
+                <CircleIcon size={8} weight="fill" className="text-success/50" />
               )}
             </span>
 

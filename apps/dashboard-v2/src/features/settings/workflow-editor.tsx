@@ -255,9 +255,9 @@ export function WorkflowEditor() {
         {editing ? (
           <div className="flex flex-col gap-3">
             {yamlError && (
-              <div className="flex items-center gap-2 border border-red-500/30 bg-red-500/5 p-2">
-                <WarningIcon size={14} className="text-red-500" />
-                <span className="text-xs text-red-400">{yamlError}</span>
+              <div className="flex items-center gap-2 border border-destructive/30 bg-destructive/5 p-2">
+                <WarningIcon size={14} className="text-destructive" />
+                <span className="text-xs text-destructive">{yamlError}</span>
               </div>
             )}
             <textarea

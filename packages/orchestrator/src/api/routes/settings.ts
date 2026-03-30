@@ -23,6 +23,11 @@ const SettingsResponseSchema = z.object({
 	settings: z.record(z.string(), z.unknown()),
 })
 
+const DeploymentModeResponseSchema = z.object({
+	mode: z.enum(['selfhosted', 'cloud']),
+})
+type DeploymentMode = z.infer<typeof DeploymentModeResponseSchema>['mode']
+
 const SettingsPatchSchema = z.record(z.string(), z.unknown())
 
 const ProviderStatusSchema = z.object({
@@ -302,12 +307,12 @@ const settings = new Hono<AppEnv>()
 			responses: {
 				200: {
 					description: 'Deployment mode',
-					content: { 'application/json': { schema: resolver(z.object({ mode: z.enum(['selfhosted', 'cloud']) })) } },
+					content: { 'application/json': { schema: resolver(DeploymentModeResponseSchema) } },
 				},
 			},
 		}),
 		(c) => {
-			const mode = process.env.DEPLOYMENT_MODE === 'cloud' ? 'cloud' : 'selfhosted'
+			const mode: DeploymentMode = process.env.DEPLOYMENT_MODE === 'cloud' ? 'cloud' : 'selfhosted'
 			return c.json({ mode }, 200)
 		},
 	)

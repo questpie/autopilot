@@ -155,7 +155,7 @@ function ReplayEventRow({ event }: { event: StreamEvent }) {
           onClick={() => setShowContent(!showContent)}
           className="flex w-full items-center gap-1.5 text-left text-[11px] text-muted-foreground hover:text-foreground"
         >
-          <CheckCircleIcon size={11} className="shrink-0 text-green-500/70" />
+          <CheckCircleIcon size={11} className="shrink-0 text-success/70" />
           <span className="font-mono">{event.tool}</span>
           {event.content && (
             <CaretRightIcon

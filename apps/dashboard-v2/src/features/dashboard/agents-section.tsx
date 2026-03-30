@@ -39,7 +39,7 @@ function AgentStatusCard({ agent }: { agent: AgentStatus }) {
             size={10}
             weight={agent.isWorking ? "fill" : "regular"}
             className={cn(
-              agent.isWorking ? "text-green-500" : "text-muted-foreground",
+              agent.isWorking ? "text-success" : "text-muted-foreground",
               agent.isWorking && "animate-pulse motion-reduce:animate-none",
             )}
           />

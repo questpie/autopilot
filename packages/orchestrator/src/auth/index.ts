@@ -14,7 +14,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { hashPassword, verifyPassword } from 'better-auth/crypto'
 import { eq } from 'drizzle-orm'
-import { logger } from '../logger'
+import { createMailService, type MailService } from '../mail'
 
 const PASSWORD_COMPLEXITY_RE = /^(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/
 
@@ -46,7 +46,9 @@ async function loadInviteEmails(companyRoot: string): Promise<string[] | null> {
 }
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export async function createAuth(db: AutopilotDb, companyRoot: string) {
+export async function createAuth(db: AutopilotDb, companyRoot: string, mail?: MailService) {
+	const mailService = mail ?? createMailService()
+
 	const auth = betterAuth({
 		database: drizzleAdapter(db, {
 			provider: 'sqlite',
@@ -54,14 +56,21 @@ export async function createAuth(db: AutopilotDb, companyRoot: string) {
 		}),
 		basePath: '/api/auth',
 
+		emailVerification: {
+			sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+				void mailService.send({
+					to: user.email,
+					subject: 'Verify your email — QUESTPIE Autopilot',
+					html: `<p>Click the link below to verify your email:</p><p><a href="${url}">${url}</a></p>`,
+				})
+			},
+			sendOnSignUp: true,
+		},
+
 		emailAndPassword: {
 			enabled: true,
 			minPasswordLength: 12,
 			requireEmailVerification: true,
-			sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
-				// TODO: integrate real email transport (SMTP / SES / Resend)
-				logger.info('auth', `Verification email for ${user.email}: ${url}`)
-			},
 			password: {
 				hash: async (password: string) => {
 					validatePasswordComplexity(password)

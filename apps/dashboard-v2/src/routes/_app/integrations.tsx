@@ -426,7 +426,7 @@ function IntegrationsPage() {
       {connectedIntegrations.length > 0 && (
         <section className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <PlugsIcon size={14} weight="bold" className="text-green-500" />
+            <PlugsIcon size={14} weight="bold" className="text-success" />
             <h2 className="font-heading text-xs font-bold uppercase tracking-widest text-foreground">
               {t("integrations.connected")}
             </h2>

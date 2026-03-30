@@ -196,7 +196,7 @@ function NotificationSettingsForm({
               </h2>
             </div>
             <div className="flex items-center gap-3">
-              <span className={`h-2 w-2 rounded-full ${pushEnabled ? "bg-green-500" : "bg-muted-foreground"}`} />
+              <span className={`h-2 w-2 rounded-full ${pushEnabled ? "bg-success" : "bg-muted-foreground"}`} />
               <span className="text-xs text-muted-foreground">
                 {pushEnabled ? t("notifications.push_status_enabled") : t("notifications.push_status_disabled")}
               </span>

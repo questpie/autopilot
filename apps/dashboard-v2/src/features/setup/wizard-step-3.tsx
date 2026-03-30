@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
 import { ArrowLeftIcon, WarningCircleIcon, CloudIcon } from "@phosphor-icons/react"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
 import { useWizardState } from "./use-wizard-state"
+import { useDeploymentMode } from "@/hooks/use-deployment-mode"
 import { api } from "@/lib/api"
 
 const providerSchema = z.object({
@@ -28,18 +29,7 @@ export function WizardStep3({ onComplete, onBack }: WizardStep3Props) {
   const { completeStep } = useWizardState()
 
   const [error, setError] = useState<string | null>(null)
-  const [deploymentMode, setDeploymentMode] = useState<"selfhosted" | "cloud">("selfhosted")
-
-  // Check deployment mode on mount
-  useEffect(() => {
-    api.api.settings["deployment-mode"]
-      .$get()
-      .then((res) => res.json())
-      .then((data) => {
-        if ("mode" in data) setDeploymentMode(data.mode as "selfhosted" | "cloud")
-      })
-      .catch(() => {})
-  }, [])
+  const { data: deploymentMode, isLoading: isLoadingMode } = useDeploymentMode()
 
   const apiKeyRefCallback = useCallback((el: HTMLInputElement | null) => {
     el?.focus()
@@ -72,7 +62,8 @@ export function WizardStep3({ onComplete, onBack }: WizardStep3Props) {
     }
   }
 
-  // Cloud mode — no API key needed
+  if (isLoadingMode) return null
+
   if (deploymentMode === "cloud") {
     return (
       <div className="flex flex-col gap-6">

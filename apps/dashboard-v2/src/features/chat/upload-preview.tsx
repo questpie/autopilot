@@ -31,7 +31,7 @@ export function UploadPreview({ items, onRemove, className }: UploadPreviewProps
             item.status === "error"
               ? "border-destructive/30 bg-destructive/5 text-destructive"
               : item.status === "complete"
-                ? "border-green-500/30 bg-green-500/5 text-green-500"
+                ? "border-success/30 bg-success/5 text-success"
                 : "border-border bg-muted/30 text-muted-foreground",
           )}
         >

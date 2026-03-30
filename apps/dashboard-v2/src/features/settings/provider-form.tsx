@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useForm, FormProvider, useFormContext, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -12,6 +12,7 @@ import {
   CircleNotchIcon,
   CloudIcon,
 } from "@phosphor-icons/react"
+import { m, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -19,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { FormSection, FormSelect } from "@/components/forms"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+import { useDeploymentMode } from "@/hooks/use-deployment-mode"
 
 type ProviderStatus = { configured: boolean; model?: string }
 
@@ -42,17 +44,7 @@ const EMBEDDINGS_OPTIONS = [
  */
 export function ProviderForm() {
   const { t } = useTranslation()
-  const [deploymentMode, setDeploymentMode] = useState<"selfhosted" | "cloud">("selfhosted")
-
-  useEffect(() => {
-    api.api.settings["deployment-mode"]
-      .$get()
-      .then((res) => res.json())
-      .then((data) => {
-        if ("mode" in data) setDeploymentMode(data.mode as "selfhosted" | "cloud")
-      })
-      .catch(() => {})
-  }, [])
+  const { data: deploymentMode, isLoading: isLoadingMode } = useDeploymentMode()
 
   const { data: providerStatus } = useQuery({
     queryKey: ["settings", "providers"],
@@ -71,7 +63,8 @@ export function ProviderForm() {
     },
   })
 
-  // Cloud mode — managed by QuestPie
+  if (isLoadingMode) return null
+
   if (deploymentMode === "cloud") {
     return (
       <div className="flex max-w-lg flex-col gap-6">
@@ -161,7 +154,7 @@ function OpenRouterCard({ configured }: { configured?: boolean }) {
         <span className="flex items-center gap-2">
           {t("settings.provider_openrouter")}
           {configured && saveStatus === "idle" && (
-            <Badge variant="secondary" className="rounded-none text-[10px] text-green-400">
+            <Badge variant="secondary" className="rounded-none text-[10px] text-success">
               <CheckCircleIcon size={10} className="mr-0.5" />
               {t("settings.provider_configured")}
             </Badge>
@@ -199,7 +192,17 @@ function OpenRouterCard({ configured }: { configured?: boolean }) {
                   onClick={() => setShowKey(!showKey)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  {showKey ? <EyeSlashIcon size={14} /> : <EyeIcon size={14} />}
+                  <AnimatePresence mode="wait" initial={false}>
+                    <m.span
+                      key={showKey ? "hide" : "show"}
+                      initial={{ opacity: 0, rotate: -90 }}
+                      animate={{ opacity: 1, rotate: 0 }}
+                      exit={{ opacity: 0, rotate: 90 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {showKey ? <EyeSlashIcon size={14} /> : <EyeIcon size={14} />}
+                    </m.span>
+                  </AnimatePresence>
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -227,18 +230,18 @@ function OpenRouterCard({ configured }: { configured?: boolean }) {
             className="gap-1.5 text-xs"
           >
             {saveStatus === "saving" && <CircleNotchIcon size={12} className="animate-spin" />}
-            {saveStatus === "success" && <CheckCircleIcon size={12} className="text-green-500" />}
-            {saveStatus === "failed" && <XCircleIcon size={12} className="text-red-500" />}
+            {saveStatus === "success" && <CheckCircleIcon size={12} className="text-success" />}
+            {saveStatus === "failed" && <XCircleIcon size={12} className="text-destructive" />}
             {saveStatus === "idle" && <FloppyDiskIcon size={12} />}
             {t("settings.provider_save_key")}
           </Button>
           {saveStatus === "success" && (
-            <Badge variant="secondary" className="rounded-none text-[10px] text-green-400">
+            <Badge variant="secondary" className="rounded-none text-[10px] text-success">
               {t("settings.provider_test_success")}
             </Badge>
           )}
           {saveStatus === "failed" && (
-            <Badge variant="secondary" className="rounded-none text-[10px] text-red-400">
+            <Badge variant="secondary" className="rounded-none text-[10px] text-destructive">
               {saveMutation.error?.message ?? t("settings.provider_test_failed")}
             </Badge>
           )}

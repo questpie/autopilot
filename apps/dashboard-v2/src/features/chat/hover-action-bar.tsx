@@ -39,7 +39,7 @@ export function HoverActionBar({
 	const unpinMessage = useUnpinMessage(channelId ?? '')
 
 	return (
-		<div className="absolute -top-3 right-4 z-10 hidden items-center gap-0.5 rounded-md border border-border bg-background px-0.5 py-0.5 shadow-sm group-hover:flex">
+		<div className="absolute -top-3 right-4 z-10 hidden items-center gap-0.5 rounded-none border border-border bg-background px-0.5 py-0.5 shadow-sm group-hover:flex">
 			{onReact && (
 				<EmojiPicker
 					onSelect={(emoji) => onReact(message, emoji)}

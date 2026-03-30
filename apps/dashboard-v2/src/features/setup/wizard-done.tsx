@@ -73,7 +73,7 @@ export function WizardDone({ onFinish }: WizardDoneProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col items-center gap-3 text-center">
-        <CheckCircleIcon className="size-10 text-green-500" weight="fill" />
+        <CheckCircleIcon className="size-10 text-success" weight="fill" />
         <h2 className="font-heading text-lg font-semibold">
           {t("setup.done_title")}
         </h2>

@@ -85,7 +85,7 @@ const EVENT_ICONS: Record<SessionEventType, typeof BrainIcon> = {
 
 const TOOL_CATEGORY_STYLES: Record<string, string> = {
 	read: 'text-muted-foreground',
-	write: 'text-green-500',
+	write: 'text-success',
 	action: 'text-amber-500',
 }
 
@@ -121,7 +121,7 @@ export function SessionEventItem({ event, mode }: SessionEventItemProps) {
 	const iconColor = toolCategory
 		? TOOL_CATEGORY_STYLES[toolCategory]
 		: event.type === 'error'
-			? 'text-red-500'
+			? 'text-destructive'
 			: event.type === 'thinking'
 				? 'text-muted-foreground/60'
 				: 'text-foreground'
@@ -145,7 +145,7 @@ export function SessionEventItem({ event, mode }: SessionEventItemProps) {
 							variant="outline"
 							className={cn(
 								'text-[10px]',
-								toolCategory === 'write' && 'border-green-500/30 text-green-500',
+								toolCategory === 'write' && 'border-success/30 text-success',
 								toolCategory === 'action' && 'border-amber-500/30 text-amber-500',
 							)}
 						>
@@ -163,7 +163,7 @@ export function SessionEventItem({ event, mode }: SessionEventItemProps) {
 						className={cn(
 							'text-xs leading-relaxed',
 							event.type === 'thinking' && 'italic text-muted-foreground/70',
-							event.type === 'error' && 'text-red-400',
+							event.type === 'error' && 'text-destructive',
 							event.type === 'text' && 'text-foreground',
 							event.type === 'tool_result' && 'text-muted-foreground',
 						)}
@@ -208,7 +208,7 @@ function CompactEventItem({ event, timestamp }: { event: SessionEvent; timestamp
 	const iconColor = toolCategory
 		? TOOL_CATEGORY_STYLES[toolCategory]
 		: event.type === 'error'
-			? 'text-red-500'
+			? 'text-destructive'
 			: 'text-muted-foreground'
 
 	const summary =
@@ -226,7 +226,7 @@ function CompactEventItem({ event, timestamp }: { event: SessionEvent; timestamp
 				className={cn(
 					'truncate text-[11px]',
 					event.type === 'thinking' && 'italic text-muted-foreground/70',
-					event.type === 'error' && 'text-red-400',
+					event.type === 'error' && 'text-destructive',
 				)}
 			>
 				{summary}

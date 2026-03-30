@@ -17,16 +17,16 @@ import { cn } from "@/lib/utils"
 type PinType = "success" | "info" | "warning" | "error" | "progress"
 
 const PIN_COLORS: Record<PinType, string> = {
-  success: "text-green-500",
-  info: "text-blue-500",
+  success: "text-success",
+  info: "text-info",
   warning: "text-amber-500",
   error: "text-destructive",
   progress: "text-primary",
 }
 
 const PIN_BG: Record<PinType, string> = {
-  success: "border-green-500/20 bg-green-500/5",
-  info: "border-blue-500/20 bg-blue-500/5",
+  success: "border-success/20 bg-success/5",
+  info: "border-info/20 bg-info/5",
   warning: "border-amber-500/20 bg-amber-500/5",
   error: "border-destructive/20 bg-destructive/5",
   progress: "border-primary/20 bg-primary/5",

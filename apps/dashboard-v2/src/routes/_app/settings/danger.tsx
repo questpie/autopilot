@@ -111,7 +111,7 @@ function SettingsDangerPage() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 border-yellow-500/30 text-yellow-500 hover:bg-yellow-500/10 hover:text-yellow-400"
+              className="gap-1.5 border-warning/30 text-warning hover:bg-warning/10 hover:text-warning"
               onClick={() => setResetDialogOpen(true)}
             >
               <ArrowCounterClockwiseIcon size={14} />
@@ -142,7 +142,7 @@ function SettingsDangerPage() {
         <DialogContent className="rounded-none sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-heading text-sm">
-              <WarningIcon size={16} className="text-yellow-500" />
+              <WarningIcon size={16} className="text-warning" />
               {t("settings.danger_reset_button")}
             </DialogTitle>
             <DialogDescription className="text-xs">

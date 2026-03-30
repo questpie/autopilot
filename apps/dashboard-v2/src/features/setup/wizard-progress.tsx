@@ -22,7 +22,7 @@ export function WizardProgress() {
             className={cn(
               "size-2 transition-colors",
               isActive && "bg-primary",
-              isDone && !isSkip && "bg-green-500",
+              isDone && !isSkip && "bg-success",
               isSkip && "bg-muted-foreground/40",
               !isActive && !isDone && !isSkip && "bg-border",
             )}

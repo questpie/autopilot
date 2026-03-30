@@ -262,7 +262,7 @@ export function ConnectWizard({ integration, open, onOpenChange, onConnected }: 
 
           {step === 3 && (
             <div className="flex flex-col items-center gap-4 py-4">
-              <CheckCircleIcon size={32} weight="fill" className="text-green-500" />
+              <CheckCircleIcon size={32} weight="fill" className="text-success" />
               <span className="font-heading text-sm font-bold text-foreground">
                 {integration.name} {t("integrations.connected").toLowerCase()}
               </span>

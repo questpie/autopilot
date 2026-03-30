@@ -105,7 +105,7 @@ export function AgentDetail({ agentId, onClose: _onClose }: AgentDetailProps) {
                 size={8}
                 weight={isWorking ? "fill" : "regular"}
                 className={cn(
-                  isWorking ? "text-green-500" : "text-muted-foreground",
+                  isWorking ? "text-success" : "text-muted-foreground",
                   isWorking && "animate-pulse motion-reduce:animate-none",
                 )}
               />
@@ -156,7 +156,7 @@ export function AgentDetail({ agentId, onClose: _onClose }: AgentDetailProps) {
           className={cn(
             "flex items-center gap-2 border px-3 py-1.5 text-xs transition-colors",
             (agent as Record<string, unknown>).web_search
-              ? "border-green-500/30 bg-green-500/10 text-green-400"
+              ? "border-success/30 bg-success/10 text-success"
               : "border-border text-muted-foreground hover:border-primary/40",
           )}
         >
@@ -278,9 +278,9 @@ export function AgentDetail({ agentId, onClose: _onClose }: AgentDetailProps) {
                   variant="outline"
                   className={cn(
                     "shrink-0 text-[10px]",
-                    task.status === "done" && "border-green-500/30 text-green-500",
-                    task.status === "in_progress" && "border-blue-500/30 text-blue-500",
-                    task.status === "blocked" && "border-red-500/30 text-red-500",
+                    task.status === "done" && "border-success/30 text-success",
+                    task.status === "in_progress" && "border-info/30 text-info",
+                    task.status === "blocked" && "border-destructive/30 text-destructive",
                   )}
                 >
                   {task.status}

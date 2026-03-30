@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import dotenv from 'dotenv'
 import { AgentsFileSchema } from '@questpie/autopilot-spec'
 import { WorkflowSchema } from '@questpie/autopilot-spec'
 import type { Schedule } from '@questpie/autopilot-spec'
@@ -86,6 +87,13 @@ export class Orchestrator {
 		}
 
 		const root = this.options.companyRoot
+
+		// Load .env from company root (SMTP, API keys, etc.)
+		const envPath = join(root, '.env')
+		if (existsSync(envPath)) {
+			dotenv.config({ path: envPath, override: false })
+			logger.info('orchestrator', `loaded env from ${envPath}`)
+		}
 
 		// Configure DI container with company root
 		configureContainer(root)

@@ -77,7 +77,7 @@ export function ArtifactViewer({ artifactId }: ArtifactViewerProps) {
           </span>
           <Badge
             variant={isRunning ? "default" : "secondary"}
-            className={`rounded-none text-[9px] ${isRunning ? "bg-green-500/10 text-green-500" : ""}`}
+            className={`rounded-none text-[9px] ${isRunning ? "bg-success/10 text-success" : ""}`}
           >
             {isRunning ? t("artifacts.status_running") : t("artifacts.status_stopped")}
           </Badge>

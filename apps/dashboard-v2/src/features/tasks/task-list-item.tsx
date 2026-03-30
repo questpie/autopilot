@@ -23,17 +23,17 @@ interface TaskListItemProps {
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-muted-foreground",
   backlog: "bg-muted-foreground",
-  assigned: "bg-blue-500",
+  assigned: "bg-info",
   in_progress: "bg-primary",
   review: "bg-amber-500",
-  blocked: "bg-red-500",
-  done: "bg-green-500",
+  blocked: "bg-destructive",
+  done: "bg-success",
   cancelled: "bg-muted-foreground/50",
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  critical: "bg-red-500",
-  high: "bg-orange-500",
+  critical: "bg-destructive",
+  high: "bg-warning",
   medium: "bg-amber-500",
   low: "bg-muted-foreground",
 }

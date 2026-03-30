@@ -23,10 +23,10 @@ interface ReplyReferenceProps {
 function stringToColor(str: string): string {
   const colors = [
     "bg-primary/20 text-primary",
-    "bg-blue-500/20 text-blue-400",
-    "bg-green-500/20 text-green-400",
+    "bg-info/20 text-info",
+    "bg-success/20 text-success",
     "bg-amber-500/20 text-amber-400",
-    "bg-red-500/20 text-red-400",
+    "bg-destructive/20 text-destructive",
     "bg-cyan-500/20 text-cyan-400",
     "bg-violet-500/20 text-violet-400",
     "bg-pink-500/20 text-pink-400",

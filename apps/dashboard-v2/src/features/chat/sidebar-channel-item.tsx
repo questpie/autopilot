@@ -61,7 +61,7 @@ export const AgentChannelItem = memo(function AgentChannelItem({
 
       {/* Unread badge */}
       {typeof channel.metadata?.unread === "number" && channel.metadata.unread > 0 ? (
-        <span className="shrink-0 rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
+        <span className="shrink-0 rounded-none bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
           {channel.metadata.unread}
         </span>
       ) : null}
@@ -69,12 +69,12 @@ export const AgentChannelItem = memo(function AgentChannelItem({
       {/* Status dot */}
       <span className="shrink-0">
         {isWorking ? (
-          <CircleNotchIcon size={10} className="animate-spin text-yellow-400" />
+          <CircleNotchIcon size={10} className="animate-spin text-warning" />
         ) : (
           <CircleIcon
             size={8}
             weight="fill"
-            className="text-green-500/50"
+            className="text-success/50"
           />
         )}
       </span>
@@ -119,7 +119,7 @@ export const GroupChannelItem = memo(function GroupChannelItem({
         {channel.name}
       </span>
       {unreadCount > 0 ? (
-        <span className="shrink-0 rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
+        <span className="shrink-0 rounded-none bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
           {unreadCount}
         </span>
       ) : null}
@@ -142,9 +142,9 @@ export const TaskChannelItem = memo(function TaskChannelItem({
   const status = (channel.metadata?.status as string) ?? "unknown"
   const statusColor =
     status === "done" || status === "completed"
-      ? "text-green-500"
+      ? "text-success"
       : status === "in_progress"
-        ? "text-yellow-400"
+        ? "text-warning"
         : "text-muted-foreground/40"
 
   return (

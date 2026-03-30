@@ -81,8 +81,8 @@ export function InlineSessionPreview({ sessionId, onClose, compact = false }: In
           </span>
           <span className="font-mono text-[10px] text-muted-foreground/50">{sessionId.slice(0, 20)}...</span>
           {connected && (
-            <span className="flex items-center gap-1 text-[10px] text-green-500/70">
-              <span className="inline-block size-1.5 animate-pulse rounded-full bg-green-500/60" />
+            <span className="flex items-center gap-1 text-[10px] text-success/70">
+              <span className="inline-block size-1.5 animate-pulse rounded-full bg-success/60" />
               connected
             </span>
           )}
@@ -136,7 +136,7 @@ function SessionEventRow({ event }: { event: StreamEvent }) {
           onClick={() => setExpanded(!expanded)}
           className="flex w-full items-center gap-1.5 text-left text-[11px] text-muted-foreground hover:text-foreground"
         >
-          <CheckCircleIcon size={11} className="shrink-0 text-green-500/70" />
+          <CheckCircleIcon size={11} className="shrink-0 text-success/70" />
           <span className="font-mono">{event.tool}</span>
           {event.content && (
             <CaretRightIcon

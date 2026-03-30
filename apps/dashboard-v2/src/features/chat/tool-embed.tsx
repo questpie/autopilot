@@ -72,14 +72,14 @@ export interface ToolEmbedProps {
 
 const BORDER_COLORS: Record<ToolEmbedProps["status"], string> = {
   running: "border-l-primary",
-  completed: "border-l-green-500",
-  error: "border-l-red-500",
+  completed: "border-l-success",
+  error: "border-l-destructive",
 }
 
 const ICON_COLORS: Record<ToolEmbedProps["status"], string> = {
   running: "text-primary",
-  completed: "text-green-400",
-  error: "text-red-400",
+  completed: "text-success",
+  error: "text-destructive",
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ const ICON_COLORS: Record<ToolEmbedProps["status"], string> = {
 function StatusBadge({ status }: { status: ToolEmbedProps["status"] }) {
   if (status === "running") {
     return (
-      <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+      <span className="flex items-center gap-1 rounded-none bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
         <SpinnerGapIcon size={10} className="animate-spin" />
         running
       </span>
@@ -97,14 +97,14 @@ function StatusBadge({ status }: { status: ToolEmbedProps["status"] }) {
   }
   if (status === "completed") {
     return (
-      <span className="flex items-center gap-1 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-400">
+      <span className="flex items-center gap-1 rounded-none bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success">
         <CheckCircleIcon size={10} weight="fill" />
         completed
       </span>
     )
   }
   return (
-    <span className="flex items-center gap-1 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400">
+    <span className="flex items-center gap-1 rounded-none bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
       <XCircleIcon size={10} weight="fill" />
       error
     </span>
@@ -139,7 +139,7 @@ export const ToolEmbed = memo(function ToolEmbed({ tool, status, params, content
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-md border-l-[3px] bg-muted/10",
+        "overflow-hidden rounded-none border-l-[3px] bg-muted/10",
         BORDER_COLORS[status],
       )}
     >

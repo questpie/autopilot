@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react"
+import { m, AnimatePresence } from "framer-motion"
 import { CopyIcon, CheckIcon } from "@phosphor-icons/react"
 import { useTranslation } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -64,17 +65,28 @@ export function CodeViewFallback({ path, content }: { path: string; content: str
           onClick={handleCopy}
           className="h-5 gap-1 px-1.5 text-[10px]"
         >
-          {copied ? (
-            <>
-              <CheckIcon size={10} />
-              {t("common.copied")}
-            </>
-          ) : (
-            <>
-              <CopyIcon size={10} />
-              {t("common.copy")}
-            </>
-          )}
+          <AnimatePresence mode="wait" initial={false}>
+            <m.span
+              key={copied ? "check" : "copy"}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.15 }}
+              className="inline-flex items-center gap-1"
+            >
+              {copied ? (
+                <>
+                  <CheckIcon size={10} />
+                  {t("common.copied")}
+                </>
+              ) : (
+                <>
+                  <CopyIcon size={10} />
+                  {t("common.copy")}
+                </>
+              )}
+            </m.span>
+          </AnimatePresence>
         </Button>
       </div>
 

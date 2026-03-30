@@ -93,7 +93,7 @@ export const ReactionsRow = memo(function ReactionsRow({ channelId, messageId }:
                 type="button"
                 onClick={() => handleToggle(group.emoji, group.hasReacted)}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors",
+                  "inline-flex items-center gap-1 rounded-none border px-2 py-0.5 text-xs transition-colors",
                   group.hasReacted
                     ? "border-primary/50 bg-primary/10 text-foreground"
                     : "border-border bg-muted/30 text-muted-foreground hover:border-foreground/30 hover:text-foreground",

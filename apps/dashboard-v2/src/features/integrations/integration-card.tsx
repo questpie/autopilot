@@ -105,7 +105,7 @@ export function IntegrationCard({ integration, onConnect, onDisconnect, onTest }
           </div>
         </div>
         {integration.connected ? (
-          <Badge variant="outline" className="gap-1 rounded-none text-[9px] text-green-500">
+          <Badge variant="outline" className="gap-1 rounded-none text-[9px] text-success">
             <CheckCircleIcon size={10} weight="fill" />
             {t("integrations.connected")}
           </Badge>

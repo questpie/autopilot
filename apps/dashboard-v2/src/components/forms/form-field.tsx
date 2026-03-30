@@ -1,4 +1,5 @@
 import { useFormContext, Controller } from "react-hook-form"
+import { m, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 
 interface FormFieldProps {
@@ -56,14 +57,20 @@ export function FormField({
             aria-invalid={!!fieldState.error}
             aria-describedby={fieldState.error ? `${name}-error` : undefined}
           />
-          {fieldState.error && (
-            <p
-              id={`${name}-error`}
-              className="text-xs text-destructive"
-            >
-              {fieldState.error.message}
-            </p>
-          )}
+          <AnimatePresence>
+            {fieldState.error && (
+              <m.p
+                id={`${name}-error`}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+                className="text-xs text-destructive"
+              >
+                {fieldState.error.message}
+              </m.p>
+            )}
+          </AnimatePresence>
         </div>
       )}
     />

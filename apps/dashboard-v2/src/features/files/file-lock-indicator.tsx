@@ -19,9 +19,9 @@ export function FileLockIndicator({ lockedBy, expiresAt }: FileLockIndicatorProp
   const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
 
   return (
-    <div className="flex items-center gap-2 border-b border-yellow-500/30 bg-yellow-500/10 px-4 py-2">
-      <LockIcon size={14} className="shrink-0 text-yellow-500" />
-      <span className="font-heading text-xs text-yellow-500">
+    <div className="flex items-center gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2">
+      <LockIcon size={14} className="shrink-0 text-warning" />
+      <span className="font-heading text-xs text-warning">
         {t("files.locked_by", { agent: lockedBy, seconds: remainingSeconds })}
       </span>
     </div>

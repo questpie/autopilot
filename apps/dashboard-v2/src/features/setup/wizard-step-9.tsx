@@ -89,9 +89,9 @@ export function WizardStep9({ onComplete, onBack, onSkip }: WizardStep9Props) {
           {connectedRepos.map((repo, i) => (
             <div
               key={`${repo}-${i}`}
-              className="flex items-center gap-2 border border-green-500/30 bg-green-500/5 px-3 py-2"
+              className="flex items-center gap-2 border border-success/30 bg-success/5 px-3 py-2"
             >
-              <GitBranchIcon className="size-3.5 text-green-500" />
+              <GitBranchIcon className="size-3.5 text-success" />
               <span className="font-heading text-xs">{repo}</span>
             </div>
           ))}

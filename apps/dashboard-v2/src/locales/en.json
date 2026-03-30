@@ -61,7 +61,9 @@
     "password_strength_weak": "Weak",
     "password_strength_fair": "Fair",
     "password_strength_good": "Good",
-    "password_strength_strong": "Strong"
+    "password_strength_strong": "Strong",
+    "email_verified_success": "Email verified! You can now sign in.",
+    "back_to_login": "Back to sign in"
   },
   "tasks": {
     "title": "Tasks",
@@ -757,6 +759,16 @@
     "finish": "Finish setup",
     "step_1_title": "Create Owner Account",
     "step_1_description": "Create your owner account. This is the first user with full access.",
+    "step_1_verify_title": "Verify Your Email",
+    "step_1_verify_description": "Before continuing, you need to verify your email address.",
+    "step_1_verify_sent_to": "We sent a verification link to {{email}}. Click the link to verify your account.",
+    "step_1_verify_console_hint": "No email received? If SMTP is not configured, the verification link is printed in the server console (terminal where you started Autopilot).",
+    "step_1_verify_resend": "Resend",
+    "step_1_verify_resent": "Verification email resent",
+    "step_1_verify_resend_failed": "Failed to resend verification email",
+    "step_1_verify_done": "I've verified my email",
+    "step_1_verify_checking": "Checking…",
+    "step_1_verify_not_yet": "Email not verified yet. Please click the verification link first.",
     "step_2_title": "Secure Your Account",
     "step_2_description": "2FA is required for owner accounts.",
     "step_2_scan_qr": "Scan with your authenticator app",

@@ -8,11 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
 import { SquareBuildLogo } from "@/components/brand"
-import { EyeIcon, EyeSlashIcon, WarningCircleIcon } from "@phosphor-icons/react"
-import { useReducer, useRef, useCallback, useEffect } from "react"
+import { EyeIcon, EyeSlashIcon, WarningCircleIcon, EnvelopeSimpleIcon, ArrowCounterClockwiseIcon, TerminalWindowIcon } from "@phosphor-icons/react"
+import { useReducer, useRef, useCallback, useEffect, useState } from "react"
+import { useQuery, useMutation } from "@tanstack/react-query"
+import { useDeploymentMode } from "@/hooks/use-deployment-mode"
 import { m, AnimatePresence } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { toast } from "sonner"
 
 const loginSchema = z.object({
   email: z.email("Invalid email address"),
@@ -88,6 +91,105 @@ function loginReducer(state: LoginState, action: LoginAction): LoginState {
   }
 }
 
+function EmailVerificationScreen({ email, onBack }: { email: string; onBack: () => void }) {
+  const { t } = useTranslation()
+  const router = useRouter()
+  const { data: deploymentMode } = useDeploymentMode()
+
+  // Poll session every 5s — auto-navigate when verified
+  const { error: checkError, refetch, isFetching: isChecking } = useQuery({
+    queryKey: ["login-email-verification-poll", email],
+    queryFn: async () => {
+      const session = await authClient.getSession()
+      if (session.data?.user) {
+        void router.invalidate().then(() => router.navigate({ to: "/" }))
+        return true
+      }
+      throw new Error("not_verified")
+    },
+    refetchInterval: 5000,
+    retry: false,
+  })
+
+  const resend = useMutation({
+    mutationFn: () => authClient.sendVerificationEmail({ email }),
+    onSuccess: () => toast.success(t("setup.step_1_verify_resent")),
+    onError: () => toast.error(t("setup.step_1_verify_resend_failed")),
+  })
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex justify-center">
+        <SquareBuildLogo size={48} />
+      </div>
+
+      <div className="text-center">
+        <h2 className="font-heading text-lg font-semibold">
+          {t("setup.step_1_verify_title")}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {t("setup.step_1_verify_description")}
+        </p>
+      </div>
+
+      <div className="flex flex-col items-center gap-4 py-4">
+        <div className="flex size-14 items-center justify-center rounded-none bg-primary/10">
+          <EnvelopeSimpleIcon className="size-7 text-primary" />
+        </div>
+        <p className="text-center text-sm">
+          {t("setup.step_1_verify_sent_to", { email })}
+        </p>
+      </div>
+
+      {checkError && (
+        <Alert variant="destructive">
+          <WarningCircleIcon className="size-4" />
+          <AlertDescription>{t("setup.step_1_verify_not_yet")}</AlertDescription>
+        </Alert>
+      )}
+
+      {deploymentMode && deploymentMode !== "cloud" && (
+        <Alert>
+          <TerminalWindowIcon className="size-4" />
+          <AlertDescription>
+            {t("setup.step_1_verify_console_hint")}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          loading={resend.isPending}
+          onClick={() => resend.mutate()}
+        >
+          <ArrowCounterClockwiseIcon className="size-4" />
+          {t("setup.step_1_verify_resend")}
+        </Button>
+        <Button
+          type="button"
+          size="lg"
+          className="flex-1"
+          loading={isChecking}
+          onClick={() => void refetch()}
+        >
+          {t("setup.step_1_verify_done")}
+        </Button>
+      </div>
+
+      <button
+        type="button"
+        className="text-xs text-muted-foreground hover:text-foreground"
+        onClick={onBack}
+      >
+        {t("auth.back_to_login")}
+      </button>
+    </div>
+  )
+}
+
 function LoginPage() {
   "use no memo"
   const { t } = useTranslation()
@@ -96,6 +198,7 @@ function LoginPage() {
   const redirect = search.redirect
 
   const [state, dispatch] = useReducer(loginReducer, loginInitialState)
+  const [verifyEmail, setVerifyEmail] = useState<string | null>(null)
 
   const { showPassword, error, showError, failCount, rateLimitCountdown } = state
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -134,6 +237,13 @@ function LoginPage() {
     })
 
     if (result.error) {
+      // Detect "email not verified" and switch to verification flow
+      const msg = result.error.message?.toLowerCase() ?? ""
+      if (msg.includes("email") && msg.includes("verified")) {
+        setVerifyEmail(values.email)
+        return
+      }
+
       const shouldRateLimit = failCount + 1 >= 10
       dispatch({
         type: "SUBMIT_FAIL",
@@ -159,6 +269,10 @@ function LoginPage() {
   }
 
   const isRateLimited = rateLimitCountdown > 0
+
+  if (verifyEmail) {
+    return <EmailVerificationScreen email={verifyEmail} onBack={() => setVerifyEmail(null)} />
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -223,11 +337,19 @@ function LoginPage() {
                 emailInputRef.current = el
               }}
             />
-            {form.formState.errors.email && (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.email.message}
-              </p>
-            )}
+            <AnimatePresence>
+              {form.formState.errors.email && (
+                <m.p
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="text-xs text-destructive"
+                >
+                  {form.formState.errors.email.message}
+                </m.p>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Password */}
@@ -252,18 +374,32 @@ function LoginPage() {
                 onClick={() => dispatch({ type: "TOGGLE_PASSWORD" })}
                 aria-label={showPassword ? t("a11y.hide_password") : t("a11y.show_password")}
               >
-                {showPassword ? (
-                  <EyeSlashIcon className="size-4" />
-                ) : (
-                  <EyeIcon className="size-4" />
-                )}
+                <AnimatePresence mode="wait" initial={false}>
+                  <m.span
+                    key={showPassword ? "hide" : "show"}
+                    initial={{ opacity: 0, rotate: -90 }}
+                    animate={{ opacity: 1, rotate: 0 }}
+                    exit={{ opacity: 0, rotate: 90 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    {showPassword ? <EyeSlashIcon className="size-4" /> : <EyeIcon className="size-4" />}
+                  </m.span>
+                </AnimatePresence>
               </button>
             </div>
-            {form.formState.errors.password && (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.password.message}
-              </p>
-            )}
+            <AnimatePresence>
+              {form.formState.errors.password && (
+                <m.p
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="text-xs text-destructive"
+                >
+                  {form.formState.errors.password.message}
+                </m.p>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Submit */}

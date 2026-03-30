@@ -55,7 +55,7 @@ export const ImageLightbox = memo(function ImageLightbox({ src, alt, onClose }: 
         ref={closeButtonRef}
         type="button"
         onClick={onClose}
-        className="absolute right-4 top-4 z-10 flex size-8 items-center justify-center rounded-full bg-white/10 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+        className="absolute right-4 top-4 z-10 flex size-8 items-center justify-center bg-white/10 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
         aria-label="Close"
       >
         <XIcon size={18} />

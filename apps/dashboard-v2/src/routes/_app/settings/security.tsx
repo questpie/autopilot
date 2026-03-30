@@ -44,7 +44,7 @@ function SettingsSecurityPage() {
             </div>
             <div className="flex items-center gap-2">
               {is2FA ? (
-                <Badge variant="secondary" className="rounded-none text-[10px] text-green-400">
+                <Badge variant="secondary" className="rounded-none text-[10px] text-success">
                   {t("settings.tfa_enabled")}
                 </Badge>
               ) : (

@@ -9,10 +9,12 @@ import { Spinner } from "@/components/ui/spinner"
 import {
   WarningCircleIcon,
   CopyIcon,
+  CheckIcon,
   DownloadSimpleIcon,
   ArrowLeftIcon,
 } from "@phosphor-icons/react"
 import { useState, useRef, useCallback } from "react"
+import { m, AnimatePresence } from "framer-motion"
 import { useWizardState } from "./use-wizard-state"
 import { toast } from "sonner"
 
@@ -34,6 +36,7 @@ export function WizardStep2({ onComplete, onBack }: WizardStep2Props) {
   const [savedBackup, setSavedBackup] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [copiedKey, setCopiedKey] = useState(false)
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
@@ -225,10 +228,23 @@ export function WizardStep2({ onComplete, onBack }: WizardStep2Props) {
                 onClick={() => {
                   void navigator.clipboard.writeText(manualKey)
                   toast.success(t("common.copied"))
+                  setCopiedKey(true)
+                  setTimeout(() => setCopiedKey(false), 2000)
                 }}
                 className="text-muted-foreground hover:text-foreground"
               >
-                <CopyIcon className="size-3.5" />
+                <AnimatePresence mode="wait" initial={false}>
+                  <m.span
+                    key={copiedKey ? "check" : "copy"}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.15 }}
+                    className="inline-flex"
+                  >
+                    {copiedKey ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+                  </m.span>
+                </AnimatePresence>
               </button>
             </div>
           )}

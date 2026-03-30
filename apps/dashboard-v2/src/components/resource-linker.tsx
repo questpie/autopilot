@@ -24,10 +24,10 @@ const RESOURCE_ICONS: Record<ResourceType, Icon> = {
 
 const RESOURCE_COLORS: Record<ResourceType, string> = {
   task: "bg-primary/10 text-primary border-primary/20",
-  agent: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  agent: "bg-info/10 text-info border-info/20",
   file: "bg-muted text-muted-foreground border-border",
-  channel: "bg-green-500/10 text-green-500 border-green-500/20",
-  pr: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  channel: "bg-success/10 text-success border-success/20",
+  pr: "bg-primary/10 text-primary border-primary/20",
   artifact: "bg-amber-500/10 text-amber-500 border-amber-500/20",
 }
 

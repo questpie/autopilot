@@ -28,7 +28,7 @@ export function ArtifactCard({ artifact, view }: ArtifactCardProps) {
       >
         <div className="flex size-8 items-center justify-center bg-muted">
           {isRunning ? (
-            <PlayIcon size={14} weight="fill" className="text-green-500" />
+            <PlayIcon size={14} weight="fill" className="text-success" />
           ) : (
             <StopIcon size={14} className="text-muted-foreground" />
           )}
@@ -45,7 +45,7 @@ export function ArtifactCard({ artifact, view }: ArtifactCardProps) {
           variant={isRunning ? "default" : "secondary"}
           className={cn(
             "rounded-none text-[9px]",
-            isRunning && "bg-green-500/10 text-green-500",
+            isRunning && "bg-success/10 text-success",
           )}
         >
           {isRunning ? t("artifacts.status_running") : t("artifacts.status_stopped")}
@@ -58,12 +58,12 @@ export function ArtifactCard({ artifact, view }: ArtifactCardProps) {
     <Link
       to="/artifacts/$id"
       params={{ id: artifact.id }}
-      className="group flex flex-col border border-border transition-all duration-200 hover:-translate-y-1 hover:border-foreground/20 hover:shadow-sm"
+      className="group flex flex-col border border-border transition-all duration-150 ease-out hover:-translate-y-1 hover:border-primary"
     >
       {/* Thumbnail area (16:10 ratio) */}
       <div className="relative flex aspect-[16/10] items-center justify-center bg-muted/30 transition-transform duration-200 group-hover:scale-[1.02]">
         {isRunning ? (
-          <PlayIcon size={24} weight="fill" className="text-green-500/50" />
+          <PlayIcon size={24} weight="fill" className="text-success/50" />
         ) : (
           <StopIcon size={24} className="text-muted-foreground/30" />
         )}
@@ -72,7 +72,7 @@ export function ArtifactCard({ artifact, view }: ArtifactCardProps) {
           variant={isRunning ? "default" : "secondary"}
           className={cn(
             "absolute right-2 top-2 rounded-none text-[9px]",
-            isRunning && "bg-green-500/10 text-green-500",
+            isRunning && "bg-success/10 text-success",
           )}
         >
           {isRunning ? t("artifacts.status_running") : t("artifacts.status_stopped")}

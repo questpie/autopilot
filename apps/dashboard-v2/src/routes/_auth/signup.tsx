@@ -60,8 +60,8 @@ function PasswordStrengthMeter({ score }: { score: number }) {
     "bg-destructive",
     "bg-destructive",
     "bg-amber-500",
-    "bg-green-500",
-    "bg-emerald-400",
+    "bg-success",
+    "bg-success",
   ] as const
 
   return (

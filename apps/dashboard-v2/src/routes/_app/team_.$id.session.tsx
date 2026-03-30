@@ -55,8 +55,8 @@ function LiveSessionPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <CircleIcon size={8} weight="fill" className="animate-pulse text-green-500 motion-reduce:animate-none" />
-            <span className="font-heading text-[10px] font-medium text-green-500">
+            <CircleIcon size={8} weight="fill" className="animate-pulse text-success motion-reduce:animate-none" />
+            <span className="font-heading text-[10px] font-medium text-success">
               {t("team.session_live")}
             </span>
           </div>

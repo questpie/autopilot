@@ -4,6 +4,7 @@ import { z } from "zod"
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { EyeIcon, EyeSlashIcon, PlusIcon } from "@phosphor-icons/react"
+import { m, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
@@ -125,12 +126,32 @@ export function SecretAddDialog({ open, onOpenChange }: SecretAddDialogProps) {
                       onClick={() => setShowValue(!showValue)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     >
-                      {showValue ? <EyeSlashIcon size={14} /> : <EyeIcon size={14} />}
+                      <AnimatePresence mode="wait" initial={false}>
+                        <m.span
+                          key={showValue ? "hide" : "show"}
+                          initial={{ opacity: 0, rotate: -90 }}
+                          animate={{ opacity: 1, rotate: 0 }}
+                          exit={{ opacity: 0, rotate: 90 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          {showValue ? <EyeSlashIcon size={14} /> : <EyeIcon size={14} />}
+                        </m.span>
+                      </AnimatePresence>
                     </button>
                   </div>
-                  {fieldState.error && (
-                    <p className="text-xs text-destructive">{fieldState.error.message}</p>
-                  )}
+                  <AnimatePresence>
+                    {fieldState.error && (
+                      <m.p
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.15 }}
+                        className="text-xs text-destructive"
+                      >
+                        {fieldState.error.message}
+                      </m.p>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
             />
