@@ -19,13 +19,24 @@ const inbox = new Hono<AppEnv>().get(
 	}),
 	async (c) => {
 		const storage = c.get('storage')
+		const actor = c.get('actor')
 
 		const db = c.get('db')
-		const [reviewTasks, blockedTasks, allPins] = await Promise.all([
+		let [reviewTasks, blockedTasks, allPins] = await Promise.all([
 			storage.listTasks({ status: 'review' }).catch(() => []),
 			storage.listTasks({ status: 'blocked' }).catch(() => []),
 			listPins(db).catch(() => []),
 		])
+
+		// Non-admin/owner users only see tasks assigned to or created by them
+		if (actor && actor.role !== 'admin' && actor.role !== 'owner') {
+			reviewTasks = reviewTasks.filter(
+				(t) => t.assigned_to === actor.id || t.created_by === actor.id,
+			)
+			blockedTasks = blockedTasks.filter(
+				(t) => t.assigned_to === actor.id || t.created_by === actor.id,
+			)
+		}
 
 		const actionPins = allPins.filter(
 			(p) => p.metadata?.actions && p.metadata.actions.length > 0,

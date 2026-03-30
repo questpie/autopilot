@@ -7,6 +7,30 @@ import { resolver } from 'hono-openapi'
 import { OkResponseSchema } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
 
+// ── Per-user daily upload quota ──────────────────────────────────────
+const DAILY_QUOTA_BYTES = 100 * 1024 * 1024 // 100 MB
+const uploadTracker = new Map<string, { bytes: number; resetAt: number }>()
+
+function checkUploadQuota(actorId: string, fileSize: number): boolean {
+	const now = Date.now()
+	const entry = uploadTracker.get(actorId)
+
+	if (!entry || now > entry.resetAt) {
+		uploadTracker.set(actorId, {
+			bytes: fileSize,
+			resetAt: now + 24 * 60 * 60 * 1000,
+		})
+		return true
+	}
+
+	if (entry.bytes + fileSize > DAILY_QUOTA_BYTES) {
+		return false
+	}
+
+	entry.bytes += fileSize
+	return true
+}
+
 const upload = new Hono<AppEnv>().post(
 	'/',
 	describeRoute({
@@ -19,6 +43,7 @@ const upload = new Hono<AppEnv>().post(
 			},
 			400: { description: 'No file provided' },
 			403: { description: 'Forbidden — path traversal' },
+			429: { description: 'Daily upload quota exceeded' },
 		},
 	}),
 	async (c) => {
@@ -28,6 +53,13 @@ const upload = new Hono<AppEnv>().post(
 		const targetDir = (formData.get('path') as string) ?? ''
 
 		if (!file) return c.json({ error: 'no file provided' }, 400)
+
+		// ── Per-user daily upload quota check ────────────────────────────
+		const actor = c.get('actor')
+		const actorId = actor?.id ?? 'anonymous'
+		if (!checkUploadQuota(actorId, file.size)) {
+			return c.json({ error: 'daily upload quota exceeded (100 MB)' }, 429)
+		}
 
 		// ── File size check (50 MB max) ──────────────────────────────────
 		const MAX_FILE_SIZE = 50 * 1024 * 1024

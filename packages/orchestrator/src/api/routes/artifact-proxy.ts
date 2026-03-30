@@ -20,10 +20,20 @@ const HOP_BY_HOP = new Set([
 	'host',
 ])
 
+/** Auth / identity headers that must be stripped before proxying upstream. */
+const STRIP_HEADERS = new Set([
+	'authorization',
+	'cookie',
+	'x-api-key',
+	'x-forwarded-for',
+	'x-real-ip',
+])
+
 function filterRequestHeaders(headers: Headers): Headers {
 	const filtered = new Headers()
 	for (const [key, value] of headers.entries()) {
-		if (!HOP_BY_HOP.has(key.toLowerCase())) {
+		const lower = key.toLowerCase()
+		if (!HOP_BY_HOP.has(lower) && !STRIP_HEADERS.has(lower)) {
 			filtered.set(key, value)
 		}
 	}

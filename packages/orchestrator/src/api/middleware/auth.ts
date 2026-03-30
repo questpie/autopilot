@@ -5,9 +5,13 @@
  */
 import { createMiddleware } from 'hono/factory'
 import { logAudit } from '../../auth/audit'
+import { loadMasterKey } from '../../auth/crypto'
 import { getRequiredPermission, resolveActor } from '../../auth/middleware'
 import { checkPermission } from '../../auth/roles'
 import type { AppEnv } from '../app'
+
+/** Cached master key — loaded once on first use. */
+let _masterKey: CryptoKey | null = null
 
 /**
  * Factory that returns a Hono middleware performing:
@@ -50,11 +54,17 @@ export function authMiddleware() {
 			return c.json({ error: 'Unauthorized' }, 401)
 		}
 
+		// Lazy-load master key for audit encryption
+		const companyRoot = c.get('companyRoot')
+		if (!_masterKey) {
+			_masterKey = await loadMasterKey(companyRoot)
+		}
+
 		// Permission check
 		const required = getRequiredPermission(path, c.req.method)
 
 		if (required && !checkPermission(actor, required.resource, required.action)) {
-			await logAudit(c.get('companyRoot'), {
+			await logAudit(companyRoot, {
 				ts: new Date().toISOString(),
 				actor: actor.id,
 				actor_type: actor.type,
@@ -63,7 +73,7 @@ export function authMiddleware() {
 				source: actor.source,
 				ip: actor.ip,
 				result: 'denied',
-			})
+			}, _masterKey)
 			return c.json({ error: 'Forbidden' }, 403)
 		}
 
@@ -71,7 +81,7 @@ export function authMiddleware() {
 
 		// Audit successful requests that required permissions
 		if (required) {
-			await logAudit(c.get('companyRoot'), {
+			await logAudit(companyRoot, {
 				ts: new Date().toISOString(),
 				actor: actor.id,
 				actor_type: actor.type,
@@ -80,7 +90,7 @@ export function authMiddleware() {
 				source: actor.source,
 				ip: actor.ip,
 				result: 'success',
-			})
+			}, _masterKey)
 		}
 	})
 }

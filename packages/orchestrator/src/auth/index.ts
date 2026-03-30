@@ -14,6 +14,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { hashPassword, verifyPassword } from 'better-auth/crypto'
 import { eq } from 'drizzle-orm'
+import { logger } from '../logger'
 
 const PASSWORD_COMPLEXITY_RE = /^(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/
 
@@ -56,6 +57,11 @@ export async function createAuth(db: AutopilotDb, companyRoot: string) {
 		emailAndPassword: {
 			enabled: true,
 			minPasswordLength: 12,
+			requireEmailVerification: true,
+			sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+				// TODO: integrate real email transport (SMTP / SES / Resend)
+				logger.info('auth', `Verification email for ${user.email}: ${url}`)
+			},
 			password: {
 				hash: async (password: string) => {
 					validatePasswordComplexity(password)
