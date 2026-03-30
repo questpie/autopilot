@@ -257,12 +257,9 @@ function LoginPage() {
       return
     }
 
-    const needs2FA = (result.data as Record<string, unknown>)?.twoFactorRedirect === true
-    const target = needs2FA
-      ? "/login/2fa"
-      : isValidRedirect(redirect) ? redirect : "/"
-
-    await router.navigate({ to: target })
+    // 2FA redirect is handled globally by twoFactorClient({ onTwoFactorRedirect })
+    // If we get here, sign-in is complete — navigate to dashboard
+    await router.navigate({ to: isValidRedirect(redirect) ? redirect : "/" })
   }
 
   const isRateLimited = rateLimitCountdown > 0

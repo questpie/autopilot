@@ -4,5 +4,11 @@ import { API_BASE } from "./api"
 
 export const authClient = createAuthClient({
   baseURL: API_BASE,
-  plugins: [twoFactorClient()],
+  plugins: [
+    twoFactorClient({
+      onTwoFactorRedirect() {
+        window.location.href = "/login/2fa"
+      },
+    }),
+  ],
 })
