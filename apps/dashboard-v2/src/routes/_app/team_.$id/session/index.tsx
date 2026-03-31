@@ -7,7 +7,7 @@ import { useTranslation } from "@/lib/i18n"
 import { agentDetailQuery } from "@/features/team/team.queries"
 import { SessionView } from "@/features/team/session-view"
 
-export const Route = createFileRoute("/_app/team_/$id/session")({
+export const Route = createFileRoute("/_app/team_/$id/session/")({
   component: LiveSessionPage,
   loader: async ({ context, params }) => {
     await context.queryClient.ensureQueryData(agentDetailQuery(params.id))

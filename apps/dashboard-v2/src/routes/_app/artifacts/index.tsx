@@ -3,7 +3,7 @@ import { useTranslation } from "@/lib/i18n"
 import { ArtifactGallery } from "@/features/artifacts/artifact-gallery"
 import { PageTransition } from "@/components/layouts/page-transition"
 
-export const Route = createFileRoute("/_app/artifacts")({
+export const Route = createFileRoute("/_app/artifacts/")({
   component: ArtifactsPage,
 })
 

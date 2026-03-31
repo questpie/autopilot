@@ -34,7 +34,7 @@ function isValidRedirect(url: string | undefined): url is string {
   return url.startsWith('/') && !url.startsWith('//')
 }
 
-export const Route = createFileRoute("/_auth/login")({
+export const Route = createFileRoute("/_auth/login/")({
   component: LoginPage,
   validateSearch: loginSearchSchema,
 })

@@ -9,7 +9,7 @@ import { authClient } from "@/lib/auth"
 import { Badge } from "@/components/ui/badge"
 import { SettingsPageHeader } from "@/features/settings/settings-page-header"
 
-export const Route = createFileRoute("/_app/settings/security")({
+export const Route = createFileRoute("/_app/settings/security/")({
   component: SettingsSecurityPage,
 })
 
