@@ -18,13 +18,13 @@ export const Route = createFileRoute('/')({
 			{
 				name: 'description',
 				content:
-					'Filesystem-native operating system where AI agents run your company through unified tools, human approval gates, and a self-evolving dashboard. Zero infrastructure. Open source.',
+					'Workflow-native operating system where AI agents execute scoped steps, the app enforces runtime state, and humans approve at gates. Zero infrastructure. Open source.',
 			},
 			{ property: 'og:title', content: 'QUESTPIE Autopilot — Agents That Act, Not Chat' },
 			{
 				property: 'og:description',
 				content:
-					'Filesystem-native operating system where AI agents run your company through unified tools, human approval gates, and a self-evolving dashboard. Zero infrastructure. Open source.',
+					'Workflow-native operating system where AI agents execute scoped steps, the app enforces runtime state, and humans approve at gates. Zero infrastructure. Open source.',
 			},
 			{ property: 'og:type', content: 'website' },
 			{ property: 'og:url', content: 'https://autopilot.questpie.com' },
@@ -54,7 +54,7 @@ function LandingPage() {
 					</h1>
 					<p className="font-sans text-base sm:text-[20px] text-lp-muted mt-5 font-light leading-relaxed max-w-[640px] mx-auto text-center">
 						AI agents that don't chat -- they act. Unified tools create tasks, write code, deploy
-						services, and build dashboards. You approve the results.
+						services, and build dashboards. Workflows carry the journey. You approve the gates.
 					</p>
 					<div className="mt-8 flex gap-2 flex-wrap justify-center">
 						<Tag>OPEN SOURCE</Tag>
@@ -150,7 +150,7 @@ autopilot attach max`}
 				<Section id="what">
 					<SectionHeader
 						num="02"
-						sub="You give a high-level intent. Your AI team decomposes it, plans it, implements it, reviews it, and deploys it. You approve at gates. The agent builds a pricing page and you see it running before it ships."
+						sub="You give a high-level intent. Autopilot compiles it into workflows, tracks execution in runtime state, and routes each scoped step to the right agent. You approve at gates."
 					>
 						What is Autopilot?
 					</SectionHeader>
@@ -185,7 +185,7 @@ You'll be notified when approvals are needed.`}
 						This isn't a chatbot. It's a company. Sam writes the spec. Alex plans the
 						implementation. Max codes it. Riley reviews it. You merge. Ops deploys. Morgan
 						announces. Each agent has persistent memory, scoped filesystem access, and communicates
-						through unified tools -- not natural language.
+						through unified tools -- but the app owns workflow state, validation, and advancement.
 					</p>
 				</Section>
 
@@ -610,7 +610,7 @@ pin({
 				<Section id="arch">
 					<SectionHeader
 						num="09"
-						sub="Single Bun process. One SQLite file. No Docker, no Postgres, no Redis. The entire company runs as files you can ls, grep, back up with cp, and fork with git clone."
+						sub="Single Bun process. One SQLite file. No Docker, no Postgres, no Redis. Files define the company. SQLite runs the company. Durable streams replay the timeline."
 					>
 						Architecture
 					</SectionHeader>
@@ -630,7 +630,7 @@ pin({
 				<Section id="fs">
 					<SectionHeader
 						num="10"
-						sub="YAML for config and knowledge. SQLite for tasks, messages, sessions, and search. FTS5 + libSQL native vectors for unified search. Everything git-tracked except the database."
+						sub="YAML for authored config and knowledge. SQLite for runtime control state. Durable streams for replay timelines. FTS5 + libSQL native vectors for unified search."
 					>
 						Filesystem + SQLite Hybrid
 					</SectionHeader>
@@ -668,9 +668,10 @@ dashboard/                   # Living dashboard
   widgets/
   pages/
   pins/
-.data/autopilot.db           # SQLite database
+.data/autopilot.db           # SQLite runtime database
 # DB tables: tasks, messages, activity,
-# agent_sessions, search_index
+# agent_sessions, workflow_runs,
+# step_runs, search_index
 # FTS5 + libSQL native vectors for unified search`}
 						</CodeBlock>
 						<div className="flex flex-col gap-4">
@@ -679,17 +680,21 @@ dashboard/                   # Living dashboard
 									HYBRID STORAGE
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
-									YAML for config and knowledge. SQLite for tasks, messages, activity, sessions, and
-									search.
+									YAML defines authored structure. SQLite holds runtime control state. Durable
+									streams capture replay timelines.
 								</div>
 								{[
 									{
 										label: 'YAML',
-										desc: 'Config, knowledge, memory, skills',
+										desc: 'Config, workflow definitions, knowledge, memory, skills',
 									},
 									{
 										label: 'SQLite',
-										desc: 'Tasks, messages, activity, sessions, search',
+										desc: 'Tasks, messages, activity, sessions, workflow runs, step runs, search',
+									},
+									{
+										label: 'Streams',
+										desc: 'Live tails and replay timelines',
 									},
 								].map((s) => (
 									<div key={s.label} className="flex items-center gap-2 py-1.5">
@@ -836,7 +841,7 @@ patterns:
 				<Section id="workflows">
 					<SectionHeader
 						num="12"
-						sub="YAML files in the filesystem. CEO agent owns them. Anyone can propose changes. They evolve based on metrics."
+						sub="Workflow YAML stays in the filesystem, but execution state lives in the app. The file defines the route. SQLite records the run."
 					>
 						Workflows as Files
 					</SectionHeader>
@@ -846,26 +851,32 @@ version: 3
 
 steps:
   - id: scope
+    executor: { kind: agent, role: strategist, model_policy: smart-plan }
     assigned_role: strategist
     transitions: { done: plan }
 
   - id: plan
+    executor: { kind: agent, role: planner, model_policy: smart-plan }
     assigned_role: planner
-    review: { reviewers_roles: [developer, reviewer], min_approvals: 2 }
+    validate: { mode: review, reviewers_roles: [developer, reviewer], min_approvals: 2 }
     transitions: { approved: implement, rejected: plan }
 
   - id: implement
+    executor: { kind: agent, role: developer, model_policy: cheap-execute }
     assigned_role: developer
-    outputs: [{ type: git_branch }, { type: git_pr }]
+    validate: { mode: auto }
+    on_fail: { action: escalate, model_policy: smart-review }
     transitions: { done: code_review }
 
   - id: code_review
+    executor: { kind: agent, role: reviewer, model_policy: smart-review }
     assigned_role: reviewer
-    review: { min_approvals: 1 }
+    validate: { mode: review, min_approvals: 1 }
     transitions: { approved: human_merge, rejected: implement }
 
   - id: human_merge
     type: human_gate              # YOU approve here
+    executor: { kind: human, gate: merge }
     gate: merge
     transitions: { approved: deploy, rejected: implement }
 

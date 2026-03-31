@@ -214,7 +214,16 @@ describe('isTerminal', () => {
 	})
 
 	it('returns true when terminal flag is set', () => {
-		expect(isTerminal({ id: 'x', type: 'agent', terminal: true, description: '', auto_execute: false, transitions: {} })).toBe(true)
+		expect(
+			isTerminal({
+				id: 'x',
+				type: 'agent',
+				terminal: true,
+				description: '',
+				auto_execute: false,
+				transitions: {},
+			}),
+		).toBe(true)
 	})
 })
 
@@ -307,6 +316,41 @@ describe('evaluateTransition', () => {
 		expect(result.assignTo).toBe('agent-devops')
 	})
 
+	it('returns spawn_workflow for sub-workflow steps', () => {
+		const workflowWithSubflow: Workflow = {
+			...testWorkflow,
+			steps: [
+				{
+					id: 'design',
+					type: 'sub_workflow',
+					description: 'Run child workflow',
+					executor: { kind: 'sub_workflow', workflow: 'design-to-code' },
+					spawn_workflow: {
+						workflow: 'design-to-code',
+						input_map: { brief: 'task.title' },
+						result_map: {},
+						idempotency_key: '{{task.id}}:design',
+					},
+					auto_execute: false,
+					transitions: { done: 'complete' },
+				},
+				{
+					id: 'complete',
+					type: 'terminal',
+					description: '',
+					auto_execute: false,
+					transitions: {},
+				},
+			],
+		}
+
+		const task = makeTask({ workflow_step: 'design' })
+		const result = evaluateTransition(workflowWithSubflow, task, testAgents)
+		expect(result.action).toBe('spawn_workflow')
+		expect(result.workflowId).toBe('design-to-code')
+		expect(result.idempotencyKey).toBe('{{task.id}}:design')
+	})
+
 	it('returns error when task has no workflow_step', () => {
 		const task = makeTask({ workflow_step: undefined })
 		const result = evaluateTransition(testWorkflow, task, testAgents)
@@ -340,6 +384,32 @@ describe('evaluateTransition', () => {
 		const task = makeTask({ workflow_step: 'implement' })
 		const result = evaluateTransition(workflowWithReview, task, testAgents)
 		expect(result.action).toBe('no_action')
+	})
+
+	it('uses the new validate block for review gating', () => {
+		const workflowWithValidateReview: Workflow = {
+			...testWorkflow,
+			steps: testWorkflow.steps.map((s) =>
+				s.id === 'implement'
+					? {
+							...s,
+							validate: {
+								mode: 'review',
+								reviewers_roles: ['reviewer'],
+								min_approvals: 1,
+								on_reject: 'revise',
+								rules: [],
+								required_outputs: [],
+							},
+						}
+					: s,
+			),
+		}
+		const task = makeTask({ workflow_step: 'implement' })
+		const result = evaluateTransition(workflowWithValidateReview, task, testAgents)
+		expect(result.action).toBe('no_action')
+		expect(result.validationMode).toBe('review')
+		expect(result.failureAction).toBe('revise')
 	})
 })
 
@@ -495,7 +565,13 @@ describe('validateWorkflowGraph', () => {
 		const badTransition: Workflow = {
 			...testWorkflow,
 			steps: [
-				{ id: 'start', type: 'agent', description: '', auto_execute: false, transitions: { done: 'nowhere' } },
+				{
+					id: 'start',
+					type: 'agent',
+					description: '',
+					auto_execute: false,
+					transitions: { done: 'nowhere' },
+				},
 				{ id: 'end', type: 'terminal', description: '', auto_execute: false, transitions: {} },
 			],
 		}
@@ -508,8 +584,20 @@ describe('validateWorkflowGraph', () => {
 		const unreachable: Workflow = {
 			...testWorkflow,
 			steps: [
-				{ id: 'start', type: 'agent', description: '', auto_execute: false, transitions: { done: 'end' } },
-				{ id: 'orphan', type: 'agent', description: '', auto_execute: false, transitions: { done: 'end' } },
+				{
+					id: 'start',
+					type: 'agent',
+					description: '',
+					auto_execute: false,
+					transitions: { done: 'end' },
+				},
+				{
+					id: 'orphan',
+					type: 'agent',
+					description: '',
+					auto_execute: false,
+					transitions: { done: 'end' },
+				},
 				{ id: 'end', type: 'terminal', description: '', auto_execute: false, transitions: {} },
 			],
 		}

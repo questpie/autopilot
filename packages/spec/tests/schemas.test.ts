@@ -1,20 +1,20 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { ZodError } from 'zod'
 import {
-	CompanySchema,
-	AgentSchema,
-	TaskSchema,
-	MessageSchema,
-	WorkflowSchema,
-	ScheduleSchema,
-	WebhookSchema,
-	WatcherSchema,
-	ThresholdSchema,
 	AgentMemorySchema,
-	PinSchema,
-	SessionMetaSchema,
-	SecretSchema,
+	AgentSchema,
+	CompanySchema,
 	HumanSchema,
+	MessageSchema,
+	PinSchema,
+	ScheduleSchema,
+	SecretSchema,
+	SessionMetaSchema,
+	TaskSchema,
+	ThresholdSchema,
+	WatcherSchema,
+	WebhookSchema,
+	WorkflowSchema,
 } from '../src/schemas'
 
 // ── CompanySchema ──────────────────────────────────────────────────────
@@ -48,21 +48,15 @@ describe('CompanySchema', () => {
 	})
 
 	test('rejects missing name', () => {
-		expect(() =>
-			CompanySchema.parse({ ...validCompany, name: undefined }),
-		).toThrow(ZodError)
+		expect(() => CompanySchema.parse({ ...validCompany, name: undefined })).toThrow(ZodError)
 	})
 
 	test('rejects invalid slug with spaces', () => {
-		expect(() =>
-			CompanySchema.parse({ ...validCompany, slug: 'quest pie' }),
-		).toThrow(ZodError)
+		expect(() => CompanySchema.parse({ ...validCompany, slug: 'quest pie' })).toThrow(ZodError)
 	})
 
 	test('rejects slug with uppercase', () => {
-		expect(() =>
-			CompanySchema.parse({ ...validCompany, slug: 'QUESTPIE' }),
-		).toThrow(ZodError)
+		expect(() => CompanySchema.parse({ ...validCompany, slug: 'QUESTPIE' })).toThrow(ZodError)
 	})
 
 	test('rejects invalid email', () => {
@@ -107,9 +101,7 @@ describe('AgentSchema', () => {
 	})
 
 	test('rejects invalid role', () => {
-		expect(() =>
-			AgentSchema.parse({ ...validAgent, role: 'hacker' }),
-		).toThrow(ZodError)
+		expect(() => AgentSchema.parse({ ...validAgent, role: 'hacker' })).toThrow(ZodError)
 	})
 
 	test('rejects missing fs_scope', () => {
@@ -118,19 +110,24 @@ describe('AgentSchema', () => {
 	})
 
 	test('rejects invalid id with spaces', () => {
-		expect(() =>
-			AgentSchema.parse({ ...validAgent, id: 'peter parker' }),
-		).toThrow(ZodError)
+		expect(() => AgentSchema.parse({ ...validAgent, id: 'peter parker' })).toThrow(ZodError)
 	})
 
 	test('rejects invalid id with uppercase', () => {
-		expect(() =>
-			AgentSchema.parse({ ...validAgent, id: 'Peter' }),
-		).toThrow(ZodError)
+		expect(() => AgentSchema.parse({ ...validAgent, id: 'Peter' })).toThrow(ZodError)
 	})
 
 	test('accepts all valid roles', () => {
-		const roles = ['meta', 'strategist', 'planner', 'developer', 'reviewer', 'devops', 'marketing', 'design']
+		const roles = [
+			'meta',
+			'strategist',
+			'planner',
+			'developer',
+			'reviewer',
+			'devops',
+			'marketing',
+			'design',
+		]
 		for (const role of roles) {
 			const result = AgentSchema.parse({ ...validAgent, role })
 			expect(result.role).toBe(role)
@@ -174,21 +171,15 @@ describe('TaskSchema', () => {
 	})
 
 	test('rejects invalid status', () => {
-		expect(() =>
-			TaskSchema.parse({ ...validTask, status: 'running' }),
-		).toThrow(ZodError)
+		expect(() => TaskSchema.parse({ ...validTask, status: 'running' })).toThrow(ZodError)
 	})
 
 	test('rejects invalid priority', () => {
-		expect(() =>
-			TaskSchema.parse({ ...validTask, priority: 'urgent' }),
-		).toThrow(ZodError)
+		expect(() => TaskSchema.parse({ ...validTask, priority: 'urgent' })).toThrow(ZodError)
 	})
 
 	test('rejects invalid type', () => {
-		expect(() =>
-			TaskSchema.parse({ ...validTask, type: 'coding' }),
-		).toThrow(ZodError)
+		expect(() => TaskSchema.parse({ ...validTask, type: 'coding' })).toThrow(ZodError)
 	})
 
 	test('rejects missing created_by', () => {
@@ -197,13 +188,20 @@ describe('TaskSchema', () => {
 	})
 
 	test('rejects invalid datetime format', () => {
-		expect(() =>
-			TaskSchema.parse({ ...validTask, created_at: 'not-a-date' }),
-		).toThrow(ZodError)
+		expect(() => TaskSchema.parse({ ...validTask, created_at: 'not-a-date' })).toThrow(ZodError)
 	})
 
 	test('accepts all valid statuses', () => {
-		const statuses = ['draft', 'backlog', 'assigned', 'in_progress', 'review', 'blocked', 'done', 'cancelled']
+		const statuses = [
+			'draft',
+			'backlog',
+			'assigned',
+			'in_progress',
+			'review',
+			'blocked',
+			'done',
+			'cancelled',
+		]
 		for (const status of statuses) {
 			const result = TaskSchema.parse({ ...validTask, status })
 			expect(result.status).toBe(status)
@@ -243,9 +241,7 @@ describe('MessageSchema', () => {
 	})
 
 	test('rejects invalid datetime', () => {
-		expect(() =>
-			MessageSchema.parse({ ...validMessage, at: 'yesterday' }),
-		).toThrow(ZodError)
+		expect(() => MessageSchema.parse({ ...validMessage, at: 'yesterday' })).toThrow(ZodError)
 	})
 
 	test('accepts optional to and channel', () => {
@@ -293,12 +289,114 @@ describe('WorkflowSchema', () => {
 		expect(result.steps[0].type).toBe('agent')
 		expect(result.steps[0].description).toBe('')
 		expect(result.steps[0].auto_execute).toBe(false)
+		expect(result.steps[0].max_retries).toBeUndefined()
+	})
+
+	test('accepts explicit validation and failure policy fields', () => {
+		const result = WorkflowSchema.parse({
+			id: 'compiled-contract',
+			name: 'Compiled Contract',
+			steps: [
+				{
+					id: 'research',
+					assigned_role: 'strategist',
+					model_policy: 'cheap-research',
+					max_retries: 2,
+					validate: {
+						mode: 'review',
+						reviewers_roles: ['reviewer'],
+						min_approvals: 1,
+						on_reject: 'revise',
+						rules: [{ type: 'min_items', target: 'examples', value: 3 }],
+						required_outputs: ['recommendation'],
+					},
+					on_fail: {
+						action: 'escalate',
+						model_policy: 'smart-review',
+					},
+					transitions: { done: 'complete' },
+				},
+				{
+					id: 'complete',
+					type: 'terminal',
+				},
+			],
+		})
+
+		expect(result.steps[0].model_policy).toBe('cheap-research')
+		expect(result.steps[0].max_retries).toBe(2)
+		expect(result.steps[0].validate?.mode).toBe('review')
+		expect(result.steps[0].validate?.rules[0]?.type).toBe('min_items')
+		expect(result.steps[0].on_fail).toEqual({
+			action: 'escalate',
+			model_policy: 'smart-review',
+			input_map: {},
+		})
+	})
+
+	test('accepts explicit executor and spawn_workflow fields', () => {
+		const result = WorkflowSchema.parse({
+			id: 'sub-flow',
+			name: 'Sub Flow',
+			steps: [
+				{
+					id: 'design-pass',
+					type: 'sub_workflow',
+					executor: {
+						kind: 'sub_workflow',
+						workflow: 'design-to-code',
+						model_policy: 'smart-plan',
+					},
+					spawn_workflow: {
+						workflow: 'design-to-code',
+						input_map: { brief: 'task.title', spec: 'context.spec_path' },
+						result_map: { mockup: 'artifacts.mockup' },
+						idempotency_key: '{{task.id}}:design-pass',
+					},
+					transitions: { done: 'complete' },
+				},
+				{ id: 'complete', type: 'terminal' },
+			],
+		})
+
+		expect(result.steps[0].executor).toEqual({
+			kind: 'sub_workflow',
+			workflow: 'design-to-code',
+			model_policy: 'smart-plan',
+		})
+		expect(result.steps[0].spawn_workflow).toEqual({
+			workflow: 'design-to-code',
+			input_map: { brief: 'task.title', spec: 'context.spec_path' },
+			result_map: { mockup: 'artifacts.mockup' },
+			idempotency_key: '{{task.id}}:design-pass',
+		})
+	})
+
+	test('rejects sub_workflow step without workflow target', () => {
+		expect(() =>
+			WorkflowSchema.parse({
+				id: 'broken-subflow',
+				name: 'Broken Subflow',
+				steps: [{ id: 'spawn-child', type: 'sub_workflow' }],
+			}),
+		).toThrow(ZodError)
+	})
+
+	test('accepts shorthand on_fail action', () => {
+		const result = WorkflowSchema.parse({
+			id: 'failure-shorthand',
+			name: 'Failure Shorthand',
+			steps: [
+				{ id: 'build', on_fail: 'retry' },
+				{ id: 'done', type: 'terminal' },
+			],
+		})
+
+		expect(result.steps[0].on_fail).toBe('retry')
 	})
 
 	test('rejects missing steps', () => {
-		expect(() =>
-			WorkflowSchema.parse({ id: 'test', name: 'Test' }),
-		).toThrow(ZodError)
+		expect(() => WorkflowSchema.parse({ id: 'test', name: 'Test' })).toThrow(ZodError)
 	})
 
 	test('rejects empty steps array', () => {
@@ -347,14 +445,16 @@ describe('ScheduleSchema', () => {
 	})
 
 	test('accepts optional workflow_inputs field', () => {
-		const result = ScheduleSchema.parse({ ...validSchedule, workflow: 'deploy', workflow_inputs: { env: 'prod' } })
+		const result = ScheduleSchema.parse({
+			...validSchedule,
+			workflow: 'deploy',
+			workflow_inputs: { env: 'prod' },
+		})
 		expect(result.workflow_inputs).toEqual({ env: 'prod' })
 	})
 
 	test('rejects missing agent', () => {
-		expect(() =>
-			ScheduleSchema.parse({ id: 'test', cron: '* * * * *' }),
-		).toThrow(ZodError)
+		expect(() => ScheduleSchema.parse({ id: 'test', cron: '* * * * *' })).toThrow(ZodError)
 	})
 })
 
@@ -385,21 +485,17 @@ describe('WebhookSchema', () => {
 	})
 
 	test('rejects missing action', () => {
-		expect(() =>
-			WebhookSchema.parse({ id: 'test', path: '/test', agent: 'ops' }),
-		).toThrow(ZodError)
+		expect(() => WebhookSchema.parse({ id: 'test', path: '/test', agent: 'ops' })).toThrow(ZodError)
 	})
 
 	test('rejects invalid auth type', () => {
-		expect(() =>
-			WebhookSchema.parse({ ...validWebhook, auth: 'basic' }),
-		).toThrow(ZodError)
+		expect(() => WebhookSchema.parse({ ...validWebhook, auth: 'basic' })).toThrow(ZodError)
 	})
 
 	test('rejects invalid action type', () => {
-		expect(() =>
-			WebhookSchema.parse({ ...validWebhook, action: { type: 'restart' } }),
-		).toThrow(ZodError)
+		expect(() => WebhookSchema.parse({ ...validWebhook, action: { type: 'restart' } })).toThrow(
+			ZodError,
+		)
 	})
 })
 
@@ -429,9 +525,7 @@ describe('WatcherSchema', () => {
 	})
 
 	test('rejects invalid event type', () => {
-		expect(() =>
-			WatcherSchema.parse({ ...validWatcher, events: ['rename'] }),
-		).toThrow(ZodError)
+		expect(() => WatcherSchema.parse({ ...validWatcher, events: ['rename'] })).toThrow(ZodError)
 	})
 
 	test('accepts all valid event types', () => {
@@ -476,9 +570,9 @@ describe('ThresholdSchema', () => {
 	})
 
 	test('rejects invalid action', () => {
-		expect(() =>
-			ThresholdSchema.parse({ ...validThreshold, action: 'restart_server' }),
-		).toThrow(ZodError)
+		expect(() => ThresholdSchema.parse({ ...validThreshold, action: 'restart_server' })).toThrow(
+			ZodError,
+		)
 	})
 
 	test('accepts spawn_agent action', () => {
@@ -570,9 +664,7 @@ describe('PinSchema', () => {
 	})
 
 	test('rejects invalid pin type', () => {
-		expect(() =>
-			PinSchema.parse({ ...validPin, type: 'critical' }),
-		).toThrow(ZodError)
+		expect(() => PinSchema.parse({ ...validPin, type: 'critical' })).toThrow(ZodError)
 	})
 
 	test('accepts all valid pin types', () => {
@@ -589,9 +681,7 @@ describe('PinSchema', () => {
 	})
 
 	test('rejects invalid created_at datetime', () => {
-		expect(() =>
-			PinSchema.parse({ ...validPin, created_at: 'today' }),
-		).toThrow(ZodError)
+		expect(() => PinSchema.parse({ ...validPin, created_at: 'today' })).toThrow(ZodError)
 	})
 })
 
@@ -624,9 +714,7 @@ describe('SessionMetaSchema', () => {
 	})
 
 	test('rejects invalid status', () => {
-		expect(() =>
-			SessionMetaSchema.parse({ ...validSession, status: 'paused' }),
-		).toThrow(ZodError)
+		expect(() => SessionMetaSchema.parse({ ...validSession, status: 'paused' })).toThrow(ZodError)
 	})
 
 	test('accepts all valid session statuses', () => {
@@ -643,9 +731,7 @@ describe('SessionMetaSchema', () => {
 	})
 
 	test('rejects invalid started_at datetime', () => {
-		expect(() =>
-			SessionMetaSchema.parse({ ...validSession, started_at: 'now' }),
-		).toThrow(ZodError)
+		expect(() => SessionMetaSchema.parse({ ...validSession, started_at: 'now' })).toThrow(ZodError)
 	})
 })
 
@@ -684,9 +770,7 @@ describe('SecretSchema', () => {
 	})
 
 	test('rejects invalid created_at datetime', () => {
-		expect(() =>
-			SecretSchema.parse({ ...validSecret, created_at: 'last-week' }),
-		).toThrow(ZodError)
+		expect(() => SecretSchema.parse({ ...validSecret, created_at: 'last-week' })).toThrow(ZodError)
 	})
 })
 

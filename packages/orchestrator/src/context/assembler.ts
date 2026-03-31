@@ -283,6 +283,33 @@ After finishing ANY task, you MUST:
 
 Without these 3 calls, the workflow pipeline stops.`)
 
+	if (task?.workflow) {
+		const workflowLines = ['## Workflow Operating Model']
+		workflowLines.push(
+			'Autopilot treats workflows as the primary execution primitive. Do not improvise your own process when a workflow is attached to the task.',
+		)
+		workflowLines.push(`- Current workflow: ${task.workflow}`)
+		if (task.workflow_step) {
+			workflowLines.push(`- Current step: ${task.workflow_step}`)
+		}
+		workflowLines.push(
+			'- Your job is to execute the current step only, using the scoped task context and available tools.',
+		)
+		workflowLines.push(
+			'- Do not skip steps, self-approve human gates, or silently change the workflow contract.',
+		)
+		workflowLines.push(
+			'- Produce concrete outputs for the current step, then update the task so runtime validation and transition logic can continue.',
+		)
+		workflowLines.push(
+			'- If work must be broken down further, create explicit child tasks or workflow tasks instead of hiding sub-processes in chat text.',
+		)
+		workflowLines.push(
+			'- Treat task completion, validation, and workflow advancement as operational state owned by the app, not by your memory.',
+		)
+		sections.push(truncateToTokens(workflowLines.join('\n'), 1_500))
+	}
+
 	// Layer 3: Company State (~5K tokens) — role-scoped snapshot
 	let streamManager: import('../session/stream').SessionStreamManager | null = null
 	try {

@@ -1,4 +1,13 @@
 import type { Agent, Task, Workflow, WorkflowStep } from '@questpie/autopilot-spec'
+import { compileWorkflow, compileWorkflowStep } from './compiler'
+import type {
+	CompiledWorkflow,
+	CompiledWorkflowFailurePolicy,
+	CompiledWorkflowStep,
+	CompiledWorkflowValidation,
+} from './compiler'
+
+type WorkflowLike = Workflow | CompiledWorkflow
 
 // ─── Result types ───────────────────────────────────────────────────────────
 
@@ -6,6 +15,7 @@ import type { Agent, Task, Workflow, WorkflowStep } from '@questpie/autopilot-sp
 export type WorkflowAction =
 	| 'assign_agent'
 	| 'notify_human'
+	| 'spawn_workflow'
 	| 'complete'
 	| 'no_action'
 	| 'error'
@@ -17,6 +27,12 @@ export interface WorkflowTransitionResult {
 	assignTo?: string
 	assignRole?: string
 	gate?: string
+	workflowId?: string
+	idempotencyKey?: string
+	childTaskId?: string
+	modelPolicy?: string
+	validationMode?: CompiledWorkflowValidation['mode']
+	failureAction?: CompiledWorkflowFailurePolicy['action']
 	error?: string
 }
 
@@ -26,10 +42,11 @@ export interface WorkflowTransitionResult {
  * Find a workflow step by its id.
  */
 export function resolveWorkflowStep(
-	workflow: Workflow,
+	workflow: WorkflowLike,
 	stepId: string,
-): WorkflowStep | undefined {
-	return workflow.steps.find((s) => s.id === stepId)
+): CompiledWorkflowStep | undefined {
+	const compiledWorkflow = compileWorkflow(workflow)
+	return compiledWorkflow.steps.find((s) => s.id === stepId)
 }
 
 // ─── Step type checks ───────────────────────────────────────────────────────
@@ -37,15 +54,17 @@ export function resolveWorkflowStep(
 /**
  * Returns true if the step is a human gate (requires human action to proceed).
  */
-export function isHumanGate(step: WorkflowStep): boolean {
-	return step.type === 'human_gate'
+export function isHumanGate(step: WorkflowStep | CompiledWorkflowStep): boolean {
+	const compiledStep = compileWorkflowStep(step)
+	return compiledStep.type === 'human_gate' || compiledStep.executor?.kind === 'human'
 }
 
 /**
  * Returns true if the step is terminal (workflow ends here).
  */
-export function isTerminal(step: WorkflowStep): boolean {
-	return step.type === 'terminal' || step.terminal === true
+export function isTerminal(step: WorkflowStep | CompiledWorkflowStep): boolean {
+	const compiledStep = compileWorkflowStep(step)
+	return compiledStep.type === 'terminal' || compiledStep.terminal === true
 }
 
 // ─── Transition helpers ─────────────────────────────────────────────────────
@@ -55,9 +74,7 @@ export function isTerminal(step: WorkflowStep): boolean {
  * Transitions can be a plain string (step id) or a record with metadata.
  * When it's a record we look for a `step` key, otherwise return undefined.
  */
-function resolveTransitionTarget(
-	value: string | Record<string, string>,
-): string | undefined {
+function resolveTransitionTarget(value: string | Record<string, string>): string | undefined {
 	if (typeof value === 'string') return value
 	if (typeof value === 'object' && 'step' in value) return value.step
 	return undefined
@@ -69,7 +86,7 @@ function resolveTransitionTarget(
  * transition key doesn't exist on the step.
  */
 export function getNextStep(
-	workflow: Workflow,
+	workflow: WorkflowLike,
 	currentStepId: string,
 	transitionKey: string,
 ): string | undefined {
@@ -89,18 +106,21 @@ export function getNextStep(
  * Matches by `assigned_to` (exact agent id) first, then `assigned_role`.
  */
 export function getAssignee(
-	step: WorkflowStep,
+	step: WorkflowStep | CompiledWorkflowStep,
 	agents: Agent[],
 ): string | undefined {
+	const compiledStep = compileWorkflowStep(step)
+	const executor = compiledStep.executor
+
 	// Explicit assignment by id takes priority
-	if (step.assigned_to) {
-		const agent = agents.find((a) => a.id === step.assigned_to)
+	if (executor?.agentId) {
+		const agent = agents.find((a) => a.id === executor.agentId)
 		if (agent) return agent.id
 	}
 
 	// Fall back to role-based matching
-	if (step.assigned_role) {
-		const agent = agents.find((a) => a.role === step.assigned_role)
+	if (executor?.role) {
+		const agent = agents.find((a) => a.role === executor.role)
 		if (agent) return agent.id
 	}
 
@@ -114,18 +134,19 @@ export function getAssignee(
  * If the step has no review block, it's considered satisfied.
  */
 export function isReviewSatisfied(
-	step: WorkflowStep,
+	step: WorkflowStep | CompiledWorkflowStep,
 	task: Task,
 	agents: Agent[] = [],
 ): boolean {
-	if (!step.review) return true
+	const compiledStep = compileWorkflowStep(step)
+	if (compiledStep.validation.mode !== 'review') return true
 
-	const minApprovals = step.review.min_approvals ?? 1
-	const reviewerRoles = step.review.reviewers_roles ?? []
+	const minApprovals = compiledStep.validation.minApprovals ?? 1
+	const reviewerRoles = compiledStep.validation.reviewersRoles
 
 	// Count approvals from task history that match this step
 	const approvals = task.history.filter((h) => {
-		if (h.action !== 'approved' || h.step !== step.id) return false
+		if (h.action !== 'approved' || h.step !== compiledStep.id) return false
 		// If no reviewer_roles specified, any approval counts
 		if (reviewerRoles.length === 0) return true
 		// Look up the actor's role from the agents list
@@ -143,8 +164,8 @@ export function isReviewSatisfied(
  * step using the given transition key.
  */
 function resolveNextStepResult(
-	workflow: Workflow,
-	currentStep: WorkflowStep,
+	workflow: CompiledWorkflow,
+	currentStep: CompiledWorkflowStep,
 	transitionKey: string,
 	agents: Agent[],
 ): WorkflowTransitionResult {
@@ -171,19 +192,37 @@ function resolveNextStepResult(
 /**
  * Build the appropriate result for entering a given step.
  */
-function buildStepResult(
-	step: WorkflowStep,
-	agents: Agent[],
-): WorkflowTransitionResult {
+function buildStepResult(step: CompiledWorkflowStep, agents: Agent[]): WorkflowTransitionResult {
 	if (isTerminal(step)) {
-		return { action: 'complete', nextStep: step.id }
+		return {
+			action: 'complete',
+			nextStep: step.id,
+			modelPolicy: step.modelPolicy,
+			validationMode: step.validation.mode,
+			failureAction: step.failurePolicy.action,
+		}
 	}
 
 	if (isHumanGate(step)) {
 		return {
 			action: 'notify_human',
 			nextStep: step.id,
-			gate: step.gate,
+			gate: step.validation.gate ?? step.gate,
+			modelPolicy: step.modelPolicy,
+			validationMode: step.validation.mode,
+			failureAction: step.failurePolicy.action,
+		}
+	}
+
+	if (step.executor?.kind === 'sub_workflow' && step.spawnWorkflow?.workflow) {
+		return {
+			action: 'spawn_workflow',
+			nextStep: step.id,
+			workflowId: step.spawnWorkflow.workflow,
+			idempotencyKey: step.spawnWorkflow.idempotencyKey,
+			modelPolicy: step.modelPolicy,
+			validationMode: step.validation.mode,
+			failureAction: step.failurePolicy.action,
 		}
 	}
 
@@ -194,12 +233,21 @@ function buildStepResult(
 			action: 'assign_agent',
 			nextStep: step.id,
 			assignTo: assignee,
-			assignRole: step.assigned_role,
+			assignRole: step.executor?.role ?? step.assigned_role,
+			modelPolicy: step.modelPolicy,
+			validationMode: step.validation.mode,
+			failureAction: step.failurePolicy.action,
 		}
 	}
 
 	// sub_workflow or unknown — no action for now
-	return { action: 'no_action', nextStep: step.id }
+	return {
+		action: 'no_action',
+		nextStep: step.id,
+		modelPolicy: step.modelPolicy,
+		validationMode: step.validation.mode,
+		failureAction: step.failurePolicy.action,
+	}
 }
 
 /**
@@ -220,20 +268,21 @@ function buildStepResult(
  *    - Otherwise → no_action (ambiguous).
  */
 export function evaluateTransition(
-	workflow: Workflow,
+	workflow: WorkflowLike,
 	task: Task,
 	agents: Agent[] = [],
 ): WorkflowTransitionResult {
+	const compiledWorkflow = compileWorkflow(workflow)
 	const stepId = task.workflow_step
 	if (!stepId) {
 		return { action: 'error', error: 'Task has no workflow_step' }
 	}
 
-	const step = resolveWorkflowStep(workflow, stepId)
+	const step = resolveWorkflowStep(compiledWorkflow, stepId)
 	if (!step) {
 		return {
 			action: 'error',
-			error: `Step '${stepId}' not found in workflow '${workflow.id}'`,
+			error: `Step '${stepId}' not found in workflow '${compiledWorkflow.id}'`,
 		}
 	}
 
@@ -251,9 +300,27 @@ export function evaluateTransition(
 		}
 	}
 
+	if (step.executor?.kind === 'sub_workflow' && step.spawnWorkflow?.workflow) {
+		return {
+			action: 'spawn_workflow',
+			nextStep: step.id,
+			workflowId: step.spawnWorkflow.workflow,
+			idempotencyKey: step.spawnWorkflow.idempotencyKey,
+			modelPolicy: step.modelPolicy,
+			validationMode: step.validation.mode,
+			failureAction: step.failurePolicy.action,
+		}
+	}
+
 	// Review gate — if review requirements exist and aren't met, wait
-	if (step.review && !isReviewSatisfied(step, task, agents)) {
-		return { action: 'no_action', nextStep: step.id }
+	if (step.validation.mode === 'review' && !isReviewSatisfied(step, task, agents)) {
+		return {
+			action: 'no_action',
+			nextStep: step.id,
+			modelPolicy: step.modelPolicy,
+			validationMode: step.validation.mode,
+			failureAction: step.failurePolicy.action,
+		}
 	}
 
 	// Agent step with auto_execute → assign immediately
@@ -262,7 +329,10 @@ export function evaluateTransition(
 			action: 'assign_agent',
 			nextStep: step.id,
 			assignTo: getAssignee(step, agents),
-			assignRole: step.assigned_role,
+			assignRole: step.executor?.role ?? step.assigned_role,
+			modelPolicy: step.modelPolicy,
+			validationMode: step.validation.mode,
+			failureAction: step.failurePolicy.action,
 		}
 	}
 
@@ -273,11 +343,20 @@ export function evaluateTransition(
 			action: 'assign_agent',
 			nextStep: step.id,
 			assignTo: getAssignee(step, agents),
-			assignRole: step.assigned_role,
+			assignRole: step.executor?.role ?? step.assigned_role,
+			modelPolicy: step.modelPolicy,
+			validationMode: step.validation.mode,
+			failureAction: step.failurePolicy.action,
 		}
 	}
 
-	return { action: 'no_action', nextStep: step.id }
+	return {
+		action: 'no_action',
+		nextStep: step.id,
+		modelPolicy: step.modelPolicy,
+		validationMode: step.validation.mode,
+		failureAction: step.failurePolicy.action,
+	}
 }
 
 /**
@@ -286,43 +365,44 @@ export function evaluateTransition(
  * the next step.
  */
 export function advanceWorkflow(
-	workflow: Workflow,
+	workflow: WorkflowLike,
 	task: Task,
 	transitionKey: string,
 	agents: Agent[] = [],
 ): WorkflowTransitionResult {
+	const compiledWorkflow = compileWorkflow(workflow)
 	const stepId = task.workflow_step
 	if (!stepId) {
 		return { action: 'error', error: 'Task has no workflow_step' }
 	}
 
-	const step = resolveWorkflowStep(workflow, stepId)
+	const step = resolveWorkflowStep(compiledWorkflow, stepId)
 	if (!step) {
 		return {
 			action: 'error',
-			error: `Step '${stepId}' not found in workflow '${workflow.id}'`,
+			error: `Step '${stepId}' not found in workflow '${compiledWorkflow.id}'`,
 		}
 	}
 
 	// Check review requirements before allowing transition
-	if (step.review && !isReviewSatisfied(step, task, agents)) {
+	if (step.validation.mode === 'review' && !isReviewSatisfied(step, task, agents)) {
 		return {
 			action: 'no_action',
 			nextStep: step.id,
+			modelPolicy: step.modelPolicy,
+			validationMode: step.validation.mode,
+			failureAction: step.failurePolicy.action,
 			error: 'Review requirements not met',
 		}
 	}
 
-	return resolveNextStepResult(workflow, step, transitionKey, agents)
+	return resolveNextStepResult(compiledWorkflow, step, transitionKey, agents)
 }
 
 /**
  * Get all available transition keys for a given step.
  */
-export function getAvailableTransitions(
-	workflow: Workflow,
-	stepId: string,
-): string[] {
+export function getAvailableTransitions(workflow: WorkflowLike, stepId: string): string[] {
 	const step = resolveWorkflowStep(workflow, stepId)
 	if (!step) return []
 	return Object.keys(step.transitions)
@@ -334,36 +414,38 @@ export function getAvailableTransitions(
  * - At least one terminal step exists
  * - No orphan steps (every non-first step is reachable)
  */
-export function validateWorkflowGraph(
-	workflow: Workflow,
-): { valid: boolean; errors: string[] } {
+export function validateWorkflowGraph(workflow: WorkflowLike): {
+	valid: boolean
+	errors: string[]
+} {
+	const compiledWorkflow = compileWorkflow(workflow)
 	const errors: string[] = []
-	const stepIds = new Set(workflow.steps.map((s) => s.id))
+	const stepIds = new Set(compiledWorkflow.steps.map((s) => s.id))
 	const reachable = new Set<string>()
 
 	// Check transitions point to valid steps
-	for (const step of workflow.steps) {
+	for (const step of compiledWorkflow.steps) {
 		for (const [key, value] of Object.entries(step.transitions)) {
 			const target = resolveTransitionTarget(value)
 			if (target && !stepIds.has(target)) {
-				errors.push(
-					`Step '${step.id}' transition '${key}' references unknown step '${target}'`,
-				)
+				errors.push(`Step '${step.id}' transition '${key}' references unknown step '${target}'`)
 			}
 			if (target) reachable.add(target)
 		}
 	}
 
 	// Check for terminal steps
-	const hasTerminal = workflow.steps.some((s) => isTerminal(s))
+	const hasTerminal = compiledWorkflow.steps.some((s) => isTerminal(s))
 	if (!hasTerminal) {
 		errors.push('Workflow has no terminal step')
 	}
 
 	// Check reachability (first step is the entry point)
-	if (workflow.steps.length > 0) {
-		const firstStepId = workflow.steps[0]!.id
-		for (const step of workflow.steps) {
+	if (compiledWorkflow.steps.length > 0) {
+		const [firstStep] = compiledWorkflow.steps
+		if (!firstStep) return { valid: errors.length === 0, errors }
+		const firstStepId = firstStep.id
+		for (const step of compiledWorkflow.steps) {
 			if (step.id !== firstStepId && !reachable.has(step.id)) {
 				errors.push(`Step '${step.id}' is unreachable`)
 			}

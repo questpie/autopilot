@@ -1,21 +1,21 @@
-import { describe, it, expect, afterEach } from 'bun:test'
-import { createTestCompany } from './helpers'
+import { afterEach, describe, expect, it } from 'bun:test'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import type { Agent, Company, Task } from '@questpie/autopilot-spec'
 import { assembleContext } from '../src/context/assembler'
 import { loadAgentMemory } from '../src/context/memory-loader'
 import { buildCompanySnapshot } from '../src/context/snapshot'
-import { writeYaml } from '../src/fs/yaml'
-import { join } from 'node:path'
-import { mkdir, writeFile } from 'node:fs/promises'
-import type { Agent, Company, Task } from '@questpie/autopilot-spec'
 import type { StorageBackend } from '../src/fs/storage'
+import { writeYaml } from '../src/fs/yaml'
+import { createTestCompany } from './helpers'
 
 const mockStorage: StorageBackend = {
 	initialize: async () => {},
 	close: async () => {},
 	createTask: async (t) => t,
 	readTask: async () => null,
-	updateTask: async (id, u, by) => ({ ...u } as any),
-	moveTask: async (id, s, by) => ({} as any),
+	updateTask: async (id, u, by) => ({ ...u }) as any,
+	moveTask: async (id, s, by) => ({}) as any,
 	listTasks: async () => [],
 	countTasks: async () => 0,
 	deleteTask: async () => {},
@@ -257,6 +257,28 @@ describe('context assembler', () => {
 		expect(result.systemPrompt).toContain('in_progress')
 		expect(result.systemPrompt).toContain('spec')
 		expect(result.systemPrompt).toContain('plan')
+	})
+
+	it('should include workflow operating memo for workflow-backed tasks', async () => {
+		await setupCompanyDir()
+
+		const result = await assembleContext({
+			companyRoot: root,
+			agent: testAgent,
+			company: testCompany,
+			task: {
+				...testTask,
+				workflow: 'development',
+				workflow_step: 'implement',
+			},
+			allAgents: testAgents,
+			storage: mockStorage,
+		})
+
+		expect(result.systemPrompt).toContain('## Workflow Operating Model')
+		expect(result.systemPrompt).toContain('Current workflow: development')
+		expect(result.systemPrompt).toContain('Current step: implement')
+		expect(result.systemPrompt).toContain('the app, not by your memory')
 	})
 
 	it('should work without a task', async () => {

@@ -1,8 +1,9 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { PATHS, WorkflowSchema } from '@questpie/autopilot-spec'
 import { parse as parseYaml } from 'yaml'
-import { WorkflowSchema, PATHS } from '@questpie/autopilot-spec'
-import type { Workflow } from '@questpie/autopilot-spec'
+import { compileWorkflow } from './compiler'
+import type { CompiledWorkflow } from './compiler'
 
 /**
  * Loads and caches workflow definitions from the company filesystem.
@@ -12,7 +13,7 @@ import type { Workflow } from '@questpie/autopilot-spec'
  * the parsed result in memory until explicitly invalidated.
  */
 export class WorkflowLoader {
-	private cache = new Map<string, Workflow>()
+	private cache = new Map<string, CompiledWorkflow>()
 
 	constructor(private companyRoot: string) {}
 
@@ -30,14 +31,14 @@ export class WorkflowLoader {
 	/**
 	 * Load a single workflow by id. Returns from cache if available.
 	 */
-	async load(workflowId: string): Promise<Workflow> {
+	async load(workflowId: string): Promise<CompiledWorkflow> {
 		const cached = this.cache.get(workflowId)
 		if (cached) return cached
 
 		const filePath = this.workflowFile(workflowId)
 		const content = await readFile(filePath, 'utf-8')
 		const raw = parseYaml(content)
-		const workflow = WorkflowSchema.parse(raw)
+		const workflow = compileWorkflow(WorkflowSchema.parse(raw))
 
 		this.cache.set(workflowId, workflow)
 		return workflow
@@ -46,7 +47,7 @@ export class WorkflowLoader {
 	/**
 	 * Load all workflows from the workflows directory.
 	 */
-	async loadAll(): Promise<Map<string, Workflow>> {
+	async loadAll(): Promise<Map<string, CompiledWorkflow>> {
 		const dir = this.workflowDir()
 		let entries: string[]
 
@@ -56,9 +57,7 @@ export class WorkflowLoader {
 			return new Map()
 		}
 
-		const yamlFiles = entries.filter(
-			(f) => f.endsWith('.yaml') || f.endsWith('.yml'),
-		)
+		const yamlFiles = entries.filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
 
 		for (const file of yamlFiles) {
 			const id = file.replace(/\.ya?ml$/, '')

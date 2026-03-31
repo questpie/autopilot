@@ -1,5 +1,5 @@
-import { z } from 'zod'
-import * as schemas from '../schemas'
+import type { z } from 'zod'
+import type * as schemas from '../schemas'
 
 // Company
 export type Company = z.infer<typeof schemas.CompanySchema>
@@ -30,6 +30,9 @@ export type Blocker = z.infer<typeof schemas.BlockerSchema>
 
 // Messages
 export type Message = z.infer<typeof schemas.MessageSchema>
+export type Reaction = z.infer<typeof schemas.ReactionSchema>
+export type PinnedMessage = z.infer<typeof schemas.PinnedMessageSchema>
+export type ChannelMember = z.infer<typeof schemas.ChannelMemberSchema>
 
 // Workflows
 export type Workflow = z.infer<typeof schemas.WorkflowSchema>
@@ -39,6 +42,12 @@ export type WorkflowReview = z.infer<typeof schemas.WorkflowReviewSchema>
 export type WorkflowTransitions = z.infer<typeof schemas.WorkflowTransitionsSchema>
 export type WorkflowChangelogEntry = z.infer<typeof schemas.WorkflowChangelogEntrySchema>
 export type WorkflowChangePolicy = z.infer<typeof schemas.WorkflowChangePolicySchema>
+export type WorkflowValidationRule = z.infer<typeof schemas.WorkflowValidationRuleSchema>
+export type WorkflowValidation = z.infer<typeof schemas.WorkflowValidationSchema>
+export type WorkflowExecutor = z.infer<typeof schemas.WorkflowExecutorSchema>
+export type WorkflowSpawnWorkflow = z.infer<typeof schemas.WorkflowSpawnWorkflowSchema>
+export type WorkflowFailureAction = z.infer<typeof schemas.WorkflowFailureActionSchema>
+export type WorkflowFailurePolicy = z.infer<typeof schemas.WorkflowFailurePolicySchema>
 
 // Schedules
 export type Schedule = z.infer<typeof schemas.ScheduleSchema>

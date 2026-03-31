@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -21,8 +22,14 @@ import { Watcher } from './watcher'
 import type { WatchEvent } from './watcher'
 import { webhookHandlerRegistry } from './webhook'
 import { telegramWebhookHandler } from './webhook'
-import { advanceWorkflow, evaluateTransition } from './workflow'
+import {
+	advanceWorkflow,
+	buildWorkflowRunId,
+	evaluateTransition,
+	workflowRuntimeStoreFactory,
+} from './workflow'
 import { WorkflowLoader } from './workflow'
+import type { CompiledWorkflowStep } from './workflow'
 
 import { BLOCKED_TASK_CLASSIFIER, classify } from './agent/micro-agent'
 import { aiProviderFactory } from './ai'
@@ -43,6 +50,89 @@ const LEGACY_TEAM_CONFIG_FILES = [
 	'webhooks.yaml',
 	'schedules.yaml',
 ] as const
+
+const WORKFLOW_EVENT_STREAM_PREFIX = 'workflow'
+
+function toContextString(value: unknown): string {
+	if (typeof value === 'string') return value
+	try {
+		return JSON.stringify(value) ?? String(value)
+	} catch {
+		return String(value)
+	}
+}
+
+function readTaskBinding(task: import('./fs/storage').Task, expression: string): unknown {
+	switch (expression) {
+		case 'id':
+		case 'task.id':
+			return task.id
+		case 'title':
+		case 'task.title':
+			return task.title
+		case 'description':
+		case 'task.description':
+			return task.description
+		case 'type':
+		case 'task.type':
+			return task.type
+		case 'priority':
+		case 'task.priority':
+			return task.priority
+		case 'workflow':
+		case 'task.workflow':
+			return task.workflow
+		case 'workflow_step':
+		case 'task.workflow_step':
+			return task.workflow_step
+		default:
+			break
+	}
+
+	if (expression.startsWith('context.')) {
+		return task.context[expression.slice('context.'.length)]
+	}
+
+	if (expression.startsWith('metadata.')) {
+		const metadata = (task.metadata ?? {}) as Record<string, unknown>
+		return metadata[expression.slice('metadata.'.length)]
+	}
+
+	return undefined
+}
+
+function resolveTaskBinding(task: import('./fs/storage').Task, expression: string): string {
+	const directValue = readTaskBinding(task, expression)
+	if (directValue !== undefined) {
+		return toContextString(directValue)
+	}
+
+	if (!expression.includes('{{')) return expression
+
+	return expression.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, token: string) => {
+		const value = readTaskBinding(task, token.trim())
+		return value === undefined ? '' : toContextString(value)
+	})
+}
+
+function sanitizeIdSegment(value: string): string {
+	const normalized = value
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+	return normalized.slice(0, 40) || 'step'
+}
+
+function buildSubWorkflowTaskId(
+	parentTaskId: string,
+	stepId: string,
+	workflowId: string,
+	idempotencyKey?: string,
+): string {
+	const source = idempotencyKey ?? `${parentTaskId}:${stepId}:${workflowId}`
+	const hash = createHash('sha1').update(source).digest('hex').slice(0, 10)
+	return `subwf-${sanitizeIdSegment(parentTaskId)}-${sanitizeIdSegment(stepId)}-${hash}`
+}
 
 function legacyConfigMigrationHint(file: string): string {
 	const base = file.replace(/\.ya?ml$/, '')
@@ -469,6 +559,48 @@ export class Orchestrator {
 		}
 	}
 
+	private async emitWorkflowEvent(taskId: string, event: Record<string, unknown>): Promise<void> {
+		if (!this.running) return
+		try {
+			const { createSessionStream, appendToSessionStream } = await import('./session/durable')
+			const streamId = `${WORKFLOW_EVENT_STREAM_PREFIX}-${taskId}`
+			await createSessionStream(streamId)
+			await appendToSessionStream(streamId, {
+				...event,
+				at: Date.now(),
+			})
+		} catch {
+			// Best-effort only — durable streams are a replay aid, not the source of truth.
+		}
+	}
+
+	private buildSubWorkflowContext(
+		task: import('./fs/storage').Task,
+		step: CompiledWorkflowStep,
+	): Record<string, string> {
+		const mapped = Object.fromEntries(
+			Object.entries(step.spawnWorkflow?.inputMap ?? {}).map(([key, expression]) => [
+				key,
+				resolveTaskBinding(task, expression),
+			]),
+		)
+
+		return {
+			...task.context,
+			parent_task_id: task.id,
+			parent_workflow: task.workflow ?? '',
+			parent_workflow_step: task.workflow_step ?? '',
+			...mapped,
+		}
+	}
+
+	private queueTaskReevaluation(taskId: string): void {
+		if (!this.running) return
+		setTimeout(() => {
+			void this.handleTaskChange(taskId)
+		}, 0)
+	}
+
 	/** Whether the orchestrator is currently running. */
 	isRunning(): boolean {
 		return this.running
@@ -665,10 +797,6 @@ export class Orchestrator {
 				// Create a task from the schedule's task_template and let the workflow engine handle it
 				const now = new Date().toISOString()
 				const template = schedule.task_template ?? {}
-				const toContextString = (value: unknown): string => {
-					if (typeof value === 'string') return value
-					return JSON.stringify(value) ?? String(value)
-				}
 				const templateWorkflow =
 					typeof template.workflow === 'string' ? template.workflow : undefined
 				const workflowId = schedule.workflow ?? templateWorkflow
@@ -794,6 +922,7 @@ export class Orchestrator {
 			const root = this.options.companyRoot
 			const { storage } = await container.resolveAsync([storageFactory])
 			const { notifier } = await container.resolveAsync([notifierFactory])
+			const { workflowRuntimeStore } = await container.resolveAsync([workflowRuntimeStoreFactory])
 			const workflowLoader = new WorkflowLoader(root)
 
 			// 1. Read the task
@@ -807,6 +936,13 @@ export class Orchestrator {
 				status: task.status,
 				workflowStep: task.workflow_step ?? 'none',
 			})
+
+			if (task.workflow && task.status === 'cancelled') {
+				await workflowRuntimeStore.archiveWorkflowRunByTaskId(taskId, 'task_cancelled', {
+					final_status: 'cancelled',
+				})
+				return
+			}
 
 			// 2. If task has a workflow but no step, initialize to first step and continue
 			if (task.workflow && !task.workflow_step) {
@@ -826,6 +962,14 @@ export class Orchestrator {
 						// Update local task reference and fall through to evaluation
 						task.workflow_step = firstStep.id
 						task.status = 'assigned'
+						await workflowRuntimeStore.ensureWorkflowRun({
+							task,
+							workflow,
+							triggerSource: 'task_change',
+							status: 'active',
+							currentStepId: firstStep.id,
+							lastEvent: 'workflow_initialized',
+						})
 					}
 				} catch (err) {
 					const msg = err instanceof Error ? err.message : String(err)
@@ -839,6 +983,10 @@ export class Orchestrator {
 				try {
 					const workflow = await workflowLoader.load(task.workflow)
 					const agents = await loadAgents(root)
+					const currentStep = workflow.steps.find((step) => step.id === task.workflow_step)
+					let runtimeState:
+						| Awaited<ReturnType<typeof workflowRuntimeStore.recordEvaluation>>
+						| undefined
 
 					let result: import('./workflow').WorkflowTransitionResult
 
@@ -846,6 +994,9 @@ export class Orchestrator {
 						// Task finished current step → advance to next step
 						result = advanceWorkflow(workflow, task, 'done', agents)
 						if (result.nextStep && result.nextStep !== task.workflow_step) {
+							if (currentStep) {
+								await workflowRuntimeStore.recordAdvance(task, workflow, currentStep, result)
+							}
 							await storage.updateTask(taskId, { workflow_step: result.nextStep }, 'system')
 							await storage.moveTask(taskId, 'assigned', 'system')
 							eventBus.emit({
@@ -858,7 +1009,16 @@ export class Orchestrator {
 								'orchestrator',
 								`advanced ${taskId}: ${task.workflow_step} -> ${result.nextStep}`,
 							)
+							await this.emitWorkflowEvent(taskId, {
+								type: 'workflow_advanced',
+								from: task.workflow_step ?? 'unknown',
+								to: result.nextStep,
+								workflowRunId: buildWorkflowRunId(task.id),
+							})
 						} else if (result.action === 'complete') {
+							if (currentStep) {
+								await workflowRuntimeStore.recordAdvance(task, workflow, currentStep, result)
+							}
 							logger.info('orchestrator', `task ${taskId} workflow complete`)
 						} else {
 							// Can't advance — don't respawn
@@ -874,6 +1034,17 @@ export class Orchestrator {
 						return
 					} else if (task.status === 'assigned' || task.status === 'in_progress') {
 						result = evaluateTransition(workflow, task, agents)
+						if (currentStep) {
+							runtimeState = await workflowRuntimeStore.recordEvaluation(
+								task,
+								workflow,
+								currentStep,
+								result,
+								{
+									taskStatus: task.status,
+								},
+							)
+						}
 					} else {
 						return
 					}
@@ -884,7 +1055,24 @@ export class Orchestrator {
 						assignTo: result.assignTo,
 						assignRole: result.assignRole,
 						gate: result.gate,
+						modelPolicy: result.modelPolicy,
+						validationMode: result.validationMode,
+						failureAction: result.failureAction,
+						workflowRunId: runtimeState?.workflowRun.id ?? buildWorkflowRunId(task.id),
+						stepRunId: runtimeState?.stepRun.id,
 						error: result.error,
+					})
+					await this.emitWorkflowEvent(taskId, {
+						type: 'workflow_evaluated',
+						step: task.workflow_step ?? 'none',
+						action: result.action,
+						nextStep: result.nextStep,
+						workflowId: result.workflowId,
+						workflowRunId: runtimeState?.workflowRun.id ?? buildWorkflowRunId(task.id),
+						stepRunId: runtimeState?.stepRun.id,
+						modelPolicy: result.modelPolicy,
+						validationMode: result.validationMode,
+						failureAction: result.failureAction,
 					})
 
 					// Log notifications based on result
@@ -909,6 +1097,7 @@ export class Orchestrator {
 									logger.info(
 										'orchestrator',
 										`spawning agent: ${agent.id} (${agent.role}) for task ${taskId}`,
+										{ modelPolicy: result.modelPolicy ?? 'agent-default' },
 									)
 									this.guardedSpawn({
 										agent,
@@ -933,6 +1122,138 @@ export class Orchestrator {
 							}
 							break
 						}
+						case 'spawn_workflow': {
+							if (!currentStep?.spawnWorkflow || !result.workflowId) {
+								logger.error(
+									'orchestrator',
+									`sub-workflow step ${task.workflow_step ?? 'unknown'} is missing workflow config`,
+								)
+								break
+							}
+
+							const resolvedIdempotencyKey = result.idempotencyKey
+								? resolveTaskBinding(task, result.idempotencyKey)
+								: undefined
+							const childTaskId = buildSubWorkflowTaskId(
+								task.id,
+								currentStep.id,
+								result.workflowId,
+								resolvedIdempotencyKey,
+							)
+							const existingChild = await storage.readTask(childTaskId)
+
+							if (existingChild) {
+								if (runtimeState?.stepRun) {
+									await workflowRuntimeStore.updateStepRun(runtimeState.stepRun.id, {
+										status: existingChild.status === 'done' ? 'completed' : 'waiting_child',
+										childTaskId,
+										childWorkflowId: result.workflowId,
+										metadata: { childStatus: existingChild.status },
+										completedAt: existingChild.status === 'done' ? new Date().toISOString() : null,
+									})
+								}
+								logger.info('orchestrator', `sub-workflow already exists for ${taskId}`, {
+									childTaskId,
+									childStatus: existingChild.status,
+									workflowId: result.workflowId,
+								})
+								await this.emitWorkflowEvent(taskId, {
+									type: 'sub_workflow_exists',
+									step: currentStep.id,
+									childTaskId,
+									childStatus: existingChild.status,
+									workflowId: result.workflowId,
+								})
+
+								if (existingChild.status === 'done') {
+									const parentAdvance = advanceWorkflow(workflow, task, 'done', agents)
+									if (parentAdvance.nextStep && parentAdvance.nextStep !== task.workflow_step) {
+										await workflowRuntimeStore.recordAdvance(
+											task,
+											workflow,
+											currentStep,
+											parentAdvance,
+										)
+										await storage.updateTask(
+											taskId,
+											{ workflow_step: parentAdvance.nextStep },
+											'system',
+										)
+										await storage.moveTask(taskId, 'assigned', 'system')
+										eventBus.emit({
+											type: 'workflow_advanced',
+											taskId,
+											from: task.workflow_step ?? 'unknown',
+											to: parentAdvance.nextStep,
+										})
+										await this.emitWorkflowEvent(taskId, {
+											type: 'sub_workflow_completed',
+											step: currentStep.id,
+											childTaskId,
+											to: parentAdvance.nextStep,
+											workflowRunId: buildWorkflowRunId(task.id),
+										})
+										this.queueTaskReevaluation(taskId)
+									}
+								}
+								break
+							}
+
+							const now = new Date().toISOString()
+							const childTask = await storage.createTask({
+								id: childTaskId,
+								title: `${task.title} / ${currentStep.name ?? currentStep.id}`,
+								description: currentStep.instructions || currentStep.description,
+								type: task.type,
+								status: 'backlog',
+								priority: task.priority,
+								created_by: 'system',
+								parent: task.id,
+								workflow: result.workflowId,
+								context: this.buildSubWorkflowContext(task, currentStep),
+								labels: task.labels,
+								project: task.project,
+								milestone: task.milestone,
+								metadata: {
+									parent_task_id: task.id,
+									parent_workflow_step: currentStep.id,
+									sub_workflow_idempotency_key:
+										resolvedIdempotencyKey ?? `${task.id}:${currentStep.id}:${result.workflowId}`,
+								},
+								created_at: now,
+								updated_at: now,
+							})
+
+							logger.info('orchestrator', `spawned sub-workflow for ${taskId}`, {
+								childTaskId,
+								workflowId: result.workflowId,
+							})
+							if (runtimeState?.stepRun) {
+								await workflowRuntimeStore.updateStepRun(runtimeState.stepRun.id, {
+									status: 'waiting_child',
+									childTaskId,
+									childWorkflowId: result.workflowId,
+									metadata: { childStatus: childTask.status },
+								})
+							}
+							await this.emitWorkflowEvent(taskId, {
+								type: 'sub_workflow_spawned',
+								step: currentStep.id,
+								childTaskId,
+								workflowId: result.workflowId,
+								workflowRunId: runtimeState?.workflowRun.id ?? buildWorkflowRunId(task.id),
+								stepRunId: runtimeState?.stepRun.id,
+							})
+							await notifier.notify({
+								type: 'task_assigned',
+								title: `Sub-workflow spawned: ${childTask.title}`,
+								message: `Task ${taskId} spawned child workflow ${result.workflowId} as ${childTaskId}`,
+								priority: task.priority === 'critical' ? 'urgent' : 'normal',
+								taskId: childTaskId,
+							})
+							this.queueTaskReevaluation(childTask.id)
+							break
+						}
 						case 'notify_human':
 							await notifier.notify({
 								type: 'approval_needed',
@@ -943,6 +1264,14 @@ export class Orchestrator {
 							})
 							break
 						case 'complete':
+							if (task.status !== 'done') {
+								await storage.moveTask(taskId, 'done', 'system')
+								task.status = 'done'
+							}
+							await workflowRuntimeStore.archiveWorkflowRunByTaskId(taskId, 'workflow_completed', {
+								final_status: 'completed',
+								workflow_step: task.workflow_step,
+							})
 							await notifier.notify({
 								type: 'task_completed',
 								title: `Task completed: ${task.title}`,

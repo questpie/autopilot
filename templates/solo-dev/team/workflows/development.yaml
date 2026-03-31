@@ -7,8 +7,17 @@ steps:
   - id: scope
     name: "Scope"
     type: agent
+    executor:
+      kind: agent
+      role: strategist
+      model_policy: smart-plan
     assigned_role: strategist
     description: "Analyze requirements and write feature spec"
+    validate:
+      mode: auto
+      rules:
+        - type: output_exists
+          target: spec_document
     outputs:
       - type: document
         path_template: "/projects/{{project}}/docs/spec-{{task_id}}.md"
@@ -19,6 +28,10 @@ steps:
   - id: plan
     name: "Plan"
     type: agent
+    executor:
+      kind: agent
+      role: planner
+      model_policy: smart-plan
     assigned_role: planner
     description: "Create detailed implementation plan from spec"
     inputs:
@@ -34,6 +47,10 @@ steps:
   - id: plan_review
     name: "Plan Review"
     type: agent
+    executor:
+      kind: agent
+      role: reviewer
+      model_policy: smart-review
     assigned_role: reviewer
     description: "Review the implementation plan for completeness and correctness"
     inputs:
@@ -44,6 +61,14 @@ steps:
       min_approvals: 1
       on_reject: revise
       on_reject_max_rounds: 2
+    validate:
+      mode: review
+      reviewers_roles: ["reviewer"]
+      min_approvals: 1
+      on_reject: revise
+      on_reject_max_rounds: 2
+    on_fail: revise
+    max_retries: 2
     transitions:
       approved: implement
       rejected: plan
@@ -51,6 +76,10 @@ steps:
   - id: implement
     name: "Implement"
     type: agent
+    executor:
+      kind: agent
+      role: developer
+      model_policy: cheap-execute
     assigned_role: developer
     description: "Write code, create branch, push commits"
     inputs:
@@ -63,12 +92,24 @@ steps:
     expected_duration: "4h"
     timeout: "8h"
     timeout_action: alert_human
+    validate:
+      mode: auto
+      rules:
+        - type: typecheck_passes
+        - type: tests_pass
+    on_fail:
+      action: escalate
+      model_policy: smart-review
     transitions:
       done: code_review
 
   - id: code_review
     name: "Code Review"
     type: agent
+    executor:
+      kind: agent
+      role: reviewer
+      model_policy: smart-review
     assigned_role: reviewer
     description: "Review code quality, architecture, and test coverage"
     inputs:
@@ -79,6 +120,14 @@ steps:
       min_approvals: 1
       on_reject: revise
       on_reject_max_rounds: 3
+    validate:
+      mode: review
+      reviewers_roles: ["reviewer"]
+      min_approvals: 1
+      on_reject: revise
+      on_reject_max_rounds: 3
+    on_fail: revise
+    max_retries: 3
     transitions:
       approved: human_merge
       rejected: implement
@@ -86,8 +135,14 @@ steps:
   - id: human_merge
     name: "Human Merge Approval"
     type: human_gate
+    executor:
+      kind: human
+      gate: merge
     gate: merge
     description: "Human reviews and approves the merge request"
+    validate:
+      mode: human
+      gate: merge
     transitions:
       approved: deploy_staging
       rejected: implement
@@ -95,6 +150,10 @@ steps:
   - id: deploy_staging
     name: "Deploy to Staging"
     type: agent
+    executor:
+      kind: agent
+      role: devops
+      model_policy: cheap-execute
     assigned_role: devops
     description: "Deploy the feature branch to staging environment"
     outputs:
@@ -106,11 +165,19 @@ steps:
   - id: verify
     name: "Verify Staging"
     type: agent
+    executor:
+      kind: agent
+      role: devops
+      model_policy: vision-verify
     assigned_role: devops
     description: "Run smoke tests and verify deployment on staging"
     expected_duration: "15m"
     timeout: "30m"
     timeout_action: alert_human
+    validate:
+      mode: auto
+      rules:
+        - type: smoke_tests_pass
     transitions:
       done: human_deploy_prod
       failed: deploy_staging
@@ -118,8 +185,14 @@ steps:
   - id: human_deploy_prod
     name: "Human Production Deploy Approval"
     type: human_gate
+    executor:
+      kind: human
+      gate: deploy
     gate: deploy
     description: "Human approves production deployment"
+    validate:
+      mode: human
+      gate: deploy
     transitions:
       approved: deploy_prod
       rejected: verify
@@ -127,6 +200,10 @@ steps:
   - id: deploy_prod
     name: "Deploy to Production"
     type: agent
+    executor:
+      kind: agent
+      role: devops
+      model_policy: cheap-execute
     assigned_role: devops
     description: "Deploy to production environment"
     outputs:
@@ -138,6 +215,10 @@ steps:
   - id: announce
     name: "Announce"
     type: agent
+    executor:
+      kind: agent
+      role: marketing
+      model_policy: cheap-execute
     assigned_role: marketing
     description: "Write release notes and announce the feature"
     inputs:

@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 /**
  * Hono app factory for the QUESTPIE Autopilot orchestrator API.
  *
@@ -8,17 +10,16 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
-import { logger } from '../logger'
 import type { Auth } from '../auth'
 import { authFactory } from '../auth'
 import type { Actor } from '../auth/types'
 import { companyRootFactory, container } from '../container'
 import type { AutopilotDb } from '../db'
 import { dbFactory } from '../db'
+import { getEnv } from '../env'
 import { storageFactory } from '../fs/sqlite-backend'
 import type { StorageBackend } from '../fs/storage'
-import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { logger } from '../logger'
 import { getDurableStreamBaseUrl } from '../session/durable'
 import { mountDocs } from './docs'
 import { artifactProxyAuth } from './middleware/artifact-auth'
@@ -29,6 +30,7 @@ import { securityHeaders } from './middleware/security-headers'
 import {
 	events,
 	activity,
+	agentSessions,
 	agents,
 	artifactProxy,
 	artifacts,
@@ -43,8 +45,6 @@ import {
 	pins,
 	search,
 	sessions,
-	agentSessions,
-	usage,
 	settings,
 	settingsPublic,
 	skills,
@@ -52,7 +52,9 @@ import {
 	tasks,
 	teamHumans,
 	upload,
+	usage,
 	webhooks,
+	workflowRuns,
 } from './routes'
 
 export interface AppEnv {
@@ -90,9 +92,10 @@ export interface AppConfig {
  */
 export function createApp(config: AppConfig) {
 	const app = new Hono<AppEnv>()
-	const rawOrigin = config.corsOrigin ?? process.env.CORS_ORIGIN
+	const env = getEnv()
+	const rawOrigin = config.corsOrigin ?? env.CORS_ORIGIN
 	const corsOrigin = rawOrigin
-		? rawOrigin.split(',').map((o) => o.trim())
+		? rawOrigin.split(',').map((o: string) => o.trim())
 		: ['http://localhost:3000', 'http://localhost:3001']
 
 	// ── 1. CORS ──────────────────────────────────────────────────────────
@@ -129,7 +132,9 @@ export function createApp(config: AppConfig) {
 		if (err instanceof HTTPException) {
 			return c.json({ error: err.message }, err.status)
 		}
-		logger.error('api', 'unhandled error', { error: err instanceof Error ? err.message : String(err) })
+		logger.error('api', 'unhandled error', {
+			error: err instanceof Error ? err.message : String(err),
+		})
 		return c.json({ error: 'internal server error' }, 500)
 	})
 
@@ -168,8 +173,7 @@ export function createApp(config: AppConfig) {
 	})
 
 	// ── 4.5. Public API routes (no auth required) ────────────────────────
-	app.route('/api/status', status)
-	app.route('/api/settings', settingsPublic)
+	const publicApp = app.route('/api/status', status).route('/api/settings', settingsPublic)
 
 	// ── 5. Auth middleware on /api/* ──────────────────────────────────────
 	app.use('/api/*', authMiddleware())
@@ -178,7 +182,7 @@ export function createApp(config: AppConfig) {
 	app.use('/api/*', actorRateLimit())
 
 	// ── 6. API routes — authenticated (chained for RPC type inference) ───
-	const typedApp = app
+	const typedApp = publicApp
 		.route('/api/tasks', tasks)
 		.route('/api/agents', agents)
 		.route('/api/pins', pins)
@@ -199,6 +203,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/sessions', sessions)
 		.route('/api/agent-sessions', agentSessions)
 		.route('/api/usage', usage)
+		.route('/api/workflow-runs', workflowRuns)
 		.route('/api/notifications', notifications)
 		.route('/api/fs', fsBrowser)
 

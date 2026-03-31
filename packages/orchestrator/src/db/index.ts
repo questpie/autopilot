@@ -1,8 +1,9 @@
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
+import { type Client, createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { migrate } from 'drizzle-orm/libsql/migrator'
-import { createClient, type Client } from '@libsql/client'
-import { join } from 'node:path'
-import { mkdir } from 'node:fs/promises'
+import { getEnv } from '../env'
 import * as schema from './schema'
 
 export type AutopilotDb = ReturnType<typeof drizzle<typeof schema>>
@@ -23,15 +24,19 @@ export interface DbResult {
  * Returns both the Drizzle ORM instance and the raw libSQL Client
  * so callers (e.g. Better Auth) can share the same underlying connection.
  */
-export async function createDb(companyRoot: string, _opts?: { embeddingDimensions?: number }): Promise<DbResult> {
+export async function createDb(
+	companyRoot: string,
+	_opts?: { embeddingDimensions?: number },
+): Promise<DbResult> {
+	const env = getEnv()
 	const dataDir = join(companyRoot, '.data')
 	await mkdir(dataDir, { recursive: true })
 
 	const dbPath = join(dataDir, 'autopilot.db')
 	const client = createClient({
-		url: process.env.DATABASE_URL ?? `file:${dbPath}`,
-		syncUrl: process.env.TURSO_SYNC_URL,
-		authToken: process.env.TURSO_AUTH_TOKEN,
+		url: env.DATABASE_URL ?? `file:${dbPath}`,
+		syncUrl: env.TURSO_SYNC_URL,
+		authToken: env.TURSO_AUTH_TOKEN,
 	})
 
 	await client.execute('PRAGMA journal_mode = WAL')
@@ -51,33 +56,67 @@ export async function createDb(companyRoot: string, _opts?: { embeddingDimension
 	// libSQL native vector indexes (DiskANN) — F32_BLOB columns added via migration 0007
 	// Indexes created here because drizzle cannot manage libsql_vector_idx
 	try {
-		await client.execute(`CREATE INDEX IF NOT EXISTS search_vec_idx ON search_index (libsql_vector_idx(embedding))`)
-	} catch { /* index exists or libSQL version without vector support */ }
+		await client.execute(
+			'CREATE INDEX IF NOT EXISTS search_vec_idx ON search_index (libsql_vector_idx(embedding))',
+		)
+	} catch {
+		/* index exists or libSQL version without vector support */
+	}
 	try {
-		await client.execute(`CREATE INDEX IF NOT EXISTS chunks_vec_idx ON chunks (libsql_vector_idx(embedding))`)
-	} catch { /* index exists or libSQL version without vector support */ }
+		await client.execute(
+			'CREATE INDEX IF NOT EXISTS chunks_vec_idx ON chunks (libsql_vector_idx(embedding))',
+		)
+	} catch {
+		/* index exists or libSQL version without vector support */
+	}
 
 	// D25: FTS5 virtual tables for chunks
 	await initChunksFts(client)
 
 	// Cleanup expired rate limit entries on startup and every 5 minutes
-	try { await client.execute(`DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()`) } catch { /* table may not exist yet */ }
-	setInterval(() => {
-		client.execute(`DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()`).catch(() => {/* db closed */})
-	}, 5 * 60 * 1000)
+	try {
+		await client.execute('DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()')
+	} catch {
+		/* table may not exist yet */
+	}
+	setInterval(
+		() => {
+			client.execute('DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()').catch(() => {
+				/* db closed */
+			})
+		},
+		5 * 60 * 1000,
+	)
 
 	// Cleanup expired file locks on startup and every minute
 	const nowMs = Date.now()
-	try { await client.execute(`DELETE FROM file_locks WHERE expires_at < ${nowMs}`) } catch { /* table may not exist yet */ }
+	try {
+		await client.execute(`DELETE FROM file_locks WHERE expires_at < ${nowMs}`)
+	} catch {
+		/* table may not exist yet */
+	}
 	setInterval(() => {
-		client.execute(`DELETE FROM file_locks WHERE expires_at < ${Date.now()}`).catch(() => {/* db closed */})
+		client.execute(`DELETE FROM file_locks WHERE expires_at < ${Date.now()}`).catch(() => {
+			/* db closed */
+		})
 	}, 60 * 1000)
 
 	// Cleanup expired pins on startup and every 5 minutes
-	try { await client.execute(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${nowMs}`) } catch { /* table may not exist yet */ }
-	setInterval(() => {
-		client.execute(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${Date.now()}`).catch(() => {/* db closed */})
-	}, 5 * 60 * 1000)
+	try {
+		await client.execute(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${nowMs}`)
+	} catch {
+		/* table may not exist yet */
+	}
+	setInterval(
+		() => {
+			client
+				.execute(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${Date.now()}`)
+				.catch(() => {
+					/* db closed */
+				})
+		},
+		5 * 60 * 1000,
+	)
 
 	return { db, raw: client }
 }
@@ -136,7 +175,9 @@ async function initChunksFts(client: Client): Promise<void> {
 				tokenize='porter unicode61'
 			)
 		`)
-	} catch { /* already exists */ }
+	} catch {
+		/* already exists */
+	}
 
 	try {
 		await client.execute(`
@@ -155,7 +196,9 @@ async function initChunksFts(client: Client): Promise<void> {
 				INSERT INTO chunks_fts(rowid, content) VALUES (new.id, new.content);
 			END
 		`)
-	} catch { /* triggers exist */ }
+	} catch {
+		/* triggers exist */
+	}
 }
 
 /**
@@ -202,7 +245,7 @@ export async function initFts(db: AutopilotDb): Promise<void> {
 
 export { schema }
 
-import { container, companyRootFactory } from '../container'
+import { companyRootFactory, container } from '../container'
 import { loadCompany } from '../fs'
 
 export const dbFactory = container.registerAsync('db', async (c) => {

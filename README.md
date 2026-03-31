@@ -28,6 +28,8 @@ cp .env.example .env
 docker compose up
 ```
 
+Open `http://localhost:3000` for the dashboard. The local Caddy proxy keeps browser auth and API calls same-origin.
+
 > **Authentication:**
 > Set your OpenRouter API key in `.env` (`OPENROUTER_API_KEY=sk-or-...`)
 > or run `autopilot provider set openrouter --api-key <key>`.
@@ -65,7 +67,21 @@ Sam is starting now. You'll be notified when approvals are needed.
 2. CEO agent decomposes into tasks
 3. Agents execute: strategist → planner → developer → reviewer → devops
 4. You approve at gates (merge, deploy, spend)
-5. Everything is files. Every action is a git commit.
+5. Workflow execution is tracked durably in SQLite
+6. Files remain the authored source of truth. Every action is still git-auditable.
+
+---
+
+## Workflow Runtime Model
+
+Autopilot treats workflows as the primary execution primitive.
+
+- `team/workflows/*.yaml` defines the authored workflow structure
+- the orchestrator compiles workflows into explicit step contracts
+- SQLite stores runtime execution in `workflow_runs` and `step_runs`
+- Durable Streams stores append-only replay timelines for sessions and workflow events
+
+Agents execute the current step. The app owns validation, transition state, deduplication, and replayability.
 
 ---
 
@@ -101,12 +117,13 @@ Storage       SQLite + Drizzle · YAML/MD/JSON · FTS5 + sqlite-vec · Git
 ```
 
 - **Config is files** — YAML, Markdown, JSON. `ls` your company config.
-- **Runtime is SQLite** — tasks, messages, sessions, search. Zero external deps.
+- **Runtime is SQLite** — tasks, messages, sessions, workflow runs, step runs, search. Zero external deps.
 - **Git is the audit trail** — every agent action = commit.
 - **MCP server** — expose Autopilot to Claude Desktop/Code via tasks, agents, search, sessions.
-- **Durable Streams** — persistent session streams with live tailing and replay.
+- **Durable Streams** — append-only session and workflow timelines with live tailing and replay.
 - **Per-agent model picker** — assign different models to different agents via OpenRouter.
 - **One Bun process** — orchestrator + API + dashboard. ~100MB RAM.
+- **Same-origin browser auth** — dashboard traffic stays on one origin; API proxying is handled by Vite in dev and Caddy in Docker/self-hosted setups.
 
 ---
 
@@ -170,10 +187,10 @@ my-company/
 ├── secrets/                  # Encrypted secrets (runtime)
 ├── projects/                 # Project workspaces (runtime)
 ├── artifacts/                # Generated apps & content (runtime)
-└── .data/autopilot.db        # SQLite (tasks, messages, FTS5, embeddings)
+└── .data/autopilot.db        # SQLite (tasks, messages, workflow_runs, step_runs, FTS5, embeddings)
 ```
 
-> **Note:** Tasks, messages, and activity are stored in SQLite (`.data/autopilot.db`), not as YAML files. Runtime directories are created by `autopilot init`, not from the template.
+> **Note:** Tasks, messages, activity, workflow runs, and step runs are stored in SQLite (`.data/autopilot.db`), not as YAML files. Runtime directories are created by `autopilot init`, not from the template.
 
 > **Config format:** Legacy monolithic files (`team/agents.yaml`, `team/humans.yaml`, `team/webhooks.yaml`, `team/schedules.yaml`) are no longer supported. Use folder-based config only.
 
@@ -199,6 +216,7 @@ curl -fsSL https://raw.githubusercontent.com/questpie/autopilot/main/install.sh 
 - [Getting Started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
 - [Agents & Roles](docs/agents.md)
+- [Internal Workflow Memo](docs/internal/workflow-operating-memo.md)
 - [Config Folder Migration](docs/guides/config-folder-migration.md)
 - [CLI Reference](docs/cli.md)
 - [VPS Deployment](docs/guides/vps-deployment.md)

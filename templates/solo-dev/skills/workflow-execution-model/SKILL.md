@@ -18,17 +18,29 @@ Autopilot breaks every task into a **workflow** — a sequence of small, scoped 
 
 ## How It Works
 
+### Workflows Are the Runtime Primitive
+
+A workflow is no longer just YAML routing. It is the primary execution contract for a task.
+
+- **Filesystem definitions** live in `team/workflows/*.yaml`
+- **Compiled step contracts** normalize legacy and explicit fields into runtime-safe structure
+- **Runtime state** lives in SQLite as `workflow_runs` and `step_runs`
+- **Timeline replay** is appended to Durable Streams as a secondary event log
+
+The app owns workflow state. Agents do not.
+
 ### Workflows Define Structure, Agents Execute Steps
 
-A workflow is a YAML-defined sequence of steps with typed transitions:
+A workflow step can now carry:
 
-- **Steps** with scoped instructions and role assignments
-- **Step types**: `agent` (AI executes), `human_gate` (pauses for approval), `terminal` (workflow complete)
-- **Transitions** that define which step follows based on outcome (e.g., `done → next_step`)
-- **Human gates** with `min_approvals` from specified reviewer roles
-- **Schedules** — workflows trigger on cron via schedule definitions
+- **Executor** details (`agent`, `human`, `tool`, `sub_workflow`)
+- **Instructions** for the current step only
+- **Validation** mode (`auto`, `review`, `human`, `tool`, `composite`)
+- **Failure policy** (`retry`, `revise`, `escalate`, `block`, `spawn_workflow`)
+- **Model policy** hints for routing and review behavior
+- **Sub-workflow spawning** with input mapping and idempotency keys
 
-The orchestrator evaluates the workflow as a pure function — no side effects. It determines what action to take (assign agent, wait for approval, complete) based on current task state.
+The workflow engine still evaluates transitions as a pure decision layer, but the orchestrator now persists the resulting runtime state.
 
 ### Agent Assignment
 
@@ -36,7 +48,7 @@ Each workflow step specifies an agent by:
 - **Role** — any agent with a matching role can be assigned
 - **Specific ID** — a named agent handles the step
 
-The assigned agent uses its own configured model (via OpenRouter). Model selection is per-agent, not per-step.
+The assigned agent uses its configured model today, while workflow steps can also declare `model_policy` as the beginning of step-level routing.
 
 ### Concurrency
 
@@ -49,6 +61,12 @@ When an agent starts a session, it receives assembled context:
 - **Company state** — project and team information
 - **Memory** — extracted facts, decisions, mistakes, and patterns from prior sessions
 - **Task context** — current task details, workflow step instructions, relevant history
+
+When a task has a workflow, the prompt also includes a **workflow operating memo** that tells the agent:
+
+- execute the current step only
+- do not invent hidden process outside the workflow
+- treat advancement and validation as app-owned runtime state
 
 ### Agent Memory
 
@@ -66,11 +84,17 @@ Human gates pause workflow execution until a human approves. Configuration inclu
 - `min_approvals` — how many approvals are needed
 - `reviewers_roles` — which roles can approve
 
-The workflow will not advance past a human gate until approval criteria are met.
+The workflow will not advance past a human gate until runtime approval criteria are met.
 
 ### Validation
 
-The only implemented validation gate is `human_gate`. There are no automated validation gates (no typecheck, test, lint, or visual comparison). If you need automated checks, run them as part of an agent step's instructions.
+Validation is now part of the step contract and runtime metadata, but only review/human waiting behavior is currently enforced deeply. Automated validators still need to be implemented case by case or executed inside the step's work instructions.
+
+So the right mental model is:
+
+- validation is a first-class workflow concept
+- persistence for validation state exists
+- full auto-validator execution is not complete yet
 
 ## Task-Workflow Lifecycle
 
@@ -86,7 +110,24 @@ Schedule/Trigger fires
   → Until terminal step → task complete
 ```
 
-Task state tracks the current `workflow_step` and full transition history.
+Task state tracks the current `workflow_step`, while SQLite tracks durable workflow runtime state.
+
+## Runtime Records
+
+Execution state now has two durable runtime records:
+
+- **`workflow_runs`** — one current run per task/workflow, including current step, status, trigger, and metadata
+- **`step_runs`** — durable per-step attempts with executor info, validation mode, failure action, child workflow linkage, and snapshots
+
+This is important: task history is no longer the only record. Workflow execution has its own queryable runtime model.
+
+## Storage Philosophy
+
+- **Filesystem** = authored inputs and human-editable source material
+- **SQLite** = control plane and resumable runtime state
+- **Durable Streams** = append-only timeline for replay/debugging
+
+If the application needs the value to dedupe work, resume after restart, inspect history, or enforce transitions, it belongs in SQLite.
 
 ## Architecture
 
@@ -103,23 +144,22 @@ team/
 
 1. **Workflows are YAML files, not code** — living documents, versioned, auditable
 2. **Workflows define routes, agents execute steps** — clean separation of concerns
-3. **Task history is the record** — every workflow transition is recorded
-4. **Pure evaluation functions** — the workflow engine has no side effects
-5. **Deterministic evaluation** — workflow decisions are computed by pure functions from current task/workflow state
+3. **Runtime state is app-owned** — the app persists workflow execution in SQLite
+4. **Pure evaluation functions** — the workflow engine still computes decisions without side effects
+5. **Deterministic evaluation** — workflow decisions are computed from current task/workflow state
 6. **Human gates are first-class** — can pause any workflow for human decision
-7. **Agents do not know about workflows** — they work on tasks; the orchestrator routes based on workflow state
+7. **Agents do not own the journey** — they work the current step; the orchestrator owns routing and advancement
 
 ## Limitations
 
 - **No model routing per step** — each agent uses its own default model for all steps it handles
-- **No automated validation gates** — only `human_gate` is functional
-- **No retry/escalation on failure** — failed steps do not automatically retry or escalate to a smarter model
-- **No sub-workflow execution** — `sub_workflow` exists in the schema but returns `no_action`
+- **Automated validation is partial** — validation contracts are modeled, but most concrete auto-validators are not implemented yet
+- **Retry/escalation policy is not centrally enforced yet** — failure policy exists in the contract, but the full policy engine is still ahead
+- **Sub-workflow execution is early-stage** — idempotent child workflow spawning works, but broader parent/child orchestration is still incomplete
 - **No parallel step execution** — steps run sequentially only
 - **No spawn queue at concurrency limit** — over-limit spawns are skipped
 - **No step timeouts** — steps run until the agent completes or is interrupted
 - **No token tracking** — `tokens_used` is always 0
 - **No step actions** — `notify`, `pin`, `move_task_to` are not implemented
-- **No `on_reject` / `max_rounds`** — not implemented
-- **No `can_skip_if`** — not implemented
-- **No global `task_changed` subscription for auto-advancement** — workflow processing runs on startup scan and explicit task handling paths
+- **No full archive lifecycle yet** — completed workflow runs are durable, but archive policy is still incomplete
+- **No central cost/quality telemetry yet** — workflow economics are not yet a first-class operator surface

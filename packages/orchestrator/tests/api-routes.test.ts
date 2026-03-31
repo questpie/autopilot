@@ -7,12 +7,16 @@ import { stringify as stringifyYaml } from 'yaml'
 import type { AppEnv } from '../src/api/app'
 import { configureContainer, container } from '../src/container'
 import type { StorageBackend } from '../src/fs/storage'
+import { compileWorkflow, workflowRuntimeStoreFactory } from '../src/workflow'
 import { setupTestApiKey, withApiKey } from './auth-helpers'
 
 let app: ReturnType<typeof import('../src/api/app').createApp>
 let companyRoot: string
 let storage: StorageBackend
 let apiKey: string
+let workflowRuntimeStore: Awaited<
+	ReturnType<typeof container.resolveAsync<[typeof workflowRuntimeStoreFactory]>>
+>['workflowRuntimeStore']
 
 beforeAll(async () => {
 	companyRoot = await mkdtemp(join(tmpdir(), 'api-routes-test-'))
@@ -72,8 +76,9 @@ beforeAll(async () => {
 
 	// Now we can safely import and resolve factories that depend on companyRoot
 	const { storageFactory } = await import('../src/fs/sqlite-backend')
-	const resolved = await container.resolveAsync([storageFactory])
+	const resolved = await container.resolveAsync([storageFactory, workflowRuntimeStoreFactory])
 	storage = resolved.storage
+	workflowRuntimeStore = resolved.workflowRuntimeStore
 	apiKey = await setupTestApiKey(companyRoot)
 
 	// Create the Hono app
@@ -234,6 +239,164 @@ describe('GET /api/tasks/:id', () => {
 
 		const data = (await res.json()) as { error: string }
 		expect(data.error).toBe('task not found')
+	})
+})
+
+// ─── GET /api/workflow-runs ─────────────────────────────────────────────────
+
+describe('GET /api/workflow-runs', () => {
+	it('should list workflow runs and expose run details by task id', async () => {
+		const task = await storage.createTask(
+			makeTaskPayload({
+				id: 'workflow-run-task',
+				workflow: 'development',
+				workflow_step: 'implement',
+				status: 'assigned',
+				context: { spec: 'projects/web/spec.md' },
+			}) as any,
+		)
+
+		const workflow = compileWorkflow({
+			id: 'development',
+			name: 'Development',
+			version: 1,
+			description: '',
+			change_policy: {
+				propose: ['any_agent'],
+				evaluate: ['ceo'],
+				apply: ['ceo'],
+				human_approval_required_for: [],
+			},
+			changelog: [],
+			steps: [
+				{
+					id: 'implement',
+					type: 'agent',
+					assigned_role: 'developer',
+					description: 'Implement the feature',
+					transitions: { done: 'complete' },
+					auto_execute: false,
+				},
+				{
+					id: 'complete',
+					type: 'terminal',
+					description: '',
+					transitions: {},
+					auto_execute: false,
+				},
+			],
+		})
+
+		const step = workflow.steps[0]
+		if (!step) throw new Error('expected workflow step')
+
+		await workflowRuntimeStore.recordEvaluation(task, workflow, step, {
+			action: 'assign_agent',
+			nextStep: 'implement',
+			assignRole: 'developer',
+			modelPolicy: 'cheap-execute',
+			validationMode: 'auto',
+			failureAction: 'block',
+		})
+
+		const listRes = await request('/api/workflow-runs?taskId=workflow-run-task')
+		expect(listRes.status).toBe(200)
+		const runs = (await listRes.json()) as Array<{ task_id: string; workflow_id: string }>
+		expect(runs).toHaveLength(1)
+		expect(runs[0]?.task_id).toBe('workflow-run-task')
+		expect(runs[0]?.workflow_id).toBe('development')
+
+		const detailRes = await request('/api/workflow-runs/task/workflow-run-task')
+		expect(detailRes.status).toBe(200)
+		const detail = (await detailRes.json()) as {
+			run: { task_id: string; current_step_id: string }
+			steps: Array<{ step_id: string; status: string; attempt: number }>
+		}
+		expect(detail.run.task_id).toBe('workflow-run-task')
+		expect(detail.run.current_step_id).toBe('implement')
+		expect(detail.steps).toHaveLength(1)
+		expect(detail.steps[0]?.step_id).toBe('implement')
+		expect(detail.steps[0]?.status).toBe('assigned')
+		expect(detail.steps[0]?.attempt).toBe(1)
+	})
+
+	it('should return 404 when workflow run does not exist', async () => {
+		const res = await request('/api/workflow-runs/task/ghost-task')
+		expect(res.status).toBe(404)
+	})
+
+	it('should exclude archived runs by default and include them on request', async () => {
+		const task = await storage.createTask(
+			makeTaskPayload({
+				id: 'archived-workflow-run-task',
+				workflow: 'development',
+				workflow_step: 'implement',
+				status: 'assigned',
+			}) as any,
+		)
+
+		const workflow = compileWorkflow({
+			id: 'development',
+			name: 'Development',
+			version: 1,
+			description: '',
+			change_policy: {
+				propose: ['any_agent'],
+				evaluate: ['ceo'],
+				apply: ['ceo'],
+				human_approval_required_for: [],
+			},
+			changelog: [],
+			steps: [
+				{
+					id: 'implement',
+					type: 'agent',
+					assigned_role: 'developer',
+					description: 'Implement the feature',
+					transitions: { done: 'complete' },
+					auto_execute: false,
+				},
+				{
+					id: 'complete',
+					type: 'terminal',
+					description: '',
+					transitions: {},
+					auto_execute: false,
+				},
+			],
+		})
+
+		const step = workflow.steps[0]
+		if (!step) throw new Error('expected workflow step')
+
+		await workflowRuntimeStore.recordEvaluation(task, workflow, step, {
+			action: 'assign_agent',
+			nextStep: 'implement',
+			assignRole: 'developer',
+			validationMode: 'auto',
+			failureAction: 'block',
+		})
+		await workflowRuntimeStore.archiveWorkflowRunByTaskId(
+			'archived-workflow-run-task',
+			'test_archive',
+		)
+
+		const activeRes = await request('/api/workflow-runs?taskId=archived-workflow-run-task')
+		expect(activeRes.status).toBe(200)
+		const activeRuns = (await activeRes.json()) as Array<{ task_id: string }>
+		expect(activeRuns).toHaveLength(0)
+
+		const archivedRes = await request(
+			'/api/workflow-runs?taskId=archived-workflow-run-task&includeArchived=true',
+		)
+		expect(archivedRes.status).toBe(200)
+		const archivedRuns = (await archivedRes.json()) as Array<{
+			task_id: string
+			archived_at: string | null
+		}>
+		expect(archivedRuns).toHaveLength(1)
+		expect(archivedRuns[0]?.task_id).toBe('archived-workflow-run-task')
+		expect(archivedRuns[0]?.archived_at).toBeTruthy()
 	})
 })
 

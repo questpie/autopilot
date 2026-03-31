@@ -63,7 +63,8 @@ What happens:
 3. **Planner** creates an implementation plan
 4. **Developer** writes the code
 5. **Reviewer** checks quality
-6. You get notified at approval gates (merge, deploy)
+6. The orchestrator records workflow execution in SQLite as the work advances
+7. You get notified at approval gates (merge, deploy)
 
 ## Watch Agents Work
 
@@ -95,7 +96,8 @@ When you ran `autopilot ask`, it:
 1. Created a task in SQLite (`.data/autopilot.db`)
 2. The CEO agent picked it up and decomposed it
 3. Sub-tasks were created and assigned to agents
-4. Each agent worked in sequence following the workflow
-5. Every file change was auto-committed to git
+4. Workflow execution was tracked in SQLite (`workflow_runs`, `step_runs`)
+5. Each agent worked in sequence following the current workflow step
+6. Every file change was auto-committed to git
 
-Your company config lives in the `my-company/` directory, and runtime data (tasks, messages, activity) lives in SQLite. Back it up with `cp -r`, fork it with `git clone`.
+Your company config lives in the `my-company/` directory, and runtime data (tasks, messages, activity, workflow execution) lives in SQLite. Back it up with `cp -r`, fork it with `git clone`.

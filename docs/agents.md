@@ -22,6 +22,20 @@ Each agent is a Claude session with:
 - **Memory** — persistent facts, decisions, patterns from past sessions
 - **Context** — role-scoped snapshot of current company state
 
+Agents are not expected to manage workflow state themselves. When a task has a workflow, the app provides the current workflow step and the orchestrator owns advancement.
+
+## Workflow Operating Model
+
+For workflow-backed tasks, the intended behavior is:
+
+1. The agent executes the current step only
+2. The app persists execution state in SQLite (`workflow_runs`, `step_runs`)
+3. Validation and advancement are owned by the orchestrator
+4. Human gates are enforced by runtime state, not by agent discretion
+5. Child workflows should be explicit runtime actions, not hidden sub-processes in chat text
+
+The system prompt now includes a short workflow operating memo for workflow-backed tasks, but the memo is only reinforcement. Correctness must come from runtime enforcement.
+
 ## Unified Tool Set
 
 All role configurations are built from these tool names:
@@ -90,6 +104,8 @@ The orchestrator picks up changes automatically (filesystem watcher).
 ## Agent Memory
 
 Each agent has persistent memory stored in `context/memory/{agent-id}/memory.yaml`. Memory is extracted automatically after each session using Claude Haiku. The agent's next session includes relevant memories in context.
+
+Important: agent memory is not the source of truth for workflow state. Use task state plus workflow runtime records for that.
 
 ## Context Layers
 
