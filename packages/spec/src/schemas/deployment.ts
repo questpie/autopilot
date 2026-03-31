@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-/** Deployment modes for QuestPie Autopilot. */
+/** Deployment modes for QUESTPIE Autopilot. */
 export const DEPLOYMENT_MODES = ['selfhosted', 'cloud'] as const
 
 export type DeploymentMode = (typeof DEPLOYMENT_MODES)[number]

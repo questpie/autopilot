@@ -31,6 +31,5 @@ export const AgentSchema = z.object({
 	keywords: z.array(z.string()).optional(),
 })
 
-export const AgentsFileSchema = z.object({
-	agents: z.array(AgentSchema),
-})
+/** @deprecated Use AgentSchema directly — agents are now individual files in AGENTS_DIR */
+export const AgentsFileSchema = AgentSchema

@@ -7,12 +7,12 @@ import { createTestCompany } from './helpers'
 import { writeYaml } from '../src/fs/yaml'
 
 describe('parseWatchEvent', () => {
-	test('parses team config path (agents.yaml)', () => {
-		const event = parseWatchEvent('/company', '/company/team/agents.yaml')
+	test('parses team config path (agents/dev.yaml)', () => {
+		const event = parseWatchEvent('/company', '/company/team/agents/dev.yaml')
 		expect(event).toEqual({
 			type: 'config_changed',
-			file: 'agents.yaml',
-			path: '/company/team/agents.yaml',
+			file: 'agents/dev.yaml',
+			path: '/company/team/agents/dev.yaml',
 		})
 	})
 
@@ -105,7 +105,7 @@ describe('Watcher', () => {
 		await cleanup()
 	})
 
-	test('triggers config_changed when agents.yaml is modified', async () => {
+	test('triggers config_changed when agent file is modified', async () => {
 		const events: WatchEvent[] = []
 
 		const watcher = new Watcher({
@@ -119,8 +119,8 @@ describe('Watcher', () => {
 		await watcher.start()
 		await new Promise((r) => setTimeout(r, 300))
 
-		await writeYaml(join(companyRoot, 'team', 'agents.yaml'), {
-			agents: [{ id: 'dev', name: 'Developer' }],
+		await writeYaml(join(companyRoot, 'team', 'agents', 'dev.yaml'), {
+			id: 'dev', name: 'Developer', role: 'developer', description: 'Dev', model: 'claude', fs_scope: { read: ['**'], write: ['**'] },
 		})
 
 		await new Promise((r) => setTimeout(r, 1000))

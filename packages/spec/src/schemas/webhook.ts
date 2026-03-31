@@ -30,17 +30,5 @@ export const WebhookSchema = z.object({
 	enabled: z.boolean().default(true),
 })
 
-export const WebhooksFileSchema = z.object({
-	server: z
-		.object({
-			base_url: z.string().url(),
-			auth: z
-				.object({
-					type: z.string(),
-					secret_ref: z.string(),
-				})
-				.optional(),
-		})
-		.optional(),
-	webhooks: z.array(WebhookSchema),
-})
+/** @deprecated Use WebhookSchema directly — webhooks are now individual files in WEBHOOKS_DIR */
+export const WebhooksFileSchema = WebhookSchema

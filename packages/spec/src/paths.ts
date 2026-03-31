@@ -7,12 +7,12 @@ export const PATHS = {
 	COMPANY_CONFIG: '/company.yaml',
 
 	// Team
-	AGENTS: '/team/agents.yaml',
-	HUMANS: '/team/humans.yaml',
+	AGENTS_DIR: '/team/agents',
+	HUMANS_DIR: '/team/humans',
 	ROLES_DIR: '/team/roles',
 	WORKFLOWS_DIR: '/team/workflows',
 	SCHEDULES_DIR: '/team/schedules',
-	WEBHOOKS: '/team/webhooks.yaml',
+	WEBHOOKS_DIR: '/team/webhooks',
 	WATCHERS: '/team/watchers.yaml',
 	THRESHOLDS: '/team/thresholds.yaml',
 	TRANSPORTS: '/team/transports.yaml',
@@ -128,3 +128,21 @@ export const rolePath = (role: string) => `${PATHS.ROLES_DIR}/${role}.md`
  * @param id - Unique schedule identifier
  */
 export const schedulePath = (id: string) => `${PATHS.SCHEDULES_DIR}/${id}.yaml`
+
+/**
+ * Returns the filesystem path for an agent YAML file.
+ * @param id - Unique agent identifier
+ */
+export const agentPath = (id: string) => `${PATHS.AGENTS_DIR}/${id}.yaml`
+
+/**
+ * Returns the filesystem path for a human YAML file.
+ * @param id - Unique human identifier
+ */
+export const humanPath = (id: string) => `${PATHS.HUMANS_DIR}/${id}.yaml`
+
+/**
+ * Returns the filesystem path for a webhook YAML file.
+ * @param id - Unique webhook identifier
+ */
+export const webhookPath = (id: string) => `${PATHS.WEBHOOKS_DIR}/${id}.yaml`

@@ -23,9 +23,11 @@ describe('WebhookServer', () => {
 	})
 
 	async function setupWebhooks(webhooks: Array<Record<string, unknown>>) {
-		await writeYaml(join(companyRoot, 'team', 'webhooks.yaml'), {
-			webhooks,
-		})
+		const { mkdir } = await import('node:fs/promises')
+		await mkdir(join(companyRoot, 'team', 'webhooks'), { recursive: true })
+		for (const webhook of webhooks) {
+			await writeYaml(join(companyRoot, 'team', 'webhooks', `${webhook.id}.yaml`), webhook)
+		}
 	}
 
 	test('server starts and responds to health check', async () => {

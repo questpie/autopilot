@@ -51,7 +51,7 @@ describe('D29: chunk search', () => {
 
 	it('should find a chunk by keyword via FTS', async () => {
 		await setup()
-		await insertChunk('knowledge', 'readme.md', 0, 'QuestPie Autopilot is an AI agent orchestration platform')
+		await insertChunk('knowledge', 'readme.md', 0, 'QUESTPIE Autopilot is an AI agent orchestration platform')
 
 		const results = await searchChunksFts(db, 'orchestration')
 		expect(results.length).toBe(1)

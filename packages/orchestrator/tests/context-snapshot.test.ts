@@ -29,15 +29,15 @@ describe('buildCompanySnapshot', () => {
 		storage = new SqliteBackend(root)
 		await storage.initialize()
 
-		// Write agents.yaml
+		// Write individual agent files
+		await mkdir(join(root, 'team', 'agents'), { recursive: true })
 		await writeFile(
-			join(root, 'team', 'agents.yaml'),
-			stringifyYaml({
-				agents: [
-					{ id: 'dev', name: 'Developer', role: 'developer', description: 'Writes code', model: 'claude', fs_scope: { read: ['**'], write: ['**'] } },
-					{ id: 'ops', name: 'DevOps', role: 'devops', description: 'Manages infra', model: 'claude', fs_scope: { read: ['**'], write: ['**'] } },
-				],
-			}),
+			join(root, 'team', 'agents', 'dev.yaml'),
+			stringifyYaml({ id: 'dev', name: 'Developer', role: 'developer', description: 'Writes code', model: 'claude', fs_scope: { read: ['**'], write: ['**'] } }),
+		)
+		await writeFile(
+			join(root, 'team', 'agents', 'ops.yaml'),
+			stringifyYaml({ id: 'ops', name: 'DevOps', role: 'devops', description: 'Manages infra', model: 'claude', fs_scope: { read: ['**'], write: ['**'] } }),
 		)
 	}
 

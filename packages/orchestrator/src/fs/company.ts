@@ -2,14 +2,15 @@ import { join } from 'node:path'
 import { existsSync, readdirSync } from 'node:fs'
 import {
 	CompanySchema,
-	AgentsFileSchema,
-	HumansFileSchema,
+	AgentSchema,
+	HumanSchema,
 	WorkflowSchema,
 	ScheduleSchema,
-	WebhooksFileSchema,
+	WebhookSchema,
 	PATHS,
 	workflowPath,
 } from '@questpie/autopilot-spec'
+import type { Agent, Human, Webhook } from '@questpie/autopilot-spec'
 import { readYaml } from './yaml'
 import { logger } from '../logger'
 
@@ -22,28 +23,40 @@ export async function loadCompany(companyRoot: string) {
 	return readYaml(resolvePath(companyRoot, PATHS.COMPANY_CONFIG), CompanySchema)
 }
 
-/**
- * Read `team/agents.yaml` and return the `agents` array.
- * Falls back to root `agents.yaml` with a deprecation warning.
- */
+/** Read `team/agents/*.yaml` and return an array of validated agents. */
 export async function loadAgents(companyRoot: string) {
-	const primaryPath = resolvePath(companyRoot, PATHS.AGENTS)
-	const legacyPath = resolvePath(companyRoot, '/agents.yaml')
+	const dir = resolvePath(companyRoot, PATHS.AGENTS_DIR)
+	const agents: Agent[] = []
+	if (!existsSync(dir)) return agents
 
-	let agentsPath = primaryPath
-	if (!existsSync(primaryPath) && existsSync(legacyPath)) {
-		logger.warn('autopilot', 'DEPRECATED: agents.yaml found at root level. Move it to team/agents.yaml.')
-		agentsPath = legacyPath
+	const files = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
+	for (const file of files) {
+		try {
+			const agent = await readYaml(join(dir, file), AgentSchema)
+			agents.push(agent)
+		} catch (err) {
+			logger.warn('company', `skipping invalid agent file ${file}`, { error: err instanceof Error ? err.message : String(err) })
+		}
 	}
-
-	const file = await readYaml(agentsPath, AgentsFileSchema)
-	return file.agents
+	return agents
 }
 
-/** Read `humans.yaml` and return the `humans` array. */
+/** Read `team/humans/*.yaml` and return an array of validated humans. */
 export async function loadHumans(companyRoot: string) {
-	const file = await readYaml(resolvePath(companyRoot, PATHS.HUMANS), HumansFileSchema)
-	return file.humans
+	const dir = resolvePath(companyRoot, PATHS.HUMANS_DIR)
+	const humans: Human[] = []
+	if (!existsSync(dir)) return humans
+
+	const files = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
+	for (const file of files) {
+		try {
+			const human = await readYaml(join(dir, file), HumanSchema)
+			humans.push(human)
+		} catch (err) {
+			logger.warn('company', `skipping invalid human file ${file}`, { error: err instanceof Error ? err.message : String(err) })
+		}
+	}
+	return humans
 }
 
 /** Read and validate a single workflow YAML file by its ID. */
@@ -69,8 +82,20 @@ export async function loadSchedules(companyRoot: string) {
 	return schedules
 }
 
-/** Read `webhooks.yaml` and return the `webhooks` array. */
+/** Read `team/webhooks/*.yaml` and return an array of validated webhooks. */
 export async function loadWebhooks(companyRoot: string) {
-	const file = await readYaml(resolvePath(companyRoot, PATHS.WEBHOOKS), WebhooksFileSchema)
-	return file.webhooks
+	const dir = resolvePath(companyRoot, PATHS.WEBHOOKS_DIR)
+	const webhooks: Webhook[] = []
+	if (!existsSync(dir)) return webhooks
+
+	const files = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
+	for (const file of files) {
+		try {
+			const webhook = await readYaml(join(dir, file), WebhookSchema)
+			webhooks.push(webhook)
+		} catch (err) {
+			logger.warn('company', `skipping invalid webhook file ${file}`, { error: err instanceof Error ? err.message : String(err) })
+		}
+	}
+	return webhooks
 }

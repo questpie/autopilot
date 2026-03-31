@@ -49,7 +49,7 @@ beforeAll(async () => {
 			owner: { name: 'Test', email: 'test@test.com', notification_channels: [] },
 		}),
 	)
-	await writeFile(join(companyRoot, 'team', 'agents.yaml'), stringifyYaml({ agents: [] }))
+	await mkdir(join(companyRoot, 'team', 'agents'), { recursive: true })
 
 	container.clearAllInstances()
 	configureContainer(companyRoot)

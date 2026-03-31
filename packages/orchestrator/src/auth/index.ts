@@ -158,7 +158,7 @@ export async function createAuth(db: AutopilotDb, companyRoot: string, mail?: Ma
 			admin(),
 			openAPI(),
 			twoFactor({
-				issuer: 'QuestPie Autopilot',
+				issuer: 'QUESTPIE Autopilot',
 				backupCodeOptions: { amount: 10 },
 				trustDeviceMaxAge: 60 * 60 * 24 * 30, // 30 days
 			}),

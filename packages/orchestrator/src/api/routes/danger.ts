@@ -61,17 +61,16 @@ const danger = new Hono<AppEnv>()
 				let humans: unknown = null
 
 				const companyPath = join(companyRoot, 'company.yaml')
-				const agentsPath = join(companyRoot, 'team', 'agents.yaml')
-				const humansPath = join(companyRoot, 'team', 'humans.yaml')
 
 				if (await fileExists(companyPath)) {
 					company = await readYamlUnsafe(companyPath)
 				}
-				if (await fileExists(agentsPath)) {
-					agents = await readYamlUnsafe(agentsPath)
-				}
-				if (await fileExists(humansPath)) {
-					humans = await readYamlUnsafe(humansPath)
+				try {
+					const { loadAgents, loadHumans } = await import('../../fs/company')
+					agents = await loadAgents(companyRoot)
+					humans = await loadHumans(companyRoot)
+				} catch {
+					// best-effort
 				}
 
 				const exportData = {

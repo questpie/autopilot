@@ -131,8 +131,10 @@ describe('context assembler', () => {
 		// Write company.yaml
 		await writeYaml(join(root, 'company.yaml'), testCompany)
 
-		// Write agents.yaml
-		await writeYaml(join(root, 'team', 'agents.yaml'), { agents: testAgents })
+		// Write individual agent files
+		for (const agent of testAgents) {
+			await writeYaml(join(root, 'team', 'agents', `${agent.id}.yaml`), agent)
+		}
 
 		// Write role prompt for developer
 		await writeFile(
@@ -386,8 +388,10 @@ describe('buildCompanySnapshot', () => {
 		root = ctx.root
 		cleanup = ctx.cleanup
 
-		// Write agents.yaml so loadAgents works
-		await writeYaml(join(root, 'team', 'agents.yaml'), { agents: testAgents })
+		// Write individual agent files so loadAgents works
+		for (const agent of testAgents) {
+			await writeYaml(join(root, 'team', 'agents', `${agent.id}.yaml`), agent)
+		}
 
 		const snapshot = await buildCompanySnapshot(root, testAgent, mockStorage)
 
@@ -402,7 +406,9 @@ describe('buildCompanySnapshot', () => {
 		root = ctx.root
 		cleanup = ctx.cleanup
 
-		await writeYaml(join(root, 'team', 'agents.yaml'), { agents: testAgents })
+		for (const agent of testAgents) {
+			await writeYaml(join(root, 'team', 'agents', `${agent.id}.yaml`), agent)
+		}
 
 		const taskData = {
 			id: 'task-1',

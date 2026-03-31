@@ -46,7 +46,7 @@ describe('search_web tool', () => {
 		await tool.execute({ query: 'test query' }, makeCtx())
 
 		expect(capturedHeaders['Authorization']).toBe('Bearer sk-test-key')
-		expect(capturedHeaders['X-Title']).toBe('QuestPie Autopilot')
+		expect(capturedHeaders['X-Title']).toBe('QUESTPIE Autopilot')
 	})
 
 	test('sends correct model and query in request body', async () => {

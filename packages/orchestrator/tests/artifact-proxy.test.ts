@@ -55,8 +55,8 @@ beforeAll(async () => {
 		}),
 	)
 
-	// Write agents.yaml
-	await writeFile(join(companyRoot, 'team', 'agents.yaml'), stringifyYaml({ agents: [] }))
+	// Create agents directory (empty — no agents)
+	await mkdir(join(companyRoot, 'team', 'agents'), { recursive: true })
 
 	// Configure DI container
 	container.clearAllInstances()

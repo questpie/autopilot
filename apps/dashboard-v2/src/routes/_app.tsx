@@ -5,7 +5,7 @@ import { CommandPalette } from "@/components/command-palette"
 import { KeyboardHelpDialog } from "@/components/keyboard-help-dialog"
 import { Toaster } from "sonner"
 import { checkAuthServer } from "@/lib/auth.fn"
-import { QuestPieSpinner } from "@/components/brand"
+import { QUESTPIESpinner } from "@/components/brand"
 import { PageError } from "@/components/feedback"
 import { useSSE } from "@/hooks/use-sse"
 import { useGlobalShortcuts } from "@/hooks/use-keyboard-shortcuts"
@@ -57,7 +57,7 @@ export const Route = createFileRoute("/_app")({
 function AuthPending() {
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background">
-      <QuestPieSpinner size={32} />
+      <QUESTPIESpinner size={32} />
     </div>
   )
 }

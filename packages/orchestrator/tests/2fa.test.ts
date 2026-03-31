@@ -34,8 +34,8 @@ describe('2FA enforcement in resolveActor', () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			await writeFile(
-				join(root, 'team', 'humans.yaml'),
-				stringify({ humans: [{ email: 'test@test.com', role: 'member' }] }),
+				join(root, 'team', 'humans', 'test.yaml'),
+				stringify({ id: 'test', email: 'test@test.com', role: 'member', name: 'test' }),
 			)
 
 			const request = new Request('http://localhost:7778/api/tasks', {
@@ -78,19 +78,16 @@ describe('2FA enforcement in resolveActor', () => {
 				}),
 			)
 
+			await mkdir(join(root, 'team', 'agents'), { recursive: true })
 			await writeFile(
-				join(root, 'team', 'agents.yaml'),
+				join(root, 'team', 'agents', 'test-agent.yaml'),
 				stringify({
-					agents: [
-						{
-							id: 'test-agent',
-							name: 'Test Agent',
-							role: 'developer',
-							description: 'Test agent',
-							fs_scope: { read: ['/**'], write: ['/tasks/**'] },
-							tools: ['fs', 'terminal'],
-						},
-					],
+					id: 'test-agent',
+					name: 'Test Agent',
+					role: 'developer',
+					description: 'Test agent',
+					fs_scope: { read: ['/**'], write: ['/tasks/**'] },
+					tools: ['fs', 'terminal'],
 				}),
 			)
 
@@ -113,8 +110,8 @@ describe('2FA enforcement in resolveActor', () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			await writeFile(
-				join(root, 'team', 'humans.yaml'),
-				stringify({ humans: [{ email: 'test@test.com', role: 'owner' }] }),
+				join(root, 'team', 'humans', 'test.yaml'),
+				stringify({ id: 'test', email: 'test@test.com', role: 'owner', name: 'test' }),
 			)
 
 			const request = new Request('http://localhost:7778/api/tasks', {
@@ -140,8 +137,8 @@ describe('2FA enforcement in resolveActor', () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			await writeFile(
-				join(root, 'team', 'humans.yaml'),
-				stringify({ humans: [{ email: 'test@test.com', role: 'owner' }] }),
+				join(root, 'team', 'humans', 'test.yaml'),
+				stringify({ id: 'test', email: 'test@test.com', role: 'owner', name: 'test' }),
 			)
 
 			const request = new Request('http://localhost:7778/api/auth/two-factor/enable', {
@@ -168,8 +165,8 @@ describe('2FA enforcement in resolveActor', () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			await writeFile(
-				join(root, 'team', 'humans.yaml'),
-				stringify({ humans: [{ email: 'test@test.com', role: 'member' }] }),
+				join(root, 'team', 'humans', 'test.yaml'),
+				stringify({ id: 'test', email: 'test@test.com', role: 'member', name: 'test' }),
 			)
 
 			const request = new Request('http://localhost:7778/api/tasks', {
@@ -226,8 +223,8 @@ describe('2FA enforcement in resolveActor', () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			await writeFile(
-				join(root, 'team', 'humans.yaml'),
-				stringify({ humans: [{ email: 'admin@test.com', role: 'admin' }] }),
+				join(root, 'team', 'humans', 'admin.yaml'),
+				stringify({ id: 'admin', email: 'admin@test.com', role: 'admin', name: 'admin' }),
 			)
 
 			const request = new Request('http://localhost:7778/api/tasks', {

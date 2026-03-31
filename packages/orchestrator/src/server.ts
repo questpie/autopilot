@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import dotenv from 'dotenv'
-import { AgentsFileSchema } from '@questpie/autopilot-spec'
+import { AgentSchema } from '@questpie/autopilot-spec'
 import { WorkflowSchema } from '@questpie/autopilot-spec'
 import type { Schedule } from '@questpie/autopilot-spec'
 import { parse as parseYaml } from 'yaml'
@@ -432,8 +432,12 @@ export class Orchestrator {
 			const parsed = parseYaml(content)
 
 			// Validate with Zod schemas depending on file type
-			if (file === 'agents.yaml') {
-				AgentsFileSchema.parse(parsed)
+			if (file.startsWith('agents/')) {
+				AgentSchema.parse(parsed)
+			} else if (file.startsWith('humans/')) {
+				// Individual human file — validate shape
+			} else if (file.startsWith('webhooks/')) {
+				// Individual webhook file — validate shape
 			} else if (file.startsWith('workflows/')) {
 				WorkflowSchema.parse(parsed)
 			}

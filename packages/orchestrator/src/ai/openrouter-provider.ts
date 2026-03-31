@@ -334,7 +334,7 @@ export class OpenRouterAIProvider implements AIProvider {
 	private createAdapter(model: string) {
 		const config: NonNullable<Parameters<typeof openRouterText>[1]> = {
 			httpReferer: 'https://questpie.com',
-			xTitle: 'QuestPie Autopilot',
+			xTitle: 'QUESTPIE Autopilot',
 		}
 		if (this.config.chatBaseUrl) {
 			config.serverURL = this.config.chatBaseUrl
@@ -361,7 +361,7 @@ export class OpenRouterAIProvider implements AIProvider {
 			'Authorization': `Bearer ${this.getApiKey()}`,
 			'Content-Type': 'application/json',
 			'HTTP-Referer': 'https://questpie.com',
-			'X-Title': 'QuestPie Autopilot',
+			'X-Title': 'QUESTPIE Autopilot',
 		}
 	}
 

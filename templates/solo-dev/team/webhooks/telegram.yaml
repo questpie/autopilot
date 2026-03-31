@@ -1,0 +1,9 @@
+id: telegram
+path: "/hooks/telegram"
+agent: ceo
+description: "Telegram bot webhook — receives messages and routes to agents"
+auth: none  # Telegram sends its own verification
+action:
+  type: spawn_agent
+  priority: normal
+enabled: false  # Enable after setting up bot token via: autopilot secrets add telegram --value "YOUR_TOKEN"

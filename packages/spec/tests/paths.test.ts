@@ -9,6 +9,9 @@ import {
 	workflowPath,
 	secretPath,
 	pinPath,
+	agentPath,
+	humanPath,
+	webhookPath,
 } from '../src/paths'
 
 describe('PATHS', () => {
@@ -23,12 +26,16 @@ describe('PATHS', () => {
 		expect(PATHS.COMPANY_CONFIG).toBe('/company.yaml')
 	})
 
-	test('AGENTS points to team/agents.yaml', () => {
-		expect(PATHS.AGENTS).toBe('/team/agents.yaml')
+	test('AGENTS_DIR points to team/agents', () => {
+		expect(PATHS.AGENTS_DIR).toBe('/team/agents')
 	})
 
-	test('HUMANS points to team/humans.yaml', () => {
-		expect(PATHS.HUMANS).toBe('/team/humans.yaml')
+	test('HUMANS_DIR points to team/humans', () => {
+		expect(PATHS.HUMANS_DIR).toBe('/team/humans')
+	})
+
+	test('WEBHOOKS_DIR points to team/webhooks', () => {
+		expect(PATHS.WEBHOOKS_DIR).toBe('/team/webhooks')
 	})
 
 	test('TASKS_DIR points to /tasks', () => {
@@ -123,5 +130,23 @@ describe('secretPath', () => {
 describe('pinPath', () => {
 	test('returns correct path with .yaml extension', () => {
 		expect(pinPath('pin-001')).toBe('/dashboard/pins/pin-001.yaml')
+	})
+})
+
+describe('agentPath', () => {
+	test('returns correct path with .yaml extension', () => {
+		expect(agentPath('peter')).toBe('/team/agents/peter.yaml')
+	})
+})
+
+describe('humanPath', () => {
+	test('returns correct path with .yaml extension', () => {
+		expect(humanPath('dominik')).toBe('/team/humans/dominik.yaml')
+	})
+})
+
+describe('webhookPath', () => {
+	test('returns correct path with .yaml extension', () => {
+		expect(webhookPath('uptime')).toBe('/team/webhooks/uptime.yaml')
 	})
 })

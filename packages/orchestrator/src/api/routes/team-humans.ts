@@ -15,8 +15,9 @@ import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
 import { join } from 'node:path'
-import { readYamlUnsafe, fileExists, writeYaml } from '../../fs/yaml'
-import { HUMAN_ROLES } from '@questpie/autopilot-spec'
+import { readdirSync, existsSync } from 'node:fs'
+import { readYaml, readYamlUnsafe, fileExists, writeYaml } from '../../fs/yaml'
+import { HUMAN_ROLES, HumanSchema, PATHS } from '@questpie/autopilot-spec'
 import { eq } from 'drizzle-orm'
 import * as authSchema from '../../db/auth-schema'
 import type { AppEnv } from '../app'
@@ -69,21 +70,27 @@ async function writeInvites(companyRoot: string, emails: string[]): Promise<void
 	await writeYaml(join(companyRoot, '.auth', 'invites.yaml'), emails)
 }
 
-/** Read humans.yaml and return parsed data. */
+/** Read all human files from team/humans/*.yaml and return parsed data. */
 async function readHumansFile(companyRoot: string): Promise<{ humans: Array<{ id: string; email?: string; role: string; name?: string; [key: string]: unknown }> }> {
-	const humansPath = join(companyRoot, 'team', 'humans.yaml')
-	if (!(await fileExists(humansPath))) return { humans: [] }
-	try {
-		const data = await readYamlUnsafe(humansPath)
-		return (data as { humans: Array<{ id: string; email?: string; role: string; name?: string }> }) ?? { humans: [] }
-	} catch {
-		return { humans: [] }
+	const dir = join(companyRoot, PATHS.HUMANS_DIR.slice(1))
+	if (!existsSync(dir)) return { humans: [] }
+	const humans: Array<{ id: string; email?: string; role: string; name?: string; [key: string]: unknown }> = []
+	const files = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
+	for (const file of files) {
+		try {
+			const human = await readYaml(join(dir, file), HumanSchema)
+			humans.push(human as { id: string; email?: string; role: string; name?: string })
+		} catch {
+			// skip invalid
+		}
 	}
+	return { humans }
 }
 
-/** Write humans.yaml. */
-async function writeHumansFile(companyRoot: string, data: { humans: Array<Record<string, unknown>> }): Promise<void> {
-	await writeYaml(join(companyRoot, 'team', 'humans.yaml'), data)
+/** Write a single human file to team/humans/{id}.yaml. */
+async function writeHumanFile(companyRoot: string, human: Record<string, unknown>): Promise<void> {
+	const id = (human.id as string) ?? (human.email as string)?.split('@')[0] ?? 'unknown'
+	await writeYaml(join(companyRoot, PATHS.HUMANS_DIR.slice(1), `${id}.yaml`), human)
 }
 
 /** Guard: only owner/admin can access. Returns error response or null. */
@@ -267,22 +274,22 @@ const teamHumans = new Hono<AppEnv>()
 				return c.json({ error: 'User not found' }, 404)
 			}
 
-			// Update humans.yaml
+			// Update individual human file
 			const humansFile = await readHumansFile(root)
-			const existingIdx = humansFile.humans.findIndex((h) => h.email === user.email)
+			const existing = humansFile.humans.find((h) => h.email === user.email)
 
-			if (existingIdx >= 0) {
-				humansFile.humans[existingIdx]!.role = role
+			if (existing) {
+				existing.role = role
+				await writeHumanFile(root, existing as Record<string, unknown>)
 			} else {
-				humansFile.humans.push({
+				const newHuman = {
 					id: user.email.split('@')[0] ?? user.email,
 					name: user.email.split('@')[0] ?? user.email,
 					email: user.email,
 					role,
-				})
+				}
+				await writeHumanFile(root, newHuman)
 			}
-
-			await writeHumansFile(root, humansFile as { humans: Array<Record<string, unknown>> })
 
 			return c.json({ ok: true as const }, 200)
 		},

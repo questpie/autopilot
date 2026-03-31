@@ -9,9 +9,10 @@
  */
 import { Hono } from 'hono'
 import { join } from 'node:path'
+import { readdirSync, existsSync } from 'node:fs'
 import { timingSafeEqual } from 'node:crypto'
 import type { Webhook } from '@questpie/autopilot-spec'
-import { WebhooksFileSchema } from '@questpie/autopilot-spec'
+import { WebhookSchema, PATHS } from '@questpie/autopilot-spec'
 import { readYaml } from '../../fs/yaml'
 import { webhookHandlerRegistry } from '../../webhook'
 import { logger } from '../../logger'
@@ -34,9 +35,20 @@ let cachedCompanyRoot: string | null = null
 
 async function loadWebhooks(companyRoot: string): Promise<Webhook[]> {
 	if (cachedWebhooks && cachedCompanyRoot === companyRoot) return cachedWebhooks
-	const webhooksPath = join(companyRoot, 'team', 'webhooks.yaml')
-	const file = await readYaml(webhooksPath, WebhooksFileSchema)
-	cachedWebhooks = file.webhooks.filter((w) => w.enabled)
+	const dir = join(companyRoot, PATHS.WEBHOOKS_DIR.slice(1))
+	const webhooks: Webhook[] = []
+	if (existsSync(dir)) {
+		const files = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
+		for (const file of files) {
+			try {
+				const webhook = await readYaml(join(dir, file), WebhookSchema)
+				webhooks.push(webhook)
+			} catch {
+				// skip invalid
+			}
+		}
+	}
+	cachedWebhooks = webhooks.filter((w) => w.enabled)
 	cachedCompanyRoot = companyRoot
 	return cachedWebhooks
 }

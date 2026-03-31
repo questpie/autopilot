@@ -11,9 +11,7 @@ describe('resolveActor', () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			// Configure webhook with auth: none so no HMAC is required
-			await writeYaml(join(root, 'team', 'webhooks.yaml'), {
-				webhooks: [{ path: '/hooks/test', auth: 'none', enabled: true }],
-			})
+			await writeYaml(join(root, 'team', 'webhooks', 'hooks-test.yaml'), { id: 'hooks-test', path: '/hooks/test', auth: 'none', enabled: true, agent: 'dev', action: { type: 'spawn_agent' } })
 			const request = new Request('http://localhost:7778/hooks/test')
 			const actor = await resolveActor(request, {
 				companyRoot: root,
@@ -51,9 +49,7 @@ describe('resolveActor', () => {
 
 describe('resolveActor 2FA enforcement for owner/admin', () => {
 	async function makeSessionAuth(root: string, role: string, twoFactorEnabled: boolean) {
-		await writeYaml(join(root, 'team', 'humans.yaml'), {
-			humans: [{ email: 'user@example.com', role }],
-		})
+		await writeYaml(join(root, 'team', 'humans', 'user.yaml'), { id: 'user', email: 'user@example.com', role, name: 'User' })
 		return {
 			companyRoot: root,
 			auth: {

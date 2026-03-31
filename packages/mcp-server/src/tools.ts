@@ -1,5 +1,5 @@
 /**
- * MCP tool definitions for QuestPie Autopilot.
+ * MCP tool definitions for QUESTPIE Autopilot.
  *
  * D33: Core tools (tasks, agents, status, activity)
  * D34: Search + file tools

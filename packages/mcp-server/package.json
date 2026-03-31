@@ -3,7 +3,7 @@
 	"version": "1.0.0",
 	"private": true,
 	"type": "module",
-	"description": "MCP server for QuestPie Autopilot — expose tasks, agents, search, sessions to Claude Desktop/Code",
+	"description": "MCP server for QUESTPIE Autopilot — expose tasks, agents, search, sessions to Claude Desktop/Code",
 	"main": "src/index.ts",
 	"bin": {
 		"autopilot-mcp": "./src/index.ts"

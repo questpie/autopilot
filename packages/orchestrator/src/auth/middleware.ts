@@ -145,21 +145,18 @@ async function resolveHumanActor(
 		return null
 	}
 
-	// Role comes from humans.yaml, NOT from Better Auth DB
-	const { readYamlUnsafe } = await import('../fs/yaml')
-	const { join } = await import('node:path')
+	// Role comes from team/humans/*.yaml, NOT from Better Auth DB
+	const { loadHumans } = await import('../fs/company')
 
 	let roleFromHumans: string | undefined
 	try {
-		const humansData = (await readYamlUnsafe(join(config.companyRoot, 'team', 'humans.yaml'))) as {
-			humans: Array<{ email?: string; role: string }>
-		}
-		const human = humansData.humans.find((h) => h.email === session.user.email)
+		const humans = await loadHumans(config.companyRoot)
+		const human = humans.find((h: { email?: string }) => h.email === session.user.email)
 		if (human) {
 			roleFromHumans = human.role
 		}
 	} catch {
-		// Fallback to viewer if humans.yaml not found
+		// Fallback to viewer if humans dir not found
 	}
 
 	const role: 'owner' | 'admin' | 'member' | 'viewer' =
@@ -216,21 +213,11 @@ async function verifyWebhookRequest(
 	} | null = null
 
 	try {
-		const { readYamlUnsafe } = await import('../fs/yaml')
-		const webhooksData = (await readYamlUnsafe(
-			join(config.companyRoot, 'team', 'webhooks.yaml'),
-		)) as {
-			webhooks?: Array<{
-				path: string
-				auth?: string
-				secret_ref?: string
-				signature_header?: string
-				enabled?: boolean
-			}>
-		}
+		const { loadWebhooks } = await import('../fs/company')
+		const webhooks = await loadWebhooks(config.companyRoot)
 
-		const matched = webhooksData.webhooks?.find(
-			(w) =>
+		const matched = webhooks.find(
+			(w: { path: string; enabled?: boolean }) =>
 				w.enabled !== false &&
 				(path === w.path || path === `/${w.path}` || `/${path}` === w.path),
 		)

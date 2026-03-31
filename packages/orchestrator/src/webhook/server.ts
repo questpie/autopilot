@@ -1,7 +1,8 @@
 import { join } from 'node:path'
+import { readdirSync, existsSync } from 'node:fs'
 import { timingSafeEqual } from 'node:crypto'
 import type { Webhook } from '@questpie/autopilot-spec'
-import { WebhooksFileSchema } from '@questpie/autopilot-spec'
+import { WebhookSchema, PATHS } from '@questpie/autopilot-spec'
 import { readYaml } from '../fs/yaml'
 import { logger } from '../logger'
 
@@ -53,9 +54,22 @@ export class WebhookServer {
 	}
 
 	private async loadWebhooks(): Promise<void> {
-		const webhooksPath = join(this.options.companyRoot, 'team', 'webhooks.yaml')
-		const file = await readYaml(webhooksPath, WebhooksFileSchema)
-		this.webhooks = file.webhooks.filter((w) => w.enabled)
+		const dir = join(this.options.companyRoot, PATHS.WEBHOOKS_DIR.slice(1))
+		if (!existsSync(dir)) {
+			this.webhooks = []
+			return
+		}
+		const webhooks: Webhook[] = []
+		const files = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
+		for (const file of files) {
+			try {
+				const webhook = await readYaml(join(dir, file), WebhookSchema)
+				webhooks.push(webhook)
+			} catch {
+				// skip invalid
+			}
+		}
+		this.webhooks = webhooks.filter((w) => w.enabled)
 	}
 
 	private async handleRequest(request: Request): Promise<Response> {

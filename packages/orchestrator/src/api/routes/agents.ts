@@ -1,12 +1,11 @@
 import { join } from 'node:path'
-import { readFile, writeFile } from 'node:fs/promises'
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
-import { AgentSchema } from '@questpie/autopilot-spec'
+import { AgentSchema, PATHS } from '@questpie/autopilot-spec'
 import { loadAgents } from '../../fs/company'
+import { readYaml, writeYaml } from '../../fs/yaml'
 import { container } from '../../container'
 import { streamManagerFactory } from '../../session/stream'
 import { eventBus } from '../../events/event-bus'
@@ -158,29 +157,27 @@ const agents = new Hono<AppEnv>()
 			const { id } = c.req.valid('param')
 			const updates = c.req.valid('json')
 
-			const agentsPath = join(root, 'agents.yaml')
-			const raw = await readFile(agentsPath, 'utf-8')
-			const doc = parseYaml(raw) as { agents: Array<Record<string, unknown>> }
+			const agentFilePath = join(root, PATHS.AGENTS_DIR.slice(1), `${id}.yaml`)
 
-			if (!doc?.agents || !Array.isArray(doc.agents)) {
-				return c.json({ error: 'Invalid agents.yaml structure' }, 400)
+			let agent: Record<string, unknown>
+			try {
+				agent = await readYaml(agentFilePath, AgentSchema) as Record<string, unknown>
+			} catch {
+				return c.json({ error: 'agent not found' }, 404)
 			}
-
-			const agentIdx = doc.agents.findIndex((a) => a.id === id)
-			if (agentIdx < 0) return c.json({ error: 'agent not found' }, 404)
 
 			// Apply updates
 			if (updates.model) {
-				doc.agents[agentIdx]!.model = updates.model
+				agent.model = updates.model
 			}
 			if (updates.web_search !== undefined) {
-				doc.agents[agentIdx]!.web_search = updates.web_search
+				agent.web_search = updates.web_search
 			}
 
-			await writeFile(agentsPath, stringifyYaml(doc, { lineWidth: 120 }), 'utf-8')
+			await writeYaml(agentFilePath, agent)
 			eventBus.emit({ type: 'settings_changed' })
 
-			return c.json({ ok: true, agent: doc.agents[agentIdx] }, 200)
+			return c.json({ ok: true, agent }, 200)
 		},
 	)
 

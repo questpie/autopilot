@@ -24,6 +24,9 @@ export async function createTestCompany(): Promise<{
 		'team',
 		'team/roles',
 		'team/workflows',
+		'team/agents',
+		'team/humans',
+		'team/webhooks',
 		'context/memory',
 		'context/indexes',
 	]

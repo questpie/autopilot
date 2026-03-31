@@ -10,13 +10,15 @@ export type NotificationChannel = z.infer<typeof schemas.NotificationChannelSche
 
 // Agents
 export type Agent = z.infer<typeof schemas.AgentSchema>
-export type AgentsFile = z.infer<typeof schemas.AgentsFileSchema>
+/** @deprecated Use Agent directly — agents are now individual files */
+export type AgentsFile = Agent
 export type FsScope = z.infer<typeof schemas.FsScopeSchema>
 export type AgentTrigger = z.infer<typeof schemas.AgentTriggerSchema>
 
 // Humans
 export type Human = z.infer<typeof schemas.HumanSchema>
-export type HumansFile = z.infer<typeof schemas.HumansFileSchema>
+/** @deprecated Use Human directly — humans are now individual files */
+export type HumansFile = Human
 export type NotificationRouting = z.infer<typeof schemas.NotificationRoutingSchema>
 export type QuietHours = z.infer<typeof schemas.QuietHoursSchema>
 
@@ -43,7 +45,8 @@ export type Schedule = z.infer<typeof schemas.ScheduleSchema>
 
 // Webhooks
 export type Webhook = z.infer<typeof schemas.WebhookSchema>
-export type WebhooksFile = z.infer<typeof schemas.WebhooksFileSchema>
+/** @deprecated Use Webhook directly — webhooks are now individual files */
+export type WebhooksFile = Webhook
 export type WebhookFilter = z.infer<typeof schemas.WebhookFilterSchema>
 export type WebhookAction = z.infer<typeof schemas.WebhookActionSchema>
 export type WebhookTaskCondition = z.infer<typeof schemas.WebhookTaskConditionSchema>

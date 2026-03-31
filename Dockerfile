@@ -1,4 +1,4 @@
-# Dockerfile for QuestPie Autopilot (orchestrator + dashboard)
+# Dockerfile for QUESTPIE Autopilot (orchestrator + dashboard)
 # Build: docker build -t questpie/autopilot .
 # Run:   docker run -p 7778:7778 -p 7777:7777 -p 3000:3000 questpie/autopilot
 

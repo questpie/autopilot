@@ -1,0 +1,8 @@
+id: riley
+name: "Riley"
+role: reviewer
+description: "Reviews code quality, architecture decisions, suggests improvements"
+fs_scope:
+  read: ["/knowledge/technical/**", "/projects/**"]
+  write: []
+tools: ["fs", "terminal", "task", "message", "pin", "search", "git", "search_web", "browse"]

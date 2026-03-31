@@ -27,6 +27,5 @@ export const HumanSchema = z.object({
 	approval_scopes: z.array(z.string()).default([]),
 })
 
-export const HumansFileSchema = z.object({
-	humans: z.array(HumanSchema),
-})
+/** @deprecated Use HumanSchema directly — humans are now individual files in HUMANS_DIR */
+export const HumansFileSchema = HumanSchema

@@ -55,9 +55,8 @@ beforeAll(async () => {
 	}
 	await writeFile(join(companyRoot, 'company.yaml'), stringifyYaml(companyData))
 
-	// Write agents.yaml
-	const agentsData = { agents: [] }
-	await writeFile(join(companyRoot, 'team', 'agents.yaml'), stringifyYaml(agentsData))
+	// Create agents directory (empty — no agents)
+	await mkdir(join(companyRoot, 'team', 'agents'), { recursive: true })
 
 	// Configure DI container — must happen before any factory resolution.
 	// Clear cached instances first to ensure clean state.

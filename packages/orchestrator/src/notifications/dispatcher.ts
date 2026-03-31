@@ -234,12 +234,9 @@ async function recordThrottle(
 // ── Target resolution ───────────────────────────────────────────────────────
 
 async function findTargets(companyRoot: string): Promise<HumanTarget[]> {
-	const humansPath = join(companyRoot, 'team', 'humans.yaml')
-	if (!(await fileExists(humansPath))) return []
 	try {
-		const data = await readYamlUnsafe(humansPath)
-		const humans = (data as { humans?: HumanTarget[] })?.humans ?? []
-		return humans
+		const { loadHumans } = await import('../fs/company')
+		return (await loadHumans(companyRoot)) as HumanTarget[]
 	} catch {
 		return []
 	}

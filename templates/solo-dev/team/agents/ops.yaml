@@ -1,0 +1,8 @@
+id: ops
+name: "Ops"
+role: devops
+description: "Deploys applications, monitors infrastructure, handles incidents"
+fs_scope:
+  read: ["/infra/**", "/projects/*/code/**", "/knowledge/technical/**"]
+  write: ["/infra/**", "/logs/**"]
+tools: ["fs", "terminal", "task", "message", "pin", "search", "http", "search_web", "browse"]

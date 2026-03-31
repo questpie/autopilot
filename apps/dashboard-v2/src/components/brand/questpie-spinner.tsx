@@ -1,7 +1,7 @@
 import { m, useReducedMotion } from "framer-motion"
 import { t } from "@/lib/i18n"
 
-interface QuestPieSpinnerProps {
+interface QUESTPIESpinnerProps {
   size?: 16 | 24 | 32
   className?: string
 }
@@ -12,10 +12,10 @@ interface QuestPieSpinnerProps {
  * Used in full-page loading (32px), button loading (16px).
  * Respects prefers-reduced-motion (shows static square).
  */
-export function QuestPieSpinner({
+export function QUESTPIESpinner({
   size = 32,
   className,
-}: QuestPieSpinnerProps) {
+}: QUESTPIESpinnerProps) {
   const shouldReduceMotion = useReducedMotion()
 
   const squareSize = size * 0.3

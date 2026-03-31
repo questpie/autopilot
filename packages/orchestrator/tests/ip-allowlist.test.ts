@@ -198,7 +198,7 @@ describe('IP allowlist middleware', () => {
 			}),
 		)
 
-		await writeFile(join(companyRoot, 'team', 'agents.yaml'), stringifyYaml({ agents: [] }))
+		await mkdir(join(companyRoot, 'team', 'agents'), { recursive: true })
 
 		try {
 			container.clearAllInstances()

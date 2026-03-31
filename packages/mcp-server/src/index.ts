@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * QuestPie Autopilot MCP Server
+ * QUESTPIE Autopilot MCP Server
  *
  * D32: MCP server scaffold with @modelcontextprotocol/sdk
  * D37: Supports stdio (default) and SSE transport
@@ -67,7 +67,7 @@ async function startSSE(mcpServer: McpServer, port: number): Promise<void> {
 		}
 
 		res.writeHead(200)
-		res.end('QuestPie Autopilot MCP Server (SSE)')
+		res.end('QUESTPIE Autopilot MCP Server (SSE)')
 	})
 
 	httpServer.listen(port, () => {
