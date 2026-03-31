@@ -1,5 +1,5 @@
-import { watch, type FSWatcher } from 'chokidar'
 import { join, relative, sep } from 'node:path'
+import { type FSWatcher, watch } from 'chokidar'
 import { logger } from '../logger'
 
 /**
@@ -56,8 +56,8 @@ export function parseWatchEvent(companyRoot: string, filePath: string): WatchEve
 		return { type: 'config_changed', file: `roles/${roleMatch[1]}`, path: filePath }
 	}
 
-	// team/*.yaml (agents.yaml, humans.yaml, roles.yaml, workflows)
-	const teamMatch = rel.match(/^team\/(.+\.yaml)$/)
+	// team/**/*.yaml|yml (e.g. agents/dev.yaml, workflows/deploy.yml, roles.yaml)
+	const teamMatch = rel.match(/^team\/(.+\.ya?ml)$/)
 	if (teamMatch?.[1]) {
 		return { type: 'config_changed', file: teamMatch[1], path: filePath }
 	}
@@ -102,12 +102,24 @@ export class Watcher {
 
 		const handleFile = (filePath: string) => {
 			const rel = relative(root, filePath).split(sep).join('/')
-			const isDashboardFile = rel.startsWith('dashboard/') && !rel.startsWith('dashboard/pins/') && rel !== 'dashboard/groups.yaml'
+			const isYamlFile = filePath.endsWith('.yaml') || filePath.endsWith('.yml')
+			const isDashboardFile =
+				rel.startsWith('dashboard/') &&
+				!rel.startsWith('dashboard/pins/') &&
+				rel !== 'dashboard/groups.yaml'
 			const isRoleFile = rel.startsWith('team/roles/') && filePath.endsWith('.md')
 			const isKnowledgeFile = rel.startsWith('knowledge/')
 			const isArtifactConfig = rel.match(/^artifacts\/[^/]+\/.artifact\.yaml$/)
 			const isCompanyYaml = rel === 'company.yaml'
-			if (!filePath.endsWith('.yaml') && !isDashboardFile && !isRoleFile && !isKnowledgeFile && !isArtifactConfig && !isCompanyYaml) return
+			if (
+				!isYamlFile &&
+				!isDashboardFile &&
+				!isRoleFile &&
+				!isKnowledgeFile &&
+				!isArtifactConfig &&
+				!isCompanyYaml
+			)
+				return
 
 			const existing = this.debounceTimers.get(filePath)
 			if (existing) clearTimeout(existing)
@@ -121,7 +133,9 @@ export class Watcher {
 						try {
 							await this.options.onEvent(event)
 						} catch (err) {
-							logger.error('watcher', 'error handling event', { error: err instanceof Error ? err.message : String(err) })
+							logger.error('watcher', 'error handling event', {
+								error: err instanceof Error ? err.message : String(err),
+							})
 						}
 					}
 				}, debounceMs),

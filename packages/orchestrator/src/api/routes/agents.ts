@@ -1,14 +1,14 @@
 import { join } from 'node:path'
+import { AgentSchema, PATHS } from '@questpie/autopilot-spec'
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import { AgentSchema, PATHS } from '@questpie/autopilot-spec'
+import { container } from '../../container'
+import { eventBus } from '../../events/event-bus'
 import { loadAgents } from '../../fs/company'
 import { readYaml, writeYaml } from '../../fs/yaml'
-import { container } from '../../container'
 import { streamManagerFactory } from '../../session/stream'
-import { eventBus } from '../../events/event-bus'
 import type { AppEnv } from '../app'
 
 /** Extended agent detail schema with memory stats and recent tasks. */
@@ -39,7 +39,7 @@ const agents = new Hono<AppEnv>()
 		'/',
 		describeRoute({
 			tags: ['agents'],
-			description: 'List all agents defined in agents.yaml',
+			description: 'List all agents defined in team/agents/*.yaml',
 			responses: {
 				200: {
 					description: 'Array of agents',
@@ -61,8 +61,7 @@ const agents = new Hono<AppEnv>()
 		'/:id',
 		describeRoute({
 			tags: ['agents'],
-			description:
-				'Get extended agent detail including memory stats and recent tasks',
+			description: 'Get extended agent detail including memory stats and recent tasks',
 			responses: {
 				200: {
 					description: 'Agent detail',
@@ -111,7 +110,9 @@ const agents = new Hono<AppEnv>()
 			let recentTasks: z.infer<typeof AgentDetailSchema>['recentTasks']
 			try {
 				const allTasks = await storage.listTasks({ assigned_to: id })
-				recentTasks = (allTasks as Array<{ id: string; title: string; status: string; created_at: string }>)
+				recentTasks = (
+					allTasks as Array<{ id: string; title: string; status: string; created_at: string }>
+				)
 					.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 					.slice(0, 10)
 					.map((t) => ({ id: t.id, title: t.title, status: t.status, created_at: t.created_at }))
@@ -122,12 +123,15 @@ const agents = new Hono<AppEnv>()
 			const { streamManager } = container.resolve([streamManagerFactory])
 			const isWorking = streamManager.getActiveStreams().some((s) => s.agentId === id)
 
-			return c.json({
-				...agent,
-				memory,
-				recentTasks,
-				sessionStatus: isWorking ? 'working' as const : 'idle' as const,
-			}, 200)
+			return c.json(
+				{
+					...agent,
+					memory,
+					recentTasks,
+					sessionStatus: isWorking ? ('working' as const) : ('idle' as const),
+				},
+				200,
+			)
 		},
 	)
 
@@ -143,10 +147,13 @@ const agents = new Hono<AppEnv>()
 			},
 		}),
 		zValidator('param', z.object({ id: z.string() })),
-		zValidator('json', z.object({
-			model: z.string().optional(),
-			web_search: z.boolean().optional(),
-		})),
+		zValidator(
+			'json',
+			z.object({
+				model: z.string().optional(),
+				web_search: z.boolean().optional(),
+			}),
+		),
 		async (c) => {
 			const actor = c.get('actor')
 			if (!actor || (actor.role !== 'admin' && actor.role !== 'owner')) {
@@ -161,7 +168,7 @@ const agents = new Hono<AppEnv>()
 
 			let agent: Record<string, unknown>
 			try {
-				agent = await readYaml(agentFilePath, AgentSchema) as Record<string, unknown>
+				agent = (await readYaml(agentFilePath, AgentSchema)) as Record<string, unknown>
 			} catch {
 				return c.json({ error: 'agent not found' }, 404)
 			}

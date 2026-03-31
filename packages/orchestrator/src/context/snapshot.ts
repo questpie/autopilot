@@ -1,9 +1,9 @@
 import type { Agent } from '@questpie/autopilot-spec'
+import { container } from '../container'
+import { dbFactory } from '../db'
 import { listPins, loadAgents } from '../fs'
 import type { StorageBackend } from '../fs/storage'
 import type { SessionStreamManager } from '../session/stream'
-import { container } from '../container'
-import { dbFactory } from '../db'
 
 /** A point-in-time snapshot of company state scoped to a single agent. */
 export interface CompanySnapshot {
@@ -95,7 +95,7 @@ export async function buildCompanySnapshot(
 			}
 		})
 	} catch {
-		// agents.yaml may not exist
+		// team/agents directory may not exist
 	}
 
 	return {

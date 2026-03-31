@@ -40,7 +40,7 @@ The assigned agent uses its own configured model (via OpenRouter). Model selecti
 
 ### Concurrency
 
-The system enforces a maximum of 5 concurrent agent sessions. Tasks beyond this limit queue until a slot opens.
+The system enforces a maximum of 5 concurrent agent sessions. When the limit is reached, additional spawns are skipped with a warning (no internal queue).
 
 ### Context Assembly
 
@@ -64,7 +64,7 @@ This memory is available to future sessions for the same agent.
 
 Human gates pause workflow execution until a human approves. Configuration includes:
 - `min_approvals` — how many approvals are needed
-- `reviewer_roles` — which roles can approve
+- `reviewers_roles` — which roles can approve
 
 The workflow will not advance past a human gate until approval criteria are met.
 
@@ -81,8 +81,7 @@ Schedule/Trigger fires
   → Assigns agent based on step role/ID
   → Agent spawns with assembled context
   → Agent completes work, marks task done
-  → task_changed event fires
-  → Workflow engine evaluates transitions
+  → Workflow engine evaluates transitions when orchestrator processes the task
   → Advances to next step (or human_gate pauses)
   → Until terminal step → task complete
 ```
@@ -106,7 +105,7 @@ team/
 2. **Workflows define routes, agents execute steps** — clean separation of concerns
 3. **Task history is the record** — every workflow transition is recorded
 4. **Pure evaluation functions** — the workflow engine has no side effects
-5. **Event-driven advancement** — `task_changed` events trigger workflow evaluation
+5. **Deterministic evaluation** — workflow decisions are computed by pure functions from current task/workflow state
 6. **Human gates are first-class** — can pause any workflow for human decision
 7. **Agents do not know about workflows** — they work on tasks; the orchestrator routes based on workflow state
 
@@ -117,8 +116,10 @@ team/
 - **No retry/escalation on failure** — failed steps do not automatically retry or escalate to a smarter model
 - **No sub-workflow execution** — `sub_workflow` exists in the schema but returns `no_action`
 - **No parallel step execution** — steps run sequentially only
+- **No spawn queue at concurrency limit** — over-limit spawns are skipped
 - **No step timeouts** — steps run until the agent completes or is interrupted
 - **No token tracking** — `tokens_used` is always 0
 - **No step actions** — `notify`, `pin`, `move_task_to` are not implemented
 - **No `on_reject` / `max_rounds`** — not implemented
 - **No `can_skip_if`** — not implemented
+- **No global `task_changed` subscription for auto-advancement** — workflow processing runs on startup scan and explicit task handling paths

@@ -1,9 +1,14 @@
-import { readFileSync, existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import dotenv from 'dotenv'
-import { AgentSchema } from '@questpie/autopilot-spec'
-import { WorkflowSchema } from '@questpie/autopilot-spec'
+import {
+	AgentSchema,
+	HumanSchema,
+	ScheduleSchema,
+	WebhookSchema,
+	WorkflowSchema,
+} from '@questpie/autopilot-spec'
 import type { Schedule } from '@questpie/autopilot-spec'
+import dotenv from 'dotenv'
 import { parse as parseYaml } from 'yaml'
 import { spawnAgent } from './agent'
 import { createApp } from './api'
@@ -19,18 +24,30 @@ import { telegramWebhookHandler } from './webhook'
 import { advanceWorkflow, evaluateTransition } from './workflow'
 import { WorkflowLoader } from './workflow'
 
-import { classify, BLOCKED_TASK_CLASSIFIER } from './agent/micro-agent'
+import { BLOCKED_TASK_CLASSIFIER, classify } from './agent/micro-agent'
 import { aiProviderFactory } from './ai'
-import { logger } from './logger'
 import { authFactory } from './auth'
 import { configureContainer, container } from './container'
 import { dbFactory } from './db'
 import { indexerFactory } from './db/indexer'
 import { embeddingServiceFactory } from './embeddings'
 import { storageFactory } from './fs/sqlite-backend'
+import { logger } from './logger'
 import { NotificationDispatcher } from './notifications'
 import { notifierFactory } from './notifier'
 import { streamManagerFactory } from './session/stream'
+
+const LEGACY_TEAM_CONFIG_FILES = [
+	'agents.yaml',
+	'humans.yaml',
+	'webhooks.yaml',
+	'schedules.yaml',
+] as const
+
+function legacyConfigMigrationHint(file: string): string {
+	const base = file.replace(/\.ya?ml$/, '')
+	return `legacy file team/${file} is no longer supported; migrate to team/${base}/<id>.yaml files`
+}
 
 /** Configuration options for the {@link Orchestrator}. */
 export interface OrchestratorOptions {
@@ -63,15 +80,35 @@ export class Orchestrator {
 	 * D4: Guarded agent spawn — enforces maxConcurrentAgents limit.
 	 * Returns the spawn promise, or logs a warning and returns null if at capacity.
 	 */
-	private guardedSpawn(opts: Parameters<typeof spawnAgent>[0]): Promise<Awaited<ReturnType<typeof spawnAgent>>> | null {
+	private guardedSpawn(
+		opts: Parameters<typeof spawnAgent>[0],
+	): Promise<Awaited<ReturnType<typeof spawnAgent>>> | null {
 		if (this.activeAgentCount >= this.maxConcurrentAgents) {
-			logger.warn('orchestrator', `max concurrent agents (${this.maxConcurrentAgents}) reached — skipping spawn for ${opts.agent.id}`)
+			logger.warn(
+				'orchestrator',
+				`max concurrent agents (${this.maxConcurrentAgents}) reached — skipping spawn for ${opts.agent.id}`,
+			)
 			return null
 		}
 		this.activeAgentCount++
 		return spawnAgent(opts).finally(() => {
 			this.activeAgentCount--
 		})
+	}
+
+	private assertNoLegacyTeamConfig(root: string): void {
+		const legacyFiles = LEGACY_TEAM_CONFIG_FILES.filter((file) =>
+			existsSync(join(root, 'team', file)),
+		)
+		if (legacyFiles.length === 0) return
+
+		for (const file of legacyFiles) {
+			logger.error('orchestrator', legacyConfigMigrationHint(file))
+		}
+
+		const firstLegacyFile = legacyFiles[0]
+		if (!firstLegacyFile) return
+		throw new Error(legacyConfigMigrationHint(firstLegacyFile))
 	}
 
 	/**
@@ -103,8 +140,12 @@ export class Orchestrator {
 		try {
 			company = await loadCompany(root)
 			logger.info('orchestrator', `loaded company: ${company.name} (${company.slug})`)
+			this.assertNoLegacyTeamConfig(root)
 		} catch (err) {
-			logger.error('orchestrator', 'failed to load company.yaml — is this a valid company directory?')
+			logger.error(
+				'orchestrator',
+				'failed to load company.yaml — is this a valid company directory?',
+			)
 			throw err
 		}
 
@@ -118,14 +159,18 @@ export class Orchestrator {
 			])
 			logger.info('orchestrator', 'core services initialized')
 		} catch (err) {
-			logger.error('orchestrator', 'failed to initialize core services', { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', 'failed to initialize core services', {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 
 		// 3. Indexer (triggers reindexAll inside factory)
 		try {
 			await container.resolveAsync([indexerFactory])
 		} catch (err) {
-			logger.error('orchestrator', 'indexer failed', { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', 'indexer failed', {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 
 		// 4. Load roles (needed for RBAC before first request)
@@ -134,7 +179,9 @@ export class Orchestrator {
 			await loadRoles(root)
 			logger.info('orchestrator', 'roles loaded')
 		} catch (err) {
-			logger.error('orchestrator', 'failed to load roles', { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', 'failed to load roles', {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 
 		// 5. Notifier + StreamManager
@@ -147,12 +194,16 @@ export class Orchestrator {
 			eventBus.subscribe((event) => {
 				// Fire-and-forget — dispatcher handles its own errors
 				dispatcher.handle(event).catch((err) => {
-					logger.error('orchestrator', 'notification dispatcher error', { error: err instanceof Error ? err.message : String(err) })
+					logger.error('orchestrator', 'notification dispatcher error', {
+						error: err instanceof Error ? err.message : String(err),
+					})
 				})
 			})
 			logger.info('orchestrator', 'notification dispatcher wired to event bus')
 		} catch (err) {
-			logger.error('orchestrator', 'failed to wire notification dispatcher', { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', 'failed to wire notification dispatcher', {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 
 		// 5c. Seed default data if DB is fresh
@@ -191,7 +242,9 @@ export class Orchestrator {
 				logger.info('orchestrator', `seeded 2 default channels with ${agents.length} agent members`)
 			}
 		} catch (err) {
-			logger.error('orchestrator', 'failed to seed defaults', { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', 'failed to seed defaults', {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 
 		// 6. Start watcher
@@ -201,9 +254,14 @@ export class Orchestrator {
 		})
 		try {
 			await this.watcher.start()
-			logger.info('orchestrator', 'watcher started (watching dashboard/, team/, knowledge/, artifacts/, company.yaml)')
+			logger.info(
+				'orchestrator',
+				'watcher started (watching dashboard/, team/, knowledge/, artifacts/, company.yaml)',
+			)
 		} catch (err) {
-			logger.error('orchestrator', 'failed to start watcher', { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', 'failed to start watcher', {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 
 		// 6. Start scheduler
@@ -216,7 +274,9 @@ export class Orchestrator {
 			const jobs = this.scheduler.getActiveJobs()
 			logger.info('orchestrator', `scheduler started (${jobs.length} active jobs)`)
 		} catch (err) {
-			logger.error('orchestrator', 'failed to start scheduler', { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', 'failed to start scheduler', {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 
 		// 7. Register webhook handlers
@@ -227,9 +287,13 @@ export class Orchestrator {
 			const { startDurableStreamServer } = await import('./session/durable')
 			await startDurableStreamServer(root)
 		} catch (err) {
-			logger.warn('orchestrator', 'durable streams server failed to start (sessions will use in-memory only)', {
-				error: err instanceof Error ? err.message : String(err),
-			})
+			logger.warn(
+				'orchestrator',
+				'durable streams server failed to start (sessions will use in-memory only)',
+				{
+					error: err instanceof Error ? err.message : String(err),
+				},
+			)
 		}
 
 		// 9. Start unified HTTP server (API + webhooks + dashboard)
@@ -247,7 +311,10 @@ export class Orchestrator {
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
 			if (msg.includes('EADDRINUSE') || msg.includes('in use')) {
-				logger.warn('orchestrator', `port ${apiPort} already in use — skipping (kill the other process or use --port)`)
+				logger.warn(
+					'orchestrator',
+					`port ${apiPort} already in use — skipping (kill the other process or use --port)`,
+				)
 			} else {
 				logger.error('orchestrator', 'failed to start server', { error: msg })
 			}
@@ -270,7 +337,9 @@ export class Orchestrator {
 			})
 			await this.gitManager.initialize()
 		} catch (err) {
-			logger.error('orchestrator', 'failed to initialize git manager', { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', 'failed to initialize git manager', {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 
 		// 11. Startup scan: process existing tasks from SQLite
@@ -289,7 +358,10 @@ export class Orchestrator {
 			}
 			const totalProcessed = allTasks.length + blockedTasks.length
 			if (totalProcessed > 0) {
-				logger.info('orchestrator', `startup scan: processed ${allTasks.length} active tasks, ${blockedTasks.length} blocked tasks`)
+				logger.info(
+					'orchestrator',
+					`startup scan: processed ${allTasks.length} active tasks, ${blockedTasks.length} blocked tasks`,
+				)
 			}
 		} catch {
 			// storage might not be ready
@@ -309,7 +381,9 @@ export class Orchestrator {
 			try {
 				await this.gitManager.stop()
 			} catch (err) {
-				logger.error('orchestrator', 'error stopping git manager', { error: err instanceof Error ? err.message : String(err) })
+				logger.error('orchestrator', 'error stopping git manager', {
+					error: err instanceof Error ? err.message : String(err),
+				})
 			}
 			this.gitManager = null
 		}
@@ -318,7 +392,9 @@ export class Orchestrator {
 			try {
 				await this.watcher.stop()
 			} catch (err) {
-				logger.error('orchestrator', 'error stopping watcher', { error: err instanceof Error ? err.message : String(err) })
+				logger.error('orchestrator', 'error stopping watcher', {
+					error: err instanceof Error ? err.message : String(err),
+				})
 			}
 			this.watcher = null
 		}
@@ -327,7 +403,9 @@ export class Orchestrator {
 			try {
 				this.scheduler.stop()
 			} catch (err) {
-				logger.error('orchestrator', 'error stopping scheduler', { error: err instanceof Error ? err.message : String(err) })
+				logger.error('orchestrator', 'error stopping scheduler', {
+					error: err instanceof Error ? err.message : String(err),
+				})
 			}
 			this.scheduler = null
 		}
@@ -336,7 +414,9 @@ export class Orchestrator {
 			try {
 				this.apiServer.stop(true)
 			} catch (err) {
-				logger.error('orchestrator', 'error stopping api server', { error: err instanceof Error ? err.message : String(err) })
+				logger.error('orchestrator', 'error stopping api server', {
+					error: err instanceof Error ? err.message : String(err),
+				})
 			}
 			this.apiServer = null
 		}
@@ -346,7 +426,9 @@ export class Orchestrator {
 			const { storage } = await container.resolveAsync([storageFactory])
 			await storage.close()
 		} catch (err) {
-			logger.error('orchestrator', 'error closing storage', { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', 'error closing storage', {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 
 		// Clear all cached singleton instances from the container
@@ -421,13 +503,19 @@ export class Orchestrator {
 					break
 			}
 		} catch (err) {
-			logger.error('orchestrator', `error handling watch event (${event.type})`, { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', `error handling watch event (${event.type})`, {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 	}
 
 	/** TM-008: Validate config files with Zod before reloading. */
 	private async handleConfigChanged(file: string, path: string): Promise<void> {
 		try {
+			if ((LEGACY_TEAM_CONFIG_FILES as readonly string[]).includes(file)) {
+				throw new Error(legacyConfigMigrationHint(file))
+			}
+
 			const content = readFileSync(path, 'utf-8')
 			const parsed = parseYaml(content)
 
@@ -435,9 +523,11 @@ export class Orchestrator {
 			if (file.startsWith('agents/')) {
 				AgentSchema.parse(parsed)
 			} else if (file.startsWith('humans/')) {
-				// Individual human file — validate shape
+				HumanSchema.parse(parsed)
 			} else if (file.startsWith('webhooks/')) {
-				// Individual webhook file — validate shape
+				WebhookSchema.parse(parsed)
+			} else if (file.startsWith('schedules/')) {
+				ScheduleSchema.parse(parsed)
 			} else if (file.startsWith('workflows/')) {
 				WorkflowSchema.parse(parsed)
 			}
@@ -471,7 +561,9 @@ export class Orchestrator {
 			await indexer.indexOne('knowledge', file, title, content)
 			eventBus.emit({ type: 'knowledge_changed', path: file, action: 'updated' })
 		} catch (err) {
-			logger.error('orchestrator', `failed to reindex knowledge file ${file}`, { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', `failed to reindex knowledge file ${file}`, {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 	}
 
@@ -498,7 +590,9 @@ export class Orchestrator {
 					logger.error('orchestrator', `dashboard rebuild failed (exit ${exitCode})`)
 				}
 			} catch (err) {
-				logger.error('orchestrator', 'dashboard rebuild error', { error: err instanceof Error ? err.message : String(err) })
+				logger.error('orchestrator', 'dashboard rebuild error', {
+					error: err instanceof Error ? err.message : String(err),
+				})
 			}
 		}, 1000)
 	}
@@ -516,7 +610,8 @@ export class Orchestrator {
 			const mentions: string[] = []
 			let match: RegExpExecArray | null = mentionPattern.exec(content)
 			while (match) {
-				mentions.push(match[1]!)
+				const mentionId = match[1]
+				if (mentionId) mentions.push(mentionId)
 				match = mentionPattern.exec(content)
 			}
 
@@ -531,7 +626,10 @@ export class Orchestrator {
 				if (!agent) continue
 				if (agent.id === from) continue // don't spawn agent that sent the message
 
-				logger.info('orchestrator', `@${mentionedId} mentioned in #${channel} by ${from} — spawning`)
+				logger.info(
+					'orchestrator',
+					`@${mentionedId} mentioned in #${channel} by ${from} — spawning`,
+				)
 				this.guardedSpawn({
 					agent,
 					company,
@@ -540,10 +638,14 @@ export class Orchestrator {
 					trigger: { type: 'mention' },
 				})
 					?.then((result) => {
-						logger.info('orchestrator', `agent ${agent.id} finished mention response`, { toolCalls: result.toolCalls })
+						logger.info('orchestrator', `agent ${agent.id} finished mention response`, {
+							toolCalls: result.toolCalls,
+						})
 					})
 					.catch((err) => {
-						logger.error('orchestrator', `agent ${agent.id} failed`, { error: err instanceof Error ? err.message : String(err) })
+						logger.error('orchestrator', `agent ${agent.id} failed`, {
+							error: err instanceof Error ? err.message : String(err),
+						})
 					})
 			}
 		} catch (err) {
@@ -563,6 +665,47 @@ export class Orchestrator {
 				// Create a task from the schedule's task_template and let the workflow engine handle it
 				const now = new Date().toISOString()
 				const template = schedule.task_template ?? {}
+				const toContextString = (value: unknown): string => {
+					if (typeof value === 'string') return value
+					return JSON.stringify(value) ?? String(value)
+				}
+				const templateWorkflow =
+					typeof template.workflow === 'string' ? template.workflow : undefined
+				const workflowId = schedule.workflow ?? templateWorkflow
+
+				if (workflowId) {
+					const workflowLoader = new WorkflowLoader(root)
+					try {
+						await workflowLoader.load(workflowId)
+					} catch (err) {
+						const msg = err instanceof Error ? err.message : String(err)
+						logger.error(
+							'orchestrator',
+							`schedule ${schedule.id} references missing workflow: ${workflowId}`,
+							{ error: msg },
+						)
+						eventBus.emit({
+							type: 'validation_error',
+							file: `schedules/${schedule.id}.yaml`,
+							error: `workflow '${workflowId}' not found`,
+						})
+						return
+					}
+				}
+
+				const workflowInputs = schedule.workflow_inputs ?? {}
+				const serializedWorkflowInputs = Object.fromEntries(
+					Object.entries(workflowInputs).map(([key, value]) => [key, toContextString(value)]),
+				)
+
+				const templateContext =
+					typeof template.context === 'object' && template.context !== null
+						? (template.context as Record<string, unknown>)
+						: {}
+				const serializedTemplateContext = Object.fromEntries(
+					Object.entries(templateContext).map(([key, value]) => [key, toContextString(value)]),
+				)
+
 				const taskId = `sched-${schedule.id}-${Date.now()}`
 				const task = await storage.createTask({
 					id: taskId,
@@ -573,7 +716,15 @@ export class Orchestrator {
 					priority: (template.priority as 'medium') ?? 'medium',
 					created_by: 'scheduler',
 					assigned_to: template.assigned_to ?? schedule.agent,
-					workflow: template.workflow,
+					workflow: workflowId,
+					context: {
+						...serializedTemplateContext,
+						...serializedWorkflowInputs,
+					},
+					metadata:
+						Object.keys(workflowInputs).length > 0
+							? { schedule_workflow_inputs: workflowInputs }
+							: {},
 					created_at: now,
 					updated_at: now,
 				})
@@ -597,13 +748,20 @@ export class Orchestrator {
 						message: `Scheduled task (${schedule.id}): ${schedule.description || 'No description'}. Check your current tasks and act accordingly.`,
 					})
 						?.then((result) => {
-							logger.info('orchestrator', `agent ${agent.id} finished schedule ${schedule.id}`, { toolCalls: result.toolCalls })
+							logger.info('orchestrator', `agent ${agent.id} finished schedule ${schedule.id}`, {
+								toolCalls: result.toolCalls,
+							})
 						})
 						.catch((err) => {
-							logger.error('orchestrator', `agent ${agent.id} failed schedule ${schedule.id}`, { error: err instanceof Error ? err.message : String(err) })
+							logger.error('orchestrator', `agent ${agent.id} failed schedule ${schedule.id}`, {
+								error: err instanceof Error ? err.message : String(err),
+							})
 						})
 				} else {
-					logger.warn('orchestrator', `schedule ${schedule.id} references unknown agent: ${schedule.agent}`)
+					logger.warn(
+						'orchestrator',
+						`schedule ${schedule.id} references unknown agent: ${schedule.agent}`,
+					)
 				}
 			}
 
@@ -616,7 +774,9 @@ export class Orchestrator {
 				agentId: schedule.agent,
 			})
 		} catch (err) {
-			logger.error('orchestrator', `error handling schedule trigger (${schedule.id})`, { error: err instanceof Error ? err.message : String(err) })
+			logger.error('orchestrator', `error handling schedule trigger (${schedule.id})`, {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
 	}
 
@@ -631,163 +791,176 @@ export class Orchestrator {
 		if (this.processingTasks.has(taskId)) return
 		this.processingTasks.add(taskId)
 		try {
+			const root = this.options.companyRoot
+			const { storage } = await container.resolveAsync([storageFactory])
+			const { notifier } = await container.resolveAsync([notifierFactory])
+			const workflowLoader = new WorkflowLoader(root)
 
-		const root = this.options.companyRoot
-		const { storage } = await container.resolveAsync([storageFactory])
-		const { notifier } = await container.resolveAsync([notifierFactory])
-		const workflowLoader = new WorkflowLoader(root)
-
-		// 1. Read the task
-		const task = await storage.readTask(taskId)
-		if (!task) {
-			logger.info('orchestrator', `task not found: ${taskId}`)
-			return
-		}
-
-		logger.info('orchestrator', `processing task: ${task.id}`, { status: task.status, workflowStep: task.workflow_step ?? 'none' })
-
-		// 2. If task has a workflow but no step, initialize to first step and continue
-		if (task.workflow && !task.workflow_step) {
-			try {
-				const workflow = await workflowLoader.load(task.workflow)
-				const firstStep = workflow.steps[0]
-				if (firstStep) {
-					await storage.updateTask(
-						taskId,
-						{
-							workflow_step: firstStep.id,
-						},
-						'system',
-					)
-					await storage.moveTask(taskId, 'assigned', 'system')
-					logger.info('orchestrator', `initialized ${taskId} to workflow step: ${firstStep.id}`)
-					// Update local task reference and fall through to evaluation
-					task.workflow_step = firstStep.id
-					task.status = 'assigned'
-				}
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err)
-				logger.error('orchestrator', `failed to initialize workflow for ${taskId}: ${msg}`)
+			// 1. Read the task
+			const task = await storage.readTask(taskId)
+			if (!task) {
+				logger.info('orchestrator', `task not found: ${taskId}`)
 				return
 			}
-		}
 
-		// 3. If task has a workflow and step, evaluate what to do
-		if (task.workflow && task.workflow_step) {
-			try {
-				const workflow = await workflowLoader.load(task.workflow)
-				const agents = await loadAgents(root)
+			logger.info('orchestrator', `processing task: ${task.id}`, {
+				status: task.status,
+				workflowStep: task.workflow_step ?? 'none',
+			})
 
-				let result: import('./workflow').WorkflowTransitionResult
-
-				if (task.status === 'done') {
-					// Task finished current step → advance to next step
-					result = advanceWorkflow(workflow, task, 'done', agents)
-					if (result.nextStep && result.nextStep !== task.workflow_step) {
+			// 2. If task has a workflow but no step, initialize to first step and continue
+			if (task.workflow && !task.workflow_step) {
+				try {
+					const workflow = await workflowLoader.load(task.workflow)
+					const firstStep = workflow.steps[0]
+					if (firstStep) {
 						await storage.updateTask(
 							taskId,
-							{ workflow_step: result.nextStep },
+							{
+								workflow_step: firstStep.id,
+							},
 							'system',
 						)
 						await storage.moveTask(taskId, 'assigned', 'system')
-						eventBus.emit({
-							type: 'workflow_advanced',
-							taskId,
-							from: task.workflow_step!,
-							to: result.nextStep,
-						})
-						logger.info('orchestrator', `advanced ${taskId}: ${task.workflow_step} -> ${result.nextStep}`)
-					} else if (result.action === 'complete') {
-						logger.info('orchestrator', `task ${taskId} workflow complete`)
+						logger.info('orchestrator', `initialized ${taskId} to workflow step: ${firstStep.id}`)
+						// Update local task reference and fall through to evaluation
+						task.workflow_step = firstStep.id
+						task.status = 'assigned'
+					}
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					logger.error('orchestrator', `failed to initialize workflow for ${taskId}: ${msg}`)
+					return
+				}
+			}
+
+			// 3. If task has a workflow and step, evaluate what to do
+			if (task.workflow && task.workflow_step) {
+				try {
+					const workflow = await workflowLoader.load(task.workflow)
+					const agents = await loadAgents(root)
+
+					let result: import('./workflow').WorkflowTransitionResult
+
+					if (task.status === 'done') {
+						// Task finished current step → advance to next step
+						result = advanceWorkflow(workflow, task, 'done', agents)
+						if (result.nextStep && result.nextStep !== task.workflow_step) {
+							await storage.updateTask(taskId, { workflow_step: result.nextStep }, 'system')
+							await storage.moveTask(taskId, 'assigned', 'system')
+							eventBus.emit({
+								type: 'workflow_advanced',
+								taskId,
+								from: task.workflow_step ?? 'unknown',
+								to: result.nextStep,
+							})
+							logger.info(
+								'orchestrator',
+								`advanced ${taskId}: ${task.workflow_step} -> ${result.nextStep}`,
+							)
+						} else if (result.action === 'complete') {
+							logger.info('orchestrator', `task ${taskId} workflow complete`)
+						} else {
+							// Can't advance — don't respawn
+							logger.info(
+								'orchestrator',
+								`task ${taskId} done but can't advance: ${result.error ?? 'unknown'}`,
+							)
+							return
+						}
+					} else if (task.status === 'blocked') {
+						// Check if task has been blocked long enough to escalate
+						await this.checkEscalation(task)
+						return
+					} else if (task.status === 'assigned' || task.status === 'in_progress') {
+						result = evaluateTransition(workflow, task, agents)
 					} else {
-						// Can't advance — don't respawn
-						logger.info('orchestrator', `task ${taskId} done but can't advance: ${result.error ?? 'unknown'}`)
 						return
 					}
-				} else if (task.status === 'blocked') {
-					// Check if task has been blocked long enough to escalate
-					await this.checkEscalation(task)
-					return
-				} else if (task.status === 'assigned' || task.status === 'in_progress') {
-					result = evaluateTransition(workflow, task, agents)
-				} else {
-					return
-				}
 
-				logger.info('orchestrator', `workflow evaluation for ${taskId}`, {
-					action: result.action,
-					nextStep: result.nextStep,
-					assignTo: result.assignTo,
-					assignRole: result.assignRole,
-					gate: result.gate,
-					error: result.error,
-				})
+					logger.info('orchestrator', `workflow evaluation for ${taskId}`, {
+						action: result.action,
+						nextStep: result.nextStep,
+						assignTo: result.assignTo,
+						assignRole: result.assignRole,
+						gate: result.gate,
+						error: result.error,
+					})
 
-				// Log notifications based on result
-				switch (result.action) {
-					case 'assign_agent': {
-						const assignedAgentId =
-							result.assignTo ?? agents.find((a) => a.role === result.assignRole)?.id
-						await notifier.notify({
-							type: 'task_assigned',
-							title: `Task assigned: ${task.title}`,
-							message: `Task ${taskId} assigned to ${assignedAgentId ?? result.assignRole ?? 'unknown'}`,
-							priority: task.priority === 'critical' ? 'urgent' : 'normal',
-							taskId,
-							agentId: assignedAgentId,
-						})
+					// Log notifications based on result
+					switch (result.action) {
+						case 'assign_agent': {
+							const assignedAgentId =
+								result.assignTo ?? agents.find((a) => a.role === result.assignRole)?.id
+							await notifier.notify({
+								type: 'task_assigned',
+								title: `Task assigned: ${task.title}`,
+								message: `Task ${taskId} assigned to ${assignedAgentId ?? result.assignRole ?? 'unknown'}`,
+								priority: task.priority === 'critical' ? 'urgent' : 'normal',
+								taskId,
+								agentId: assignedAgentId,
+							})
 
-						// Actually spawn the agent
-						if (assignedAgentId) {
-							const agent = agents.find((a) => a.id === assignedAgentId)
-							if (agent) {
-								const company = await loadCompany(root)
-								logger.info('orchestrator', `spawning agent: ${agent.id} (${agent.role}) for task ${taskId}`)
-								this.guardedSpawn({
-									agent,
-									company,
-									allAgents: agents,
-									task,
-									storage,
-									trigger: { type: 'task_assigned', task_id: taskId },
-								})
-									?.then((result) => {
-										logger.info('orchestrator', `agent ${agent.id} finished`, { toolCalls: result.toolCalls, error: result.error })
+							// Actually spawn the agent
+							if (assignedAgentId) {
+								const agent = agents.find((a) => a.id === assignedAgentId)
+								if (agent) {
+									const company = await loadCompany(root)
+									logger.info(
+										'orchestrator',
+										`spawning agent: ${agent.id} (${agent.role}) for task ${taskId}`,
+									)
+									this.guardedSpawn({
+										agent,
+										company,
+										allAgents: agents,
+										task,
+										storage,
+										trigger: { type: 'task_assigned', task_id: taskId },
 									})
-									.catch((err) => {
-										logger.error('orchestrator', `agent ${agent.id} failed`, { error: err instanceof Error ? err.message : String(err) })
-									})
+										?.then((result) => {
+											logger.info('orchestrator', `agent ${agent.id} finished`, {
+												toolCalls: result.toolCalls,
+												error: result.error,
+											})
+										})
+										.catch((err) => {
+											logger.error('orchestrator', `agent ${agent.id} failed`, {
+												error: err instanceof Error ? err.message : String(err),
+											})
+										})
+								}
 							}
+							break
 						}
-						break
+						case 'notify_human':
+							await notifier.notify({
+								type: 'approval_needed',
+								title: `Human approval needed: ${task.title}`,
+								message: `Task ${taskId} requires human approval at gate: ${result.gate ?? 'unknown'}`,
+								priority: 'high',
+								taskId,
+							})
+							break
+						case 'complete':
+							await notifier.notify({
+								type: 'task_completed',
+								title: `Task completed: ${task.title}`,
+								message: `Task ${taskId} reached terminal step`,
+								priority: 'normal',
+								taskId,
+							})
+							break
+						case 'error':
+							logger.error('orchestrator', `workflow error for ${taskId}: ${result.error}`)
+							break
 					}
-					case 'notify_human':
-						await notifier.notify({
-							type: 'approval_needed',
-							title: `Human approval needed: ${task.title}`,
-							message: `Task ${taskId} requires human approval at gate: ${result.gate ?? 'unknown'}`,
-							priority: 'high',
-							taskId,
-						})
-						break
-					case 'complete':
-						await notifier.notify({
-							type: 'task_completed',
-							title: `Task completed: ${task.title}`,
-							message: `Task ${taskId} reached terminal step`,
-							priority: 'normal',
-							taskId,
-						})
-						break
-					case 'error':
-						logger.error('orchestrator', `workflow error for ${taskId}: ${result.error}`)
-						break
+				} catch (err) {
+					logger.error('orchestrator', `failed to evaluate workflow for task ${taskId}`, {
+						error: err instanceof Error ? err.message : String(err),
+					})
 				}
-			} catch (err) {
-				logger.error('orchestrator', `failed to evaluate workflow for task ${taskId}`, { error: err instanceof Error ? err.message : String(err) })
 			}
-		}
-
 		} finally {
 			this.processingTasks.delete(taskId)
 		}
@@ -800,9 +973,11 @@ export class Orchestrator {
 	 */
 	private async checkEscalation(task: import('./fs/storage').Task): Promise<void> {
 		// Find the most recent status_change to 'blocked' in history
-		const blockedSince = [...(task.history ?? [])].reverse().find(
-			(h: { action: string; to?: string }) => h.action === 'status_change' && h.to === 'blocked',
-		)
+		const blockedSince = [...(task.history ?? [])]
+			.reverse()
+			.find(
+				(h: { action: string; to?: string }) => h.action === 'status_change' && h.to === 'blocked',
+			)
 		if (!blockedSince) return
 
 		const blockedAt = new Date(blockedSince.at)
@@ -820,14 +995,18 @@ export class Orchestrator {
 
 		try {
 			const { aiProvider } = await container.resolveAsync([aiProviderFactory])
-			const result = await classify(aiProvider, BLOCKED_TASK_CLASSIFIER, JSON.stringify({
-				taskId: task.id,
-				title: task.title,
-				status: task.status,
-				blockedMinutes: Math.round(blockedMinutes),
-				blockers: task.blockers,
-				assignedTo: task.assigned_to,
-			}))
+			const result = await classify(
+				aiProvider,
+				BLOCKED_TASK_CLASSIFIER,
+				JSON.stringify({
+					taskId: task.id,
+					title: task.title,
+					status: task.status,
+					blockedMinutes: Math.round(blockedMinutes),
+					blockers: task.blockers,
+					assignedTo: task.assigned_to,
+				}),
+			)
 
 			if (!result) return // AI unavailable — do nothing
 
@@ -838,10 +1017,14 @@ export class Orchestrator {
 					taskId: task.id,
 					status: 'blocked',
 				})
-				logger.info('orchestrator', `escalation: task ${task.id} blocked ${Math.round(blockedMinutes)}min`, {
-					recommendation: result.action,
-					reason: result.reason,
-				})
+				logger.info(
+					'orchestrator',
+					`escalation: task ${task.id} blocked ${Math.round(blockedMinutes)}min`,
+					{
+						recommendation: result.action,
+						reason: result.reason,
+					},
+				)
 			} else if (result.action === 'reassign' && result.reassign_to) {
 				// Auto-reassign to a different agent
 				const { storage } = await container.resolveAsync([storageFactory])

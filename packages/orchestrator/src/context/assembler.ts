@@ -1,14 +1,14 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Agent, Company, Task } from '@questpie/autopilot-spec'
 import { rolePath as specRolePath } from '@questpie/autopilot-spec'
-import { buildCompanySnapshot } from './snapshot'
-import { loadAgentMemory } from './memory-loader'
-import { getSkillsForRole } from '../skills'
-import { stringify as stringifyYaml, parse as parseYaml } from 'yaml'
-import type { StorageBackend } from '../fs/storage'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { container } from '../container'
+import type { StorageBackend } from '../fs/storage'
 import { streamManagerFactory } from '../session/stream'
-import { join } from 'node:path'
-import { existsSync, readFileSync } from 'node:fs'
+import { getSkillsForRole } from '../skills'
+import { loadAgentMemory } from './memory-loader'
+import { buildCompanySnapshot } from './snapshot'
 
 /** The final output of the context assembly pipeline. */
 export interface AssembledContext {
@@ -43,9 +43,7 @@ function truncateToTokens(text: string, maxTokens: number): string {
 }
 
 function formatTeamRoster(agents: Agent[]): string {
-	return agents
-		.map((a) => `- ${a.name} (${a.id}): ${a.role} — ${a.description}`)
-		.join('\n')
+	return agents.map((a) => `- ${a.name} (${a.id}): ${a.role} — ${a.description}`).join('\n')
 }
 
 function formatTasksSummary(
@@ -53,25 +51,16 @@ function formatTasksSummary(
 ): string {
 	if (tasks.length === 0) return 'No active tasks.'
 	return tasks
-		.map(
-			(t) =>
-				`- [${t.status}] ${t.title} (${t.id})${t.assigned_to ? ` → ${t.assigned_to}` : ''}`,
-		)
+		.map((t) => `- [${t.status}] ${t.title} (${t.id})${t.assigned_to ? ` → ${t.assigned_to}` : ''}`)
 		.join('\n')
 }
 
-function formatMessages(
-	messages: Array<{ from: string; content: string; at: string }>,
-): string {
+function formatMessages(messages: Array<{ from: string; content: string; at: string }>): string {
 	if (messages.length === 0) return ''
-	return messages
-		.map((m) => `[${m.at}] ${m.from}: ${m.content}`)
-		.join('\n')
+	return messages.map((m) => `[${m.at}] ${m.from}: ${m.content}`).join('\n')
 }
 
-function formatPins(
-	pins: Array<{ title: string; type: string; content: string }>,
-): string {
+function formatPins(pins: Array<{ title: string; type: string; content: string }>): string {
 	if (pins.length === 0) return ''
 	return pins.map((p) => `- [${p.type}] ${p.title}: ${p.content}`).join('\n')
 }
@@ -181,7 +170,7 @@ function buildIdentityPrompt(
 	if (rolePrompt) {
 		sections.push(rolePrompt)
 	} else if (agent.description) {
-		// Fallback: use agent description from agents.yaml
+		// Fallback: use agent description from team/agents/{id}.yaml
 		sections.push(
 			`You are ${agent.name}, a ${agent.role} at ${company.name}.\n\n${agent.description}\n\n## Your Team\n${teamRoster}`,
 		)
@@ -231,7 +220,15 @@ function buildIdentityPrompt(
  * it trims memory rather than tool documentation.
  */
 export async function assembleContext(options: ContextOptions): Promise<AssembledContext> {
-	const { companyRoot, agent, company, task, allAgents, storage, maxTokens = DEFAULT_MAX_TOKENS } = options
+	const {
+		companyRoot,
+		agent,
+		company,
+		task,
+		allAgents,
+		storage,
+		maxTokens = DEFAULT_MAX_TOKENS,
+	} = options
 
 	const sections: string[] = []
 
@@ -365,7 +362,9 @@ Without these 3 calls, the workflow pipeline stops.`)
 			const taskMessages = await storage.readMessages({ channel: taskChannelId, limit: 10 })
 			if (taskMessages.length > 0) {
 				const taskDiscussion = formatMessages(taskMessages)
-				taskLines.push(`\n### Task Discussion\nRecent messages from #${taskChannelId}:\n${taskDiscussion}`)
+				taskLines.push(
+					`\n### Task Discussion\nRecent messages from #${taskChannelId}:\n${taskDiscussion}`,
+				)
 			}
 		} catch {
 			// Task channel may not exist yet — safe to ignore
@@ -378,7 +377,9 @@ Without these 3 calls, the workflow pipeline stops.`)
 				const projectMessages = await storage.readMessages({ channel: projectChannelId, limit: 5 })
 				if (projectMessages.length > 0) {
 					const projectDiscussion = formatMessages(projectMessages)
-					taskLines.push(`\n### Project Discussion\nRecent messages from #${projectChannelId}:\n${projectDiscussion}`)
+					taskLines.push(
+						`\n### Project Discussion\nRecent messages from #${projectChannelId}:\n${projectDiscussion}`,
+					)
 				}
 			} catch {
 				// Project channel may not exist yet — safe to ignore
@@ -392,7 +393,9 @@ Without these 3 calls, the workflow pipeline stops.`)
 	const roleSkills = await getSkillsForRole(companyRoot, agent.role)
 	if (roleSkills.length > 0) {
 		const skillLines: string[] = ['## Available Skills']
-		skillLines.push('These skills are auto-loaded based on your role. Use `read_file("skills/{id}/SKILL.md")` for full content.\n')
+		skillLines.push(
+			'These skills are auto-loaded based on your role. Use `read_file("skills/{id}/SKILL.md")` for full content.\n',
+		)
 		// Include top 5 most relevant skill summaries directly in context
 		const topSkills = roleSkills.slice(0, 5)
 		for (const skill of topSkills) {
@@ -400,7 +403,9 @@ Without these 3 calls, the workflow pipeline stops.`)
 			skillLines.push(`- **${skill.name}** (\`${skill.id}\`)${desc}`)
 		}
 		if (roleSkills.length > 5) {
-			skillLines.push(`\n...and ${roleSkills.length - 5} more. Use \`read_file("skills/{id}/SKILL.md")\` to access any skill.`)
+			skillLines.push(
+				`\n...and ${roleSkills.length - 5} more. Use \`read_file("skills/{id}/SKILL.md")\` to access any skill.`,
+			)
 		}
 		sections.push(truncateToTokens(skillLines.join('\n'), 2_000))
 	}
@@ -410,9 +415,7 @@ Without these 3 calls, the workflow pipeline stops.`)
 	const memory = await loadAgentMemory(companyRoot, agent.id)
 	if (memory) {
 		const memoryContent = stringifyYaml(memory, { lineWidth: 120 })
-		sections.push(
-			truncateToTokens(`## Agent Memory\n\`\`\`yaml\n${memoryContent}\`\`\``, 16_000),
-		)
+		sections.push(truncateToTokens(`## Agent Memory\n\`\`\`yaml\n${memoryContent}\`\`\``, 16_000))
 	}
 
 	const systemPrompt = sections.join('\n\n---\n\n')

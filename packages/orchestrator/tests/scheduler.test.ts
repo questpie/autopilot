@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
+import { writeYaml } from '../src/fs/yaml'
 import { Scheduler } from '../src/scheduler/scheduler'
 import { createTestCompany } from './helpers'
-import { writeYaml } from '../src/fs/yaml'
 
 describe('Scheduler', () => {
 	let companyRoot: string
@@ -153,6 +153,26 @@ describe('Scheduler', () => {
 
 		await scheduler.start()
 		expect(scheduler.getActiveJobs()).toHaveLength(0)
+		scheduler.stop()
+	})
+
+	test('loads schedules from .yml files', async () => {
+		const dir = join(companyRoot, 'team', 'schedules')
+		await mkdir(dir, { recursive: true })
+		await writeYaml(join(dir, 'health-check.yml'), {
+			id: 'health-check',
+			agent: 'ops',
+			cron: '*/5 * * * *',
+			enabled: true,
+		})
+
+		const scheduler = new Scheduler({
+			companyRoot,
+			onTrigger: async () => {},
+		})
+
+		await scheduler.start()
+		expect(scheduler.getActiveJobs()).toContain('health-check')
 		scheduler.stop()
 	})
 

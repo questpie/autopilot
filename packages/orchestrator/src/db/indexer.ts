@@ -1,21 +1,21 @@
+import { createHash } from 'node:crypto'
 import { readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { createHash } from 'node:crypto'
-import { PATHS } from '@questpie/autopilot-spec'
-import type { AutopilotDb } from './index'
-import { eq, and } from 'drizzle-orm'
 import type { Client } from '@libsql/client'
-import { indexEntity, removeEntity, type EntityType } from './search-index'
-import { chunkText, chunkCode } from './chunker'
-import { schema } from './index'
-import { container, companyRootFactory } from '../container'
-import { dbFactory } from './index'
-import { logger } from '../logger'
+import { PATHS } from '@questpie/autopilot-spec'
+import { and, eq } from 'drizzle-orm'
+import { companyRootFactory, container } from '../container'
 import { embeddingServiceFactory } from '../embeddings'
 import type { EmbeddingService } from '../embeddings'
 import { loadAgents } from '../fs'
-import { loadSkillCatalog } from '../skills/loader'
 import type { StorageBackend } from '../fs/storage'
+import { logger } from '../logger'
+import { loadSkillCatalog } from '../skills/loader'
+import { chunkCode, chunkText } from './chunker'
+import type { AutopilotDb } from './index'
+import { schema } from './index'
+import { dbFactory } from './index'
+import { type EntityType, indexEntity, removeEntity } from './search-index'
 
 /** D31: Batch size for reindexAll processing. */
 const BATCH_SIZE = 100
@@ -61,8 +61,13 @@ export class Indexer {
 	 * Reindex all entity types. Returns counts per type.
 	 */
 	async reindexAll(storage?: StorageBackend): Promise<{
-		tasks: number; messages: number; knowledge: number; pins: number
-		agents: number; channels: number; skills: number
+		tasks: number
+		messages: number
+		knowledge: number
+		pins: number
+		agents: number
+		channels: number
+		skills: number
 	}> {
 		const [tasks, messages, knowledge, pins] = await Promise.all([
 			this.indexTasks(),
@@ -137,17 +142,58 @@ export class Indexer {
 	/** D27: Supported file extensions for knowledge indexing. */
 	private static INDEXABLE_EXTENSIONS = new Set([
 		// Text
-		'md', 'txt', 'rst', 'adoc',
+		'md',
+		'txt',
+		'rst',
+		'adoc',
 		// Data
-		'json', 'csv', 'yaml', 'yml', 'toml',
+		'json',
+		'csv',
+		'yaml',
+		'yml',
+		'toml',
 		// Markup
-		'html', 'htm', 'xml', 'svg',
+		'html',
+		'htm',
+		'xml',
+		'svg',
 		// Code
-		'ts', 'tsx', 'js', 'jsx', 'mts', 'mjs', 'py', 'go', 'rs', 'java', 'kt',
-		'rb', 'php', 'c', 'cpp', 'h', 'hpp', 'cs', 'swift', 'sh', 'bash', 'zsh',
-		'sql', 'graphql', 'proto', 'lua', 'r', 'scala', 'zig', 'asm',
+		'ts',
+		'tsx',
+		'js',
+		'jsx',
+		'mts',
+		'mjs',
+		'py',
+		'go',
+		'rs',
+		'java',
+		'kt',
+		'rb',
+		'php',
+		'c',
+		'cpp',
+		'h',
+		'hpp',
+		'cs',
+		'swift',
+		'sh',
+		'bash',
+		'zsh',
+		'sql',
+		'graphql',
+		'proto',
+		'lua',
+		'r',
+		'scala',
+		'zig',
+		'asm',
 		// Config
-		'env', 'ini', 'cfg', 'conf', 'dockerfile',
+		'env',
+		'ini',
+		'cfg',
+		'conf',
+		'dockerfile',
 	])
 
 	/** D27: Binary document formats parsed via officeparser. */
@@ -182,11 +228,17 @@ export class Indexer {
 						try {
 							const relPath = relative(knowledgeDir, fullPath)
 							const data = Buffer.from(await Bun.file(fullPath).arrayBuffer())
-							const mimeType = ext === 'svg' ? 'image/svg+xml' : `image/${ext === 'jpg' ? 'jpeg' : ext}`
+							const mimeType =
+								ext === 'svg' ? 'image/svg+xml' : `image/${ext === 'jpg' ? 'jpeg' : ext}`
 							const embedding = await this.embeddingService.embedImage(data, mimeType)
 							if (embedding) {
 								// Index with minimal text content (filename) + store embedding in chunks_vec
-								const changed = await this.indexEntitySafe('knowledge', relPath, entry.name, `[Image: ${entry.name}]`)
+								const changed = await this.indexEntitySafe(
+									'knowledge',
+									relPath,
+									entry.name,
+									`[Image: ${entry.name}]`,
+								)
 								if (changed) count++
 							}
 						} catch {
@@ -196,9 +248,10 @@ export class Indexer {
 					// D27: Binary document formats (PDF, DOCX, PPTX, XLSX) via officeparser
 					else if (Indexer.OFFICE_EXTENSIONS.has(ext)) {
 						try {
-							const officeparser = await import('officeparser') as any
+							const officeparser = (await import('officeparser')) as any
 							const relPath = relative(knowledgeDir, fullPath)
-							const parseOfficeAsync = officeparser.parseOfficeAsync ?? officeparser.default?.parseOfficeAsync
+							const parseOfficeAsync =
+								officeparser.parseOfficeAsync ?? officeparser.default?.parseOfficeAsync
 							const content = await parseOfficeAsync(fullPath)
 							if (content && content.trim().length > 0) {
 								const title = entry.name.replace(/\.[^.]+$/, '')
@@ -210,7 +263,11 @@ export class Indexer {
 						}
 					}
 					// D27: Index all supported text formats
-					else if (Indexer.INDEXABLE_EXTENSIONS.has(ext) || baseName === 'dockerfile' || baseName === 'makefile') {
+					else if (
+						Indexer.INDEXABLE_EXTENSIONS.has(ext) ||
+						baseName === 'dockerfile' ||
+						baseName === 'makefile'
+					) {
 						try {
 							const raw = await Bun.file(fullPath).text()
 							const relPath = relative(knowledgeDir, fullPath)
@@ -259,7 +316,7 @@ export class Indexer {
 	}
 
 	/**
-	 * Index all agents from agents.yaml.
+	 * Index all agents from team/agents/*.yaml.
 	 */
 	async indexAgents(): Promise<number> {
 		let count = 0
@@ -273,7 +330,7 @@ export class Indexer {
 				if (changed) count++
 			}
 		} catch {
-			// agents.yaml may not exist
+			// team/agents directory may not exist
 		}
 		return count
 	}
@@ -286,9 +343,7 @@ export class Indexer {
 		try {
 			const channels = await storage.listChannels()
 			for (const ch of channels) {
-				const content = [ch.name, ch.description ?? '', ch.type]
-					.filter(Boolean)
-					.join('\n')
+				const content = [ch.name, ch.description ?? '', ch.type].filter(Boolean).join('\n')
 				const changed = await this.indexEntitySafe('channel', ch.id, ch.name, content)
 				if (changed) count++
 			}
@@ -347,18 +402,26 @@ export class Indexer {
 
 	/** Code file extensions for D28 code-aware chunking. */
 	private static CODE_EXTENSIONS = new Set([
-		'ts', 'tsx', 'js', 'jsx', 'mts', 'mjs', 'py', 'go', 'rs', 'java', 'kt', 'rb', 'php',
+		'ts',
+		'tsx',
+		'js',
+		'jsx',
+		'mts',
+		'mjs',
+		'py',
+		'go',
+		'rs',
+		'java',
+		'kt',
+		'rb',
+		'php',
 	])
 
 	/**
 	 * D26: Split content into chunks and store in the chunks table.
 	 * D28: Uses code-aware chunking for code files.
 	 */
-	private async storeChunks(
-		type: EntityType,
-		id: string,
-		content: string,
-	): Promise<void> {
+	private async storeChunks(type: EntityType, id: string, content: string): Promise<void> {
 		try {
 			// D28: Use code-aware chunking for code files
 			const ext = id.split('.').pop()?.toLowerCase() ?? ''
@@ -367,7 +430,8 @@ export class Indexer {
 			const now = new Date().toISOString()
 
 			// Delete existing chunks for this entity
-			await this.db.delete(schema.chunks)
+			await this.db
+				.delete(schema.chunks)
 				.where(and(eq(schema.chunks.entityType, type), eq(schema.chunks.entityId, id)))
 
 			// Insert new chunks
@@ -386,7 +450,11 @@ export class Indexer {
 
 			// Store chunk embeddings if available
 			if (this.embeddingService) {
-				await this.storeChunkEmbeddings(type, id, textChunks.map((c) => c.content))
+				await this.storeChunkEmbeddings(
+					type,
+					id,
+					textChunks.map((c) => c.content),
+				)
 			}
 		} catch {
 			// Chunk storage failed — entity is still indexed for FTS
@@ -418,8 +486,13 @@ export class Indexer {
 				const embeddingBuffer = Buffer.from(embedding.buffer)
 
 				try {
-					await raw.execute({ sql: 'UPDATE chunks SET embedding = vector(?) WHERE id = ?', args: [embeddingBuffer, chunkId] })
-				} catch { /* vector support not available */ }
+					await raw.execute({
+						sql: 'UPDATE chunks SET embedding = vector(?) WHERE id = ?',
+						args: [embeddingBuffer, chunkId],
+					})
+				} catch {
+					/* vector support not available */
+				}
 			}
 		} catch {
 			// Embedding storage failed — chunks still searchable via FTS
@@ -452,8 +525,13 @@ export class Indexer {
 			const embeddingBuffer = Buffer.from(embedding.buffer)
 
 			try {
-				await raw.execute({ sql: 'UPDATE search_index SET embedding = vector(?) WHERE id = ?', args: [embeddingBuffer, row.id] })
-			} catch { /* vector support not available */ }
+				await raw.execute({
+					sql: 'UPDATE search_index SET embedding = vector(?) WHERE id = ?',
+					args: [embeddingBuffer, row.id],
+				})
+			} catch {
+				/* vector support not available */
+			}
 		} catch {
 			// Embedding storage failed — entity still indexed for FTS
 		}
@@ -467,7 +545,8 @@ export class Indexer {
 			case 'html':
 			case 'htm':
 				// Strip HTML tags for indexing
-				return raw.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+				return raw
+					.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
 					.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
 					.replace(/<[^>]+>/g, ' ')
 					.replace(/\s+/g, ' ')
@@ -488,7 +567,10 @@ export class Indexer {
 			case 'xml':
 			case 'svg':
 				// Strip XML tags
-				return raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+				return raw
+					.replace(/<[^>]+>/g, ' ')
+					.replace(/\s+/g, ' ')
+					.trim()
 
 			default:
 				return raw
@@ -509,14 +591,22 @@ import { storageFactory } from '../fs/sqlite-backend'
 
 export const indexerFactory = container.registerAsync('indexer', async (c) => {
 	const { db, embeddingService, companyRoot, storage } = await c.resolveAsync([
-		dbFactory, embeddingServiceFactory, companyRootFactory, storageFactory
+		dbFactory,
+		embeddingServiceFactory,
+		companyRootFactory,
+		storageFactory,
 	])
 	const indexer = new Indexer(db.db, companyRoot, embeddingService)
 	// Don't await — run in background so server starts immediately
-	indexer.reindexAll(storage).then(() => {
-		logger.info('db', 'startup reindex complete')
-	}).catch((err) => {
-		logger.error('db', 'startup reindex failed', { error: err instanceof Error ? err.message : String(err) })
-	})
+	indexer
+		.reindexAll(storage)
+		.then(() => {
+			logger.info('db', 'startup reindex complete')
+		})
+		.catch((err) => {
+			logger.error('db', 'startup reindex failed', {
+				error: err instanceof Error ? err.message : String(err),
+			})
+		})
 	return indexer
 })

@@ -162,7 +162,7 @@ questpie-autopilot/
 
 - The orchestrator watches `tasks/`, `comms/`, `dashboard/`, and `team/` directories
 - Changes to `company.yaml` require a restart
-- Changes to `schedules.yaml` are hot-reloaded
+- Changes to `team/schedules/*.yaml` are hot-reloaded
 - Changes to `roles.yaml` are hot-reloaded
 - Dashboard dev server (`bun dev`) has HMR
 

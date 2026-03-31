@@ -16,8 +16,8 @@
 │  Agent Spawner ──── Claude Agent SDK sessions           │
 │  Context Builder ── role-scoped company snapshots       │
 │  Memory Extractor ── persists learnings post-session    │
-│  Scheduler ──── cron jobs from schedules.yaml           │
-│  Webhook Server ── port 7777, HMAC-verified             │
+│  Scheduler ──── cron jobs from team/schedules/*.yaml    │
+│  Webhook Routes ── /webhooks/*, HMAC-verified           │
 │  API Server ──── port 7778, Hono REST                   │
 │  Git Manager ──── auto-commit agent changes             │
 │  Stream Manager ── SSE for live session attach          │

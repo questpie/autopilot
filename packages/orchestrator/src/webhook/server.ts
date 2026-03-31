@@ -1,8 +1,8 @@
-import { join } from 'node:path'
-import { readdirSync, existsSync } from 'node:fs'
 import { timingSafeEqual } from 'node:crypto'
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Webhook } from '@questpie/autopilot-spec'
-import { WebhookSchema, PATHS } from '@questpie/autopilot-spec'
+import { PATHS, WebhookSchema } from '@questpie/autopilot-spec'
 import { readYaml } from '../fs/yaml'
 import { logger } from '../logger'
 
@@ -25,7 +25,7 @@ export interface WebhookServerOptions {
 /**
  * HTTP server that receives external webhook payloads.
  *
- * Matches incoming requests to webhook definitions from `webhooks.yaml`,
+ * Matches incoming requests to webhook definitions from `team/webhooks/*.yaml`,
  * verifies authentication (none / bearer_token / hmac_sha256), and
  * forwards the payload to the `onWebhook` callback.
  */
@@ -104,7 +104,9 @@ export class WebhookServer {
 		try {
 			await this.options.onWebhook(webhook, payload)
 		} catch (err) {
-			logger.error('webhook', `error handling ${webhook.id}`, { error: err instanceof Error ? err.message : String(err) })
+			logger.error('webhook', `error handling ${webhook.id}`, {
+				error: err instanceof Error ? err.message : String(err),
+			})
 			return new Response(JSON.stringify({ error: 'internal error' }), {
 				status: 500,
 				headers: { 'content-type': 'application/json' },
@@ -126,7 +128,10 @@ export class WebhookServer {
 
 			// Fail-secure: reject if no secret_ref configured
 			if (!webhook.secret_ref) {
-				logger.warn('webhook', `bearer_token auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`)
+				logger.warn(
+					'webhook',
+					`bearer_token auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`,
+				)
 				return false
 			}
 
@@ -145,12 +150,15 @@ export class WebhookServer {
 		if (webhook.auth === 'hmac_sha256') {
 			const signature = webhook.signature_header
 				? request.headers.get(webhook.signature_header)
-				: request.headers.get('x-signature-256') ?? request.headers.get('x-hub-signature-256')
+				: (request.headers.get('x-signature-256') ?? request.headers.get('x-hub-signature-256'))
 			if (!signature) return false
 
 			// Fail-secure: reject if no secret_ref configured
 			if (!webhook.secret_ref) {
-				logger.warn('webhook', `hmac_sha256 auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`)
+				logger.warn(
+					'webhook',
+					`hmac_sha256 auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`,
+				)
 				return false
 			}
 

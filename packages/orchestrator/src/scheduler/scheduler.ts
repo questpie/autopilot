@@ -1,8 +1,8 @@
-import cron from 'node-cron'
-import { join } from 'node:path'
 import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Schedule } from '@questpie/autopilot-spec'
-import { ScheduleSchema, PATHS } from '@questpie/autopilot-spec'
+import { PATHS, ScheduleSchema } from '@questpie/autopilot-spec'
+import cron from 'node-cron'
 import { readYaml } from '../fs/yaml'
 import { logger } from '../logger'
 
@@ -49,17 +49,20 @@ export class Scheduler {
 	}
 
 	private async loadSchedules(): Promise<void> {
-		const schedulesDir = join(this.options.companyRoot, 'team', 'schedules')
+		const schedulesDir = join(this.options.companyRoot, PATHS.SCHEDULES_DIR.slice(1))
 		if (!existsSync(schedulesDir)) return
 
-		const files = readdirSync(schedulesDir).filter((f) => f.endsWith('.yaml'))
+		const files = readdirSync(schedulesDir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
 
 		for (const file of files) {
 			let schedule: Schedule
 			try {
 				schedule = await readYaml(join(schedulesDir, file), ScheduleSchema)
 			} catch (err) {
-				logger.warn('scheduler', `failed to parse schedule ${file}: ${err instanceof Error ? err.message : String(err)}`)
+				logger.warn(
+					'scheduler',
+					`failed to parse schedule ${file}: ${err instanceof Error ? err.message : String(err)}`,
+				)
 				continue
 			}
 
@@ -74,7 +77,9 @@ export class Scheduler {
 				try {
 					await this.options.onTrigger(schedule)
 				} catch (err) {
-					logger.error('scheduler', `error in job ${schedule.id}`, { error: err instanceof Error ? err.message : String(err) })
+					logger.error('scheduler', `error in job ${schedule.id}`, {
+						error: err instanceof Error ? err.message : String(err),
+					})
 				}
 			})
 

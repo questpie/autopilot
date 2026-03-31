@@ -1,3 +1,8 @@
+import { timingSafeEqual } from 'node:crypto'
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import type { Webhook } from '@questpie/autopilot-spec'
+import { PATHS, WebhookSchema } from '@questpie/autopilot-spec'
 /**
  * Hono route that handles incoming webhook requests.
  *
@@ -8,16 +13,11 @@
  * services do not carry Bearer tokens.
  */
 import { Hono } from 'hono'
-import { join } from 'node:path'
-import { readdirSync, existsSync } from 'node:fs'
-import { timingSafeEqual } from 'node:crypto'
-import type { Webhook } from '@questpie/autopilot-spec'
-import { WebhookSchema, PATHS } from '@questpie/autopilot-spec'
-import { readYaml } from '../../fs/yaml'
-import { webhookHandlerRegistry } from '../../webhook'
-import { logger } from '../../logger'
 import { container } from '../../container'
+import { readYaml } from '../../fs/yaml'
+import { logger } from '../../logger'
 import { notifierFactory } from '../../notifier'
+import { webhookHandlerRegistry } from '../../webhook'
 import type { AppEnv } from '../app'
 
 /**
@@ -29,12 +29,7 @@ function safeCompare(a: string, b: string): boolean {
 	return timingSafeEqual(Buffer.from(a), Buffer.from(b))
 }
 
-/** Cached webhook definitions (lazy-loaded on first request). */
-let cachedWebhooks: Webhook[] | null = null
-let cachedCompanyRoot: string | null = null
-
 async function loadWebhooks(companyRoot: string): Promise<Webhook[]> {
-	if (cachedWebhooks && cachedCompanyRoot === companyRoot) return cachedWebhooks
 	const dir = join(companyRoot, PATHS.WEBHOOKS_DIR.slice(1))
 	const webhooks: Webhook[] = []
 	if (existsSync(dir)) {
@@ -48,9 +43,7 @@ async function loadWebhooks(companyRoot: string): Promise<Webhook[]> {
 			}
 		}
 	}
-	cachedWebhooks = webhooks.filter((w) => w.enabled)
-	cachedCompanyRoot = companyRoot
-	return cachedWebhooks
+	return webhooks.filter((w) => w.enabled)
 }
 
 function matchWebhook(webhooks: Webhook[], path: string): Webhook | undefined {
@@ -59,7 +52,11 @@ function matchWebhook(webhooks: Webhook[], path: string): Webhook | undefined {
 	})
 }
 
-async function verifyAuth(request: Request, webhook: Webhook, companyRoot: string): Promise<boolean> {
+async function verifyAuth(
+	request: Request,
+	webhook: Webhook,
+	companyRoot: string,
+): Promise<boolean> {
 	if (webhook.auth === 'none') return true
 
 	if (webhook.auth === 'bearer_token') {
@@ -67,7 +64,10 @@ async function verifyAuth(request: Request, webhook: Webhook, companyRoot: strin
 		if (!authHeader?.startsWith('Bearer ')) return false
 
 		if (!webhook.secret_ref) {
-			logger.warn('webhook', `bearer_token auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`)
+			logger.warn(
+				'webhook',
+				`bearer_token auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`,
+			)
 			return false
 		}
 
@@ -86,11 +86,14 @@ async function verifyAuth(request: Request, webhook: Webhook, companyRoot: strin
 	if (webhook.auth === 'hmac_sha256') {
 		const signature = webhook.signature_header
 			? request.headers.get(webhook.signature_header)
-			: request.headers.get('x-signature-256') ?? request.headers.get('x-hub-signature-256')
+			: (request.headers.get('x-signature-256') ?? request.headers.get('x-hub-signature-256'))
 		if (!signature) return false
 
 		if (!webhook.secret_ref) {
-			logger.warn('webhook', `hmac_sha256 auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`)
+			logger.warn(
+				'webhook',
+				`hmac_sha256 auth for "${webhook.id}" has no secret_ref — rejecting (configure secret_ref to enable)`,
+			)
 			return false
 		}
 
@@ -124,7 +127,9 @@ webhooks.post('/*', async (c) => {
 	try {
 		allWebhooks = await loadWebhooks(companyRoot)
 	} catch (err) {
-		logger.error('webhook', 'failed to load webhooks.yaml', { error: err instanceof Error ? err.message : String(err) })
+		logger.error('webhook', 'failed to load webhook config files', {
+			error: err instanceof Error ? err.message : String(err),
+		})
 		return c.json({ error: 'webhook configuration unavailable' }, 500)
 	}
 
@@ -176,7 +181,9 @@ webhooks.post('/*', async (c) => {
 			})
 		}
 	} catch (err) {
-		logger.error('webhook', `error handling ${webhook.id}`, { error: err instanceof Error ? err.message : String(err) })
+		logger.error('webhook', `error handling ${webhook.id}`, {
+			error: err instanceof Error ? err.message : String(err),
+		})
 		return c.json({ error: 'internal error' }, 500)
 	}
 

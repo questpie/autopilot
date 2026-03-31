@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolContext } from './tools'
+import type { ToolContext, ToolDefinition } from './tools'
 
 /**
  * Agent event emitted during a session.
@@ -22,7 +22,7 @@ export interface AgentSpawnOptions {
 	tools: ToolDefinition[]
 	toolContext: ToolContext
 	maxTurns?: number
-	/** Agent tool groups from agents.yaml (e.g. ['fs', 'terminal']) */
+	/** Agent tool groups from team/agents/*.yaml (e.g. ['fs', 'terminal']) */
 	agentTools?: string[]
 	/** Agent filesystem scope for PreToolUse enforcement */
 	agentScope?: { fsRead?: string[]; fsWrite?: string[]; secrets?: string[] }

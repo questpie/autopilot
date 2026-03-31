@@ -191,7 +191,7 @@ async function resolveHumanActor(
  * Verify an incoming webhook request using per-webhook or global HMAC secret.
  *
  * Resolution:
- * 1. Load webhooks.yaml and match by path — use webhook-specific secret_ref / signature_header
+ * 1. Load team/webhooks/*.yaml and match by path — use webhook-specific secret_ref / signature_header
  * 2. Fall back to WEBHOOK_SECRET env var with common signature headers
  * 3. If auth is 'none' in webhook config, allow without verification
  * 4. Reject if no secret configured, signature missing, or signature invalid
@@ -218,8 +218,7 @@ async function verifyWebhookRequest(
 
 		const matched = webhooks.find(
 			(w: { path: string; enabled?: boolean }) =>
-				w.enabled !== false &&
-				(path === w.path || path === `/${w.path}` || `/${path}` === w.path),
+				w.enabled !== false && (path === w.path || path === `/${w.path}` || `/${path}` === w.path),
 		)
 		if (matched) {
 			webhookConfig = {
@@ -229,7 +228,7 @@ async function verifyWebhookRequest(
 			}
 		}
 	} catch {
-		// webhooks.yaml not found or invalid — fall through to global secret
+		// webhook directory missing or invalid — fall through to global secret
 	}
 
 	// If webhook is configured with auth: none, allow without verification
@@ -242,11 +241,7 @@ async function verifyWebhookRequest(
 
 	if (webhookConfig?.secret_ref) {
 		try {
-			const secretPath = join(
-				config.companyRoot,
-				'secrets',
-				`${webhookConfig.secret_ref}.yaml`,
-			)
+			const secretPath = join(config.companyRoot, 'secrets', `${webhookConfig.secret_ref}.yaml`)
 			const secretFile = await Bun.file(secretPath).text()
 			const { parse } = await import('yaml')
 			const parsed = parse(secretFile)
@@ -366,7 +361,8 @@ export function getRequiredPermission(
 		return { resource: 'knowledge', action: method === 'GET' ? 'read' : 'write' }
 
 	// Chat
-	if (path.startsWith('/api/chat')) return { resource: 'chat', action: method === 'GET' ? 'read' : 'write' }
+	if (path.startsWith('/api/chat'))
+		return { resource: 'chat', action: method === 'GET' ? 'read' : 'write' }
 
 	// Integrations
 	if (path.startsWith('/api/integrations')) {
@@ -409,7 +405,8 @@ export function getRequiredPermission(
 	// Danger zone
 	if (path === '/api/export' && method === 'POST') return { resource: 'danger', action: 'export' }
 	if (path === '/api/reset' && method === 'POST') return { resource: 'danger', action: 'reset' }
-	if (path === '/api/delete-company' && method === 'POST') return { resource: 'danger', action: 'delete' }
+	if (path === '/api/delete-company' && method === 'POST')
+		return { resource: 'danger', action: 'delete' }
 
 	// Notifications
 	if (path.startsWith('/api/notifications')) {

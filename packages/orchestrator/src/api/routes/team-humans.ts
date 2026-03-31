@@ -1,10 +1,14 @@
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { HUMAN_ROLES, HumanSchema, PATHS } from '@questpie/autopilot-spec'
+import { eq } from 'drizzle-orm'
 /**
  * Team humans API — manage human users (list, invite, roles, ban/unban).
  *
  * GET    /team/humans              → list all human users with roles, 2FA status
  * POST   /team/humans/invite       → add email to .auth/invites.yaml
  * DELETE /team/humans/invite       → remove email from .auth/invites.yaml
- * PATCH  /team/humans/:id/role     → change role in humans.yaml
+ * PATCH  /team/humans/:id/role     → change role in team/humans/{id}.yaml
  * POST   /team/humans/:id/ban      → ban user via Better Auth admin
  * POST   /team/humans/:id/unban    → unban user via Better Auth admin
  *
@@ -14,12 +18,8 @@ import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import { join } from 'node:path'
-import { readdirSync, existsSync } from 'node:fs'
-import { readYaml, readYamlUnsafe, fileExists, writeYaml } from '../../fs/yaml'
-import { HUMAN_ROLES, HumanSchema, PATHS } from '@questpie/autopilot-spec'
-import { eq } from 'drizzle-orm'
 import * as authSchema from '../../db/auth-schema'
+import { fileExists, readYaml, readYamlUnsafe, writeYaml } from '../../fs/yaml'
 import type { AppEnv } from '../app'
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
@@ -71,10 +71,20 @@ async function writeInvites(companyRoot: string, emails: string[]): Promise<void
 }
 
 /** Read all human files from team/humans/*.yaml and return parsed data. */
-async function readHumansFile(companyRoot: string): Promise<{ humans: Array<{ id: string; email?: string; role: string; name?: string; [key: string]: unknown }> }> {
+async function readHumansFile(
+	companyRoot: string,
+): Promise<{
+	humans: Array<{ id: string; email?: string; role: string; name?: string; [key: string]: unknown }>
+}> {
 	const dir = join(companyRoot, PATHS.HUMANS_DIR.slice(1))
 	if (!existsSync(dir)) return { humans: [] }
-	const humans: Array<{ id: string; email?: string; role: string; name?: string; [key: string]: unknown }> = []
+	const humans: Array<{
+		id: string
+		email?: string
+		role: string
+		name?: string
+		[key: string]: unknown
+	}> = []
 	const files = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
 	for (const file of files) {
 		try {
@@ -94,7 +104,10 @@ async function writeHumanFile(companyRoot: string, human: Record<string, unknown
 }
 
 /** Guard: only owner/admin can access. Returns error response or null. */
-function requireAdminRole(c: { get(key: 'actor'): { role: string } | null; json: (data: unknown, status: number) => Response }): Response | null {
+function requireAdminRole(c: {
+	get(key: 'actor'): { role: string } | null
+	json: (data: unknown, status: number) => Response
+}): Response | null {
 	const actor = c.get('actor')
 	if (!actor || (actor.role !== 'owner' && actor.role !== 'admin')) {
 		return c.json({ error: 'Forbidden: owner or admin role required' }, 403)
@@ -133,7 +146,7 @@ const teamHumans = new Hono<AppEnv>()
 				return c.json([], 200)
 			}
 
-			const result = await listUsersFn({ query: { limit: 9999 } }) as {
+			const result = (await listUsersFn({ query: { limit: 9999 } })) as {
 				users?: Array<{
 					id: string
 					email: string
@@ -146,11 +159,9 @@ const teamHumans = new Hono<AppEnv>()
 
 			const users = result?.users ?? []
 
-			// Merge role from humans.yaml
+			// Merge role from team/humans/*.yaml
 			const humansFile = await readHumansFile(root)
-			const humansMap = new Map(
-				humansFile.humans.map((h) => [h.email, h]),
-			)
+			const humansMap = new Map(humansFile.humans.map((h) => [h.email, h]))
 
 			const merged = users.map((u) => {
 				const humanRecord = humansMap.get(u.email)
@@ -247,7 +258,7 @@ const teamHumans = new Hono<AppEnv>()
 		'/:id/role',
 		describeRoute({
 			tags: ['team'],
-			description: 'Change a user\'s role in humans.yaml',
+			description: "Change a user's role in team/humans/{id}.yaml",
 			responses: {
 				200: {
 					description: 'Role updated',
@@ -269,7 +280,11 @@ const teamHumans = new Hono<AppEnv>()
 			const { role } = c.req.valid('json')
 
 			// Get user email directly from DB
-			const user = await db.select({ id: authSchema.user.id, email: authSchema.user.email }).from(authSchema.user).where(eq(authSchema.user.id, id)).get()
+			const user = await db
+				.select({ id: authSchema.user.id, email: authSchema.user.email })
+				.from(authSchema.user)
+				.where(eq(authSchema.user.id, id))
+				.get()
 			if (!user) {
 				return c.json({ error: 'User not found' }, 404)
 			}

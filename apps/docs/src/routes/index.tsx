@@ -1,13 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AgentCard } from '@/components/landing/AgentCard'
+import { ArchitectureDiagram } from '@/components/landing/ArchitectureDiagram'
 import { CodeBlock } from '@/components/landing/CodeBlock'
 import { DashboardMock } from '@/components/landing/DashboardMock'
 import { Header } from '@/components/landing/Header'
 import { LiveStream } from '@/components/landing/LiveStream'
 import { QSymbol } from '@/components/landing/QSymbol'
 import { Section, SectionHeader } from '@/components/landing/Section'
-import { ArchitectureDiagram } from '@/components/landing/ArchitectureDiagram'
 import { Tag } from '@/components/landing/Tag'
 import { UseCaseCard } from '@/components/landing/UseCaseCard'
 
@@ -53,9 +53,8 @@ function LandingPage() {
 						company operating system
 					</h1>
 					<p className="font-sans text-base sm:text-[20px] text-lp-muted mt-5 font-light leading-relaxed max-w-[640px] mx-auto text-center">
-						AI agents that don't chat -- they act. Unified tools create tasks,
-						write code, deploy services, and build dashboards.
-						You approve the results.
+						AI agents that don't chat -- they act. Unified tools create tasks, write code, deploy
+						services, and build dashboards. You approve the results.
 					</p>
 					<div className="mt-8 flex gap-2 flex-wrap justify-center">
 						<Tag>OPEN SOURCE</Tag>
@@ -83,7 +82,10 @@ function LandingPage() {
 
 				{/* ========== 2. THE 60-SECOND DEMO ========== */}
 				<Section id="quickstart">
-					<SectionHeader num="01" sub="Install globally, scaffold a company, and give your first intent. One Bun process. One SQLite file. Zero infrastructure.">
+					<SectionHeader
+						num="01"
+						sub="Install globally, scaffold a company, and give your first intent. One Bun process. One SQLite file. Zero infrastructure."
+					>
 						Get Started in 60 Seconds
 					</SectionHeader>
 					<CodeBlock title="install">
@@ -112,10 +114,10 @@ autopilot attach max`}
 					</CodeBlock>
 					<div className="mt-4 bg-lp-card border border-lp-border p-6">
 						<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-							<strong className="text-lp-fg">What you need:</strong>{' '}
-							Bun runtime + an <code className="font-mono text-[11px] text-lp-purple">OPENROUTER_API_KEY</code>. That's it.
-							One key gives you access to 300+ models (Claude, GPT, Gemini, Llama, and more).
-							No Docker. No Postgres. No Redis. No vector DB. No Kubernetes.
+							<strong className="text-lp-fg">What you need:</strong> Bun runtime + an{' '}
+							<code className="font-mono text-[11px] text-lp-purple">OPENROUTER_API_KEY</code>.
+							That's it. One key gives you access to 300+ models (Claude, GPT, Gemini, Llama, and
+							more). No Docker. No Postgres. No Redis. No vector DB. No Kubernetes.
 						</div>
 					</div>
 					<div className="mt-4 bg-lp-card border border-lp-border p-6">
@@ -125,15 +127,20 @@ autopilot attach max`}
 						<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-1.5">
 							<div>
 								<strong className="text-lp-fg">OpenRouter:</strong>{' '}
-								<code className="font-mono text-[11px] text-lp-purple">OPENROUTER_API_KEY</code> — 300+ models (Claude, GPT, Gemini, Llama, and more)
+								<code className="font-mono text-[11px] text-lp-purple">OPENROUTER_API_KEY</code> —
+								300+ models (Claude, GPT, Gemini, Llama, and more)
 							</div>
 							<div>
-								<strong className="text-lp-fg">Per-agent:</strong>{' '}
-								Each agent can use a different model (<code className="font-mono text-[11px] text-lp-purple">anthropic/claude-sonnet-4</code>, <code className="font-mono text-[11px] text-lp-purple">openai/gpt-4o</code>)
+								<strong className="text-lp-fg">Per-agent:</strong> Each agent can use a different
+								model (
+								<code className="font-mono text-[11px] text-lp-purple">
+									anthropic/claude-sonnet-4
+								</code>
+								, <code className="font-mono text-[11px] text-lp-purple">openai/gpt-4o</code>)
 							</div>
 							<div>
-								<strong className="text-lp-fg">Embeddings:</strong>{' '}
-								Gemini Embedding 2 (multimodal, optional) or local E5
+								<strong className="text-lp-fg">Embeddings:</strong> Gemini Embedding 2 (multimodal,
+								optional) or local E5
 							</div>
 						</div>
 					</div>
@@ -141,7 +148,10 @@ autopilot attach max`}
 
 				{/* ========== 3. WHAT IS AUTOPILOT ========== */}
 				<Section id="what">
-					<SectionHeader num="02" sub="You give a high-level intent. Your AI team decomposes it, plans it, implements it, reviews it, and deploys it. You approve at gates. The agent builds a pricing page and you see it running before it ships.">
+					<SectionHeader
+						num="02"
+						sub="You give a high-level intent. Your AI team decomposes it, plans it, implements it, reviews it, and deploys it. You approve at gates. The agent builds a pricing page and you see it running before it ships."
+					>
 						What is Autopilot?
 					</SectionHeader>
 					<CodeBlock title="terminal -- giving intent">
@@ -172,17 +182,19 @@ Sam is starting on task-050 now.
 You'll be notified when approvals are needed.`}
 					</CodeBlock>
 					<p className="font-sans text-sm text-lp-ghost mt-6 leading-relaxed">
-						This isn't a chatbot. It's a company. Sam writes the spec. Alex plans
-						the implementation. Max codes it. Riley reviews it. You merge. Ops
-						deploys. Morgan announces. Each agent has persistent memory, scoped
-						filesystem access, and communicates through unified tools -- not
-						natural language.
+						This isn't a chatbot. It's a company. Sam writes the spec. Alex plans the
+						implementation. Max codes it. Riley reviews it. You merge. Ops deploys. Morgan
+						announces. Each agent has persistent memory, scoped filesystem access, and communicates
+						through unified tools -- not natural language.
 					</p>
 				</Section>
 
 				{/* ========== 4. PRIMITIVES, NOT CHAT ========== */}
 				<Section id="tools">
-					<SectionHeader num="03" sub="Agent thinking is private. Only effects are visible. Every agent action is a typed function call with clear targets and effects -- not a text response for you to parse.">
+					<SectionHeader
+						num="03"
+						sub="Agent thinking is private. Only effects are visible. Every agent action is a typed function call with clear targets and effects -- not a text response for you to parse."
+					>
 						Tools, Not Chat
 					</SectionHeader>
 					<CodeBlock title="what agents actually do">
@@ -221,8 +233,14 @@ search({
 								AUTOPILOT AGENTS
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-								Call 12 unified tools: <code className="font-mono text-[11px] text-lp-purple">task</code>, <code className="font-mono text-[11px] text-lp-purple">message</code>, <code className="font-mono text-[11px] text-lp-purple">pin</code>, <code className="font-mono text-[11px] text-lp-purple">search_index</code>, <code className="font-mono text-[11px] text-lp-purple">fetch</code>, <code className="font-mono text-[11px] text-lp-purple">web_search</code>.
-								Every call produces a visible, auditable effect.
+								Call 12 unified tools:{' '}
+								<code className="font-mono text-[11px] text-lp-purple">task</code>,{' '}
+								<code className="font-mono text-[11px] text-lp-purple">message</code>,{' '}
+								<code className="font-mono text-[11px] text-lp-purple">pin</code>,{' '}
+								<code className="font-mono text-[11px] text-lp-purple">search_index</code>,{' '}
+								<code className="font-mono text-[11px] text-lp-purple">fetch</code>,{' '}
+								<code className="font-mono text-[11px] text-lp-purple">web_search</code>. Every call
+								produces a visible, auditable effect.
 							</div>
 						</div>
 						<div className="bg-lp-card border border-lp-border p-6">
@@ -230,8 +248,8 @@ search({
 								CHATBOT AGENTS
 							</div>
 							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-								Generate text for you to read. You copy-paste it somewhere. No audit trail.
-								No structured effects. No workflow integration. You are the middleware.
+								Generate text for you to read. You copy-paste it somewhere. No audit trail. No
+								structured effects. No workflow integration. You are the middleware.
 							</div>
 						</div>
 					</div>
@@ -239,7 +257,10 @@ search({
 
 				{/* ========== 5. LIVING DASHBOARD ========== */}
 				<Section id="dashboard">
-					<SectionHeader num="04" sub="Your agents build your internal tools. In real time. No deploy. The dashboard is a React app in the company filesystem that agents edit -- changes appear in seconds via HMR.">
+					<SectionHeader
+						num="04"
+						sub="Your agents build your internal tools. In real time. No deploy. The dashboard is a React app in the company filesystem that agents edit -- changes appear in seconds via HMR."
+					>
 						Living Dashboard
 					</SectionHeader>
 					<DashboardMock />
@@ -287,9 +308,11 @@ search({
 							<div className="bg-lp-card border border-lp-border p-6">
 								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
 									<strong className="text-lp-fg">"Add a revenue chart to the dashboard."</strong>{' '}
-									Agent writes <code className="font-mono text-[11px] text-lp-purple">widget.tsx</code>,
-									registers it in <code className="font-mono text-[11px] text-lp-purple">layout.yaml</code>,
-									and it appears. No Retool. No deployment. No drag-and-drop.
+									Agent writes{' '}
+									<code className="font-mono text-[11px] text-lp-purple">widget.tsx</code>,
+									registers it in{' '}
+									<code className="font-mono text-[11px] text-lp-purple">layout.yaml</code>, and it
+									appears. No Retool. No deployment. No drag-and-drop.
 								</div>
 							</div>
 						</div>
@@ -298,7 +321,10 @@ search({
 
 				{/* ========== 6. TRUST & SAFETY ========== */}
 				<Section id="trust">
-					<SectionHeader num="05" sub="The #1 objection to autonomous AI agents is trust. Autopilot has answers: explicit approval gates, hardcoded deny patterns, live session observation, and a full git audit trail.">
+					<SectionHeader
+						num="05"
+						sub="The #1 objection to autonomous AI agents is trust. Autopilot has answers: explicit approval gates, hardcoded deny patterns, live session observation, and a full git audit trail."
+					>
 						Trust & Safety
 					</SectionHeader>
 					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -347,10 +373,7 @@ steps:
 									desc: 'Every agent action is a git commit (5s batch). Your company has version control. git diff to see what changed. git revert to undo.',
 								},
 							].map((item) => (
-								<div
-									key={item.label}
-									className="bg-lp-card border border-lp-border p-6"
-								>
+								<div key={item.label} className="bg-lp-card border border-lp-border p-6">
 									<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-1">
 										{item.label}
 									</div>
@@ -365,7 +388,10 @@ steps:
 
 				{/* ========== 7. SESSION ATTACH ========== */}
 				<Section id="attach">
-					<SectionHeader num="06" sub="Connect to any running agent and watch them work in real-time. Ctrl+C to detach -- agent keeps working. Replay past sessions for review.">
+					<SectionHeader
+						num="06"
+						sub="Connect to any running agent and watch them work in real-time. Ctrl+C to detach -- agent keeps working. Replay past sessions for review."
+					>
 						Session Attach
 					</SectionHeader>
 					<LiveStream />
@@ -392,7 +418,10 @@ $ autopilot replay max`}
 
 				{/* ========== 8. USE CASES ========== */}
 				<Section id="usecases">
-					<SectionHeader num="07" sub="Same Autopilot kernel. Different skills. Different company. Three flagship use cases, validated in production.">
+					<SectionHeader
+						num="07"
+						sub="Same Autopilot kernel. Different skills. Different company. Three flagship use cases, validated in production."
+					>
 						Use Cases
 					</SectionHeader>
 
@@ -401,8 +430,15 @@ $ autopilot replay max`}
 						title="SOLO DEV SHOP"
 						fields={[
 							{ label: 'INPUT', value: '"Build a pricing page with Stripe"' },
-							{ label: 'WHAT HAPPENS', value: 'CEO decomposes, strategist scopes, planner plans, developer implements, reviewer reviews' },
-							{ label: 'WHAT YOU SEE', value: 'Task progress on dashboard, PR for merge, live preview via artifact router' },
+							{
+								label: 'WHAT HAPPENS',
+								value:
+									'CEO decomposes, strategist scopes, planner plans, developer implements, reviewer reviews',
+							},
+							{
+								label: 'WHAT YOU SEE',
+								value: 'Task progress on dashboard, PR for merge, live preview via artifact router',
+							},
 						]}
 						outcome="Feature shipped without micromanaging a single step"
 						codeTitle="terminal -- solo dev flow"
@@ -428,8 +464,14 @@ $ autopilot attach max
 						title="SELF-BUILDING INTERNAL TOOLS"
 						fields={[
 							{ label: 'INPUT', value: '"Add a revenue chart to the dashboard"' },
-							{ label: 'WHAT HAPPENS', value: 'Developer agent writes widget.tsx, registers it in layout.yaml' },
-							{ label: 'WHAT YOU SEE', value: 'New widget appears on dashboard within seconds via HMR' },
+							{
+								label: 'WHAT HAPPENS',
+								value: 'Developer agent writes widget.tsx, registers it in layout.yaml',
+							},
+							{
+								label: 'WHAT YOU SEE',
+								value: 'New widget appears on dashboard within seconds via HMR',
+							},
 						]}
 						outcome="Internal tools built without Retool, without deployment, evolved by agents"
 						codeTitle="dashboard/widgets/revenue/widget.tsx"
@@ -456,8 +498,15 @@ $ autopilot attach max
 						title="INFRASTRUCTURE MANAGEMENT"
 						fields={[
 							{ label: 'INPUT', value: '"Deploy the billing service to billing.company.com"' },
-							{ label: 'WHAT HAPPENS', value: 'DevOps agent reads infra skills, builds Docker image, creates k8s manifests, applies them, sets up DNS' },
-							{ label: 'WHAT YOU SEE', value: 'Service deployed and verified, URL pinned to dashboard' },
+							{
+								label: 'WHAT HAPPENS',
+								value:
+									'DevOps agent reads infra skills, builds Docker image, creates k8s manifests, applies them, sets up DNS',
+							},
+							{
+								label: 'WHAT YOU SEE',
+								value: 'Service deployed and verified, URL pinned to dashboard',
+							},
 						]}
 						outcome="Infrastructure managed by an agent who knows your stack via skills"
 						codeTitle="terminal -- ops deploying"
@@ -481,9 +530,12 @@ pin({
 					/>
 				</Section>
 
-{/* ========== 9. DEFINE YOUR TEAM ========== */}
+				{/* ========== 9. DEFINE YOUR TEAM ========== */}
 				<Section id="team">
-					<SectionHeader num="08" sub="Define agents in YAML. Give them names, roles, tools, and filesystem scope. Start from a template or build your own team.">
+					<SectionHeader
+						num="08"
+						sub="Define agents in YAML. Give them names, roles, tools, and filesystem scope. Start from a template or build your own team."
+					>
 						Define Your Team
 					</SectionHeader>
 					<div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
@@ -546,17 +598,20 @@ pin({
 					</div>
 					<div className="bg-lp-card border border-lp-border p-6">
 						<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-							<strong className="text-lp-fg">Example above:</strong>{' '}
-							The <strong className="text-lp-fg">Solo Dev Shop</strong> template.
-							Start with 2-3 agents, add as you need. You choose the names, the roles, and
-							the tools. Same kernel, different distribution.
+							<strong className="text-lp-fg">Example above:</strong> The{' '}
+							<strong className="text-lp-fg">Solo Dev Shop</strong> template. Start with 2-3 agents,
+							add as you need. You choose the names, the roles, and the tools. Same kernel,
+							different distribution.
 						</div>
 					</div>
 				</Section>
 
 				{/* ========== 10. ARCHITECTURE ========== */}
 				<Section id="arch">
-					<SectionHeader num="09" sub="Single Bun process. One SQLite file. No Docker, no Postgres, no Redis. The entire company runs as files you can ls, grep, back up with cp, and fork with git clone.">
+					<SectionHeader
+						num="09"
+						sub="Single Bun process. One SQLite file. No Docker, no Postgres, no Redis. The entire company runs as files you can ls, grep, back up with cp, and fork with git clone."
+					>
 						Architecture
 					</SectionHeader>
 					<ArchitectureDiagram />
@@ -565,25 +620,29 @@ pin({
 							ZERO INFRASTRUCTURE
 						</div>
 						<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-							No Docker, no Postgres, no Redis, no vector DB. Just Bun + an <code className="font-mono text-[11px] text-lp-purple">OPENROUTER_API_KEY</code>.
+							No Docker, no Postgres, no Redis, no vector DB. Just Bun + an{' '}
+							<code className="font-mono text-[11px] text-lp-purple">OPENROUTER_API_KEY</code>.
 						</div>
 					</div>
 				</Section>
 
 				{/* ========== 11. FILESYSTEM + SEARCH ========== */}
 				<Section id="fs">
-					<SectionHeader num="10" sub="YAML for config and knowledge. SQLite for tasks, messages, sessions, and search. FTS5 + libSQL native vectors for unified search. Everything git-tracked except the database.">
+					<SectionHeader
+						num="10"
+						sub="YAML for config and knowledge. SQLite for tasks, messages, sessions, and search. FTS5 + libSQL native vectors for unified search. Everything git-tracked except the database."
+					>
 						Filesystem + SQLite Hybrid
 					</SectionHeader>
 					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 						<CodeBlock title="/company/">
 							{`company.yaml                 # Company config
 team/
-  agents.yaml                # Agent definitions
-  humans.yaml                # Human team members
+  agents/                    # Agent definitions (one file per agent)
+  humans/                    # Human team members (one file per human)
   roles.yaml                 # Permission roles
-  schedules.yaml             # Cron triggers
-  webhooks.yaml              # HTTP event handlers
+  schedules/                 # Cron triggers (one file per schedule)
+  webhooks/                  # HTTP event handlers (one file per webhook)
   workflows/                 # YAML state machines
     development.yaml
     incident.yaml
@@ -620,8 +679,8 @@ dashboard/                   # Living dashboard
 									HYBRID STORAGE
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
-									YAML for config and knowledge. SQLite for tasks,
-									messages, activity, sessions, and search.
+									YAML for config and knowledge. SQLite for tasks, messages, activity, sessions, and
+									search.
 								</div>
 								{[
 									{
@@ -633,16 +692,9 @@ dashboard/                   # Living dashboard
 										desc: 'Tasks, messages, activity, sessions, search',
 									},
 								].map((s) => (
-									<div
-										key={s.label}
-										className="flex items-center gap-2 py-1.5"
-									>
-										<span className="font-mono text-[11px] text-lp-fg min-w-[70px]">
-											{s.label}
-										</span>
-										<span className="font-sans text-[11px] text-lp-ghost">
-											{s.desc}
-										</span>
+									<div key={s.label} className="flex items-center gap-2 py-1.5">
+										<span className="font-mono text-[11px] text-lp-fg min-w-[70px]">{s.label}</span>
+										<span className="font-sans text-[11px] text-lp-ghost">{s.desc}</span>
 									</div>
 								))}
 							</div>
@@ -651,8 +703,7 @@ dashboard/                   # Living dashboard
 									UNIFIED SEARCH
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
-									Two search engines run in parallel. Results merged via
-									Reciprocal Rank Fusion.
+									Two search engines run in parallel. Results merged via Reciprocal Rank Fusion.
 								</div>
 								{[
 									{
@@ -664,16 +715,9 @@ dashboard/                   # Living dashboard
 										desc: 'Semantic similarity, natural language',
 									},
 								].map((s) => (
-									<div
-										key={s.label}
-										className="flex items-center gap-2 py-1.5"
-									>
-										<span className="font-mono text-[11px] text-lp-fg min-w-[70px]">
-											{s.label}
-										</span>
-										<span className="font-sans text-[11px] text-lp-ghost">
-											{s.desc}
-										</span>
+									<div key={s.label} className="flex items-center gap-2 py-1.5">
+										<span className="font-mono text-[11px] text-lp-fg min-w-[70px]">{s.label}</span>
+										<span className="font-sans text-[11px] text-lp-ghost">{s.desc}</span>
 									</div>
 								))}
 							</div>
@@ -682,8 +726,12 @@ dashboard/                   # Living dashboard
 									GIT-VERSIONED COMPANY
 								</div>
 								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-									Every agent action is a git commit. <code className="font-mono text-[11px] text-lp-purple">git diff</code> to see what changed. <code className="font-mono text-[11px] text-lp-purple">git revert</code> to undo.
-									Fork a company with <code className="font-mono text-[11px] text-lp-purple">git clone</code>. Back it up with <code className="font-mono text-[11px] text-lp-purple">cp</code>.
+									Every agent action is a git commit.{' '}
+									<code className="font-mono text-[11px] text-lp-purple">git diff</code> to see what
+									changed. <code className="font-mono text-[11px] text-lp-purple">git revert</code>{' '}
+									to undo. Fork a company with{' '}
+									<code className="font-mono text-[11px] text-lp-purple">git clone</code>. Back it
+									up with <code className="font-mono text-[11px] text-lp-purple">cp</code>.
 								</div>
 							</div>
 						</div>
@@ -692,7 +740,10 @@ dashboard/                   # Living dashboard
 
 				{/* ========== 12. CONTEXT & MEMORY ========== */}
 				<Section id="memory">
-					<SectionHeader num="11" sub="Each agent has persistent memory scoped to their role. Facts, decisions, mistakes, learnings. Extracted after every session. Private -- no agent reads another's memory.">
+					<SectionHeader
+						num="11"
+						sub="Each agent has persistent memory scoped to their role. Facts, decisions, mistakes, learnings. Extracted after every session. Private -- no agent reads another's memory."
+					>
 						Per-Agent Memory
 					</SectionHeader>
 					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -732,8 +783,7 @@ patterns:
 									CONTEXT ASSEMBLY
 								</div>
 								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
-									Before every session, 4 layers are assembled into the
-									agent&apos;s context window:
+									Before every session, 4 layers are assembled into the agent&apos;s context window:
 								</div>
 								{[
 									{
@@ -762,29 +812,20 @@ patterns:
 										className={`flex justify-between items-center py-1.5 ${i < 3 ? 'border-b border-lp-border' : ''}`}
 									>
 										<div className="flex items-center gap-2">
-											<span className="font-sans text-xs text-lp-fg font-semibold">
-												{l.label}
-											</span>
-											<span className="font-sans text-[11px] text-lp-ghost">
-												-- {l.desc}
-											</span>
+											<span className="font-sans text-xs text-lp-fg font-semibold">{l.label}</span>
+											<span className="font-sans text-[11px] text-lp-ghost">-- {l.desc}</span>
 										</div>
-										<span className="font-mono text-[10px] text-lp-muted">
-											{l.tokens}
-										</span>
+										<span className="font-mono text-[10px] text-lp-muted">{l.tokens}</span>
 									</div>
 								))}
 							</div>
 							<div className="bg-lp-card border border-lp-border p-6">
 								<div className="font-sans text-[13px] text-lp-fg leading-relaxed">
-									<strong className="text-white">Isolation rule:</strong> No
-									agent reads another agent's memory. Cross-agent info sharing
-									only through channels and task history. If you need info
-									outside your scope, use{' '}
-									<code className="font-mono text-[11px] text-lp-purple">
-										message
-									</code>{' '}
-									-- the owning agent decides to share or escalate.
+									<strong className="text-white">Isolation rule:</strong> No agent reads another
+									agent's memory. Cross-agent info sharing only through channels and task history.
+									If you need info outside your scope, use{' '}
+									<code className="font-mono text-[11px] text-lp-purple">message</code> -- the
+									owning agent decides to share or escalate.
 								</div>
 							</div>
 						</div>
@@ -793,7 +834,10 @@ patterns:
 
 				{/* ========== 13. WORKFLOWS ========== */}
 				<Section id="workflows">
-					<SectionHeader num="12" sub="YAML files in the filesystem. CEO agent owns them. Anyone can propose changes. They evolve based on metrics.">
+					<SectionHeader
+						num="12"
+						sub="YAML files in the filesystem. CEO agent owns them. Anyone can propose changes. They evolve based on metrics."
+					>
 						Workflows as Files
 					</SectionHeader>
 					<CodeBlock title="team/workflows/development.yaml (abbreviated)">

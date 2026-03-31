@@ -36,52 +36,53 @@ All role configurations are built from these tool names:
 
 ## Customizing Agents
 
-Edit `team/agents.yaml` in your company directory:
+Edit an individual file in `team/agents/` in your company directory:
 
 ```yaml
-agents:
-  max:
-    name: Max
-    role: developer
-    description: "Full-stack developer specializing in React and Node.js"
-    model: claude-opus-4 # or claude-sonnet-4
-    tools:
-      - task
-      - message
-      - pin
-      - search
-      - http
-      - search_web
-      - browse
-    fs_scope:
-      - "projects/**"
-      - "knowledge/technical/**"
-    schedule: []
+id: max
+name: Max
+role: developer
+description: "Full-stack developer specializing in React and Node.js"
+model: anthropic/claude-opus-4
+tools:
+  - task
+  - message
+  - pin
+  - search
+  - http
+  - search_web
+  - browse
+fs_scope:
+  read:
+    - "projects/**"
+    - "knowledge/technical/**"
+  write:
+    - "projects/**"
 ```
 
 ## Adding Custom Agents
 
-Add a new entry to `team/agents.yaml`:
+Create a new file in `team/agents/` (for example `team/agents/data-analyst.yaml`):
 
 ```yaml
-agents:
-  # ... existing agents ...
-
-  data-analyst:
-    name: Dana
-    role: analyst
-    description: "Data analyst - dashboards, queries, reports"
-    model: claude-sonnet-4
-    tools:
-      - task
-      - search
-      - message
-      - pin
-      - http
-    fs_scope:
-      - "projects/**"
-      - "knowledge/**"
-      - "dashboard/**"
+id: data-analyst
+name: Dana
+role: planner
+description: "Data analyst - dashboards, queries, reports"
+model: anthropic/claude-sonnet-4
+tools:
+  - task
+  - search
+  - message
+  - pin
+  - http
+fs_scope:
+  read:
+    - "projects/**"
+    - "knowledge/**"
+    - "dashboard/**"
+  write:
+    - "projects/**"
 ```
 
 The orchestrator picks up changes automatically (filesystem watcher).

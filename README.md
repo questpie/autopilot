@@ -71,20 +71,19 @@ Sam is starting now. You'll be notified when approvals are needed.
 
 ## Your Team, Your Rules
 
-Autopilot ships with 8 default agents across 8 roles — meta, strategist, planner, developer, reviewer, devops, marketing, design. Customize them or create your own in `team/agents.yaml`.
+Autopilot ships with 8 default agents across 8 roles — meta, strategist, planner, developer, reviewer, devops, marketing, design. Customize them or create your own in `team/agents/*.yaml`.
 
 ```yaml
-# team/agents.yaml
-agents:
-  - name: CEO
-    role: meta
-    description: Decomposes intent, delegates, unblocks
-
-  - name: Max
-    role: developer
-    description: Implementation, tests, debugging
-
-  # Add your own roles, rename agents, change responsibilities
+# team/agents/max.yaml
+id: max
+name: Max
+role: developer
+description: Implementation, tests, debugging
+model: anthropic/claude-sonnet-4
+tools: [fs, terminal]
+fs_scope:
+  read: ["**"]
+  write: ["**"]
 ```
 
 ---
@@ -154,11 +153,11 @@ autopilot provider set <p>   # Configure AI provider (openrouter)
 my-company/
 ├── company.yaml              # Company configuration
 ├── team/
-│   ├── agents.yaml           # AI agent definitions (8 default agents)
-│   ├── humans.yaml           # Human team members
+│   ├── agents/               # AI agent definitions (one file per agent)
+│   ├── humans/               # Human team members (one file per human)
 │   ├── roles.yaml            # RBAC role definitions
-│   ├── schedules.yaml        # Cron-triggered agent jobs
-│   ├── webhooks.yaml         # External webhook integrations
+│   ├── schedules/            # Cron-triggered jobs (one file per schedule)
+│   ├── webhooks/             # External webhook integrations (one file per webhook)
 │   ├── workflows/            # development (12), marketing (7), incident (8)
 │   └── policies/             # Human approval requirements
 ├── knowledge/                # Searchable knowledge base (markdown)
@@ -175,6 +174,8 @@ my-company/
 ```
 
 > **Note:** Tasks, messages, and activity are stored in SQLite (`.data/autopilot.db`), not as YAML files. Runtime directories are created by `autopilot init`, not from the template.
+
+> **Config format:** Legacy monolithic files (`team/agents.yaml`, `team/humans.yaml`, `team/webhooks.yaml`, `team/schedules.yaml`) are no longer supported. Use folder-based config only.
 
 ---
 
@@ -198,6 +199,7 @@ curl -fsSL https://raw.githubusercontent.com/questpie/autopilot/main/install.sh 
 - [Getting Started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
 - [Agents & Roles](docs/agents.md)
+- [Config Folder Migration](docs/guides/config-folder-migration.md)
 - [CLI Reference](docs/cli.md)
 - [VPS Deployment](docs/guides/vps-deployment.md)
 - [Docker Guide](docs/guides/docker.md)
