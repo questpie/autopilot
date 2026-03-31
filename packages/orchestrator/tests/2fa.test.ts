@@ -7,7 +7,7 @@ import { resolveActor } from '../src/auth/middleware'
 import { createTestCompany } from './helpers'
 
 describe('2FA enforcement in resolveActor', () => {
-	test('returns null when twoFactorEnabled=true but twoFactorVerified=false', async () => {
+	test('returns null when 2FA is pending and no session exists', async () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			const request = new Request('http://localhost:7778/api/tasks', {
@@ -17,10 +17,7 @@ describe('2FA enforcement in resolveActor', () => {
 				companyRoot: root,
 				auth: {
 					api: {
-						getSession: async () => ({
-							user: { id: 'user-1', email: 'test@test.com', twoFactorEnabled: true },
-							twoFactorVerified: false,
-						}),
+						getSession: async () => null,
 					},
 				} as any,
 			})
@@ -30,7 +27,7 @@ describe('2FA enforcement in resolveActor', () => {
 		}
 	})
 
-	test('returns actor when twoFactorEnabled=true and twoFactorVerified=true', async () => {
+	test('returns actor when session exists for a 2FA-enabled user', async () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			await writeFile(
@@ -46,8 +43,13 @@ describe('2FA enforcement in resolveActor', () => {
 				auth: {
 					api: {
 						getSession: async () => ({
-							user: { id: 'user-1', email: 'test@test.com', name: 'Test', twoFactorEnabled: true },
-							twoFactorVerified: true,
+							user: {
+								id: 'user-1',
+								email: 'test@test.com',
+								name: 'Test',
+								role: 'member',
+								twoFactorEnabled: true,
+							},
 						}),
 					},
 				} as any,
@@ -122,7 +124,7 @@ describe('2FA enforcement in resolveActor', () => {
 				auth: {
 					api: {
 						getSession: async () => ({
-							user: { id: 'user-2', email: 'test@test.com', name: 'Test' },
+							user: { id: 'user-2', email: 'test@test.com', name: 'Test', role: 'owner' },
 						}),
 					},
 				} as any,
@@ -149,7 +151,7 @@ describe('2FA enforcement in resolveActor', () => {
 				auth: {
 					api: {
 						getSession: async () => ({
-							user: { id: 'user-2', email: 'test@test.com', name: 'Test' },
+							user: { id: 'user-2', email: 'test@test.com', name: 'Test', role: 'owner' },
 						}),
 					},
 				} as any,
@@ -177,7 +179,7 @@ describe('2FA enforcement in resolveActor', () => {
 				auth: {
 					api: {
 						getSession: async () => ({
-							user: { id: 'user-3', email: 'test@test.com', name: 'Test' },
+							user: { id: 'user-3', email: 'test@test.com', name: 'Test', role: 'member' },
 						}),
 					},
 				} as any,
@@ -235,7 +237,7 @@ describe('2FA enforcement in resolveActor', () => {
 				auth: {
 					api: {
 						getSession: async () => ({
-							user: { id: 'admin-1', email: 'admin@test.com', name: 'Admin' },
+							user: { id: 'admin-1', email: 'admin@test.com', name: 'Admin', role: 'admin' },
 						}),
 					},
 				} as any,

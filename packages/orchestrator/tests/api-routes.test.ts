@@ -6,7 +6,11 @@ import type { Hono } from 'hono'
 import { stringify as stringifyYaml } from 'yaml'
 import type { AppEnv } from '../src/api/app'
 import { configureContainer, container } from '../src/container'
+import type { AutopilotDb } from '../src/db'
+import * as authSchema from '../src/db/auth-schema'
 import type { StorageBackend } from '../src/fs/storage'
+import { readYamlUnsafe } from '../src/fs/yaml'
+import { readSecretRecord } from '../src/secrets/store'
 import { compileWorkflow, workflowRuntimeStoreFactory } from '../src/workflow'
 import { setupTestApiKey, withApiKey } from './auth-helpers'
 
@@ -14,6 +18,7 @@ let app: ReturnType<typeof import('../src/api/app').createApp>
 let companyRoot: string
 let storage: StorageBackend
 let apiKey: string
+let db: AutopilotDb
 let workflowRuntimeStore: Awaited<
 	ReturnType<typeof container.resolveAsync<[typeof workflowRuntimeStoreFactory]>>
 >['workflowRuntimeStore']
@@ -76,9 +81,15 @@ beforeAll(async () => {
 
 	// Now we can safely import and resolve factories that depend on companyRoot
 	const { storageFactory } = await import('../src/fs/sqlite-backend')
-	const resolved = await container.resolveAsync([storageFactory, workflowRuntimeStoreFactory])
+	const { dbFactory } = await import('../src/db')
+	const resolved = await container.resolveAsync([
+		storageFactory,
+		workflowRuntimeStoreFactory,
+		dbFactory,
+	])
 	storage = resolved.storage
 	workflowRuntimeStore = resolved.workflowRuntimeStore
+	db = resolved.db.db
 	apiKey = await setupTestApiKey(companyRoot)
 
 	// Create the Hono app
@@ -145,6 +156,148 @@ describe('GET /api/status', () => {
 		expect(typeof data.userCount).toBe('number')
 		expect(typeof data.agentCount).toBe('number')
 		expect(typeof data.activeTasks).toBe('number')
+	})
+})
+
+describe('GET /api/setup/verification-status', () => {
+	it('should return email verification status without auth', async () => {
+		const pendingEmail = 'pending@example.com'
+		const verifiedEmail = 'verified@example.com'
+		const now = new Date()
+
+		await db.insert(authSchema.user).values([
+			{
+				id: 'user-pending',
+				name: 'Pending User',
+				email: pendingEmail,
+				emailVerified: false,
+				createdAt: now,
+				updatedAt: now,
+			},
+			{
+				id: 'user-verified',
+				name: 'Verified User',
+				email: verifiedEmail,
+				emailVerified: true,
+				createdAt: now,
+				updatedAt: now,
+			},
+		])
+
+		const pendingRes = await app.request(`/api/setup/verification-status?email=${pendingEmail}`)
+		expect(pendingRes.status).toBe(200)
+		expect(await pendingRes.json()).toEqual({ exists: true, verified: false })
+
+		const verifiedRes = await app.request(`/api/setup/verification-status?email=${verifiedEmail}`)
+		expect(verifiedRes.status).toBe(200)
+		expect(await verifiedRes.json()).toEqual({ exists: true, verified: true })
+
+		const missingRes = await app.request('/api/setup/verification-status?email=missing@example.com')
+		expect(missingRes.status).toBe(200)
+		expect(await missingRes.json()).toEqual({ exists: false, verified: false })
+	})
+})
+
+describe('GET /api/setup/invite', () => {
+	it('should validate active invite tokens without auth', async () => {
+		const now = new Date()
+		const expiresAt = new Date(now.getTime() + 1000 * 60 * 60)
+		await db.insert(authSchema.invite).values({
+			id: 'invite-1',
+			email: 'invitee@example.com',
+			role: 'member',
+			token: 'invite-token-1',
+			invitedBy: 'owner-1',
+			createdAt: now,
+			updatedAt: now,
+			expiresAt,
+			acceptedAt: null,
+		})
+
+		const validRes = await app.request('/api/setup/invite?token=invite-token-1')
+		expect(validRes.status).toBe(200)
+		const valid = (await validRes.json()) as {
+			valid: boolean
+			email: string | null
+			role: string | null
+			expiresAt: string | null
+		}
+		expect(valid.valid).toBe(true)
+		expect(valid.email).toBe('invitee@example.com')
+		expect(valid.role).toBe('member')
+		expect(valid.expiresAt).toBeTruthy()
+
+		const mismatchedRes = await app.request(
+			'/api/setup/invite?token=invite-token-1&email=wrong@example.com',
+		)
+		expect(mismatchedRes.status).toBe(200)
+		expect(await mismatchedRes.json()).toEqual({
+			valid: false,
+			email: null,
+			role: null,
+			expiresAt: null,
+		})
+	})
+})
+
+describe('settings providers and secrets', () => {
+	it('stores provider keys in company secrets and updates company config', async () => {
+		const saveRes = await request('/api/settings/providers/openrouter', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ apiKey: 'sk-or-test-provider-key' }),
+		})
+		expect(saveRes.status).toBe(200)
+
+		const company = (await readYamlUnsafe(join(companyRoot, 'company.yaml'))) as {
+			settings?: { ai_provider?: { provider?: string; secret_ref?: string } }
+		}
+		expect(company.settings?.ai_provider?.provider).toBe('openrouter')
+		expect(company.settings?.ai_provider?.secret_ref).toBe('provider-openrouter')
+
+		const secret = await readSecretRecord(companyRoot, 'provider-openrouter')
+		expect(secret?.encrypted).toBe(true)
+		expect(secret?.value).toBe('sk-or-test-provider-key')
+
+		const statusRes = await request('/api/settings/providers')
+		expect(statusRes.status).toBe(200)
+		const status = (await statusRes.json()) as Record<string, { configured: boolean }>
+		expect(status.openrouter?.configured).toBe(true)
+
+		const deleteRes = await request('/api/settings/providers/openrouter', { method: 'DELETE' })
+		expect(deleteRes.status).toBe(200)
+
+		const removed = await readSecretRecord(companyRoot, 'provider-openrouter')
+		expect(removed).toBeNull()
+	})
+
+	it('creates and lists encrypted secrets without exposing values', async () => {
+		const createRes = await request('/api/settings/secrets', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				name: 'stripe-api',
+				value: 'sk_test_secret_123',
+				type: 'api_token',
+				allowed_agents: ['ops'],
+				usage: 'billing.stripe',
+			}),
+		})
+		expect(createRes.status).toBe(200)
+
+		const listRes = await request('/api/settings/secrets')
+		expect(listRes.status).toBe(200)
+		const secrets = (await listRes.json()) as Array<{
+			name: string
+			encrypted: boolean
+			hasValue: boolean
+		}>
+		expect(secrets.some((secret) => secret.name === 'stripe-api')).toBe(true)
+		expect(secrets.find((secret) => secret.name === 'stripe-api')?.encrypted).toBe(true)
+		expect(secrets.find((secret) => secret.name === 'stripe-api')?.hasValue).toBe(true)
+
+		const stored = await readSecretRecord(companyRoot, 'stripe-api')
+		expect(stored?.value).toBe('sk_test_secret_123')
 	})
 })
 

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { type Client, createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { migrate } from 'drizzle-orm/libsql/migrator'
-import { getEnv } from '../env'
+import { env } from '../env'
 import * as schema from './schema'
 
 export type AutopilotDb = ReturnType<typeof drizzle<typeof schema>>
@@ -28,7 +28,6 @@ export async function createDb(
 	companyRoot: string,
 	_opts?: { embeddingDimensions?: number },
 ): Promise<DbResult> {
-	const env = getEnv()
 	const dataDir = join(companyRoot, '.data')
 	await mkdir(dataDir, { recursive: true })
 

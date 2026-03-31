@@ -17,6 +17,7 @@ import { container } from '../../container'
 import { readYaml } from '../../fs/yaml'
 import { logger } from '../../logger'
 import { notifierFactory } from '../../notifier'
+import { readSecretRecord } from '../../secrets/store'
 import { webhookHandlerRegistry } from '../../webhook'
 import type { AppEnv } from '../app'
 
@@ -71,11 +72,9 @@ async function verifyAuth(
 			return false
 		}
 
-		const secretPath = join(companyRoot, 'secrets', `${webhook.secret_ref}.yaml`)
 		try {
-			const secretFile = await Bun.file(secretPath).text()
-			const { parse } = await import('yaml')
-			const secret = parse(secretFile)
+			const secret = await readSecretRecord(companyRoot, webhook.secret_ref)
+			if (!secret) return false
 			const token = authHeader.slice(7)
 			return safeCompare(token, secret.value)
 		} catch {
@@ -97,11 +96,9 @@ async function verifyAuth(
 			return false
 		}
 
-		const secretPath = join(companyRoot, 'secrets', `${webhook.secret_ref}.yaml`)
 		try {
-			const secretFile = await Bun.file(secretPath).text()
-			const { parse } = await import('yaml')
-			const secret = parse(secretFile)
+			const secret = await readSecretRecord(companyRoot, webhook.secret_ref)
+			if (!secret) return false
 			const body = await request.clone().text()
 			const hmac = new Bun.CryptoHasher('sha256', secret.value)
 			hmac.update(body)

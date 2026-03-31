@@ -30,6 +30,7 @@ mkdir -p "$INSTALL_DIR" && cd "$INSTALL_DIR"
 REPO_RAW="https://raw.githubusercontent.com/questpie/autopilot/main"
 curl -fsSL "$REPO_RAW/docker-compose.yml" -o docker-compose.yml
 curl -fsSL "$REPO_RAW/.env.example" -o .env
+curl -fsSL "$REPO_RAW/Caddyfile.local" -o Caddyfile.local
 
 # Prompt for API key (optional — subscription login is recommended)
 echo ""

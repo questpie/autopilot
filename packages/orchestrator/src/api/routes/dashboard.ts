@@ -1,10 +1,10 @@
+import { readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import { join } from 'node:path'
-import { readdir } from 'node:fs/promises'
-import { readYamlUnsafe, fileExists } from '../../fs/yaml'
+import { fileExists, readYamlUnsafe } from '../../fs/yaml'
 import type { AppEnv } from '../app'
 
 const WidgetSummarySchema = z.object({
@@ -124,8 +124,12 @@ const dashboard = new Hono<AppEnv>()
 				return c.json({ pages: [] })
 			}
 
-			const pages = await readYamlUnsafe(pagesPath)
-			return c.json({ pages })
+			try {
+				const pages = await readYamlUnsafe(pagesPath)
+				return c.json({ pages })
+			} catch {
+				return c.json({ pages: [] })
+			}
 		},
 	)
 	// ── GET /groups ─────────────────────────────────────────────────────
@@ -146,8 +150,18 @@ const dashboard = new Hono<AppEnv>()
 				return c.json({ groups: [] })
 			}
 
-			const groups = await readYamlUnsafe(groupsPath)
-			return c.json({ groups })
+			try {
+				const raw = (await readYamlUnsafe(groupsPath)) as
+					| { groups?: unknown }
+					| Array<unknown>
+					| null
+
+				const groups = Array.isArray(raw) ? raw : Array.isArray(raw?.groups) ? raw.groups : []
+
+				return c.json({ groups })
+			} catch {
+				return c.json({ groups: [] })
+			}
 		},
 	)
 

@@ -3,10 +3,12 @@
  * MCP tools are HTTP wrappers — no direct DB access.
  */
 
+import { env } from './env'
+
 const DEFAULT_BASE = 'http://localhost:7778'
 
 export function getBaseUrl(): string {
-	return process.env.AUTOPILOT_API_URL ?? DEFAULT_BASE
+	return env.AUTOPILOT_API_URL ?? DEFAULT_BASE
 }
 
 export async function apiGet<T = unknown>(path: string): Promise<T> {

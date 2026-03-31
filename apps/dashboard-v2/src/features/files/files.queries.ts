@@ -8,7 +8,7 @@ export interface FsEntry {
   size: number
 }
 
-async function fetchDirectory(dirPath: string): Promise<FsEntry[]> {
+async function fetchDirectory(dirPath: string): Promise<FsEntry[] | null> {
   const cleanPath = dirPath.replace(/^\/+/, "")
   const res = cleanPath
     ? await api.api.fs[":path{.+}"].$get({ param: { path: cleanPath } })
@@ -16,6 +16,10 @@ async function fetchDirectory(dirPath: string): Promise<FsEntry[]> {
   if (!res.ok) {
     if (res.status === 404) return []
     throw new Error(`Failed to fetch directory: ${res.statusText}`)
+  }
+  const contentType = res.headers.get("content-type") ?? ""
+  if (!contentType.includes("application/json")) {
+    return null
   }
   return res.json() as Promise<FsEntry[]>
 }

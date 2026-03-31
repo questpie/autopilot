@@ -1,31 +1,33 @@
-import { logger } from '../../logger'
+import {
+	ChannelMemberSchema,
+	ChannelMessagesQuerySchema,
+	ChannelSchema,
+	CreateChannelRequestSchema,
+	ManageMembersRequestSchema,
+	MessageSchema,
+	OkResponseSchema,
+	PinnedMessageSchema,
+	ReactionSchema,
+	SendChannelMessageRequestSchema,
+} from '@questpie/autopilot-spec'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import {
-	ChannelSchema,
-	ChannelMemberSchema,
-	MessageSchema,
-	OkResponseSchema,
-	CreateChannelRequestSchema,
-	ChannelMessagesQuerySchema,
-	SendChannelMessageRequestSchema,
-	ManageMembersRequestSchema,
-	ReactionSchema,
-	PinnedMessageSchema,
-} from '@questpie/autopilot-spec'
+import { spawnAgent } from '../../agent/spawner'
 import { eventBus } from '../../events/event-bus'
 import { loadAgents, loadCompany } from '../../fs/company'
+import type { ChannelMember, Message, PinnedMessage, Reaction } from '../../fs/storage'
+import { logger } from '../../logger'
 import { routeMessage } from '../../router'
-import { spawnAgent } from '../../agent/spawner'
 import type { AppEnv } from '../app'
-import type { Context } from 'hono'
 
 // ─── Shared param validators ────────────────────────────────────────────────
 
 const ChannelIdParam = z.object({ id: z.string() })
 const MessageParam = z.object({ id: z.string(), msgId: z.string() })
+type MessageWithRouting = Message & { routed_to?: string; route_reason?: string }
 
 /** Resolve actor ID from context, falling back to 'anonymous'. */
 function getActorId(c: Context<AppEnv>): string {
@@ -50,7 +52,10 @@ async function requireMember(c: Context<AppEnv>, channelId: string): Promise<Res
 }
 
 /** Returns a 403 response if the actor cannot manage channel members. Requires admin/owner role, channel creator, or channel-level owner role. */
-async function requireChannelAdmin(c: Context<AppEnv>, channelId: string): Promise<Response | null> {
+async function requireChannelAdmin(
+	c: Context<AppEnv>,
+	channelId: string,
+): Promise<Response | null> {
 	const actor = c.get('actor')
 	if (!actor) return c.json({ error: 'unauthorized' }, 401)
 
@@ -94,9 +99,7 @@ const channels = new Hono<AppEnv>()
 				return c.json(result)
 			}
 
-			const result = await storage.listChannels(
-				actor ? { actor_id: actor.id } : undefined,
-			)
+			const result = await storage.listChannels(actor ? { actor_id: actor.id } : undefined)
 			return c.json(result)
 		},
 	)
@@ -119,7 +122,11 @@ const channels = new Hono<AppEnv>()
 			const actor = c.get('actor')
 			const body = c.req.valid('json')
 
-			const id = body.name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+			const id = body.name
+				.toLowerCase()
+				.replace(/[^a-z0-9-]/g, '-')
+				.replace(/-+/g, '-')
+				.replace(/^-|-$/g, '')
 			const now = new Date().toISOString()
 
 			const channel = await storage.createChannel({
@@ -238,7 +245,7 @@ const channels = new Hono<AppEnv>()
 				thread_id,
 			})
 
-			return c.json(messages)
+			return c.json<Message[]>(messages)
 		},
 	)
 	// POST /channels/:id/messages — send message to channel
@@ -310,9 +317,7 @@ const channels = new Hono<AppEnv>()
 				const recentMessages = await storage.readMessages({ channel: channelId, limit: 10 })
 				const allAgents = await loadAgents(root)
 				const members = await storage.getChannelMembers(channelId)
-				const agentMembers = allAgents.filter((a) =>
-					members.some((m) => m.actor_id === a.id),
-				)
+				const agentMembers = allAgents.filter((a) => members.some((m) => m.actor_id === a.id))
 
 				if (agentMembers.length > 0) {
 					const result = await routeMessage(body.content, agentMembers, root, {
@@ -334,14 +339,18 @@ const channels = new Hono<AppEnv>()
 						trigger: { type: 'channel_message', task_id: undefined },
 						message: body.content,
 					}).catch((err) =>
-						logger.error('api', 'channels spawn error', { error: err instanceof Error ? err.message : String(err) }),
+						logger.error('api', 'channels spawn error', {
+							error: err instanceof Error ? err.message : String(err),
+						}),
 					)
 				}
 			} catch (err) {
-				logger.error('api', 'channels routing error', { error: err instanceof Error ? err.message : String(err) })
+				logger.error('api', 'channels routing error', {
+					error: err instanceof Error ? err.message : String(err),
+				})
 			}
 
-			return c.json(
+			return c.json<MessageWithRouting>(
 				{ ...message, routed_to: routedTo, route_reason: routeReason },
 				201,
 			)
@@ -376,15 +385,30 @@ const channels = new Hono<AppEnv>()
 
 			if (body.add?.length) {
 				for (const member of body.add) {
-					await storage.addChannelMember(id, member.actor_id, member.actor_type, member.role ?? 'member')
-					eventBus.emit({ type: 'channel_member_changed', channelId: id, actorId: member.actor_id, action: 'added' })
+					await storage.addChannelMember(
+						id,
+						member.actor_id,
+						member.actor_type,
+						member.role ?? 'member',
+					)
+					eventBus.emit({
+						type: 'channel_member_changed',
+						channelId: id,
+						actorId: member.actor_id,
+						action: 'added',
+					})
 				}
 			}
 
 			if (body.remove?.length) {
 				for (const actorId of body.remove) {
 					await storage.removeChannelMember(id, actorId)
-					eventBus.emit({ type: 'channel_member_changed', channelId: id, actorId, action: 'removed' })
+					eventBus.emit({
+						type: 'channel_member_changed',
+						channelId: id,
+						actorId,
+						action: 'removed',
+					})
 				}
 			}
 
@@ -415,7 +439,7 @@ const channels = new Hono<AppEnv>()
 			if (denied) return denied
 
 			const members = await storage.getChannelMembers(id)
-			return c.json(members)
+			return c.json<ChannelMember[]>(members)
 		},
 	)
 	// PATCH /channels/:id/messages/:msgId — edit message
@@ -452,7 +476,7 @@ const channels = new Hono<AppEnv>()
 			}
 
 			const updated = await storage.updateMessage(msgId, content)
-			return c.json(updated)
+			return c.json<Message>(updated)
 		},
 	)
 	// DELETE /channels/:id/messages/:msgId — delete message
@@ -512,7 +536,7 @@ const channels = new Hono<AppEnv>()
 			if (denied) return denied
 
 			const pin = await storage.pinMessage(channelId, msgId, getActorId(c))
-			return c.json(pin, 201)
+			return c.json<PinnedMessage>(pin, 201)
 		},
 	)
 	// DELETE /channels/:id/messages/:msgId/pin — unpin message
@@ -562,7 +586,7 @@ const channels = new Hono<AppEnv>()
 			if (denied) return denied
 
 			const pins = await storage.getPinnedMessages(channelId)
-			return c.json(pins)
+			return c.json<PinnedMessage[]>(pins)
 		},
 	)
 	// POST /channels/:id/messages/:msgId/reactions — add reaction
@@ -589,7 +613,7 @@ const channels = new Hono<AppEnv>()
 			if (denied) return denied
 
 			const reaction = await storage.addReaction(msgId, emoji, getActorId(c))
-			return c.json(reaction, 201)
+			return c.json<Reaction>(reaction, 201)
 		},
 	)
 	// DELETE /channels/:id/messages/:msgId/reactions — remove reaction
@@ -671,7 +695,7 @@ const channels = new Hono<AppEnv>()
 			if (denied) return denied
 
 			const reactions = await storage.getReactions(msgId)
-			return c.json(reactions)
+			return c.json<Reaction[]>(reactions)
 		},
 	)
 

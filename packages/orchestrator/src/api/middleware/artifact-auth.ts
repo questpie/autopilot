@@ -14,6 +14,7 @@ export function artifactProxyAuth() {
 		const result = await resolveActor(c.req.raw, {
 			companyRoot: c.get('companyRoot'),
 			auth: c.get('auth'),
+			db: c.get('db'),
 		})
 
 		// Webhook auth can return a Response directly with specific error details

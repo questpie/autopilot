@@ -9,6 +9,7 @@ export {
 	twoFactor,
 	apikey,
 	rateLimit,
+	invite,
 } from './auth-schema'
 
 // ─── Tasks ──────────────────────────────────────────────────────────────────

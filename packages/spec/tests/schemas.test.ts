@@ -47,8 +47,9 @@ describe('CompanySchema', () => {
 		expect(result.owner.notification_channels).toEqual([])
 	})
 
-	test('rejects missing name', () => {
-		expect(() => CompanySchema.parse({ ...validCompany, name: undefined })).toThrow(ZodError)
+	test('defaults missing name', () => {
+		const result = CompanySchema.parse({ ...validCompany, name: undefined })
+		expect(result.name).toBe('My Company')
 	})
 
 	test('rejects invalid slug with spaces', () => {
@@ -68,10 +69,9 @@ describe('CompanySchema', () => {
 		).toThrow(ZodError)
 	})
 
-	test('rejects missing description', () => {
-		expect(() =>
-			CompanySchema.parse({ name: 'Test', slug: 'test', owner: validCompany.owner }),
-		).toThrow(ZodError)
+	test('defaults missing description', () => {
+		const result = CompanySchema.parse({ name: 'Test', slug: 'test', owner: validCompany.owner })
+		expect(result.description).toBe('')
 	})
 })
 

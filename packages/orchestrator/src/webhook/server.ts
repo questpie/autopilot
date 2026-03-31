@@ -5,6 +5,7 @@ import type { Webhook } from '@questpie/autopilot-spec'
 import { PATHS, WebhookSchema } from '@questpie/autopilot-spec'
 import { readYaml } from '../fs/yaml'
 import { logger } from '../logger'
+import { readSecretRecord } from '../secrets/store'
 
 /**
  * Timing-safe string comparison to prevent timing attacks on secrets.
@@ -135,11 +136,9 @@ export class WebhookServer {
 				return false
 			}
 
-			const secretPath = join(this.options.companyRoot, 'secrets', `${webhook.secret_ref}.yaml`)
 			try {
-				const secretFile = await Bun.file(secretPath).text()
-				const { parse } = await import('yaml')
-				const secret = parse(secretFile)
+				const secret = await readSecretRecord(this.options.companyRoot, webhook.secret_ref)
+				if (!secret) return false
 				const token = authHeader.slice(7)
 				return safeCompare(token, secret.value)
 			} catch {
@@ -162,11 +161,9 @@ export class WebhookServer {
 				return false
 			}
 
-			const secretPath = join(this.options.companyRoot, 'secrets', `${webhook.secret_ref}.yaml`)
 			try {
-				const secretFile = await Bun.file(secretPath).text()
-				const { parse } = await import('yaml')
-				const secret = parse(secretFile)
+				const secret = await readSecretRecord(this.options.companyRoot, webhook.secret_ref)
+				if (!secret) return false
 				const body = await request.clone().text()
 				const hmac = new Bun.CryptoHasher('sha256', secret.value)
 				hmac.update(body)

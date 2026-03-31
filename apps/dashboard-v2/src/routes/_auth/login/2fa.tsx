@@ -1,17 +1,33 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { useTranslation } from '@/lib/i18n'
-import { authClient } from '@/lib/auth'
-import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
+import { authClient } from '@/lib/auth'
+import { checkAuthServer } from '@/lib/auth.fn'
+import { useTranslation } from '@/lib/i18n'
 import { WarningCircleIcon } from '@phosphor-icons/react'
-import { useReducer, useRef, useCallback } from 'react'
-import { m, AnimatePresence } from 'framer-motion'
+import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
+import { AnimatePresence, m } from 'framer-motion'
+import { useCallback, useReducer, useRef } from 'react'
 
 export const Route = createFileRoute('/_auth/login/2fa')({
+	beforeLoad: async () => {
+		const result = await checkAuthServer()
+
+		if (result.noUsersExist) {
+			throw redirect({ to: '/setup' })
+		}
+
+		if (result.isAuthenticated) {
+			throw redirect({ to: result.setupCompleted ? '/' : '/setup' })
+		}
+
+		if (!result.needs2FA) {
+			throw redirect({ to: '/login' })
+		}
+	},
 	component: TwoFactorPage,
 })
 
@@ -116,7 +132,6 @@ function TwoFactorPage() {
 				return
 			}
 
-			await router.invalidate()
 			await router.navigate({ to: '/' })
 		},
 		[router, t, trustDevice, useBackup],

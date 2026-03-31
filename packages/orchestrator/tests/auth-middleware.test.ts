@@ -11,7 +11,14 @@ describe('resolveActor', () => {
 		const { root, cleanup } = await createTestCompany()
 		try {
 			// Configure webhook with auth: none so no HMAC is required
-			await writeYaml(join(root, 'team', 'webhooks', 'hooks-test.yaml'), { id: 'hooks-test', path: '/hooks/test', auth: 'none', enabled: true, agent: 'dev', action: { type: 'spawn_agent' } })
+			await writeYaml(join(root, 'team', 'webhooks', 'hooks-test.yaml'), {
+				id: 'hooks-test',
+				path: '/hooks/test',
+				auth: 'none',
+				enabled: true,
+				agent: 'dev',
+				action: { type: 'spawn_agent' },
+			})
 			const request = new Request('http://localhost:7778/hooks/test')
 			const actor = await resolveActor(request, {
 				companyRoot: root,
@@ -45,11 +52,39 @@ describe('resolveActor', () => {
 			await cleanup()
 		}
 	})
+
+	test('resolves cookie-backed session without authorization header', async () => {
+		const { root, cleanup } = await createTestCompany()
+		try {
+			const request = new Request('http://localhost:7778/api/tasks', {
+				headers: { cookie: 'better-auth.session_token=test' },
+			})
+			const actor = await resolveActor(request, {
+				companyRoot: root,
+				auth: {
+					api: {
+						getSession: async () => ({
+							user: {
+								id: 'user-1',
+								email: 'user@example.com',
+								name: 'Test User',
+								role: 'member',
+							},
+						}),
+					},
+				} as any,
+			})
+
+			expect(actor).not.toBeNull()
+			expect((actor as Actor).id).toBe('user-1')
+		} finally {
+			await cleanup()
+		}
+	})
 })
 
 describe('resolveActor 2FA enforcement for owner/admin', () => {
 	async function makeSessionAuth(root: string, role: string, twoFactorEnabled: boolean) {
-		await writeYaml(join(root, 'team', 'humans', 'user.yaml'), { id: 'user', email: 'user@example.com', role, name: 'User' })
 		return {
 			companyRoot: root,
 			auth: {
@@ -59,9 +94,9 @@ describe('resolveActor 2FA enforcement for owner/admin', () => {
 							id: 'user-1',
 							email: 'user@example.com',
 							name: 'Test User',
+							role,
 							twoFactorEnabled,
 						},
-						twoFactorVerified: twoFactorEnabled, // only set when 2FA is enabled and done
 					}),
 				},
 			} as any,

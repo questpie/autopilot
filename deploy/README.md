@@ -60,6 +60,7 @@ https://autopilot.yourdomain.com
   /api/*         → orchestrator (REST API, auth, SSE)
   /artifacts/*   → artifact proxy (auto-start, preview)
   /fs/*          → filesystem browser
+  /streams/*     → durable stream proxy
   /*             → dashboard (React UI)
 ```
 

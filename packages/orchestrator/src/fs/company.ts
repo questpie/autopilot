@@ -12,15 +12,34 @@ import {
 } from '@questpie/autopilot-spec'
 import type { Agent, Human, Schedule, Webhook } from '@questpie/autopilot-spec'
 import { logger } from '../logger'
-import { readYaml } from './yaml'
+import { readYaml, writeYaml } from './yaml'
 
 function resolvePath(companyRoot: string, relativePath: string): string {
 	return join(companyRoot, relativePath)
 }
 
-/** Read and validate `company.yaml`. */
+/**
+ * Read and validate `company.yaml`.
+ *
+ * If the file is missing or unreadable the schema defaults are used and the
+ * file is re-written so subsequent reads succeed normally.
+ */
 export async function loadCompany(companyRoot: string) {
-	return readYaml(resolvePath(companyRoot, PATHS.COMPANY_CONFIG), CompanySchema)
+	const configPath = resolvePath(companyRoot, PATHS.COMPANY_CONFIG)
+
+	try {
+		return await readYaml(configPath, CompanySchema)
+	} catch (err) {
+		logger.warn('company', 'company.yaml missing or invalid — using defaults', {
+			error: err instanceof Error ? err.message : String(err),
+		})
+
+		const defaults = CompanySchema.parse({})
+		await writeYaml(configPath, defaults)
+
+		logger.info('company', 'regenerated company.yaml with defaults')
+		return defaults
+	}
 }
 
 /** Read `team/agents/*.yaml` and return an array of validated agents. */

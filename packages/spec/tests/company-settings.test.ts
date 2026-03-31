@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { CompanySettingsSchema } from '../src/schemas'
 
 describe('CompanySettingsSchema defaults', () => {
@@ -51,6 +51,27 @@ describe('CompanySettingsSchema embeddings', () => {
 			embeddings: { dimensions: 1536 },
 		})
 		expect(result.embeddings!.dimensions).toBe(1536)
+	})
+})
+
+describe('CompanySettingsSchema ai_provider', () => {
+	test('ai_provider is optional', () => {
+		const result = CompanySettingsSchema.parse({})
+		expect(result.ai_provider).toBeUndefined()
+	})
+
+	test('accepts ai_provider secret_ref config', () => {
+		const result = CompanySettingsSchema.parse({
+			ai_provider: {
+				provider: 'openrouter',
+				secret_ref: 'provider-openrouter',
+				default_model: 'anthropic/claude-sonnet-4',
+			},
+		})
+
+		expect(result.ai_provider?.provider).toBe('openrouter')
+		expect(result.ai_provider?.secret_ref).toBe('provider-openrouter')
+		expect(result.ai_provider?.default_model).toBe('anthropic/claude-sonnet-4')
 	})
 })
 

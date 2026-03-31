@@ -10,15 +10,14 @@
 		"./api": "./src/api/index.ts",
 		"./client": "./src/client.ts"
 	},
-	"files": [
-		"src/"
-	],
+	"files": ["src/"],
 	"scripts": {
 		"build": "bun build src/index.ts --outdir dist --target bun",
 		"test": "bun test",
 		"typecheck": "bunx tsc --noEmit"
 	},
 	"dependencies": {
+		"@t3-oss/env-core": "^0.13.8",
 		"@better-auth/api-key": "^1.5.6",
 		"@better-auth/drizzle-adapter": "^1.5.6",
 		"@drepkovsky/tinydi": "^2.3.0",
@@ -58,14 +57,7 @@
 		"drizzle-kit": "^0.31.10",
 		"typescript": "^5.9.3"
 	},
-	"keywords": [
-		"questpie",
-		"autopilot",
-		"orchestrator",
-		"ai",
-		"agents",
-		"workflow"
-	],
+	"keywords": ["questpie", "autopilot", "orchestrator", "ai", "agents", "workflow"],
 	"homepage": "https://autopilot.questpie.com",
 	"repository": {
 		"type": "git",

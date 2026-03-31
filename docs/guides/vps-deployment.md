@@ -70,14 +70,28 @@ apt install -y caddy
 
 cat > /etc/caddy/Caddyfile << 'EOF'
 autopilot.yourdomain.com {
-    reverse_proxy localhost:3000
-
     handle /api/* {
         reverse_proxy localhost:7778
     }
 
-    handle /hooks/* {
+    handle /artifacts/* {
+        reverse_proxy localhost:7778
+    }
+
+    handle /fs/* {
+        reverse_proxy localhost:7778
+    }
+
+    handle /streams/* {
+        reverse_proxy localhost:7778
+    }
+
+    handle /webhooks/* {
         reverse_proxy localhost:7777
+    }
+
+    handle {
+        reverse_proxy localhost:3000
     }
 }
 EOF

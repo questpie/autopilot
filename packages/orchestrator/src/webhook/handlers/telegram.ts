@@ -5,25 +5,18 @@
  * original Telegram-specific logic from `telegram-handler.ts`.
  */
 
-import { join } from 'node:path'
-import { z } from 'zod'
-import {
-	parseTelegramUpdate,
-	extractMentions,
-	sendTelegramMessage,
-} from '../../transports/adapters/telegram'
-import { loadAgents, loadCompany } from '../../fs'
-import { readYamlUnsafe } from '../../fs/yaml'
 import { spawnAgent } from '../../agent'
 import { container } from '../../container'
+import { loadAgents, loadCompany } from '../../fs'
 import { storageFactory } from '../../fs/sqlite-backend'
-import type { WebhookHandler, WebhookContext, WebhookResult } from '../handler'
 import { logger } from '../../logger'
-
-/** Zod schema for the Telegram secret YAML file. */
-const TelegramSecretSchema = z.object({
-	value: z.string(),
-}).passthrough()
+import { readSecretRecord } from '../../secrets/store'
+import {
+	extractMentions,
+	parseTelegramUpdate,
+	sendTelegramMessage,
+} from '../../transports/adapters/telegram'
+import type { WebhookContext, WebhookHandler, WebhookResult } from '../handler'
 
 /**
  * Read the Telegram bot token from the secrets directory.
@@ -31,10 +24,9 @@ const TelegramSecretSchema = z.object({
  * Expects a file at `secrets/telegram.yaml` with a `value` field.
  */
 async function readBotToken(companyRoot: string): Promise<string | null> {
-	const secretPath = join(companyRoot, 'secrets', 'telegram.yaml')
 	try {
-		const secret = TelegramSecretSchema.parse(await readYamlUnsafe(secretPath))
-		return secret.value
+		const secret = await readSecretRecord(companyRoot, 'telegram')
+		return secret?.value ?? null
 	} catch {
 		return null
 	}
@@ -72,7 +64,10 @@ export const telegramWebhookHandler: WebhookHandler = {
 		// 2. Read bot token
 		const botToken = await readBotToken(companyRoot)
 		if (!botToken) {
-			logger.error('telegram', 'no bot token found — add one via: autopilot secrets add telegram --value "YOUR_TOKEN"')
+			logger.error(
+				'telegram',
+				'no bot token found — add one via: autopilot secrets add telegram --value "YOUR_TOKEN"',
+			)
 			return { handled: false, error: 'no bot token configured' }
 		}
 
@@ -101,10 +96,7 @@ export const telegramWebhookHandler: WebhookHandler = {
 		logger.info('telegram', `routing to agent: ${agent.id} (${agent.name})`)
 
 		// 5. Send a "thinking" indicator
-		await sendTelegramMessage(
-			{ botToken, chatId },
-			`_${agent.name} is working on this..._`,
-		)
+		await sendTelegramMessage({ botToken, chatId }, `_${agent.name} is working on this..._`)
 
 		// 6. Spawn agent with the message as context
 		try {
@@ -120,8 +112,8 @@ export const telegramWebhookHandler: WebhookHandler = {
 			})
 
 			// 7. Send the response back to Telegram
-			const responseText = result.result
-				?? (result.error ? `Error: ${result.error}` : 'Done. No output produced.')
+			const responseText =
+				result.result ?? (result.error ? `Error: ${result.error}` : 'Done. No output produced.')
 
 			await sendTelegramMessage({ botToken, chatId }, responseText)
 
@@ -130,10 +122,7 @@ export const telegramWebhookHandler: WebhookHandler = {
 			const errorMsg = err instanceof Error ? err.message : String(err)
 			logger.error('telegram', `agent ${agent.id} failed`, { error: errorMsg })
 
-			await sendTelegramMessage(
-				{ botToken, chatId },
-				`Something went wrong: ${errorMsg}`,
-			)
+			await sendTelegramMessage({ botToken, chatId }, `Something went wrong: ${errorMsg}`)
 
 			return { handled: false, agentId: agent.id, error: errorMsg }
 		}

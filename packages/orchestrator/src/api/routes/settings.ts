@@ -1,20 +1,22 @@
+import { join } from 'node:path'
 /**
  * Settings API — read and write company configuration + provider management.
  *
  * GET    /settings                    → returns company.yaml as JSON
  * PATCH  /settings                    → merges JSON body into company.yaml, saves
  * GET    /settings/providers          → returns provider status (configured/model) without keys
- * POST   /settings/providers/:provider → saves API key to .env
- * DELETE /settings/providers/:provider → removes API key from .env
+ * POST   /settings/providers/:provider → saves API key to encrypted company secrets
+ * DELETE /settings/providers/:provider → removes provider secret + company reference
  */
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import { join, resolve } from 'node:path'
-import { readFile, writeFile } from 'node:fs/promises'
-import { readYamlUnsafe, fileExists, writeYaml } from '../../fs/yaml'
+import { container } from '../../container'
+import { getEnv } from '../../env'
 import { eventBus } from '../../events/event-bus'
+import { fileExists, readYamlUnsafe, writeYaml } from '../../fs/yaml'
+import { deleteSecret, listSecrets, readSecretRecord, writeSecret } from '../../secrets/store'
 import type { AppEnv } from '../app'
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
@@ -44,6 +46,29 @@ const SaveProviderKeySchema = z.object({
 	apiKey: z.string().min(1, 'API key is required'),
 })
 
+const SecretMetadataSchema = z.object({
+	name: z.string(),
+	service: z.string(),
+	type: z.string(),
+	created_at: z.string(),
+	created_by: z.string(),
+	allowed_agents: z.array(z.string()),
+	usage: z.string(),
+	encrypted: z.boolean(),
+	hasValue: z.boolean(),
+})
+
+const CreateSecretSchema = z.object({
+	name: z
+		.string()
+		.min(1)
+		.regex(/^[a-z0-9-]+$/, 'Use lowercase letters, numbers, and hyphens only'),
+	value: z.string().min(1, 'Secret value is required'),
+	type: z.string().default('api_token'),
+	allowed_agents: z.array(z.string()).default([]),
+	usage: z.string().default(''),
+})
+
 const ProviderParamSchema = z.object({
 	provider: z.enum(['openrouter', 'gemini']),
 })
@@ -63,25 +88,19 @@ function deepMerge(
 		const tVal = target[key]
 		const sVal = source[key]
 		if (
-			tVal && sVal &&
-			typeof tVal === 'object' && typeof sVal === 'object' &&
-			!Array.isArray(tVal) && !Array.isArray(sVal)
+			tVal &&
+			sVal &&
+			typeof tVal === 'object' &&
+			typeof sVal === 'object' &&
+			!Array.isArray(tVal) &&
+			!Array.isArray(sVal)
 		) {
-			result[key] = deepMerge(
-				tVal as Record<string, unknown>,
-				sVal as Record<string, unknown>,
-			)
+			result[key] = deepMerge(tVal as Record<string, unknown>, sVal as Record<string, unknown>)
 		} else {
 			result[key] = sVal
 		}
 	}
 	return result
-}
-
-/** Map provider name to its .env variable name. */
-const PROVIDER_ENV_MAP: Record<string, string> = {
-	openrouter: 'OPENROUTER_API_KEY',
-	gemini: 'GOOGLE_AI_API_KEY',
 }
 
 /** Map provider name to its default model. */
@@ -96,42 +115,46 @@ const KEY_PATTERNS: Record<string, RegExp> = {
 	gemini: /^AI/,
 }
 
-/** Resolve the .env file path (project root). */
-function envFilePath(): string {
-	// Walk up from this file to find the monorepo root (where .env lives)
-	return resolve(__dirname, '..', '..', '..', '..', '..', '.env')
+function providerSecretName(provider: string): string {
+	return `provider-${provider}`
 }
 
-/** Parse a .env file into key-value pairs (preserving comments and order). */
-async function readEnvFile(path: string): Promise<string> {
-	try {
-		return await readFile(path, 'utf-8')
-	} catch {
-		return ''
-	}
-}
-
-/** Set a key in the .env content string. Adds it if missing, updates if present. */
-function setEnvVar(content: string, key: string, value: string): string {
-	const lines = content.split('\n')
-	const pattern = new RegExp(`^#?\\s*${key}\\s*=`)
-	const idx = lines.findIndex((l) => pattern.test(l))
-
-	if (idx >= 0) {
-		lines[idx] = `${key}=${value}`
-	} else {
-		// Append at end
-		lines.push(`${key}=${value}`)
+async function updateCompanyProviderSettings(
+	root: string,
+	provider: string,
+	secretRef?: string,
+): Promise<void> {
+	const companyPath = join(root, 'company.yaml')
+	let existing: Record<string, unknown> = {}
+	if (await fileExists(companyPath)) {
+		const data = await readYamlUnsafe(companyPath)
+		if (data && typeof data === 'object') existing = data as Record<string, unknown>
 	}
 
-	return lines.join('\n')
-}
+	const settings = (existing.settings as Record<string, unknown> | undefined) ?? {}
+	const currentAiProvider = (settings.ai_provider as Record<string, unknown> | undefined) ?? {}
+	const nextAiProvider = secretRef
+		? {
+				...currentAiProvider,
+				provider,
+				secret_ref: secretRef,
+				default_model:
+					typeof currentAiProvider.default_model === 'string'
+						? currentAiProvider.default_model
+						: PROVIDER_MODEL_MAP[provider],
+			}
+		: undefined
+	const { ai_provider: _unusedAiProvider, ...settingsWithoutAiProvider } = settings
+	const nextSettings = nextAiProvider
+		? { ...settingsWithoutAiProvider, ai_provider: nextAiProvider }
+		: settingsWithoutAiProvider
 
-/** Remove a key from the .env content string (comment it out). */
-function removeEnvVar(content: string, key: string): string {
-	const lines = content.split('\n')
-	const pattern = new RegExp(`^\\s*${key}\\s*=`)
-	return lines.map((l) => pattern.test(l) ? `# ${key}=` : l).join('\n')
+	const merged = {
+		...existing,
+		settings: nextSettings,
+	}
+
+	await writeYaml(companyPath, merged)
 }
 
 // ── Routes ──────────────────────────────────────────────────────────────────
@@ -140,24 +163,23 @@ function removeEnvVar(content: string, key: string): string {
  * Public settings route — deployment mode only, no auth required.
  * Mounted before auth middleware in app.ts.
  */
-const settingsPublic = new Hono<AppEnv>()
-	.get(
-		'/deployment-mode',
-		describeRoute({
-			tags: ['settings'],
-			description: 'Return the current deployment mode (selfhosted or cloud)',
-			responses: {
-				200: {
-					description: 'Deployment mode',
-					content: { 'application/json': { schema: resolver(DeploymentModeResponseSchema) } },
-				},
+const settingsPublic = new Hono<AppEnv>().get(
+	'/deployment-mode',
+	describeRoute({
+		tags: ['settings'],
+		description: 'Return the current deployment mode (selfhosted or cloud)',
+		responses: {
+			200: {
+				description: 'Deployment mode',
+				content: { 'application/json': { schema: resolver(DeploymentModeResponseSchema) } },
 			},
-		}),
-		(c) => {
-			const mode: DeploymentMode = process.env.DEPLOYMENT_MODE === 'cloud' ? 'cloud' : 'selfhosted'
-			return c.json({ mode }, 200)
 		},
-	)
+	}),
+	(c) => {
+		const mode: DeploymentMode = getEnv().DEPLOYMENT_MODE
+		return c.json({ mode }, 200)
+	},
+)
 
 const settings = new Hono<AppEnv>()
 	// ── GET /settings — read company config as JSON ──────────────────
@@ -220,6 +242,76 @@ const settings = new Hono<AppEnv>()
 			return c.json({ ok: true as const }, 200)
 		},
 	)
+	.get(
+		'/secrets',
+		describeRoute({
+			tags: ['settings'],
+			description: 'List company secrets metadata (values are never returned)',
+			responses: {
+				200: {
+					description: 'Secrets metadata',
+					content: { 'application/json': { schema: resolver(z.array(SecretMetadataSchema)) } },
+				},
+			},
+		}),
+		async (c) => {
+			const root = c.get('companyRoot')
+			return c.json(await listSecrets(root), 200)
+		},
+	)
+	.post(
+		'/secrets',
+		describeRoute({
+			tags: ['settings'],
+			description: 'Create or replace an encrypted company secret',
+			responses: {
+				200: {
+					description: 'Secret saved',
+					content: {
+						'application/json': {
+							schema: resolver(z.object({ ok: z.literal(true), secret: SecretMetadataSchema })),
+						},
+					},
+				},
+			},
+		}),
+		zValidator('json', CreateSecretSchema),
+		async (c) => {
+			const actor = c.get('actor')
+			const root = c.get('companyRoot')
+			const body = c.req.valid('json')
+			const secret = await writeSecret(root, {
+				name: body.name,
+				value: body.value,
+				type: body.type,
+				createdBy: actor?.id ?? 'system',
+				allowedAgents: body.allowed_agents,
+				usage: body.usage,
+			})
+			eventBus.emit({ type: 'settings_changed' })
+			return c.json({ ok: true as const, secret }, 200)
+		},
+	)
+	.delete(
+		'/secrets/:name',
+		describeRoute({
+			tags: ['settings'],
+			description: 'Delete an encrypted company secret',
+			responses: {
+				200: { description: 'Secret deleted' },
+				404: { description: 'Secret not found' },
+			},
+		}),
+		zValidator('param', z.object({ name: z.string() })),
+		async (c) => {
+			const root = c.get('companyRoot')
+			const { name } = c.req.valid('param')
+			const deleted = await deleteSecret(root, name)
+			if (!deleted) return c.json({ error: 'secret not found' }, 404)
+			eventBus.emit({ type: 'settings_changed' })
+			return c.json({ ok: true as const }, 200)
+		},
+	)
 	// ── GET /settings/providers — provider status ────────────────────
 	.get(
 		'/providers',
@@ -234,13 +326,31 @@ const settings = new Hono<AppEnv>()
 			},
 		}),
 		async (c) => {
+			const root = c.get('companyRoot')
+			const env = getEnv()
+			const companyPath = join(root, 'company.yaml')
+			const company = (await fileExists(companyPath))
+				? ((await readYamlUnsafe(companyPath)) as Record<string, unknown>)
+				: {}
+			const settings = (company.settings as Record<string, unknown> | undefined) ?? {}
+			const aiProvider = (settings.ai_provider as Record<string, unknown> | undefined) ?? {}
 			const result: Record<string, { configured: boolean; model?: string }> = {}
 
-			for (const [provider, envVar] of Object.entries(PROVIDER_ENV_MAP)) {
-				const key = process.env[envVar]
+			for (const provider of Object.keys(PROVIDER_MODEL_MAP)) {
+				const secretRef =
+					typeof aiProvider.secret_ref === 'string' && aiProvider.provider === provider
+						? aiProvider.secret_ref
+						: undefined
+				const secret = secretRef ? await readSecretRecord(root, secretRef).catch(() => null) : null
+				const fallbackKey = provider === 'openrouter' ? env.OPENROUTER_API_KEY : undefined
+				const key = secret?.value ?? fallbackKey
 				result[provider] = {
 					configured: !!key && key.length > 0,
-					model: key ? PROVIDER_MODEL_MAP[provider] : undefined,
+					model: key
+						? typeof aiProvider.default_model === 'string'
+							? aiProvider.default_model
+							: PROVIDER_MODEL_MAP[provider]
+						: undefined,
 				}
 			}
 
@@ -264,6 +374,7 @@ const settings = new Hono<AppEnv>()
 		zValidator('param', ProviderParamSchema),
 		zValidator('json', SaveProviderKeySchema),
 		async (c) => {
+			const actor = c.get('actor')
 			const { provider } = c.req.valid('param')
 			const { apiKey } = c.req.valid('json')
 
@@ -276,14 +387,19 @@ const settings = new Hono<AppEnv>()
 				)
 			}
 
-			const envVar = PROVIDER_ENV_MAP[provider]!
-			const envPath = envFilePath()
-			const content = await readEnvFile(envPath)
-			const updated = setEnvVar(content, envVar, apiKey)
-			await writeFile(envPath, updated, 'utf-8')
-
-			// Update process.env so GET reflects immediately
-			process.env[envVar] = apiKey
+			const root = c.get('companyRoot')
+			const secretRef = providerSecretName(provider)
+			await writeSecret(root, {
+				name: secretRef,
+				value: apiKey,
+				type: 'api_token',
+				createdBy: actor?.id ?? 'system',
+				allowedAgents: [],
+				usage: `provider.${provider}`,
+			})
+			await updateCompanyProviderSettings(root, provider, secretRef)
+			container.clearInstance('aiProvider')
+			container.clearInstance('embeddingService')
 
 			eventBus.emit({ type: 'settings_changed' })
 
@@ -306,14 +422,11 @@ const settings = new Hono<AppEnv>()
 		zValidator('param', ProviderParamSchema),
 		async (c) => {
 			const { provider } = c.req.valid('param')
-			const envVar = PROVIDER_ENV_MAP[provider]!
-			const envPath = envFilePath()
-			const content = await readEnvFile(envPath)
-			const updated = removeEnvVar(content, envVar)
-			await writeFile(envPath, updated, 'utf-8')
-
-			// Clear from process.env
-			delete process.env[envVar]
+			const root = c.get('companyRoot')
+			await deleteSecret(root, providerSecretName(provider))
+			await updateCompanyProviderSettings(root, provider)
+			container.clearInstance('aiProvider')
+			container.clearInstance('embeddingService')
 
 			eventBus.emit({ type: 'settings_changed' })
 

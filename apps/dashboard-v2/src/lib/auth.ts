@@ -1,14 +1,21 @@
-import { createAuthClient } from "better-auth/react"
-import { twoFactorClient } from "better-auth/client/plugins"
-import { API_BASE } from "./api"
+import { twoFactorClient } from 'better-auth/client/plugins'
+import { createAuthClient } from 'better-auth/react'
+import { getPublicApiBase } from './env'
+
+const publicApiUrl = import.meta.env.SSR ? undefined : getPublicApiBase() || undefined
+
+export function getAppCallbackUrl(path: string): string {
+	if (typeof window === 'undefined') return path
+	return new URL(path, window.location.origin).toString()
+}
 
 export const authClient = createAuthClient({
-  baseURL: API_BASE,
-  plugins: [
-    twoFactorClient({
-      onTwoFactorRedirect() {
-        window.location.href = "/login/2fa"
-      },
-    }),
-  ],
+	...(publicApiUrl ? { baseURL: publicApiUrl } : {}),
+	plugins: [
+		twoFactorClient({
+			onTwoFactorRedirect() {
+				window.location.href = '/login/2fa'
+			},
+		}),
+	],
 })

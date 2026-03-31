@@ -1,4 +1,15 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    restart: unless-stopped
+
   orchestrator:
     image: questpie/autopilot:latest
     # build:        # Uncomment to build from source
@@ -7,11 +18,11 @@ services:
     ports:
       - "${PORT:-7778}:7778"
       - "${WEBHOOK_PORT:-7777}:7777"
-      - "${DASHBOARD_PORT:-3000}:3000"
     volumes:
       - ${COMPANY_ROOT:-./company}:/data/company
     environment:
       - COMPANY_ROOT=/data/company
+      - API_INTERNAL_URL=http://localhost:7778
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - AUTOPILOT_MASTER_KEY=${AUTOPILOT_MASTER_KEY:-}
@@ -66,6 +77,7 @@ services:
       - ${COMPANY_ROOT:-./company}:/data/company
     environment:
       - COMPANY_ROOT=/data/company
+      - API_INTERNAL_URL=http://localhost:7778
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - AUTOPILOT_MASTER_KEY=${AUTOPILOT_MASTER_KEY:-}

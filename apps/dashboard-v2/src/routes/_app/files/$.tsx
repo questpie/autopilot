@@ -24,13 +24,11 @@ function FilesCatchAll() {
   const { _splat: splatPath } = Route.useParams()
   const filePath = splatPath ?? ""
 
-  // Try loading as directory first
+  // Returns FsEntry[] for directories, null for files
   const { data: dirEntries } = useSuspenseQuery(directoryQuery(filePath))
 
-  // If we got a directory listing (array), show directory
-  // If we got a non-array response, treat as file
-  const isDirectory = Array.isArray(dirEntries)
-  const isFile = !Array.isArray(dirEntries)
+  const isDirectory = dirEntries != null
+  const isFile = dirEntries == null
 
   return (
     <div className="flex flex-col">

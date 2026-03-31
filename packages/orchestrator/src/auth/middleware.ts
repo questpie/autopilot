@@ -1,3 +1,7 @@
+import { eq } from 'drizzle-orm'
+import type { AutopilotDb } from '../db'
+import * as authSchema from '../db/auth-schema'
+import { env } from '../env'
 import { loadAgents } from '../fs'
 import { verifyAgentKey } from './agent-keys'
 /**
@@ -19,9 +23,43 @@ const WEBHOOK_PERMISSIONS: Record<string, string[]> = {
 	channels: ['write'],
 }
 
+function normalizeHumanRole(role: unknown): Actor['role'] | null {
+	return role === 'owner' || role === 'admin' || role === 'member' || role === 'viewer'
+		? role
+		: null
+}
+
 export interface ResolveActorConfig {
 	companyRoot: string
 	auth: Auth
+	db?: AutopilotDb
+}
+
+type HumanSession = {
+	user: {
+		id: string
+		email: string
+		name?: string
+		role?: string
+		twoFactorEnabled?: boolean
+	}
+}
+
+async function getHumanSession(
+	request: Request,
+	config: ResolveActorConfig,
+): Promise<HumanSession | null> {
+	try {
+		const authApi = config.auth.api as Record<
+			string,
+			((args: unknown) => Promise<unknown>) | undefined
+		>
+		const getSessionFn = authApi.getSession
+		if (!getSessionFn) return null
+		return (await getSessionFn({ headers: request.headers })) as HumanSession | null
+	} catch {
+		return null
+	}
 }
 
 /**
@@ -45,31 +83,18 @@ export async function resolveActor(
 		return resolveApiKeyActor(apiKeyHeader, request, config)
 	}
 
-	// 3. Authorization: Bearer header
+	// 3. Better Auth session via cookies or bearer token
+	const session = await getHumanSession(request, config)
+	if (session) {
+		return resolveHumanActor(session, request, config)
+	}
+
+	// 4. Authorization: Bearer header (agent key fallback)
 	const authHeader = request.headers.get('authorization')
 	if (authHeader?.startsWith('Bearer ')) {
 		const token = authHeader.slice(7)
 
-		// 3a. Try Better Auth session (human bearer token)
-		try {
-			const authApi = config.auth.api as Record<
-				string,
-				((args: unknown) => Promise<unknown>) | undefined
-			>
-			const getSessionFn = authApi.getSession
-			if (!getSessionFn) return null
-			const session = (await getSessionFn({ headers: request.headers })) as {
-				user: { id: string; email: string; name?: string; twoFactorEnabled?: boolean }
-				twoFactorVerified?: boolean
-			} | null
-			if (session) {
-				return resolveHumanActor(session, request, config)
-			}
-		} catch {
-			// Not a valid session
-		}
-
-		// 3b. Try agent API key (sent as Bearer)
+		// 4a. Try agent API key (sent as Bearer)
 		const agentActor = await resolveApiKeyActor(token, request, config)
 		if (agentActor) return agentActor
 	}
@@ -134,38 +159,33 @@ async function resolveApiKeyActor(
 
 async function resolveHumanActor(
 	session: {
-		user: { id: string; email: string; name?: string; twoFactorEnabled?: boolean }
-		twoFactorVerified?: boolean
+		user: {
+			id: string
+			email: string
+			name?: string
+			role?: string
+			twoFactorEnabled?: boolean
+		}
 	},
 	request: Request,
 	config: ResolveActorConfig,
 ): Promise<Actor | null> {
-	// 2FA enforcement: if user has 2FA enabled but session not verified, reject
-	if (session.user.twoFactorEnabled && !session.twoFactorVerified) {
-		return null
-	}
+	let roleFromAuthDb: string | undefined = session.user.role
 
-	// Role comes from team/humans/*.yaml, NOT from Better Auth DB
-	const { loadHumans } = await import('../fs/company')
-
-	let roleFromHumans: string | undefined
-	try {
-		const humans = await loadHumans(config.companyRoot)
-		const human = humans.find((h: { email?: string }) => h.email === session.user.email)
-		if (human) {
-			roleFromHumans = human.role
+	if (config.db) {
+		try {
+			const authUser = await config.db
+				.select({ role: authSchema.user.role })
+				.from(authSchema.user)
+				.where(eq(authSchema.user.id, session.user.id))
+				.get()
+			roleFromAuthDb = authUser?.role ?? roleFromAuthDb
+		} catch {
+			// Fall back to session payload only.
 		}
-	} catch {
-		// Fallback to viewer if humans dir not found
 	}
 
-	const role: 'owner' | 'admin' | 'member' | 'viewer' =
-		roleFromHumans === 'owner' ||
-		roleFromHumans === 'admin' ||
-		roleFromHumans === 'member' ||
-		roleFromHumans === 'viewer'
-			? roleFromHumans
-			: 'viewer'
+	const role = normalizeHumanRole(roleFromAuthDb) ?? 'viewer'
 
 	// Mandatory 2FA for owner/admin: if not enabled and path is not an auth route, block access.
 	// Exempt /api/auth/* so users can still configure 2FA.
@@ -201,8 +221,8 @@ async function verifyWebhookRequest(
 	path: string,
 	config: ResolveActorConfig,
 ): Promise<Actor | Response> {
-	const { join } = await import('node:path')
 	const { timingSafeEqual, createHmac } = await import('node:crypto')
+	const { readSecretRecord } = await import('../secrets/store')
 	const ip = request.headers.get('x-forwarded-for') ?? undefined
 
 	// Try to load webhook config for this path
@@ -241,10 +261,7 @@ async function verifyWebhookRequest(
 
 	if (webhookConfig?.secret_ref) {
 		try {
-			const secretPath = join(config.companyRoot, 'secrets', `${webhookConfig.secret_ref}.yaml`)
-			const secretFile = await Bun.file(secretPath).text()
-			const { parse } = await import('yaml')
-			const parsed = parse(secretFile)
+			const parsed = await readSecretRecord(config.companyRoot, webhookConfig.secret_ref)
 			secret = parsed?.value ?? null
 		} catch {
 			// Secret file not readable
@@ -252,7 +269,7 @@ async function verifyWebhookRequest(
 	}
 
 	if (!secret) {
-		secret = process.env.WEBHOOK_SECRET ?? null
+		secret = env.WEBHOOK_SECRET ?? null
 	}
 
 	if (!secret) {

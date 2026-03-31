@@ -6,8 +6,9 @@
  * 2. secrets/.master-key file (for local development)
  */
 import { existsSync } from 'node:fs'
-import { readFile, writeFile, mkdir, chmod } from 'node:fs/promises'
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { env } from '../env'
 import { logger } from '../logger'
 
 const IV_LENGTH = 12
@@ -16,7 +17,7 @@ const IV_LENGTH = 12
  * Ensure a master key exists. Creates one if missing (dev mode).
  */
 export async function ensureMasterKey(companyRoot: string): Promise<void> {
-	if (process.env.AUTOPILOT_MASTER_KEY) {
+	if (env.AUTOPILOT_MASTER_KEY) {
 		return
 	}
 
@@ -37,9 +38,10 @@ export async function ensureMasterKey(companyRoot: string): Promise<void> {
 export async function loadMasterKey(companyRoot: string): Promise<CryptoKey> {
 	let keyBase64: string
 
-	if (process.env.AUTOPILOT_MASTER_KEY) {
-		keyBase64 = process.env.AUTOPILOT_MASTER_KEY
+	if (env.AUTOPILOT_MASTER_KEY) {
+		keyBase64 = env.AUTOPILOT_MASTER_KEY
 	} else {
+		await ensureMasterKey(companyRoot)
 		keyBase64 = await readFile(join(companyRoot, 'secrets', '.master-key'), 'utf-8')
 	}
 
@@ -106,5 +108,5 @@ export function hashApiKey(raw: string): string {
 /** Mask a secret for safe logging */
 export function maskSecret(value: string): string {
 	if (value.length < 10) return '****'
-	return value.slice(0, 4) + '****' + value.slice(-4)
+	return `${value.slice(0, 4)}****${value.slice(-4)}`
 }

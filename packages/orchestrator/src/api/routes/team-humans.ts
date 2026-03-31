@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { HUMAN_ROLES, HumanSchema, PATHS } from '@questpie/autopilot-spec'
-import { eq } from 'drizzle-orm'
+import { and, eq, gt, isNull, or } from 'drizzle-orm'
 /**
  * Team humans API — manage human users (list, invite, roles, ban/unban).
  *
@@ -19,7 +20,8 @@ import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
 import * as authSchema from '../../db/auth-schema'
-import { fileExists, readYaml, readYamlUnsafe, writeYaml } from '../../fs/yaml'
+import { env } from '../../env'
+import { readYaml } from '../../fs/yaml'
 import type { AppEnv } from '../app'
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
@@ -36,6 +38,22 @@ const HumanUserSchema = z.object({
 
 const InviteRequestSchema = z.object({
 	email: z.string().email('Invalid email address'),
+	role: z.enum(HUMAN_ROLES).default('member'),
+})
+
+const InviteDeleteSchema = z.object({
+	email: z.string().email('Invalid email address'),
+})
+
+const InviteRecordSchema = z.object({
+	id: z.string(),
+	email: z.string().email(),
+	role: z.enum(HUMAN_ROLES),
+	token: z.string(),
+	inviteUrl: z.string().url(),
+	createdAt: z.string(),
+	expiresAt: z.string().nullable(),
+	acceptedAt: z.string().nullable(),
 })
 
 const RoleChangeSchema = z.object({
@@ -52,28 +70,19 @@ const IdParamSchema = z.object({
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Read .auth/invites.yaml as a string array. Returns empty array if not found. */
-async function readInvites(companyRoot: string): Promise<string[]> {
-	const invitesPath = join(companyRoot, '.auth', 'invites.yaml')
-	if (!(await fileExists(invitesPath))) return []
-	try {
-		const data = await readYamlUnsafe(invitesPath)
-		if (Array.isArray(data)) return data as string[]
-		return []
-	} catch {
-		return []
-	}
-}
-
-/** Write .auth/invites.yaml from a string array. */
-async function writeInvites(companyRoot: string, emails: string[]): Promise<void> {
-	await writeYaml(join(companyRoot, '.auth', 'invites.yaml'), emails)
+function buildInviteUrl(email: string, token: string): string {
+	const baseOrigin =
+		env.CORS_ORIGIN?.split(',')
+			.map((origin) => origin.trim())
+			.find(Boolean) ?? 'http://localhost:3000'
+	const url = new URL('/signup', baseOrigin)
+	url.searchParams.set('email', email)
+	url.searchParams.set('token', token)
+	return url.toString()
 }
 
 /** Read all human files from team/humans/*.yaml and return parsed data. */
-async function readHumansFile(
-	companyRoot: string,
-): Promise<{
+async function readHumansFile(companyRoot: string): Promise<{
 	humans: Array<{ id: string; email?: string; role: string; name?: string; [key: string]: unknown }>
 }> {
 	const dir = join(companyRoot, PATHS.HUMANS_DIR.slice(1))
@@ -95,12 +104,6 @@ async function readHumansFile(
 		}
 	}
 	return { humans }
-}
-
-/** Write a single human file to team/humans/{id}.yaml. */
-async function writeHumanFile(companyRoot: string, human: Record<string, unknown>): Promise<void> {
-	const id = (human.id as string) ?? (human.email as string)?.split('@')[0] ?? 'unknown'
-	await writeYaml(join(companyRoot, PATHS.HUMANS_DIR.slice(1), `${id}.yaml`), human)
 }
 
 /** Guard: only owner/admin can access. Returns error response or null. */
@@ -151,13 +154,22 @@ const teamHumans = new Hono<AppEnv>()
 					id: string
 					email: string
 					name?: string
+					role?: string
 					banned?: boolean
 					twoFactorEnabled?: boolean
 					createdAt?: string
 				}>
 			}
 
-			const users = result?.users ?? []
+			const users: Array<{
+				id: string
+				email: string
+				name?: string
+				role?: string
+				banned?: boolean
+				twoFactorEnabled?: boolean
+				createdAt?: string
+			}> = result?.users ?? []
 
 			// Merge role from team/humans/*.yaml
 			const humansFile = await readHumansFile(root)
@@ -169,7 +181,7 @@ const teamHumans = new Hono<AppEnv>()
 					id: u.id,
 					name: u.name,
 					email: u.email,
-					role: humanRecord?.role ?? 'viewer',
+					role: u.role ?? humanRecord?.role ?? 'viewer',
 					twoFactorEnabled: u.twoFactorEnabled ?? false,
 					banned: u.banned ?? false,
 					createdAt: u.createdAt,
@@ -179,16 +191,63 @@ const teamHumans = new Hono<AppEnv>()
 			return c.json(merged, 200)
 		},
 	)
+	.get(
+		'/invite',
+		describeRoute({
+			tags: ['team'],
+			description: 'List pending invites from SQLite',
+			responses: {
+				200: {
+					description: 'Array of pending invites',
+					content: { 'application/json': { schema: resolver(z.array(InviteRecordSchema)) } },
+				},
+				403: { description: 'Forbidden' },
+			},
+		}),
+		async (c) => {
+			const denied = requireAdminRole(c as never)
+			if (denied) return denied
+
+			const db = c.get('db')
+			const invites = await db
+				.select()
+				.from(authSchema.invite)
+				.where(
+					and(
+						isNull(authSchema.invite.acceptedAt),
+						or(isNull(authSchema.invite.expiresAt), gt(authSchema.invite.expiresAt, new Date())),
+					),
+				)
+
+			return c.json(
+				invites.map((invite) => ({
+					id: invite.id,
+					email: invite.email,
+					role: invite.role as (typeof HUMAN_ROLES)[number],
+					token: invite.token,
+					inviteUrl: buildInviteUrl(invite.email, invite.token),
+					createdAt: invite.createdAt.toISOString(),
+					expiresAt: invite.expiresAt?.toISOString() ?? null,
+					acceptedAt: invite.acceptedAt?.toISOString() ?? null,
+				})),
+				200,
+			)
+		},
+	)
 	// ── POST /team/humans/invite — add email to invite list ──────────
 	.post(
 		'/invite',
 		describeRoute({
 			tags: ['team'],
-			description: 'Add an email to the invite list (.auth/invites.yaml)',
+			description: 'Create a pending invite in SQLite for a future Better Auth signup',
 			responses: {
 				200: {
-					description: 'Email added',
-					content: { 'application/json': { schema: resolver(z.object({ ok: z.literal(true) })) } },
+					description: 'Invite created',
+					content: {
+						'application/json': {
+							schema: resolver(z.object({ ok: z.literal(true), invite: InviteRecordSchema })),
+						},
+					},
 				},
 				400: { description: 'Invalid email' },
 				403: { description: 'Forbidden' },
@@ -200,20 +259,60 @@ const teamHumans = new Hono<AppEnv>()
 			const denied = requireAdminRole(c as never)
 			if (denied) return denied
 
-			const root = c.get('companyRoot')
-			const { email } = c.req.valid('json')
-
-			const invites = await readInvites(root)
+			const db = c.get('db')
+			const actor = c.get('actor')
+			const { email, role } = c.req.valid('json')
 			const lowerEmail = email.toLowerCase()
 
-			if (invites.some((e) => e.toLowerCase() === lowerEmail)) {
-				return c.json({ error: 'Email already on invite list' }, 409)
+			const existingUser = await db
+				.select({ id: authSchema.user.id })
+				.from(authSchema.user)
+				.where(eq(authSchema.user.email, lowerEmail))
+				.get()
+			if (existingUser) {
+				return c.json({ error: 'User already exists' }, 409)
 			}
 
-			invites.push(email)
-			await writeInvites(root, invites)
+			const existingInvite = await db
+				.select({ id: authSchema.invite.id })
+				.from(authSchema.invite)
+				.where(and(eq(authSchema.invite.email, lowerEmail), isNull(authSchema.invite.acceptedAt)))
+				.get()
+			if (existingInvite) {
+				return c.json({ error: 'Email already invited' }, 409)
+			}
 
-			return c.json({ ok: true as const }, 200)
+			const now = new Date()
+			const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7)
+			const token = randomUUID()
+			const inviteId = randomUUID()
+			await db.insert(authSchema.invite).values({
+				id: inviteId,
+				email: lowerEmail,
+				role,
+				token,
+				invitedBy: actor?.id ?? null,
+				createdAt: now,
+				updatedAt: now,
+				expiresAt,
+			})
+
+			return c.json(
+				{
+					ok: true as const,
+					invite: {
+						id: inviteId,
+						email: lowerEmail,
+						role,
+						token,
+						inviteUrl: buildInviteUrl(lowerEmail, token),
+						createdAt: now.toISOString(),
+						expiresAt: expiresAt.toISOString(),
+						acceptedAt: null,
+					},
+				},
+				200,
+			)
 		},
 	)
 	// ── DELETE /team/humans/invite — remove email from invite list ───
@@ -231,24 +330,26 @@ const teamHumans = new Hono<AppEnv>()
 				404: { description: 'Email not on invite list' },
 			},
 		}),
-		zValidator('json', InviteRequestSchema),
+		zValidator('json', InviteDeleteSchema),
 		async (c) => {
 			const denied = requireAdminRole(c as never)
 			if (denied) return denied
 
-			const root = c.get('companyRoot')
+			const db = c.get('db')
 			const { email } = c.req.valid('json')
-
-			const invites = await readInvites(root)
 			const lowerEmail = email.toLowerCase()
-			const idx = invites.findIndex((e) => e.toLowerCase() === lowerEmail)
 
-			if (idx < 0) {
+			const existingInvite = await db
+				.select({ id: authSchema.invite.id })
+				.from(authSchema.invite)
+				.where(and(eq(authSchema.invite.email, lowerEmail), isNull(authSchema.invite.acceptedAt)))
+				.get()
+
+			if (!existingInvite) {
 				return c.json({ error: 'Email not on invite list' }, 404)
 			}
 
-			invites.splice(idx, 1)
-			await writeInvites(root, invites)
+			await db.delete(authSchema.invite).where(eq(authSchema.invite.id, existingInvite.id))
 
 			return c.json({ ok: true as const }, 200)
 		},
@@ -274,7 +375,6 @@ const teamHumans = new Hono<AppEnv>()
 			const denied = requireAdminRole(c as never)
 			if (denied) return denied
 
-			const root = c.get('companyRoot')
 			const db = c.get('db')
 			const { id } = c.req.valid('param')
 			const { role } = c.req.valid('json')
@@ -289,22 +389,7 @@ const teamHumans = new Hono<AppEnv>()
 				return c.json({ error: 'User not found' }, 404)
 			}
 
-			// Update individual human file
-			const humansFile = await readHumansFile(root)
-			const existing = humansFile.humans.find((h) => h.email === user.email)
-
-			if (existing) {
-				existing.role = role
-				await writeHumanFile(root, existing as Record<string, unknown>)
-			} else {
-				const newHuman = {
-					id: user.email.split('@')[0] ?? user.email,
-					name: user.email.split('@')[0] ?? user.email,
-					email: user.email,
-					role,
-				}
-				await writeHumanFile(root, newHuman)
-			}
+			await db.update(authSchema.user).set({ role }).where(eq(authSchema.user.id, id))
 
 			return c.json({ ok: true as const }, 200)
 		},

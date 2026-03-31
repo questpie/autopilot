@@ -7,28 +7,27 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { ToolContext } from '../src/agent/tools'
 import { createSearchWebTool } from '../src/agent/tools/search-web'
+import { OpenRouterAIProvider } from '../src/ai/openrouter-provider'
 
 const originalFetch = globalThis.fetch
-const originalKey = process.env.OPENROUTER_API_KEY
 
 function makeCtx(): ToolContext {
 	return { companyRoot: '/tmp', agentId: 'test', storage: {} as any, eventBus: {} as any }
 }
 
-beforeEach(() => {
-	process.env.OPENROUTER_API_KEY = 'sk-test-key'
-})
+function makeProvider(apiKey: string) {
+	return new OpenRouterAIProvider({ apiKey })
+}
+
+beforeEach(() => {})
 
 afterEach(() => {
 	globalThis.fetch = originalFetch
-	if (originalKey) process.env.OPENROUTER_API_KEY = originalKey
-	else delete process.env.OPENROUTER_API_KEY
 })
 
 describe('search_web tool', () => {
 	test('returns error when OPENROUTER_API_KEY is not set', async () => {
-		delete process.env.OPENROUTER_API_KEY
-		const tool = createSearchWebTool('/tmp')
+		const tool = createSearchWebTool(makeProvider(''))
 		const result = await tool.execute({ query: 'test' }, makeCtx())
 		expect(result.isError).toBe(true)
 		expect(result.content[0]?.text).toContain('API key')
@@ -44,7 +43,7 @@ describe('search_web tool', () => {
 			})
 		}) as typeof fetch
 
-		const tool = createSearchWebTool('/tmp')
+		const tool = createSearchWebTool(makeProvider('sk-test-key'))
 		await tool.execute({ query: 'test query' }, makeCtx())
 
 		expect(capturedHeaders['Authorization']).toBe('Bearer sk-test-key')
@@ -60,7 +59,7 @@ describe('search_web tool', () => {
 			})
 		}) as typeof fetch
 
-		const tool = createSearchWebTool('/tmp')
+		const tool = createSearchWebTool(makeProvider('sk-test-key'))
 		await tool.execute({ query: 'TypeScript best practices' }, makeCtx())
 
 		expect(capturedBody.model).toBe('openai/gpt-4o-mini:online')
@@ -76,7 +75,7 @@ describe('search_web tool', () => {
 				{ status: 200 },
 			)) as typeof fetch
 
-		const tool = createSearchWebTool('/tmp')
+		const tool = createSearchWebTool(makeProvider('sk-test-key'))
 		const result = await tool.execute({ query: 'TypeScript' }, makeCtx())
 
 		expect(result.isError).toBeFalsy()
@@ -116,7 +115,7 @@ describe('search_web tool', () => {
 				{ status: 200 },
 			)) as typeof fetch
 
-		const tool = createSearchWebTool('/tmp')
+		const tool = createSearchWebTool(makeProvider('sk-test-key'))
 		const result = await tool.execute({ query: 'TypeScript' }, makeCtx())
 
 		expect(result.isError).toBeFalsy()
@@ -135,7 +134,7 @@ describe('search_web tool', () => {
 			})
 		}) as typeof fetch
 
-		const tool = createSearchWebTool('/tmp')
+		const tool = createSearchWebTool(makeProvider('sk-test-key'))
 		await tool.execute({ query: 'test', max_results: 10 }, makeCtx())
 
 		expect((capturedBody.messages as any[])[0].content).toContain('10')
@@ -145,7 +144,7 @@ describe('search_web tool', () => {
 		globalThis.fetch = (async () =>
 			new Response('Rate limit exceeded', { status: 429 })) as typeof fetch
 
-		const tool = createSearchWebTool('/tmp')
+		const tool = createSearchWebTool(makeProvider('sk-test-key'))
 		const result = await tool.execute({ query: 'test' }, makeCtx())
 
 		expect(result.isError).toBe(true)
@@ -157,7 +156,7 @@ describe('search_web tool', () => {
 			throw new Error('ECONNREFUSED')
 		}) as typeof fetch
 
-		const tool = createSearchWebTool('/tmp')
+		const tool = createSearchWebTool(makeProvider('sk-test-key'))
 		const result = await tool.execute({ query: 'test' }, makeCtx())
 
 		expect(result.isError).toBe(true)
@@ -168,7 +167,7 @@ describe('search_web tool', () => {
 		globalThis.fetch = (async () =>
 			new Response(JSON.stringify({ choices: [{ message: {} }] }), { status: 200 })) as typeof fetch
 
-		const tool = createSearchWebTool('/tmp')
+		const tool = createSearchWebTool(makeProvider('sk-test-key'))
 		const result = await tool.execute({ query: 'test' }, makeCtx())
 
 		expect(result.isError).toBeFalsy()
@@ -179,7 +178,7 @@ describe('search_web tool', () => {
 		globalThis.fetch = (async () =>
 			new Response(JSON.stringify({ choices: [] }), { status: 200 })) as typeof fetch
 
-		const tool = createSearchWebTool('/tmp')
+		const tool = createSearchWebTool(makeProvider('sk-test-key'))
 		const result = await tool.execute({ query: 'test' }, makeCtx())
 
 		expect(result.isError).toBeFalsy()

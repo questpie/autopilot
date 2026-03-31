@@ -1,3 +1,5 @@
+import { apiKey } from '@better-auth/api-key'
+import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 /**
  * Better Auth instance for QUESTPIE Autopilot.
  *
@@ -5,16 +7,13 @@
  * migrations — no more Kysely internal migrations.
  */
 import { betterAuth } from 'better-auth'
-import { bearer, admin, openAPI, twoFactor } from 'better-auth/plugins'
-import { apiKey } from '@better-auth/api-key'
-import { drizzleAdapter } from '@better-auth/drizzle-adapter'
+import { hashPassword, verifyPassword } from 'better-auth/crypto'
+import { admin, bearer, openAPI, twoFactor } from 'better-auth/plugins'
+import { and, eq, gt, isNull, or, sql } from 'drizzle-orm'
 import type { AutopilotDb } from '../db'
 import * as authSchema from '../db/auth-schema'
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { hashPassword, verifyPassword } from 'better-auth/crypto'
-import { eq } from 'drizzle-orm'
-import { createMailService, type MailService } from '../mail'
+import { env } from '../env'
+import { type MailService, createMailService } from '../mail'
 
 const PASSWORD_COMPLEXITY_RE = /^(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/
 
@@ -26,27 +25,30 @@ function validatePasswordComplexity(password: string): void {
 	}
 }
 
-async function loadInviteEmails(companyRoot: string): Promise<string[] | null> {
-	try {
-		const raw = await readFile(join(companyRoot, '.auth', 'invites.yaml'), 'utf-8')
-		// Simple YAML parse: look for lines like "  - email@example.com"
-		const emails: string[] = []
-		for (const line of raw.split('\n')) {
-			const trimmed = line.trim()
-			if (trimmed.startsWith('- ')) {
-				const email = trimmed.slice(2).trim().replace(/^['"]|['"]$/g, '')
-				if (email) emails.push(email)
-			}
-		}
-		return emails
-	} catch {
-		// File doesn't exist — allow all signups (fresh install)
-		return null
-	}
+async function getUserCount(db: AutopilotDb): Promise<number> {
+	const row = await db.select({ count: sql<number>`count(*)` }).from(authSchema.user).get()
+	return Number(row?.count ?? 0)
+}
+
+async function getActiveInvite(db: AutopilotDb, email: string) {
+	const normalizedEmail = email.trim().toLowerCase()
+	const now = new Date()
+
+	return db
+		.select()
+		.from(authSchema.invite)
+		.where(
+			and(
+				eq(authSchema.invite.email, normalizedEmail),
+				isNull(authSchema.invite.acceptedAt),
+				or(isNull(authSchema.invite.expiresAt), gt(authSchema.invite.expiresAt, now)),
+			),
+		)
+		.get()
 }
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export async function createAuth(db: AutopilotDb, companyRoot: string, mail?: MailService) {
+export async function createAuth(db: AutopilotDb, _companyRoot: string, mail?: MailService) {
 	const mailService = mail ?? createMailService()
 
 	const auth = betterAuth({
@@ -91,13 +93,13 @@ export async function createAuth(db: AutopilotDb, companyRoot: string, mail?: Ma
 			},
 		},
 
-		trustedOrigins: (process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3001')
+		trustedOrigins: (env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3001')
 			.split(',')
-			.map((o) => o.trim()),
+			.map((o: string) => o.trim()),
 		advanced: {
 			defaultCookieAttributes: {
 				sameSite: 'lax',
-				secure: process.env.NODE_ENV === 'production',
+				secure: env.NODE_ENV === 'production',
 				httpOnly: true,
 			},
 		},
@@ -116,30 +118,73 @@ export async function createAuth(db: AutopilotDb, companyRoot: string, mail?: Ma
 			user: {
 				create: {
 					before: async (user: { email: string; [key: string]: unknown }) => {
-						// Invite-only: check .auth/invites.yaml
-						const allowedEmails = await loadInviteEmails(companyRoot)
-						if (allowedEmails !== null) {
-							const emailLower = user.email.toLowerCase()
-							const isInvited = allowedEmails.some((e) => e.toLowerCase() === emailLower)
-							if (!isInvited) {
-								throw new Error('Registration is invite-only. Your email is not on the invite list.')
+						const emailLower = user.email.toLowerCase()
+						const userCount = await getUserCount(db)
+
+						if (userCount === 0) {
+							return {
+								data: {
+									...user,
+									email: emailLower,
+									role: 'owner',
+								},
 							}
 						}
-						return { data: user }
+
+						const invite = await getActiveInvite(db, emailLower)
+						if (!invite) {
+							throw new Error('Registration is invite-only. Your email is not on the invite list.')
+						}
+
+						return {
+							data: {
+								...user,
+								email: emailLower,
+								role: invite.role,
+							},
+						}
 					},
 				},
 			},
 			session: {
 				create: {
 					after: async (session: { userId: string; [key: string]: unknown }) => {
-						// Banned user logout: reject session creation for banned users
 						try {
-							const row = await db.select({ banned: authSchema.user.banned }).from(authSchema.user).where(eq(authSchema.user.id, session.userId)).get()
-							if (row?.banned === true) {
-								const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
+							const currentUser = await db
+								.select({
+									email: authSchema.user.email,
+									banned: authSchema.user.banned,
+								})
+								.from(authSchema.user)
+								.where(eq(authSchema.user.id, session.userId))
+								.get()
+
+							if (currentUser?.email) {
+								await db
+									.update(authSchema.invite)
+									.set({
+										acceptedAt: new Date(),
+										updatedAt: new Date(),
+									})
+									.where(
+										and(
+											eq(authSchema.invite.email, currentUser.email.toLowerCase()),
+											isNull(authSchema.invite.acceptedAt),
+										),
+									)
+							}
+
+							// Banned user logout: reject session creation for banned users
+							if (currentUser?.banned === true) {
+								const authApi = auth.api as Record<
+									string,
+									((args: unknown) => Promise<unknown>) | undefined
+								>
 								const revokeSessionFn = authApi.revokeSession
 								if (revokeSessionFn) {
-									await revokeSessionFn({ body: { token: (session as { token?: string }).token } }).catch(() => {})
+									await revokeSessionFn({
+										body: { token: (session as { token?: string }).token },
+									}).catch(() => {})
 								}
 								throw new Error('Your account has been banned.')
 							}
@@ -172,7 +217,7 @@ export async function createAuth(db: AutopilotDb, companyRoot: string, mail?: Ma
 
 export type Auth = Awaited<ReturnType<typeof createAuth>>
 
-import { container, companyRootFactory } from '../container'
+import { companyRootFactory, container } from '../container'
 import { dbFactory } from '../db'
 
 export const authFactory = container.registerAsync('auth', async (c) => {

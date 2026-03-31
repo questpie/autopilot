@@ -1,4 +1,5 @@
-import { createTransport, type Transporter } from 'nodemailer'
+import { type Transporter, createTransport } from 'nodemailer'
+import { env } from '../env'
 import { logger } from '../logger'
 
 export interface MailMessage {
@@ -12,7 +13,13 @@ export interface MailService {
 	canSend(): boolean
 }
 
-function createSmtpMailService(host: string, port: number, user?: string, pass?: string, from?: string): MailService {
+function createSmtpMailService(
+	host: string,
+	port: number,
+	user?: string,
+	pass?: string,
+	from?: string,
+): MailService {
 	const transporter: Transporter = createTransport({
 		host,
 		port,
@@ -51,18 +58,12 @@ function createConsoleMailService(): MailService {
 }
 
 export function createMailService(): MailService {
-	const host = process.env.SMTP_HOST
-	const port = Number(process.env.SMTP_PORT)
+	const host = env.SMTP_HOST
+	const port = env.SMTP_PORT ?? 0
 
 	if (host && port) {
 		logger.info('mail', `SMTP configured: ${host}:${port}`)
-		return createSmtpMailService(
-			host,
-			port,
-			process.env.SMTP_USER,
-			process.env.SMTP_PASS,
-			process.env.SMTP_FROM,
-		)
+		return createSmtpMailService(host, port, env.SMTP_USER, env.SMTP_PASS, env.SMTP_FROM)
 	}
 
 	logger.info('mail', 'No SMTP configured — emails will be printed to console')

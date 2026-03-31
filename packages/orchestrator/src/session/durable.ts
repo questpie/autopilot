@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { DurableStreamTestServer } from '@durable-streams/server'
+import { env } from '../env'
 import { logger } from '../logger'
 
 /**
@@ -11,11 +12,16 @@ import { logger } from '../logger'
 
 const DEFAULT_PORT = 4437
 
-const DURABLE_STREAMS_URL =
-	process.env.DURABLE_STREAMS_URL ??
-	`http://127.0.0.1:${process.env.DURABLE_STREAMS_PORT ?? DEFAULT_PORT}`
-
 let server: DurableStreamTestServer | null = null
+
+function getDurableStreamsConfig() {
+	const port = env.DURABLE_STREAMS_PORT ?? DEFAULT_PORT
+	return {
+		port,
+		url: env.DURABLE_STREAMS_URL ?? `http://127.0.0.1:${port}`,
+		externalUrl: env.DURABLE_STREAMS_URL,
+	}
+}
 
 /**
  * Start the durable streams server in-process.
@@ -23,22 +29,22 @@ let server: DurableStreamTestServer | null = null
  * If DURABLE_STREAMS_URL is set, assumes an external server and skips.
  */
 export async function startDurableStreamServer(companyRoot: string): Promise<void> {
-	if (process.env.DURABLE_STREAMS_URL) {
-		logger.info('durable-streams', `using external server at ${DURABLE_STREAMS_URL}`)
+	const config = getDurableStreamsConfig()
+	if (config.externalUrl) {
+		logger.info('durable-streams', `using external server at ${config.url}`)
 		return
 	}
 
-	const port = Number(process.env.DURABLE_STREAMS_PORT ?? DEFAULT_PORT)
 	const dataDir = join(companyRoot, '.data', 'streams')
 
 	server = new DurableStreamTestServer({
-		port,
+		port: config.port,
 		host: '127.0.0.1',
 		dataDir,
 	})
 
 	await server.start()
-	logger.info('durable-streams', `server started on port ${port} (data: ${dataDir})`)
+	logger.info('durable-streams', `server started on port ${config.port} (data: ${dataDir})`)
 }
 
 /**
@@ -57,8 +63,9 @@ export async function stopDurableStreamServer(): Promise<void> {
  */
 export async function checkDurableStreamHealth(): Promise<{ ok: boolean; latencyMs?: number }> {
 	const start = Date.now()
+	const { url } = getDurableStreamsConfig()
 	try {
-		const resp = await fetch(`${DURABLE_STREAMS_URL}/health`, { signal: AbortSignal.timeout(5000) })
+		const resp = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5000) })
 		return { ok: resp.ok, latencyMs: Date.now() - start }
 	} catch {
 		return { ok: false, latencyMs: Date.now() - start }
@@ -68,11 +75,11 @@ export async function checkDurableStreamHealth(): Promise<{ ok: boolean; latency
 // ── Stream operations ─────────────────────────────────────────────────────
 
 export function getDurableStreamBaseUrl(): string {
-	return DURABLE_STREAMS_URL
+	return getDurableStreamsConfig().url
 }
 
 export function getSessionStreamUrl(sessionId: string): string {
-	return `${DURABLE_STREAMS_URL}/v1/stream/sessions/${encodeURIComponent(sessionId)}`
+	return `${getDurableStreamsConfig().url}/v1/stream/sessions/${encodeURIComponent(sessionId)}`
 }
 
 export async function createSessionStream(sessionId: string): Promise<void> {

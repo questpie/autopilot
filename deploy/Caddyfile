@@ -9,6 +9,7 @@
 #   /api/*         → orchestrator API (port 7778)
 #   /artifacts/*   → artifact proxy   (port 7778)
 #   /fs/*          → filesystem browser (port 7778)
+#   /streams/*     → durable streams proxy (port 7778)
 #   /api/auth/*    → Better Auth      (port 7778)
 #   /*             → dashboard         (port 3000)
 #
@@ -29,6 +30,11 @@
 
 	# Filesystem browser → orchestrator
 	handle /fs/* {
+		reverse_proxy autopilot:7778
+	}
+
+	# Durable stream proxy → orchestrator
+	handle /streams/* {
 		reverse_proxy autopilot:7778
 	}
 

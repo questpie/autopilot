@@ -16,20 +16,29 @@ autopilot provider login claude   # Use Claude subscription (recommended, works 
 Dashboard: http://localhost:3000
 API: http://localhost:7778
 
+The dashboard runs through a local Caddy proxy on `:3000`, so browser requests to `/api`, `/artifacts`, `/fs`, and `/streams` stay same-origin.
+
 ## docker-compose.yml Explained
 
 ```yaml
 services:
+  caddy:
+    image: caddy:2-alpine          # Same-origin proxy for browser traffic
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+
   orchestrator:
     build: .                          # Builds from Dockerfile
     ports:
-      - "7778:7778"                   # API server
+      - "7778:7778"                   # API server (direct/debug)
       - "7777:7777"                   # Webhook server
-      - "3000:3000"                   # Dashboard
     volumes:
       - ./company:/data/company       # Company files (persisted)
     environment:
       - COMPANY_ROOT=/data/company    # Path inside container
+      - API_INTERNAL_URL=http://localhost:7778
       - ANTHROPIC_API_KEY=...         # From .env file
 ```
 
@@ -49,6 +58,7 @@ See `.env.example` for all options. Key ones:
 |----------|----------|------------|
 | `ANTHROPIC_API_KEY` | No | Claude API key (alternative to `autopilot provider login claude`) |
 | `COMPANY_ROOT` | Docker only | Path inside container (default: `/data/company`) |
+| `API_INTERNAL_URL` | No | Dashboard server-side internal URL to the orchestrator API (default: `http://localhost:7778`) |
 | `AUTOPILOT_MASTER_KEY` | Production | Encryption key for secrets |
 
 ## Profiles
@@ -61,7 +71,7 @@ docker compose up
 docker compose --profile auto-update up
 
 # Development mode (hot reload, source mounted)
-docker compose --profile dev up
+docker compose --profile dev up orchestrator-dev mailpit
 ```
 
 ## Updating

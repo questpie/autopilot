@@ -16,7 +16,7 @@ import type { Actor } from '../auth/types'
 import { companyRootFactory, container } from '../container'
 import type { AutopilotDb } from '../db'
 import { dbFactory } from '../db'
-import { getEnv } from '../env'
+import { env } from '../env'
 import { storageFactory } from '../fs/sqlite-backend'
 import type { StorageBackend } from '../fs/storage'
 import { logger } from '../logger'
@@ -47,6 +47,8 @@ import {
 	sessions,
 	settings,
 	settingsPublic,
+	setup,
+	setupPublic,
 	skills,
 	status,
 	tasks,
@@ -92,7 +94,6 @@ export interface AppConfig {
  */
 export function createApp(config: AppConfig) {
 	const app = new Hono<AppEnv>()
-	const env = getEnv()
 	const rawOrigin = config.corsOrigin ?? env.CORS_ORIGIN
 	const corsOrigin = rawOrigin
 		? rawOrigin.split(',').map((o: string) => o.trim())
@@ -173,7 +174,10 @@ export function createApp(config: AppConfig) {
 	})
 
 	// ── 4.5. Public API routes (no auth required) ────────────────────────
-	const publicApp = app.route('/api/status', status).route('/api/settings', settingsPublic)
+	const publicApp = app
+		.route('/api/status', status)
+		.route('/api/settings', settingsPublic)
+		.route('/api/setup', setupPublic)
 
 	// ── 5. Auth middleware on /api/* ──────────────────────────────────────
 	app.use('/api/*', authMiddleware())
@@ -195,6 +199,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/skills', skills)
 		.route('/api/dashboard', dashboard)
 		.route('/api/settings', settings)
+		.route('/api/setup', setup)
 		.route('/api/team/humans', teamHumans)
 		.route('/api', danger)
 		.route('/api', files)

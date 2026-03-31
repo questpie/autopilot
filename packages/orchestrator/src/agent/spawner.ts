@@ -1,17 +1,18 @@
 import type { Agent, Task } from '@questpie/autopilot-spec'
-import { assembleContext } from '../context/assembler'
-import { extractMemory } from './memory-extractor'
-import type { StorageBackend } from '../fs/storage'
-import { createAutopilotTools } from './tools'
-import { createFileTools } from './tools/file-tools'
-import type { ToolContext } from './tools'
-import type { AgentEvent } from './provider'
 import { aiProviderFactory } from '../ai'
-import { eventBus } from '../events'
-import { container, companyRootFactory } from '../container'
+import { companyRootFactory, container } from '../container'
+import { assembleContext } from '../context/assembler'
 import { dbFactory } from '../db'
-import { streamManagerFactory } from '../session/stream'
+import { env } from '../env'
+import { eventBus } from '../events'
+import type { StorageBackend } from '../fs/storage'
 import { logger } from '../logger'
+import { streamManagerFactory } from '../session/stream'
+import { extractMemory } from './memory-extractor'
+import type { AgentEvent } from './provider'
+import { createAutopilotTools } from './tools'
+import type { ToolContext } from './tools'
+import { createFileTools } from './tools/file-tools'
 
 const DEFAULT_MODEL = 'anthropic/claude-sonnet-4'
 
@@ -55,13 +56,23 @@ export interface SpawnResult {
  */
 /** D40: Read plan limits from env. Returns null if no limit set. */
 function getPlanLimits(): { maxAgents?: number; maxTokensDay?: number } {
-	const maxAgents = process.env.PLAN_MAX_AGENTS ? Number(process.env.PLAN_MAX_AGENTS) : undefined
-	const maxTokensDay = process.env.PLAN_MAX_TOKENS_DAY ? Number(process.env.PLAN_MAX_TOKENS_DAY) : undefined
+	const maxAgents = env.PLAN_MAX_AGENTS
+	const maxTokensDay = env.PLAN_MAX_TOKENS_DAY
 	return { maxAgents, maxTokensDay }
 }
 
 export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
-	const { agent, company, allAgents, task, storage, trigger, message, mode = 'autonomous', channelId } = options
+	const {
+		agent,
+		company,
+		allAgents,
+		task,
+		storage,
+		trigger,
+		message,
+		mode = 'autonomous',
+		channelId,
+	} = options
 	const { companyRoot } = container.resolve([companyRootFactory])
 	const { streamManager } = container.resolve([streamManagerFactory])
 	const sessionId = `session-${Date.now().toString(36)}-${agent.id}`
@@ -71,7 +82,11 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	if (limits.maxAgents) {
 		const active = streamManager.getActiveStreams().length
 		if (active >= limits.maxAgents) {
-			return { sessionId, toolCalls: 0, error: `Plan limit: max ${limits.maxAgents} concurrent agents` }
+			return {
+				sessionId,
+				toolCalls: 0,
+				error: `Plan limit: max ${limits.maxAgents} concurrent agents`,
+			}
 		}
 	}
 	if (limits.maxTokensDay) {
@@ -84,7 +99,11 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 			`)
 			const used = Number(result.rows[0]?.tokens ?? 0)
 			if (used >= limits.maxTokensDay) {
-				return { sessionId, toolCalls: 0, error: `Plan limit: daily token limit (${limits.maxTokensDay}) reached` }
+				return {
+					sessionId,
+					toolCalls: 0,
+					error: `Plan limit: daily token limit (${limits.maxTokensDay}) reached`,
+				}
 			}
 		} catch {
 			// Can't check — proceed anyway
@@ -128,9 +147,10 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 			: `You have been triggered by: ${trigger.type}. Check your current tasks and act accordingly.`
 
 	// D10: In chat mode, add instruction to respond directly via text (not message tool)
-	const systemPrompt = mode === 'chat'
-		? `${context.systemPrompt}\n\nYou are in direct chat mode. Respond directly to the user through text. Do not use the message() tool — your text output is streamed directly to the user.`
-		: context.systemPrompt
+	const systemPrompt =
+		mode === 'chat'
+			? `${context.systemPrompt}\n\nYou are in direct chat mode. Respond directly to the user through text. Do not use the message() tool — your text output is streamed directly to the user.`
+			: context.systemPrompt
 
 	// 5. Create session stream for attach
 	streamManager.createStream(sessionId, agent.id)
@@ -141,7 +161,15 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		agent: agent.id,
 		type: 'session_start',
 		summary: `Session started: ${task?.title ?? trigger.type} [${aiProvider.name}/${agent.model}] (${mode})`,
-		details: { sessionId, trigger, taskId: task?.id, provider: aiProvider.name, model: agent.model, mode, channelId },
+		details: {
+			sessionId,
+			trigger,
+			taskId: task?.id,
+			provider: aiProvider.name,
+			model: agent.model,
+			mode,
+			channelId,
+		},
 	})
 	eventBus.emit({ type: 'agent_session', agentId: agent.id, status: 'started', sessionId })
 	// D9: Emit typing started
@@ -157,14 +185,21 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		})
 
 		if (event.type === 'tool_call') {
-			storage.appendActivity({
-				at: new Date().toISOString(),
+			storage
+				.appendActivity({
+					at: new Date().toISOString(),
+					agent: agent.id,
+					type: 'tool_call',
+					summary: event.tool ?? 'unknown',
+					details: { sessionId, tool: event.tool },
+				})
+				.catch(() => {}) // Fire-and-forget activity logging
+			eventBus.emit({
+				type: 'activity',
 				agent: agent.id,
-				type: 'tool_call',
+				toolName: event.tool ?? 'unknown',
 				summary: event.tool ?? 'unknown',
-				details: { sessionId, tool: event.tool },
-			}).catch(() => {}) // Fire-and-forget activity logging
-			eventBus.emit({ type: 'activity', agent: agent.id, toolName: event.tool ?? 'unknown', summary: event.tool ?? 'unknown' })
+			})
 		}
 	}
 

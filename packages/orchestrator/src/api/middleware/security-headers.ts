@@ -1,9 +1,9 @@
 import { createMiddleware } from 'hono/factory'
-
-const isDev = process.env.NODE_ENV !== 'production'
+import { env } from '../../env'
 
 export function securityHeaders() {
 	return createMiddleware(async (c, next) => {
+		const isDev = env.NODE_ENV !== 'production'
 		await next()
 
 		const path = new URL(c.req.url).pathname

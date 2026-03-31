@@ -31,6 +31,7 @@ export function authMiddleware() {
 		const result = await resolveActor(c.req.raw, {
 			companyRoot: c.get('companyRoot'),
 			auth: c.get('auth'),
+			db: c.get('db'),
 		})
 
 		// Webhook auth can return a Response directly with specific error details
@@ -55,16 +56,20 @@ export function authMiddleware() {
 		const required = getRequiredPermission(path, c.req.method)
 
 		if (required && !checkPermission(actor, required.resource, required.action)) {
-			await logAudit(companyRoot, {
-				ts: new Date().toISOString(),
-				actor: actor.id,
-				actor_type: actor.type,
-				action: `${required.resource}.${required.action}`,
-				target: path,
-				source: actor.source,
-				ip: actor.ip,
-				result: 'denied',
-			}, _masterKey)
+			await logAudit(
+				companyRoot,
+				{
+					ts: new Date().toISOString(),
+					actor: actor.id,
+					actor_type: actor.type,
+					action: `${required.resource}.${required.action}`,
+					target: path,
+					source: actor.source,
+					ip: actor.ip,
+					result: 'denied',
+				},
+				_masterKey,
+			)
 			return c.json({ error: 'Forbidden' }, 403)
 		}
 
@@ -72,16 +77,20 @@ export function authMiddleware() {
 
 		// Audit successful requests that required permissions
 		if (required) {
-			await logAudit(companyRoot, {
-				ts: new Date().toISOString(),
-				actor: actor.id,
-				actor_type: actor.type,
-				action: `${required.resource}.${required.action}`,
-				target: path,
-				source: actor.source,
-				ip: actor.ip,
-				result: 'success',
-			}, _masterKey)
+			await logAudit(
+				companyRoot,
+				{
+					ts: new Date().toISOString(),
+					actor: actor.id,
+					actor_type: actor.type,
+					action: `${required.resource}.${required.action}`,
+					target: path,
+					source: actor.source,
+					ip: actor.ip,
+					result: 'success',
+				},
+				_masterKey,
+			)
 		}
 	})
 }

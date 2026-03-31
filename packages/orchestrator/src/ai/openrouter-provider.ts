@@ -1,20 +1,21 @@
 import { chat, maxIterations } from '@tanstack/ai'
+import type { AfterToolCallInfo, ChatMiddleware, ChatMiddlewareContext } from '@tanstack/ai'
+import type { JSONSchema, Tool as TanStackTool } from '@tanstack/ai'
 import { openRouterText } from '@tanstack/ai-openrouter'
-import type { ChatMiddleware, AfterToolCallInfo, ChatMiddlewareContext } from '@tanstack/ai'
-import type { Tool as TanStackTool, JSONSchema } from '@tanstack/ai'
-import type {
-	AIProvider,
-	CompleteOptions,
-	ClassifyOptions,
-	WebSearchResult,
-	AgentSpawnOptions,
-	AgentSessionResult,
-	AgentEvent,
-} from './provider'
-import type { EmbeddingInput, EmbeddingTaskType } from '../embeddings/provider'
 import { executeTool } from '../agent/tools'
 import { zodToJsonSchema } from '../agent/utils/zod-to-json'
+import type { EmbeddingInput, EmbeddingTaskType } from '../embeddings/provider'
+import { getEnv } from '../env'
 import { logger } from '../logger'
+import type {
+	AIProvider,
+	AgentEvent,
+	AgentSessionResult,
+	AgentSpawnOptions,
+	ClassifyOptions,
+	CompleteOptions,
+	WebSearchResult,
+} from './provider'
 
 export interface OpenRouterConfig {
 	/** Base URL for chat completions. Default: undefined (= OpenRouter default). */
@@ -46,13 +47,16 @@ export class OpenRouterAIProvider implements AIProvider {
 	readonly embeddingDimensions: number
 
 	private config: Required<OpenRouterConfig>
+	private explicitApiKey: string | undefined
 	private warnedNoKey = false
 
 	constructor(config?: OpenRouterConfig) {
+		const env = getEnv()
+		this.explicitApiKey = config?.apiKey
 		this.config = {
 			chatBaseUrl: config?.chatBaseUrl ?? '',
 			embeddingsBaseUrl: config?.embeddingsBaseUrl ?? 'https://openrouter.ai/api/v1',
-			apiKey: config?.apiKey ?? process.env.OPENROUTER_API_KEY ?? '',
+			apiKey: config?.apiKey ?? env.OPENROUTER_API_KEY ?? '',
 			defaultModel: config?.defaultModel ?? 'anthropic/claude-sonnet-4',
 			utilityModel: config?.utilityModel ?? 'google/gemma-3-4b-it:free',
 			searchModel: config?.searchModel ?? 'openai/gpt-4o-mini:online',
@@ -69,9 +73,10 @@ export class OpenRouterAIProvider implements AIProvider {
 		onEvent: (event: AgentEvent) => void,
 	): Promise<AgentSessionResult> {
 		const { systemPrompt, prompt, tools, toolContext, maxTurns = 50 } = options
-		const model = options.webSearch && !options.model.includes(':online')
-			? `${options.model}:online`
-			: options.model
+		const model =
+			options.webSearch && !options.model.includes(':online')
+				? `${options.model}:online`
+				: options.model
 
 		let toolCalls = 0
 		let error: string | undefined
@@ -123,9 +128,8 @@ export class OpenRouterAIProvider implements AIProvider {
 			onError(_ctx: ChatMiddlewareContext, errorInfo) {
 				onEvent({
 					type: 'error',
-					content: errorInfo.error instanceof Error
-						? errorInfo.error.message
-						: String(errorInfo.error),
+					content:
+						errorInfo.error instanceof Error ? errorInfo.error.message : String(errorInfo.error),
 				})
 			},
 		}
@@ -165,11 +169,11 @@ export class OpenRouterAIProvider implements AIProvider {
 			}
 			messages.push({ role: 'user', content: options.prompt })
 
-			const result = await chat({
+			const result = (await chat({
 				adapter: this.createAdapter(model),
 				messages: messages as Array<{ role: 'user'; content: string }>,
 				stream: false,
-			}) as string
+			})) as string
 
 			return result || null
 		} catch (err) {
@@ -187,19 +191,24 @@ export class OpenRouterAIProvider implements AIProvider {
 
 		try {
 			const model = options.model ?? this.config.utilityModel
-			const result = await chat({
+			const result = (await chat({
 				adapter: this.createAdapter(model),
-				messages: [{
-					role: 'user',
-					content: `${options.systemPrompt}\n\nInput:\n${options.input}\n\nRespond with ONLY valid JSON, no markdown fences.`,
-				}],
+				messages: [
+					{
+						role: 'user',
+						content: `${options.systemPrompt}\n\nInput:\n${options.input}\n\nRespond with ONLY valid JSON, no markdown fences.`,
+					},
+				],
 				stream: false,
-			}) as string
+			})) as string
 
 			if (!result) return null
 
 			// Parse JSON + validate with Zod
-			const cleaned = result.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
+			const cleaned = result
+				.replace(/^```(?:json)?\s*\n?/i, '')
+				.replace(/\n?```\s*$/i, '')
+				.trim()
 			const parsed = JSON.parse(cleaned)
 			const validated = options.schema.safeParse(parsed)
 			if (!validated.success) {
@@ -231,10 +240,12 @@ export class OpenRouterAIProvider implements AIProvider {
 				headers: this.authHeaders(),
 				body: JSON.stringify({
 					model: this.config.searchModel,
-					messages: [{
-						role: 'user',
-						content: `Search the web for: ${query}\n\nReturn the top ${maxResults} most relevant results. For each result include the title, URL, and a brief content snippet.`,
-					}],
+					messages: [
+						{
+							role: 'user',
+							content: `Search the web for: ${query}\n\nReturn the top ${maxResults} most relevant results. For each result include the title, URL, and a brief content snippet.`,
+						},
+					],
 					max_tokens: 1500,
 				}),
 				signal: AbortSignal.timeout(30_000),
@@ -321,7 +332,10 @@ export class OpenRouterAIProvider implements AIProvider {
 		}
 	}
 
-	async embedBatch(inputs: EmbeddingInput[], taskType?: EmbeddingTaskType): Promise<(Float32Array | null)[]> {
+	async embedBatch(
+		inputs: EmbeddingInput[],
+		taskType?: EmbeddingTaskType,
+	): Promise<(Float32Array | null)[]> {
 		const textInputs = inputs.filter((i) => i.type === 'text')
 		if (textInputs.length === inputs.length && textInputs.length > 0) {
 			return this.embedBatchText(textInputs as Array<{ type: 'text'; content: string }>)
@@ -343,7 +357,8 @@ export class OpenRouterAIProvider implements AIProvider {
 	}
 
 	private getApiKey(): string {
-		return this.config.apiKey || process.env.OPENROUTER_API_KEY || ''
+		if (this.explicitApiKey !== undefined) return this.explicitApiKey
+		return this.config.apiKey || getEnv().OPENROUTER_API_KEY || ''
 	}
 
 	private chatCompletionsUrl(): string {
@@ -358,7 +373,7 @@ export class OpenRouterAIProvider implements AIProvider {
 
 	private authHeaders(): Record<string, string> {
 		return {
-			'Authorization': `Bearer ${this.getApiKey()}`,
+			Authorization: `Bearer ${this.getApiKey()}`,
 			'Content-Type': 'application/json',
 			'HTTP-Referer': 'https://questpie.com',
 			'X-Title': 'QUESTPIE Autopilot',
@@ -372,12 +387,14 @@ export class OpenRouterAIProvider implements AIProvider {
 			case 'image':
 				return {
 					model: this.config.embeddingModel,
-					input: [{
-						type: 'image_url',
-						image_url: {
-							url: `data:${input.mimeType};base64,${input.data.toString('base64')}`,
+					input: [
+						{
+							type: 'image_url',
+							image_url: {
+								url: `data:${input.mimeType};base64,${input.data.toString('base64')}`,
+							},
 						},
-					}],
+					],
 				}
 			default:
 				return null

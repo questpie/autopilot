@@ -1,20 +1,16 @@
-import { join } from 'path'
 import { z } from 'zod'
-import { PATHS } from '@questpie/autopilot-spec'
-import { readYamlUnsafe } from '../../fs/yaml'
-import type { ToolDefinition, AutopilotToolOptions } from '../tools'
+import { readSecretRecord } from '../../secrets/store'
+import type { AutopilotToolOptions, ToolDefinition } from '../tools'
 import { checkSsrf } from './shared'
 
-/** Zod schema for secret YAML files used by the fetch tool. */
-const SecretSchema = z.object({
-	allowed_agents: z.array(z.string()).optional(),
-	api_key: z.string().optional(),
-}).passthrough()
-
-export function createHttpTool(companyRoot: string, options?: AutopilotToolOptions): ToolDefinition {
+export function createHttpTool(
+	companyRoot: string,
+	options?: AutopilotToolOptions,
+): ToolDefinition {
 	return {
 		name: 'fetch',
-		description: 'Fetch a URL or call an external API. Supports GET, POST, PUT, PATCH, DELETE with custom headers and body.',
+		description:
+			'Fetch a URL or call an external API. Supports GET, POST, PUT, PATCH, DELETE with custom headers and body.',
 		schema: z.object({
 			method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
 			url: z.string().describe('Full URL'),
@@ -26,26 +22,31 @@ export function createHttpTool(companyRoot: string, options?: AutopilotToolOptio
 			const headers: Record<string, string> = { ...args.headers }
 
 			if (args.secret_ref) {
-				const secretPath = join(
-					companyRoot,
-					PATHS.SECRETS_DIR.replace(/^\/company/, ''),
-					`${args.secret_ref}.yaml`,
-				)
 				try {
-					const secret = SecretSchema.parse(await readYamlUnsafe(secretPath))
-					if (secret.allowed_agents && !secret.allowed_agents.includes(ctx.agentId)) {
+					const secret = await readSecretRecord(companyRoot, args.secret_ref)
+					if (!secret) {
+						throw new Error(`Secret ${args.secret_ref} not found`)
+					}
+					if (secret.allowed_agents.length > 0 && !secret.allowed_agents.includes(ctx.agentId)) {
 						return {
-							content: [{ type: 'text' as const, text: `Agent ${ctx.agentId} not allowed to use secret ${args.secret_ref}` }],
+							content: [
+								{
+									type: 'text' as const,
+									text: `Agent ${ctx.agentId} not allowed to use secret ${args.secret_ref}`,
+								},
+							],
 							isError: true,
 						}
 					}
-					if (secret.api_key) {
-						headers['Authorization'] = `Bearer ${secret.api_key}`
+					if (secret.value) {
+						headers.Authorization = `Bearer ${secret.value}`
 					}
 				} catch (err) {
 					const msg = err instanceof Error ? err.message : String(err)
 					return {
-						content: [{ type: 'text' as const, text: `Failed to load secret ${args.secret_ref}: ${msg}` }],
+						content: [
+							{ type: 'text' as const, text: `Failed to load secret ${args.secret_ref}: ${msg}` },
+						],
 						isError: true,
 					}
 				}
@@ -65,7 +66,12 @@ export function createHttpTool(companyRoot: string, options?: AutopilotToolOptio
 					}
 					if (!options.httpAllowlist.includes(requestHostname)) {
 						return {
-							content: [{ type: 'text' as const, text: `Blocked: hostname "${requestHostname}" is not in the allowed list` }],
+							content: [
+								{
+									type: 'text' as const,
+									text: `Blocked: hostname "${requestHostname}" is not in the allowed list`,
+								},
+							],
 							isError: true,
 						}
 					}
