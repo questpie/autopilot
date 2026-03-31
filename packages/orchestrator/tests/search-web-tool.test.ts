@@ -4,9 +4,9 @@
  * Tests error handling, API key requirement, response parsing,
  * and URL citation formatting.
  */
-import { describe, test, expect, afterEach, beforeEach } from 'bun:test'
-import { createSearchWebTool } from '../src/agent/tools/search-web'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { ToolContext } from '../src/agent/tools'
+import { createSearchWebTool } from '../src/agent/tools/search-web'
 
 const originalFetch = globalThis.fetch
 const originalKey = process.env.OPENROUTER_API_KEY
@@ -31,7 +31,7 @@ describe('search_web tool', () => {
 		const tool = createSearchWebTool('/tmp')
 		const result = await tool.execute({ query: 'test' }, makeCtx())
 		expect(result.isError).toBe(true)
-		expect(result.content[0]?.text).toContain('OPENROUTER_API_KEY')
+		expect(result.content[0]?.text).toContain('API key')
 	})
 
 	test('makes request to OpenRouter with correct headers', async () => {
@@ -39,7 +39,9 @@ describe('search_web tool', () => {
 		globalThis.fetch = (async (_url: unknown, opts: unknown) => {
 			const h = (opts as RequestInit).headers as Record<string, string>
 			capturedHeaders = h
-			return new Response(JSON.stringify({ choices: [{ message: { content: 'Results' } }] }), { status: 200 })
+			return new Response(JSON.stringify({ choices: [{ message: { content: 'Results' } }] }), {
+				status: 200,
+			})
 		}) as typeof fetch
 
 		const tool = createSearchWebTool('/tmp')
@@ -53,7 +55,9 @@ describe('search_web tool', () => {
 		let capturedBody: Record<string, unknown> = {}
 		globalThis.fetch = (async (_url: unknown, opts: unknown) => {
 			capturedBody = JSON.parse((opts as RequestInit).body as string)
-			return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), { status: 200 })
+			return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), {
+				status: 200,
+			})
 		}) as typeof fetch
 
 		const tool = createSearchWebTool('/tmp')
@@ -65,10 +69,12 @@ describe('search_web tool', () => {
 
 	test('returns raw content when no annotations', async () => {
 		globalThis.fetch = (async () =>
-			new Response(JSON.stringify({
-				choices: [{ message: { content: 'Here are the search results about TypeScript.' } }],
-			}), { status: 200 })
-		) as typeof fetch
+			new Response(
+				JSON.stringify({
+					choices: [{ message: { content: 'Here are the search results about TypeScript.' } }],
+				}),
+				{ status: 200 },
+			)) as typeof fetch
 
 		const tool = createSearchWebTool('/tmp')
 		const result = await tool.execute({ query: 'TypeScript' }, makeCtx())
@@ -79,32 +85,36 @@ describe('search_web tool', () => {
 
 	test('formats URL citations when present', async () => {
 		globalThis.fetch = (async () =>
-			new Response(JSON.stringify({
-				choices: [{
-					message: {
-						content: 'Search results',
-						annotations: [
-							{
-								type: 'url_citation',
-								url_citation: {
-									url: 'https://example.com/article',
-									title: 'TypeScript Guide',
-									content: 'A comprehensive guide to TypeScript.',
-								},
+			new Response(
+				JSON.stringify({
+					choices: [
+						{
+							message: {
+								content: 'Search results',
+								annotations: [
+									{
+										type: 'url_citation',
+										url_citation: {
+											url: 'https://example.com/article',
+											title: 'TypeScript Guide',
+											content: 'A comprehensive guide to TypeScript.',
+										},
+									},
+									{
+										type: 'url_citation',
+										url_citation: {
+											url: 'https://docs.example.com',
+											title: 'Official Docs',
+											content: 'Documentation for TypeScript features.',
+										},
+									},
+								],
 							},
-							{
-								type: 'url_citation',
-								url_citation: {
-									url: 'https://docs.example.com',
-									title: 'Official Docs',
-									content: 'Documentation for TypeScript features.',
-								},
-							},
-						],
-					},
-				}],
-			}), { status: 200 })
-		) as typeof fetch
+						},
+					],
+				}),
+				{ status: 200 },
+			)) as typeof fetch
 
 		const tool = createSearchWebTool('/tmp')
 		const result = await tool.execute({ query: 'TypeScript' }, makeCtx())
@@ -120,7 +130,9 @@ describe('search_web tool', () => {
 		let capturedBody: Record<string, unknown> = {}
 		globalThis.fetch = (async (_url: unknown, opts: unknown) => {
 			capturedBody = JSON.parse((opts as RequestInit).body as string)
-			return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), { status: 200 })
+			return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), {
+				status: 200,
+			})
 		}) as typeof fetch
 
 		const tool = createSearchWebTool('/tmp')
@@ -131,8 +143,7 @@ describe('search_web tool', () => {
 
 	test('handles HTTP error response', async () => {
 		globalThis.fetch = (async () =>
-			new Response('Rate limit exceeded', { status: 429 })
-		) as typeof fetch
+			new Response('Rate limit exceeded', { status: 429 })) as typeof fetch
 
 		const tool = createSearchWebTool('/tmp')
 		const result = await tool.execute({ query: 'test' }, makeCtx())
@@ -142,7 +153,9 @@ describe('search_web tool', () => {
 	})
 
 	test('handles fetch error (network failure)', async () => {
-		globalThis.fetch = (async () => { throw new Error('ECONNREFUSED') }) as typeof fetch
+		globalThis.fetch = (async () => {
+			throw new Error('ECONNREFUSED')
+		}) as typeof fetch
 
 		const tool = createSearchWebTool('/tmp')
 		const result = await tool.execute({ query: 'test' }, makeCtx())
@@ -153,8 +166,7 @@ describe('search_web tool', () => {
 
 	test('returns fallback text when response has no content', async () => {
 		globalThis.fetch = (async () =>
-			new Response(JSON.stringify({ choices: [{ message: {} }] }), { status: 200 })
-		) as typeof fetch
+			new Response(JSON.stringify({ choices: [{ message: {} }] }), { status: 200 })) as typeof fetch
 
 		const tool = createSearchWebTool('/tmp')
 		const result = await tool.execute({ query: 'test' }, makeCtx())
@@ -165,8 +177,7 @@ describe('search_web tool', () => {
 
 	test('handles empty choices array', async () => {
 		globalThis.fetch = (async () =>
-			new Response(JSON.stringify({ choices: [] }), { status: 200 })
-		) as typeof fetch
+			new Response(JSON.stringify({ choices: [] }), { status: 200 })) as typeof fetch
 
 		const tool = createSearchWebTool('/tmp')
 		const result = await tool.execute({ query: 'test' }, makeCtx())

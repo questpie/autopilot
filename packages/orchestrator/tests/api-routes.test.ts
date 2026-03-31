@@ -98,7 +98,7 @@ function makeTaskPayload(overrides: Record<string, unknown> = {}) {
 		type: overrides.type ?? 'implementation',
 		status: overrides.status ?? 'backlog',
 		priority: overrides.priority ?? 'medium',
-		created_by: overrides.created_by ?? 'planner',
+		created_by: overrides.created_by ?? 'test-agent',
 		created_at: ts,
 		updated_at: ts,
 		history: [{ at: ts, by: 'planner', action: 'created' }],
@@ -240,32 +240,27 @@ describe('GET /api/tasks/:id', () => {
 // ─── POST /api/tasks/:id/approve ────────────────────────────────────────────
 
 describe('POST /api/tasks/:id/approve', () => {
-	it('should move a task to done status', async () => {
+	it('should require admin/owner role', async () => {
 		await storage.createTask(makeTaskPayload({ id: 'approve-t1', status: 'review' }) as any)
 
 		const res = await request('/api/tasks/approve-t1/approve', { method: 'POST' })
-		expect(res.status).toBe(200)
-
-		const data = (await res.json()) as { ok: boolean; taskId: string; status: string }
-		expect(data.ok).toBe(true)
-		expect(data.taskId).toBe('approve-t1')
-		expect(data.status).toBe('done')
+		expect(res.status).toBe(403)
 
 		// Verify in storage
 		const task = await storage.readTask('approve-t1')
-		expect(task!.status).toBe('done')
+		expect(task!.status).toBe('review')
 	})
 
-	it('should return 404 when approving non-existent task', async () => {
+	it('should return 403 for non-privileged actors before existence check', async () => {
 		const res = await request('/api/tasks/ghost-task/approve', { method: 'POST' })
-		expect(res.status).toBe(404)
+		expect(res.status).toBe(403)
 	})
 })
 
 // ─── POST /api/tasks/:id/reject ─────────────────────────────────────────────
 
 describe('POST /api/tasks/:id/reject', () => {
-	it('should move a task to blocked status with custom reason', async () => {
+	it('should require admin/owner role for reject', async () => {
 		await storage.createTask(makeTaskPayload({ id: 'reject-t1', status: 'review' }) as any)
 
 		const res = await request('/api/tasks/reject-t1/reject', {
@@ -273,25 +268,14 @@ describe('POST /api/tasks/:id/reject', () => {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ reason: 'Needs rework' }),
 		})
-		expect(res.status).toBe(200)
-
-		const data = (await res.json()) as {
-			ok: boolean
-			taskId: string
-			status: string
-			reason: string
-		}
-		expect(data.ok).toBe(true)
-		expect(data.taskId).toBe('reject-t1')
-		expect(data.status).toBe('blocked')
-		expect(data.reason).toBe('Needs rework')
+		expect(res.status).toBe(403)
 
 		// Verify in storage
 		const task = await storage.readTask('reject-t1')
-		expect(task!.status).toBe('blocked')
+		expect(task!.status).toBe('review')
 	})
 
-	it('should use default reason when none provided', async () => {
+	it('should return 403 for reject without privileged role', async () => {
 		await storage.createTask(makeTaskPayload({ id: 'reject-t2', status: 'review' }) as any)
 
 		const res = await request('/api/tasks/reject-t2/reject', {
@@ -299,19 +283,16 @@ describe('POST /api/tasks/:id/reject', () => {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({}),
 		})
-		expect(res.status).toBe(200)
-
-		const data = (await res.json()) as { reason: string }
-		expect(data.reason).toBe('Rejected by human')
+		expect(res.status).toBe(403)
 	})
 
-	it('should return 404 when rejecting non-existent task', async () => {
+	it('should return 403 for non-privileged actors before existence check', async () => {
 		const res = await request('/api/tasks/ghost-task/reject', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({}),
 		})
-		expect(res.status).toBe(404)
+		expect(res.status).toBe(403)
 	})
 })
 

@@ -11,8 +11,9 @@ import { logger } from '../logger'
 
 const DEFAULT_PORT = 4437
 
-const DURABLE_STREAMS_URL = process.env.DURABLE_STREAMS_URL
-	?? `http://127.0.0.1:${process.env.DURABLE_STREAMS_PORT ?? DEFAULT_PORT}`
+const DURABLE_STREAMS_URL =
+	process.env.DURABLE_STREAMS_URL ??
+	`http://127.0.0.1:${process.env.DURABLE_STREAMS_PORT ?? DEFAULT_PORT}`
 
 let server: DurableStreamTestServer | null = null
 
@@ -75,24 +76,43 @@ export function getSessionStreamUrl(sessionId: string): string {
 }
 
 export async function createSessionStream(sessionId: string): Promise<void> {
-	const resp = await fetch(getSessionStreamUrl(sessionId), {
-		method: 'PUT',
-		headers: { 'Content-Type': 'application/json' },
-	})
-	if (!resp.ok && resp.status !== 409) {
-		throw new Error(`Failed to create stream for ${sessionId}: ${resp.status}`)
+	try {
+		const resp = await fetch(getSessionStreamUrl(sessionId), {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+		})
+		if (!resp.ok && resp.status !== 409) {
+			throw new Error(`Failed to create stream for ${sessionId}: ${resp.status}`)
+		}
+	} catch (error) {
+		logger.warn('durable-streams', `create stream failed for ${sessionId}`, {
+			error: error instanceof Error ? error.message : String(error),
+		})
 	}
 }
 
 export async function appendToSessionStream(sessionId: string, chunk: unknown): Promise<void> {
-	await fetch(getSessionStreamUrl(sessionId), {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(chunk),
-	})
+	try {
+		const resp = await fetch(getSessionStreamUrl(sessionId), {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(chunk),
+		})
+		if (!resp.ok) {
+			logger.warn('durable-streams', `append failed for ${sessionId}: ${resp.status}`)
+		}
+	} catch (error) {
+		logger.warn('durable-streams', `append failed for ${sessionId}`, {
+			error: error instanceof Error ? error.message : String(error),
+		})
+	}
 }
 
-export async function steerSession(sessionId: string, message: string, from: string = 'user'): Promise<void> {
+export async function steerSession(
+	sessionId: string,
+	message: string,
+	from = 'user',
+): Promise<void> {
 	await appendToSessionStream(sessionId, {
 		type: 'user_steer',
 		from,
