@@ -133,13 +133,20 @@
     "create_title_placeholder": "What needs to be done?",
     "create_description_label": "Description",
     "create_description_placeholder": "Add details (supports markdown)",
-    "create_type_label": "Type",
     "create_priority_label": "Priority",
     "create_assignee_label": "Assignee",
+    "create_assignee_placeholder": "Select assignee",
     "create_project_label": "Project",
-    "create_project_placeholder": "Project name",
+    "create_project_placeholder": "Select or create project",
     "create_workflow_label": "Workflow",
-    "create_submit": "Create task"
+    "create_workflow_placeholder": "Select workflow",
+    "create_labels_label": "Labels",
+    "create_labels_placeholder": "Type label and press Enter",
+    "create_submit": "Create task",
+    "no_agents_found": "No agents found",
+    "no_projects_found": "No projects found",
+    "no_workflows_found": "No workflows found",
+    "create_new_project": "Create \"{{name}}\""
   },
   "team": {
     "title": "Team",
