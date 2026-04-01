@@ -290,6 +290,14 @@ export class Orchestrator {
 				})
 			})
 			logger.info('orchestrator', 'notification dispatcher wired to event bus')
+
+			// 5c-h3: Wire task_changed events back into workflow engine
+			eventBus.subscribe((event) => {
+				if (event.type === 'task_changed' && event.taskId) {
+					this.queueTaskReevaluation(event.taskId)
+				}
+			})
+			logger.info('orchestrator', 'task change → workflow reevaluation wired to event bus')
 		} catch (err) {
 			logger.error('orchestrator', 'failed to wire notification dispatcher', {
 				error: err instanceof Error ? err.message : String(err),
@@ -999,6 +1007,8 @@ export class Orchestrator {
 							}
 							await storage.updateTask(taskId, { workflow_step: result.nextStep }, 'system')
 							await storage.moveTask(taskId, 'assigned', 'system')
+							task.workflow_step = result.nextStep
+							task.status = 'assigned'
 							eventBus.emit({
 								type: 'workflow_advanced',
 								taskId,
@@ -1088,6 +1098,22 @@ export class Orchestrator {
 								taskId,
 								agentId: assignedAgentId,
 							})
+
+							// H1: Check for active session on this task before spawning
+							try {
+								const { db: dbResult } = await container.resolveAsync([dbFactory])
+								const raw = (dbResult.db as unknown as { $client: import('@libsql/client').Client }).$client
+								const existing = await raw.execute({
+									sql: `SELECT id FROM agent_sessions WHERE task_id = ? AND status = 'running' LIMIT 1`,
+									args: [taskId],
+								})
+								if (existing.rows.length > 0) {
+									logger.info('orchestrator', `skipping spawn for task ${taskId} — active session ${String(existing.rows[0]?.id)}`)
+									break
+								}
+							} catch {
+								// Can't check — proceed with spawn
+							}
 
 							// Actually spawn the agent
 							if (assignedAgentId) {

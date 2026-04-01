@@ -2,7 +2,6 @@ id: owner
 name: "Owner"
 role: "owner"
 # email: "you@example.com"  # Set your email for notifications
-description: "Company owner and sole human operator"
 notification_routing:
   urgent:
     transports: ["email"]
@@ -22,4 +21,3 @@ quiet_hours:
   end: "07:00"
   timezone: "UTC"
   except: ["urgent"]
-approval_scopes: ["merge", "deploy", "spend", "publish", "setup"]

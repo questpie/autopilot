@@ -110,6 +110,19 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		}
 	}
 
+	// H1: Persist session to agentSessions table for dedup
+	try {
+		const { db: dbResult } = await container.resolveAsync([dbFactory])
+		const raw = (dbResult.db as unknown as { $client: import('@libsql/client').Client }).$client
+		await raw.execute({
+			sql: `INSERT INTO agent_sessions (id, agent_id, task_id, trigger_type, status, started_at, tool_calls, tokens_used)
+			      VALUES (?, ?, ?, ?, 'running', ?, 0, 0)`,
+			args: [sessionId, agent.id, task?.id ?? null, trigger.type, new Date().toISOString()],
+		})
+	} catch (err) {
+		logger.warn('agent', `failed to record session start: ${err instanceof Error ? err.message : String(err)}`)
+	}
+
 	// 1. Resolve AIProvider from DI
 	const { aiProvider } = await container.resolveAsync([aiProviderFactory])
 
@@ -234,6 +247,24 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		// D9: Emit typing stopped
 		eventBus.emit({ type: 'agent_typing', agentId: agent.id, status: 'stopped', sessionId })
 		streamManager.endStream(sessionId)
+
+		// H1: Update session record with final status
+		try {
+			const { db: dbResult } = await container.resolveAsync([dbFactory])
+			const raw = (dbResult.db as unknown as { $client: import('@libsql/client').Client }).$client
+			await raw.execute({
+				sql: `UPDATE agent_sessions SET status = ?, ended_at = ?, tool_calls = ?, error = ? WHERE id = ?`,
+				args: [
+					sessionResult!.error ? 'failed' : 'completed',
+					new Date().toISOString(),
+					sessionResult!.toolCalls,
+					sessionResult!.error ?? null,
+					sessionId,
+				],
+			})
+		} catch (err) {
+			logger.warn('agent', `failed to record session end: ${err instanceof Error ? err.message : String(err)}`)
+		}
 
 		await storage.appendActivity({
 			at: new Date().toISOString(),

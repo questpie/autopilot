@@ -792,15 +792,12 @@ describe('HumanSchema', () => {
 
 	test('applies default values', () => {
 		const result = HumanSchema.parse(validHuman)
-		expect(result.description).toBe('')
 		expect(result.notification_routing).toEqual({})
 		expect(result.quiet_hours.enabled).toBe(false)
 		expect(result.quiet_hours.start).toBe('22:00')
 		expect(result.quiet_hours.end).toBe('07:00')
 		expect(result.quiet_hours.timezone).toBe('UTC')
 		expect(result.quiet_hours.except).toEqual(['urgent'])
-		expect(result.transport_config).toEqual({})
-		expect(result.approval_scopes).toEqual([])
 	})
 
 	test('rejects missing id', () => {

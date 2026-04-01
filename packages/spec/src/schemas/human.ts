@@ -20,11 +20,8 @@ export const HumanSchema = z.object({
 	name: z.string(),
 	role: z.enum(HUMAN_ROLES),
 	email: z.string().email().optional(),
-	description: z.string().default(''),
 	notification_routing: z.record(z.string(), NotificationRoutingSchema).default({}),
 	quiet_hours: QuietHoursSchema.default({}),
-	transport_config: z.record(z.string(), z.record(z.string())).default({}),
-	approval_scopes: z.array(z.string()).default([]),
 })
 
 /** @deprecated Use HumanSchema directly — humans are now individual files in HUMANS_DIR */
