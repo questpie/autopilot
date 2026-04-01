@@ -117,3 +117,37 @@ export function useRenameFile() {
     },
   })
 }
+
+export function useDuplicateFile() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: { sourcePath: string; targetPath: string }) => {
+      const cleanPath = params.sourcePath.replace(/^\/+/, "")
+      const res = await api.api.fs[":path{.+}"].$get({
+        param: { path: cleanPath },
+      })
+      if (!res.ok) {
+        throw new Error("Failed to read source file")
+      }
+      const content = await res.text()
+      await createFile({ path: params.targetPath, content })
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.files.root })
+    },
+  })
+}
+
+export function useCreateDirectory() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: { path: string }) => {
+      // Create a directory by creating a .gitkeep file inside it
+      const keepPath = `${params.path}/.gitkeep`
+      await createFile({ path: keepPath, content: "" })
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.files.root })
+    },
+  })
+}
