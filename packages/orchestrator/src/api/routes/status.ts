@@ -1,8 +1,9 @@
-import type { Client } from '@libsql/client'
 import { StatusResponseSchema } from '@questpie/autopilot-spec'
+import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver } from 'hono-openapi'
+import * as authSchema from '../../db/auth-schema'
 import { loadAgents, loadCompany } from '../../fs/company'
 import { container } from '../../container'
 import { streamManagerFactory } from '../../session/stream'
@@ -24,7 +25,6 @@ const status = new Hono<AppEnv>().get(
 		const root = c.get('companyRoot')
 		const storage = c.get('storage')
 		const db = c.get('db')
-		const raw = (db as unknown as { $client: Client }).$client
 
 		const company = await loadCompany(root)
 
@@ -43,9 +43,11 @@ const status = new Hono<AppEnv>().get(
 
 		let userCount = 0
 		try {
-			const result = await raw.execute('SELECT COUNT(*) as count FROM user')
-			const row = result.rows[0]
-			userCount = Number(row?.count ?? 0)
+			const row = await db
+				.select({ count: sql<number>`count(*)` })
+				.from(authSchema.user)
+				.get()
+			userCount = row?.count ?? 0
 		} catch {
 			// Auth tables may not exist yet during early startup
 		}

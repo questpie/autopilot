@@ -1,6 +1,6 @@
 import { join } from 'node:path'
-import type { Client } from '@libsql/client'
 import { MessageSchema } from '@questpie/autopilot-spec/schemas'
+import { and, desc, eq, max } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { spawnAgent } from '../../agent/spawner'
 import { logger } from '../../logger'
 import { container } from '../../container'
+import * as schema from '../../db/schema'
 import { loadAgents, loadCompany } from '../../fs/company'
 import { fileExists, readYamlUnsafe, writeYaml } from '../../fs/yaml'
 import { streamManagerFactory } from '../../session/stream'
@@ -15,18 +16,6 @@ import type { AppEnv } from '../app'
 
 const ONBOARDING_TRIGGER_MESSAGE = '__onboarding__'
 const ONBOARDING_DISPLAY_MESSAGE = "Let's set up my company."
-const SESSION_FIRST_MESSAGE_SQL = `
-	COALESCE(
-		first_message,
-		(
-			SELECT m.content
-			FROM messages m
-			WHERE m.session_id = agent_sessions.id
-			ORDER BY m.created_at ASC
-			LIMIT 1
-		)
-	)
-`
 
 const CreateChatSessionSchema = z.object({
 	agentId: z.string().min(1),
@@ -60,7 +49,9 @@ const ChatSessionSummarySchema = z.object({
 	startedAt: z.string(),
 	endedAt: z.string().nullable(),
 	channelId: z.string().nullable(),
+	channelName: z.string().nullable(),
 	firstMessage: z.string().nullable(),
+	lastMessageAt: z.string(),
 	toolCalls: z.number(),
 	tokensUsed: z.number(),
 })
@@ -79,20 +70,20 @@ const ChatSessionStreamSchema = z.object({
 	streamUrl: z.string(),
 })
 
-type SessionLookupResult =
-	| { kind: 'owned'; row: Record<string, unknown> }
-	| { kind: 'forbidden' }
-	| { kind: 'missing' }
-
-function getRawDb(db: AppEnv['Variables']['db']): Client {
-	return (db as unknown as { $client: Client }).$client
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 async function markOnboardingChatStarted(root: string): Promise<void> {
 	const companyPath = join(root, 'company.yaml')
-	const existing = (await fileExists(companyPath))
-		? ((await readYamlUnsafe(companyPath)) as Record<string, unknown>)
-		: {}
+	let existing: Record<string, unknown> = {}
+
+	if (await fileExists(companyPath)) {
+		const parsed = await readYamlUnsafe(companyPath)
+		if (isRecord(parsed)) {
+			existing = parsed
+		}
+	}
 
 	if (existing.onboarding_chat_completed === true) {
 		return
@@ -119,61 +110,120 @@ function createMessageId(actorId: string): string {
 	return `msg-${Date.now().toString(36)}-${actorId}`
 }
 
+function createSessionSummaryQuery(db: AppEnv['Variables']['db']) {
+	const sessionLastMessage = db
+		.select({
+			session_id: schema.messages.session_id,
+			last_message_at: max(schema.messages.created_at).as('last_message_at'),
+		})
+		.from(schema.messages)
+		.groupBy(schema.messages.session_id)
+		.as('session_last_message')
+
+	const query = db
+		.select({
+			id: schema.agentSessions.id,
+			agent_id: schema.agentSessions.agent_id,
+			status: schema.agentSessions.status,
+			started_at: schema.agentSessions.started_at,
+			ended_at: schema.agentSessions.ended_at,
+			channel_id: schema.agentSessions.channel_id,
+			channel_name: schema.channels.name,
+			first_message: schema.agentSessions.first_message,
+			last_message_at: sessionLastMessage.last_message_at,
+			tool_calls: schema.agentSessions.tool_calls,
+			tokens_used: schema.agentSessions.tokens_used,
+		})
+		.from(schema.agentSessions)
+		.leftJoin(schema.channels, eq(schema.channels.id, schema.agentSessions.channel_id))
+		.leftJoin(sessionLastMessage, eq(sessionLastMessage.session_id, schema.agentSessions.id))
+
+	return {
+		query,
+		sessionLastMessage,
+	}
+}
+
+async function selectOwnedSessionRow(
+	db: AppEnv['Variables']['db'],
+	sessionId: string,
+	actorId: string,
+) {
+	const { query } = createSessionSummaryQuery(db)
+
+	return query
+		.where(
+			and(
+				eq(schema.agentSessions.id, sessionId),
+				eq(schema.agentSessions.initiated_by, actorId),
+			),
+		)
+		.get()
+}
+
+async function listOwnedSessionRows(
+	db: AppEnv['Variables']['db'],
+	actorId: string,
+	limit: number,
+	offset: number,
+) {
+	const { query, sessionLastMessage } = createSessionSummaryQuery(db)
+
+	return query
+		.where(eq(schema.agentSessions.initiated_by, actorId))
+		.orderBy(desc(sessionLastMessage.last_message_at), desc(schema.agentSessions.started_at))
+		.limit(limit)
+		.offset(offset)
+}
+
+type SessionRow = NonNullable<Awaited<ReturnType<typeof selectOwnedSessionRow>>>
+
+type SessionLookupResult =
+	| { kind: 'owned'; row: SessionRow }
+	| { kind: 'forbidden' }
+	| { kind: 'missing' }
+
 function toSessionSummary(
-	row: Record<string, unknown>,
+	row: SessionRow,
 	agentsById: Map<string, { name: string }>,
 ) {
 	return {
-		id: String(row.id),
-		agentId: String(row.agent_id),
-		agentName: getAgentName(String(row.agent_id), agentsById),
-		status: String(row.status),
-		startedAt: String(row.started_at),
-		endedAt: row.ended_at ? String(row.ended_at) : null,
-		channelId: row.channel_id ? String(row.channel_id) : null,
-		firstMessage: row.first_message ? String(row.first_message) : null,
-		toolCalls: Number(row.tool_calls ?? 0),
-		tokensUsed: Number(row.tokens_used ?? 0),
+		id: row.id,
+		agentId: row.agent_id,
+		agentName: getAgentName(row.agent_id, agentsById),
+		status: row.status,
+		startedAt: row.started_at,
+		endedAt: row.ended_at,
+		channelId: row.channel_id,
+		channelName: row.channel_name,
+		firstMessage: row.first_message,
+		lastMessageAt: row.last_message_at ?? row.started_at,
+		toolCalls: row.tool_calls ?? 0,
+		tokensUsed: row.tokens_used ?? 0,
 	}
 }
 
 async function getOwnedSessionRow(
-	raw: Client,
+	db: AppEnv['Variables']['db'],
 	sessionId: string,
 	actorId: string,
 ): Promise<SessionLookupResult> {
-	const result = await raw.execute({
-		sql: `
-			SELECT
-				id,
-				agent_id,
-				status,
-				started_at,
-				ended_at,
-				channel_id,
-				${SESSION_FIRST_MESSAGE_SQL} AS first_message,
-				tool_calls,
-				tokens_used
-			FROM agent_sessions
-			WHERE id = ? AND initiated_by = ?
-			LIMIT 1
-		`,
-		args: [sessionId, actorId],
-	})
+	const row = await selectOwnedSessionRow(db, sessionId, actorId)
 
-	if (result.rows[0]) {
+	if (row) {
 		return {
 			kind: 'owned',
-			row: result.rows[0] as Record<string, unknown>,
+			row,
 		}
 	}
 
-	const anyResult = await raw.execute({
-		sql: 'SELECT id FROM agent_sessions WHERE id = ? LIMIT 1',
-		args: [sessionId],
-	})
+	const anyResult = await db
+		.select({ id: schema.agentSessions.id })
+		.from(schema.agentSessions)
+		.where(eq(schema.agentSessions.id, sessionId))
+		.get()
 
-	return anyResult.rows[0] ? { kind: 'forbidden' } : { kind: 'missing' }
+	return anyResult ? { kind: 'forbidden' } : { kind: 'missing' }
 }
 
 const chatSessions = new Hono<AppEnv>()
@@ -200,7 +250,7 @@ const chatSessions = new Hono<AppEnv>()
 
 			const root = c.get('companyRoot')
 			const storage = c.get('storage')
-			const raw = getRawDb(c.get('db'))
+			const db = c.get('db')
 			const body = c.req.valid('json')
 			const agents = await loadAgents(root)
 			const agent = agents.find((item) => item.id === body.agentId)
@@ -226,7 +276,7 @@ const chatSessions = new Hono<AppEnv>()
 				channelId = (await storage.getOrCreateDirectChannel(actor.id, agent.id)).id
 			}
 
-			const sessionId = `session-${Date.now().toString(36)}-${agent.id}`
+			const sessionId = `session-${crypto.randomUUID()}`
 			const startedAt = new Date().toISOString()
 			const triggerMessage =
 				body.message === ONBOARDING_TRIGGER_MESSAGE ? ONBOARDING_TRIGGER_MESSAGE : body.message
@@ -239,21 +289,18 @@ const chatSessions = new Hono<AppEnv>()
 				streamManager.createStream(sessionId, agent.id)
 				streamCreated = true
 
-				await raw.execute({
-					sql: `INSERT INTO agent_sessions (
-						id, agent_id, task_id, initiated_by, channel_id, first_message,
-						trigger_type, status, started_at, tool_calls, tokens_used
-					) VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, 0, 0)`,
-					args: [
-						sessionId,
-						agent.id,
-						null,
-						actor.id,
-						channelId,
-						displayMessage,
-						'chat',
-						startedAt,
-					],
+				await db.insert(schema.agentSessions).values({
+					id: sessionId,
+					agent_id: agent.id,
+					task_id: null,
+					initiated_by: actor.id,
+					channel_id: channelId,
+					first_message: displayMessage,
+					trigger_type: 'chat',
+					status: 'running',
+					started_at: startedAt,
+					tool_calls: 0,
+					tokens_used: 0,
 				})
 
 				await storage.sendMessage({
@@ -305,16 +352,14 @@ const chatSessions = new Hono<AppEnv>()
 				)
 			} catch (error) {
 				if (streamCreated) {
-					await raw
-						.execute({
-							sql: `UPDATE agent_sessions SET status = ?, ended_at = ?, error = ? WHERE id = ?`,
-							args: [
-								'failed',
-								new Date().toISOString(),
-								error instanceof Error ? error.message : 'Failed to create chat session',
-								sessionId,
-							],
+					await db
+						.update(schema.agentSessions)
+						.set({
+							status: 'failed',
+							ended_at: new Date().toISOString(),
+							error: error instanceof Error ? error.message : 'Failed to create chat session',
 						})
+						.where(eq(schema.agentSessions.id, sessionId))
 						.catch(() => {})
 					streamManager.endStream(sessionId)
 				}
@@ -348,35 +393,15 @@ const chatSessions = new Hono<AppEnv>()
 			}
 
 			const root = c.get('companyRoot')
-			const raw = getRawDb(c.get('db'))
+			const db = c.get('db')
 			const { limit, offset } = c.req.valid('query')
 			const agents = await loadAgents(root)
 			const agentsById = new Map(agents.map((agent) => [agent.id, { name: agent.name }]))
-			const result = await raw.execute({
-				sql: `
-					SELECT
-						id,
-						agent_id,
-						status,
-						started_at,
-						ended_at,
-						channel_id,
-						${SESSION_FIRST_MESSAGE_SQL} AS first_message,
-						tool_calls,
-						tokens_used
-					FROM agent_sessions
-					WHERE initiated_by = ?
-					ORDER BY started_at DESC
-					LIMIT ? OFFSET ?
-				`,
-				args: [actor.id, limit, offset],
-			})
+			const rows = await listOwnedSessionRows(db, actor.id, limit, offset)
 
 			return c.json(
 				{
-					sessions: result.rows.map((row) =>
-						toSessionSummary(row as Record<string, unknown>, agentsById),
-					),
+					sessions: rows.map((row) => toSessionSummary(row, agentsById)),
 				},
 				200,
 			)
@@ -404,9 +429,9 @@ const chatSessions = new Hono<AppEnv>()
 			}
 
 			const root = c.get('companyRoot')
-			const raw = getRawDb(c.get('db'))
+			const db = c.get('db')
 			const { id } = c.req.valid('param')
-			const sessionLookup = await getOwnedSessionRow(raw, id, actor.id)
+			const sessionLookup = await getOwnedSessionRow(db, id, actor.id)
 
 			if (sessionLookup.kind === 'forbidden') {
 				return c.json({ error: 'Access denied' }, 403)
@@ -452,10 +477,10 @@ const chatSessions = new Hono<AppEnv>()
 			}
 
 			const storage = c.get('storage')
-			const raw = getRawDb(c.get('db'))
+			const db = c.get('db')
 			const { id } = c.req.valid('param')
 			const { limit, offset } = c.req.valid('query')
-			const sessionLookup = await getOwnedSessionRow(raw, id, actor.id)
+			const sessionLookup = await getOwnedSessionRow(db, id, actor.id)
 
 			if (sessionLookup.kind === 'forbidden') {
 				return c.json({ error: 'Access denied' }, 403)
@@ -499,10 +524,10 @@ const chatSessions = new Hono<AppEnv>()
 
 			const root = c.get('companyRoot')
 			const storage = c.get('storage')
-			const raw = getRawDb(c.get('db'))
+			const db = c.get('db')
 			const { id } = c.req.valid('param')
 			const { message } = c.req.valid('json')
-			const sessionLookup = await getOwnedSessionRow(raw, id, actor.id)
+			const sessionLookup = await getOwnedSessionRow(db, id, actor.id)
 
 			if (sessionLookup.kind === 'forbidden') {
 				return c.json({ error: 'Access denied' }, 403)
@@ -538,16 +563,14 @@ const chatSessions = new Hono<AppEnv>()
 				streamManager.createStream(id, agent.id)
 				streamCreated = true
 
-				await raw.execute({
-					sql: `
-						UPDATE agent_sessions
-						SET status = 'running',
-							ended_at = NULL,
-							error = NULL
-						WHERE id = ?
-					`,
-					args: [id],
-				})
+				await db
+					.update(schema.agentSessions)
+					.set({
+						status: 'running',
+						ended_at: null,
+						error: null,
+					})
+					.where(eq(schema.agentSessions.id, id))
 
 				await storage.sendMessage({
 					id: createMessageId(actor.id),
@@ -594,16 +617,14 @@ const chatSessions = new Hono<AppEnv>()
 				)
 			} catch (error) {
 				if (streamCreated) {
-					await raw
-						.execute({
-							sql: `UPDATE agent_sessions SET status = ?, ended_at = ?, error = ? WHERE id = ?`,
-							args: [
-								'failed',
-								new Date().toISOString(),
-								error instanceof Error ? error.message : 'Failed to continue chat session',
-								id,
-							],
+					await db
+						.update(schema.agentSessions)
+						.set({
+							status: 'failed',
+							ended_at: new Date().toISOString(),
+							error: error instanceof Error ? error.message : 'Failed to continue chat session',
 						})
+						.where(eq(schema.agentSessions.id, id))
 						.catch(() => {})
 					streamManager.endStream(id)
 				}

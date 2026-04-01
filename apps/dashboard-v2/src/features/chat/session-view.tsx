@@ -3,6 +3,7 @@ import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { PageTransition } from '@/components/layouts/page-transition'
 import { queryKeys } from '@/lib/query-keys'
 import { Route as AppRoute } from '@/routes/_app'
+import { useChatSeenStore } from '@/stores/chat-seen.store'
 import { MessageComposer } from './message-composer'
 import { MessageList } from './message-list'
 import { useContinueChatSession } from './chat.mutations'
@@ -16,6 +17,7 @@ interface SessionViewProps {
 
 export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element {
 	const queryClient = useQueryClient()
+	const markSessionSeen = useChatSeenStore((state) => state.markSessionSeen)
 	const { user } = AppRoute.useRouteContext()
 	const currentUserId = user?.id ?? 'human'
 	const currentUserName = user?.name ?? user?.email ?? 'You'
@@ -24,6 +26,12 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
 	const continueSession = useContinueChatSession()
 	const wantsStream = session.status === 'running' || continueSession.isPending
 	const stream = useSessionStream(wantsStream ? session.id : null)
+	const latestVisibleMessageAt =
+		messages[messages.length - 1]?.at ?? session.lastMessageAt ?? session.startedAt
+
+	useEffect(() => {
+		markSessionSeen(sessionId, latestVisibleMessageAt)
+	}, [latestVisibleMessageAt, markSessionSeen, sessionId])
 
 	useEffect(() => {
 		if (stream.state.status !== 'completed' && stream.state.status !== 'error') {

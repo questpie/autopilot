@@ -1,41 +1,27 @@
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
-import { MessageSchema } from '@questpie/autopilot-spec/schemas'
 import { queryOptions } from '@tanstack/react-query'
+import type { InferResponseType } from 'hono/client'
 import type { Message } from './chat.types'
 
-const MessagesSchema = MessageSchema.array()
+type StatusGetResponse = InferResponseType<typeof api.api.status.$get, 200>
+type ChatSessionsGetResponse = InferResponseType<(typeof api.api)['chat-sessions']['$get'], 200>
+type ChatSessionGetResponse = InferResponseType<
+	(typeof api.api)['chat-sessions'][':id']['$get'],
+	200
+>
 
-export interface ChatSessionSummary {
-	id: string
-	agentId: string
-	agentName: string
-	status: string
-	startedAt: string
-	endedAt: string | null
-	channelId: string | null
-	firstMessage: string | null
-	toolCalls: number
-	tokensUsed: number
-}
+export type StatusResponse = StatusGetResponse
+export type ChatSessionsResponse = ChatSessionsGetResponse
+export type ChatSessionSummary = ChatSessionsResponse['sessions'][number]
+export type ChatSessionDetail = ChatSessionGetResponse
 
-export interface ChatSessionDetail extends ChatSessionSummary {
-	streamUrl: string
-}
+function getErrorMessage(body: unknown, fallback: string): string {
+	if (typeof body !== 'object' || body === null || !('error' in body)) {
+		return fallback
+	}
 
-export interface ChatSessionsResponse {
-	sessions: ChatSessionSummary[]
-}
-
-export interface StatusResponse {
-	company: string
-	userCount: number
-	setupCompleted: boolean
-	onboardingChatCompleted: boolean
-	agentCount: number
-	activeTasks: number
-	runningSessions: number
-	pendingApprovals: number
+	return typeof body.error === 'string' ? body.error : fallback
 }
 
 export const statusQuery = queryOptions({
@@ -72,7 +58,7 @@ export function chatSessionDetailQuery(sessionId: string) {
 			})
 			if (!res.ok) {
 				const body = await res.json().catch(() => ({}))
-				throw new Error((body as { error?: string }).error ?? 'Failed to fetch chat session')
+				throw new Error(getErrorMessage(body, 'Failed to fetch chat session'))
 			}
 			return res.json()
 		},
@@ -93,11 +79,9 @@ export function chatSessionMessagesQuery(sessionId: string, limit = 200, offset 
 			})
 			if (!res.ok) {
 				const body = await res.json().catch(() => ({}))
-				throw new Error(
-					(body as { error?: string }).error ?? 'Failed to fetch session messages',
-				)
+				throw new Error(getErrorMessage(body, 'Failed to fetch session messages'))
 			}
-			return MessagesSchema.parse(await res.json())
+			return res.json()
 		},
 		enabled: !!sessionId,
 	})

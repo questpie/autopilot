@@ -1,6 +1,7 @@
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import type { InferResponseType } from 'hono/client'
 import type { ChatSessionDetail } from './chat.queries'
 
 export interface CreateChatSessionInput {
@@ -9,21 +10,23 @@ export interface CreateChatSessionInput {
 	channelId?: string
 }
 
-export interface CreateChatSessionResult {
-	sessionId: string
-	channelId: string
-	streamUrl: string
-}
-
 export interface ContinueChatSessionInput {
 	sessionId: string
 	message: string
 }
 
-export interface ContinueChatSessionResult {
-	sessionId: string
-	channelId?: string
-	streamUrl: string
+type CreateChatSessionResult = InferResponseType<(typeof api.api)['chat-sessions']['$post'], 200>
+type ContinueChatSessionResult = InferResponseType<
+	(typeof api.api)['chat-sessions'][':id']['messages']['$post'],
+	200
+>
+
+function getErrorMessage(body: unknown, fallback: string): string {
+	if (typeof body !== 'object' || body === null || !('error' in body)) {
+		return fallback
+	}
+
+	return typeof body.error === 'string' ? body.error : fallback
 }
 
 export function useCreateChatSession() {
@@ -36,7 +39,7 @@ export function useCreateChatSession() {
 			})
 			if (!res.ok) {
 				const body = await res.json().catch(() => ({}))
-				throw new Error((body as { error?: string }).error ?? 'Failed to create session')
+				throw new Error(getErrorMessage(body, 'Failed to create session'))
 			}
 			return res.json()
 		},
@@ -60,7 +63,7 @@ export function useContinueChatSession() {
 			})
 			if (!res.ok) {
 				const body = await res.json().catch(() => ({}))
-				throw new Error((body as { error?: string }).error ?? 'Failed to continue session')
+				throw new Error(getErrorMessage(body, 'Failed to continue session'))
 			}
 			return res.json()
 		},

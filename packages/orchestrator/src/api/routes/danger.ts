@@ -4,6 +4,7 @@
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
+import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { join } from 'node:path'
 import { rm } from 'node:fs/promises'
@@ -127,7 +128,7 @@ const danger = new Hono<AppEnv>()
 				return c.json({ error: 'only owner or admin can perform this action' }, 403)
 			}
 
-			const body = c.req.valid('json' as never) as z.infer<typeof ConfirmSchema>
+			const body = c.req.valid('json')
 			if (body.confirm !== true) {
 				return c.json({ error: 'Missing confirmation. Send { "confirm": true }' }, 400)
 			}
@@ -144,10 +145,9 @@ const danger = new Hono<AppEnv>()
 				await db.delete(schema.tasks)
 				await db.delete(schema.searchIndex)
 
-				// Clear FTS tables (raw SQL required for virtual tables)
-				const raw = (db as unknown as { $client: import('@libsql/client').Client }).$client
-				try { await raw.execute(`DELETE FROM search_fts`) } catch { /* may not exist */ }
-				try { await raw.execute(`DELETE FROM messages_fts`) } catch { /* may not exist */ }
+				// Clear FTS tables via Drizzle SQL execution.
+				try { await db.run(sql`DELETE FROM search_fts`) } catch { /* may not exist */ }
+				try { await db.run(sql`DELETE FROM messages_fts`) } catch { /* may not exist */ }
 
 				// Notify dashboard to refresh
 				eventBus.emit({ type: 'settings_changed' })
@@ -181,7 +181,7 @@ const danger = new Hono<AppEnv>()
 		}),
 		zValidator('json', DeleteConfirmSchema),
 		async (c) => {
-			const body = c.req.valid('json' as never) as z.infer<typeof DeleteConfirmSchema>
+			const body = c.req.valid('json')
 			if (body.confirm !== 'DELETE') {
 				return c.json({ error: 'Missing confirmation. Send { "confirm": "DELETE" }' }, 400)
 			}
