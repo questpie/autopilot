@@ -24,6 +24,7 @@
 		"@hono/client": "^0.0.3",
 		"@hookform/resolvers": "^5.2.2",
 		"@phosphor-icons/react": "^2.1.10",
+		"@questpie/avatar": "workspace:*",
 		"@questpie/autopilot-spec": "1.0.0",
 		"@t3-oss/env-core": "^0.13.8",
 		"@tailwindcss/vite": "^4.2.1",

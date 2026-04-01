@@ -1,89 +1,103 @@
 import { create } from 'zustand'
+import { createJSONStorage, persist } from 'zustand/middleware'
 
 export const WIZARD_TOTAL_STEPS = 3
-export const WIZARD_MANDATORY_STEPS = 3
 
-export type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+export type WizardStep = 1 | 2 | 3
+export interface WizardAccountData {
+	name: string
+	email: string
+}
 
 export interface WizardState {
 	currentStep: WizardStep
-	completedSteps: Set<WizardStep>
-	skippedSteps: Set<WizardStep>
+	completedSteps: WizardStep[]
 	/** Data from step 1 */
-	accountData: {
-		name: string
-		email: string
-	} | null
+	accountData: WizardAccountData | null
 	/** Provider choice from step 3 (always openrouter in v3) */
 	providerChoice: 'openrouter' | null
-	/** Reserved for legacy optional setup steps; retained for state compatibility. */
-	teamTemplate: 'solo' | 'minimal' | 'custom' | null
+	handoffReady: boolean
+	hasHydrated: boolean
 }
 
 interface WizardActions {
+	setHasHydrated: (hydrated: boolean) => void
 	setStep: (step: WizardStep) => void
 	completeStep: (step: WizardStep) => void
-	skipStep: (step: WizardStep) => void
 	nextStep: () => void
 	prevStep: () => void
-	setAccountData: (data: { name: string; email: string }) => void
+	setAccountData: (data: WizardAccountData) => void
 	setProviderChoice: (choice: 'openrouter') => void
-	setTeamTemplate: (template: 'solo' | 'minimal' | 'custom') => void
+	setHandoffReady: (ready: boolean) => void
 	reset: () => void
 	isStepComplete: (step: WizardStep) => boolean
-	isStepSkipped: (step: WizardStep) => boolean
-	canSkip: (step: WizardStep) => boolean
 }
 
-const initialState: WizardState = {
+type PersistedWizardState = Pick<
+	WizardState,
+	'accountData' | 'completedSteps' | 'currentStep' | 'handoffReady' | 'providerChoice'
+>
+
+const initialWizardState: PersistedWizardState = {
 	currentStep: 1,
-	completedSteps: new Set(),
-	skippedSteps: new Set(),
+	completedSteps: [],
 	accountData: null,
 	providerChoice: null,
-	teamTemplate: null,
+	handoffReady: false,
 }
 
-export const useWizardState = create<WizardState & WizardActions>()((set, get) => ({
-	...initialState,
+export const useWizardState = create<WizardState & WizardActions>()(
+	persist(
+		(set, get) => ({
+			...initialWizardState,
+			hasHydrated: false,
 
-	setStep: (step) => set({ currentStep: step }),
+			setHasHydrated: (hasHydrated) => set({ hasHydrated }),
 
-	completeStep: (step) =>
-		set((state) => ({
-			completedSteps: new Set([...state.completedSteps, step]),
-		})),
+			setStep: (step) => set({ currentStep: step }),
 
-	skipStep: (step) =>
-		set((state) => ({
-			skippedSteps: new Set([...state.skippedSteps, step]),
-			completedSteps: new Set([...state.completedSteps, step]),
-		})),
+			completeStep: (step) =>
+				set((state) => ({
+					completedSteps: state.completedSteps.includes(step)
+						? state.completedSteps
+						: [...state.completedSteps, step],
+				})),
 
-	nextStep: () =>
-		set((state) => {
-			const next = Math.min(state.currentStep + 1, WIZARD_TOTAL_STEPS) as WizardStep
-			return { currentStep: next }
+			nextStep: () =>
+				set((state) => {
+					const next = Math.min(state.currentStep + 1, WIZARD_TOTAL_STEPS) as WizardStep
+					return { currentStep: next }
+				}),
+
+			prevStep: () =>
+				set((state) => {
+					const prev = Math.max(state.currentStep - 1, 1) as WizardStep
+					return { currentStep: prev }
+				}),
+
+			setAccountData: (accountData) => set({ accountData }),
+			setProviderChoice: (providerChoice) => set({ providerChoice }),
+			setHandoffReady: (handoffReady) => set({ handoffReady }),
+
+			reset: () =>
+				set((state) => ({
+					...initialWizardState,
+					hasHydrated: state.hasHydrated,
+				})),
+
+			isStepComplete: (step) => get().completedSteps.includes(step),
 		}),
-
-	prevStep: () =>
-		set((state) => {
-			const prev = Math.max(state.currentStep - 1, 1) as WizardStep
-			return { currentStep: prev }
-		}),
-
-	setAccountData: (data) => set({ accountData: data }),
-	setProviderChoice: (choice) => set({ providerChoice: choice }),
-	setTeamTemplate: (template) => set({ teamTemplate: template }),
-
-	reset: () =>
-		set({
-			...initialState,
-			completedSteps: new Set(),
-			skippedSteps: new Set(),
-		}),
-
-	isStepComplete: (step) => get().completedSteps.has(step),
-	isStepSkipped: (step) => get().skippedSteps.has(step),
-	canSkip: (step) => step > WIZARD_MANDATORY_STEPS,
-}))
+		{
+			name: 'questpie-setup-wizard',
+			storage: createJSONStorage(() => sessionStorage),
+			skipHydration: true,
+			partialize: (state): PersistedWizardState => ({
+				currentStep: state.currentStep,
+				completedSteps: state.completedSteps,
+				accountData: state.accountData,
+				providerChoice: state.providerChoice,
+				handoffReady: state.handoffReady,
+			}),
+		},
+	),
+)

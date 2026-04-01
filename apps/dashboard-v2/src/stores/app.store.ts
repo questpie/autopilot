@@ -1,14 +1,8 @@
+import type { SSEStatus } from "@/lib/sse-client"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { SSEStatus } from "@/lib/sse-client"
 
 type Theme = "dark" | "light" | "system"
-
-interface RightPanelState {
-  open: boolean
-  mode: "chat" | "details" | null
-  channel: string | null
-}
 
 interface AppState {
   /** Mobile overlay: whether the sidebar sheet is open */
@@ -20,13 +14,6 @@ interface AppState {
   sidebarCollapsed: boolean
   setSidebarCollapsed: (collapsed: boolean) => void
   toggleSidebarCollapsed: () => void
-
-  rightPanel: RightPanelState
-  setRightPanel: (panel: Partial<RightPanelState>) => void
-  closeRightPanel: () => void
-
-  commandPaletteOpen: boolean
-  setCommandPaletteOpen: (open: boolean) => void
 
   theme: Theme
   setTheme: (theme: Theme) => void
@@ -48,17 +35,6 @@ export const useAppStore = create<AppState>()(
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () =>
         set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
-
-      rightPanel: { open: false, mode: null, channel: null },
-      setRightPanel: (panel) =>
-        set((state) => ({
-          rightPanel: { ...state.rightPanel, ...panel, open: true },
-        })),
-      closeRightPanel: () =>
-        set({ rightPanel: { open: false, mode: null, channel: null } }),
-
-      commandPaletteOpen: false,
-      setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
 
       theme: "dark" as Theme,
       setTheme: (theme) => set({ theme }),

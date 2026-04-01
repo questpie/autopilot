@@ -3,10 +3,10 @@ import { useWizardState, WIZARD_TOTAL_STEPS, type WizardStep } from "./use-wizar
 
 /**
  * Progress dots for the setup wizard.
- * Active = primary, Done = success, Skipped = muted, Pending = border.
+ * Active = primary, Done = success, Pending = border.
  */
 export function WizardProgress() {
-  const { currentStep, isStepComplete, isStepSkipped } = useWizardState()
+  const { currentStep, isStepComplete } = useWizardState()
 
   return (
     <div className="flex items-center justify-center gap-2 py-4">
@@ -14,7 +14,6 @@ export function WizardProgress() {
         const step = (i + 1) as WizardStep
         const isActive = step === currentStep
         const isDone = isStepComplete(step) && !isActive
-        const isSkip = isStepSkipped(step) && !isActive
 
         return (
           <div
@@ -22,11 +21,10 @@ export function WizardProgress() {
             className={cn(
               "size-2 transition-colors",
               isActive && "bg-primary",
-              isDone && !isSkip && "bg-success",
-              isSkip && "bg-muted-foreground/40",
-              !isActive && !isDone && !isSkip && "bg-border",
+              isDone && "bg-success",
+              !isActive && !isDone && "bg-border",
             )}
-            aria-label={`Step ${step}${isActive ? " (current)" : ""}${isDone ? " (complete)" : ""}${isSkip ? " (skipped)" : ""}`}
+            aria-label={`Step ${step}${isActive ? " (current)" : ""}${isDone ? " (complete)" : ""}`}
           />
         )
       })}

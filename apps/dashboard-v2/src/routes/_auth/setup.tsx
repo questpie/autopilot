@@ -1,9 +1,10 @@
 import {
 	WIZARD_TOTAL_STEPS,
+	type WizardAccountData,
 	type WizardStep,
 	useWizardState,
 } from '@/features/setup/use-wizard-state'
-import { WizardDone } from '@/features/setup/wizard-done'
+import { SetupHandoff } from '@/features/setup/setup-handoff'
 import { WizardProgress } from '@/features/setup/wizard-progress'
 import { WizardStep1 } from '@/features/setup/wizard-step-1'
 import { WizardStep2 } from '@/features/setup/wizard-step-2'
@@ -11,7 +12,7 @@ import { WizardStep3 } from '@/features/setup/wizard-step-3'
 import { checkAuthServer } from '@/lib/auth.fn'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { AnimatePresence, m } from 'framer-motion'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect } from 'react'
 
 export const Route = createFileRoute('/_auth/setup')({
 	component: SetupPage,
@@ -37,38 +38,96 @@ export const Route = createFileRoute('/_auth/setup')({
 })
 
 function SetupPage() {
-	const { currentStep, nextStep, prevStep, setStep } = useWizardState()
-	const [showDone, setShowDone] = useState(false)
+	const {
+		currentStep,
+		nextStep,
+		prevStep,
+		setStep,
+		completeStep,
+		isStepComplete,
+		accountData,
+		handoffReady,
+		hasHydrated,
+		setHasHydrated,
+		setAccountData,
+		setHandoffReady,
+	} = useWizardState()
 	const { authResult } = Route.useRouteContext()
+	const fallbackOwner: WizardAccountData | null = authResult.user
+		? {
+				name: authResult.user.name ?? authResult.user.email,
+				email: authResult.user.email,
+			}
+		: null
+
+	useEffect(() => {
+		let cancelled = false
+
+		void Promise.resolve(useWizardState.persist.rehydrate()).finally(() => {
+			if (!cancelled) {
+				setHasHydrated(true)
+			}
+		})
+
+		return () => {
+			cancelled = true
+		}
+	}, [setHasHydrated])
 
 	// If user is authenticated and wizard is still on step 1, skip to step 2
 	useEffect(() => {
-		if (authResult.isAuthenticated && currentStep <= 1) {
-			setStep(2 as WizardStep)
+		if (!hasHydrated || !authResult.isAuthenticated) {
+			return
 		}
-	}, [authResult.isAuthenticated, currentStep, setStep])
+
+		if (
+			fallbackOwner &&
+			(accountData?.email !== fallbackOwner.email || accountData?.name !== fallbackOwner.name)
+		) {
+			setAccountData(fallbackOwner)
+		}
+
+		if (!handoffReady && !isStepComplete(1)) {
+			completeStep(1)
+		}
+
+		if (!handoffReady && currentStep === 1) {
+			setStep(2)
+		}
+	}, [
+		accountData,
+		authResult.isAuthenticated,
+		completeStep,
+		currentStep,
+		fallbackOwner,
+		hasHydrated,
+		handoffReady,
+		isStepComplete,
+		setAccountData,
+		setStep,
+	])
 
 	const handleNext = useCallback(() => {
 		if (currentStep === WIZARD_TOTAL_STEPS) {
-			setShowDone(true)
+			setHandoffReady(true)
 		} else {
 			nextStep()
 		}
-	}, [currentStep, nextStep])
+	}, [currentStep, nextStep, setHandoffReady])
 
 	const handleBack = useCallback(() => {
 		prevStep()
 	}, [prevStep])
 
-	const handleFinish = useCallback(() => {
-		// Clear wizard state -- done in WizardDone component
-	}, [])
+	if (!hasHydrated) {
+		return <div className="min-h-64" />
+	}
 
-	if (showDone) {
+	if (handoffReady) {
 		return (
 			<div className="flex flex-col">
 				<WizardProgress />
-				<WizardDone onFinish={handleFinish} />
+				<SetupHandoff fallbackOwner={fallbackOwner} />
 			</div>
 		)
 	}

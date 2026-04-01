@@ -10,7 +10,7 @@
  * - 32×32: + jaw, top/side decor, frame
  * - 64×64: + patterns, bg grid, full detail
  */
-import { extractDna, resolveContext, CELL, BRAND, type ResolveOptions } from './core'
+import { resolveContext, CELL, BRAND } from './core'
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -90,7 +90,6 @@ function strokeRect(
 	rgba: RGBA,
 	strokeW: number,
 ): void {
-	const sw = Math.max(1, Math.round(strokeW * scale / CELL))
 	// Top
 	fillRect(buf, size, scale, gx, gy, gw, strokeW / CELL, rgba)
 	// Bottom
