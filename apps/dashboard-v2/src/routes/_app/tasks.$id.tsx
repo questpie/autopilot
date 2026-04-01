@@ -1,36 +1,36 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import {
-  Sheet,
-  SheetContent,
-} from "@/components/ui/sheet"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { ArrowLeftIcon } from "@phosphor-icons/react"
+import { useTranslation } from "@/lib/i18n"
 import { TaskDetail } from "@/features/tasks/task-detail"
+import { PageTransition } from "@/components/layouts/page-transition"
+import { taskDetailQuery } from "@/features/tasks/task.queries"
 
 export const Route = createFileRoute("/_app/tasks/$id")({
   component: TaskDetailRoute,
+  loader: async ({ context, params }) => {
+    await context.queryClient.ensureQueryData(taskDetailQuery(params.id))
+  },
 })
 
-/**
- * Route-based task detail sheet.
- * Opens as a sheet overlay on the tasks page.
- * Browser back closes the sheet.
- */
 function TaskDetailRoute() {
   const { id } = Route.useParams()
-  const navigate = useNavigate()
-
-  function handleClose() {
-    void navigate({ to: "/tasks" })
-  }
+  const { t } = useTranslation()
 
   return (
-    <Sheet open onOpenChange={(open) => { if (!open) handleClose() }}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-[600px]"
-        showCloseButton={false}
-      >
-        <TaskDetail taskId={id} onClose={handleClose} />
-      </SheetContent>
-    </Sheet>
+    <PageTransition className="flex flex-1 flex-col">
+      <div className="border-b border-border px-6 py-3">
+        <Link
+          to="/tasks"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeftIcon size={14} />
+          {t("tasks.back_to_tasks")}
+        </Link>
+      </div>
+
+      <div className="mx-auto w-full max-w-4xl flex-1">
+        <TaskDetail taskId={id} />
+      </div>
+    </PageTransition>
   )
 }

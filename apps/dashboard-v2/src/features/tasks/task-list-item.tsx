@@ -1,5 +1,20 @@
 import { m } from "framer-motion"
-import { ClockIcon } from "@phosphor-icons/react"
+import {
+  ClockIcon,
+  DotsThreeIcon,
+  PencilSimpleIcon,
+  UserSwitchIcon,
+  ArrowsClockwiseIcon,
+  TrashIcon,
+} from "@phosphor-icons/react"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useTranslation } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 interface TaskListItemProps {
@@ -66,6 +81,8 @@ export function TaskListItem({
   onOpen,
   onToggleSelection,
 }: TaskListItemProps) {
+  const { t } = useTranslation()
+
   return (
     <m.div
       layout
@@ -75,7 +92,7 @@ export function TaskListItem({
       exit={{ opacity: 0, height: 0 }}
       transition={{ duration: 0.15 }}
       className={cn(
-        "flex cursor-pointer items-center gap-3 border-b border-border px-4 py-2.5 transition-colors",
+        "group/task-item flex cursor-pointer items-center gap-3 border-b border-border px-4 py-2.5 transition-colors",
         isFocused && "border-l-2 border-l-primary bg-primary/5",
         isSelected && "bg-accent/50",
         !isFocused && !isSelected && "hover:bg-accent/30",
@@ -154,6 +171,40 @@ export function TaskListItem({
         <ClockIcon size={11} />
         {formatTimeAgo(task.updated_at)}
       </span>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="h-6 w-6 shrink-0 opacity-0 transition-opacity group-hover/task-item:opacity-100 data-[state=open]:opacity-100"
+              aria-label={t("a11y.more_options")}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            />
+          }
+        >
+          <DotsThreeIcon size={14} weight="bold" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem className="gap-2">
+            <PencilSimpleIcon size={14} />
+            {t("tasks.actions_edit")}
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2">
+            <UserSwitchIcon size={14} />
+            {t("tasks.actions_reassign")}
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2">
+            <ArrowsClockwiseIcon size={14} />
+            {t("tasks.actions_change_status")}
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2 text-destructive">
+            <TrashIcon size={14} />
+            {t("tasks.actions_delete")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </m.div>
   )
 }

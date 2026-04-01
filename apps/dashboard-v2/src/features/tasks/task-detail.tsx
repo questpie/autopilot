@@ -8,7 +8,6 @@ import {
   CopySimpleIcon,
   TrashIcon,
   Link as LinkIcon,
-  ArrowLeftIcon,
 } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -41,10 +40,9 @@ import { toast } from "sonner"
 
 interface TaskDetailProps {
   taskId: string
-  onClose: () => void
 }
 
-export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
+export function TaskDetail({ taskId }: TaskDetailProps) {
   const { t } = useTranslation()
   const { data: task, isLoading } = useQuery(taskDetailQuery(taskId))
   const approveMutation = useApproveTaskMutation()
@@ -108,20 +106,9 @@ export function TaskDetail({ taskId, onClose }: TaskDetailProps) {
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("a11y.close")}
-              onClick={onClose}
-              className="md:hidden"
-            >
-              <ArrowLeftIcon size={16} />
-            </Button>
-            <span className="font-heading text-xs text-muted-foreground">
-              {formatTaskId(task.id)}
-            </span>
-          </div>
+          <span className="font-heading text-xs text-muted-foreground">
+            {formatTaskId(task.id)}
+          </span>
           <div className="flex items-center gap-1.5">
             {isActionable && (
               <>
