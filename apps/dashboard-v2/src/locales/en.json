@@ -265,7 +265,14 @@
     "context_dm": "DM: {{name}}",
     "context_file": "About: {{name}}",
     "context_channel": "#{{name}}",
-    "panel_toggle": "Toggle chat panel"
+    "panel_toggle": "Toggle chat panel",
+    "reply": "Reply",
+    "pin_message": "Pin message",
+    "copy_text": "Copy text",
+    "delete_message": "Delete message",
+    "more_actions": "More actions",
+    "text_copied": "Text copied",
+    "live": "LIVE"
   },
   "files": {
     "title": "Files",

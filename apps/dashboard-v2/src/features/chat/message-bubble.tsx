@@ -4,6 +4,8 @@ import { useTranslation } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { ArrowClockwiseIcon } from '@phosphor-icons/react'
 import { memo } from 'react'
+import { HoverActionBar } from './hover-action-bar'
+import { MessageContextMenu } from './message-context-menu'
 
 interface Message {
 	id: string
@@ -99,80 +101,86 @@ export const MessageBubble = memo(function MessageBubble({
 	const primitiveLabel = isAgent ? 'message' : null
 
 	return (
-		<div
-			className={cn(
-				'group flex gap-2.5 px-4',
-				isGroupStart ? 'pt-2' : 'pt-0.5',
-				compact && 'px-3',
-				isSending && 'opacity-60',
-			)}
-		>
-			{/* Avatar column */}
-			<div className={cn('w-8 shrink-0', compact && 'w-6')}>
-				{isGroupStart && (
-					<div
-						className={cn(
-							'flex items-center justify-center font-heading text-xs font-bold',
-							compact ? 'size-6 text-[10px]' : 'size-8 text-xs',
-							avatarColor,
-						)}
-						title={message.from}
-					>
-						{initial}
-					</div>
+		<MessageContextMenu messageContent={message.content}>
+			<div
+				className={cn(
+					'group relative flex gap-2.5 px-4',
+					isGroupStart ? 'pt-2' : 'pt-0.5',
+					compact && 'px-3',
+					isSending && 'opacity-60',
 				)}
-			</div>
+			>
+				{!isSending && (
+					<HoverActionBar messageContent={message.content} />
+				)}
 
-			{/* Content */}
-			<div className="min-w-0 flex-1">
-				{isGroupStart && (
-					<div className="mb-0.5 flex items-center gap-2">
-						<span className="font-heading text-xs font-semibold text-foreground">
-							{message.from}
-						</span>
-						<span
-							className="text-[10px] text-muted-foreground/60"
-							title={formatAbsoluteTimestamp(message.at)}
+				{/* Avatar column */}
+				<div className={cn('w-8 shrink-0', compact && 'w-6')}>
+					{isGroupStart && (
+						<div
+							className={cn(
+								'flex items-center justify-center font-heading text-xs font-bold',
+								compact ? 'size-6 text-[10px]' : 'size-8 text-xs',
+								avatarColor,
+							)}
+							title={message.from}
 						>
-							{formatTimestamp(message.at)}
-						</span>
-						{primitiveLabel && (
-							<span className="text-[10px] italic text-muted-foreground/40">
-								{t('chat.via_primitive', { primitive: primitiveLabel })}
-							</span>
-						)}
-					</div>
-				)}
-
-				{/* Message body */}
-				<div className="text-sm">
-					<MarkdownRenderer content={message.content} mode="inline" />
+							{initial}
+						</div>
+					)}
 				</div>
 
-				{/* Resource references */}
-				{message.references.length > 0 && (
-					<div className="mt-1 flex flex-wrap gap-1">
-						{message.references.map((ref) => (
-							<ResourceLinker key={ref} text={ref} className="text-xs" />
-						))}
-					</div>
-				)}
+				{/* Content */}
+				<div className="min-w-0 flex-1">
+					{isGroupStart && (
+						<div className="mb-0.5 flex items-center gap-2">
+							<span className="font-heading text-xs font-semibold text-foreground">
+								{message.from}
+							</span>
+							<span
+								className="text-[10px] text-muted-foreground/60"
+								title={formatAbsoluteTimestamp(message.at)}
+							>
+								{formatTimestamp(message.at)}
+							</span>
+							{primitiveLabel && (
+								<span className="text-[10px] italic text-muted-foreground/40">
+									{t('chat.via_primitive', { primitive: primitiveLabel })}
+								</span>
+							)}
+						</div>
+					)}
 
-				{/* Sending / failed state */}
-				{isSending && (
-					<span className="text-[10px] text-muted-foreground">{t('chat.sending')}</span>
-				)}
-				{isFailed && onRetry && (
-					<button
-						type="button"
-						onClick={onRetry}
-						className="mt-1 flex items-center gap-1 text-[10px] text-destructive hover:underline"
-					>
-						<ArrowClockwiseIcon size={10} />
-						{t('chat.retry_send')}
-					</button>
-				)}
+					{/* Message body */}
+					<div className="text-sm">
+						<MarkdownRenderer content={message.content} mode="inline" />
+					</div>
+
+					{/* Resource references */}
+					{message.references.length > 0 && (
+						<div className="mt-1 flex flex-wrap gap-1">
+							{message.references.map((ref) => (
+								<ResourceLinker key={ref} text={ref} className="text-xs" />
+							))}
+						</div>
+					)}
+
+					{/* Sending / failed state */}
+					{isSending && (
+						<span className="text-[10px] text-muted-foreground">{t('chat.sending')}</span>
+					)}
+					{isFailed && onRetry && (
+						<button
+							type="button"
+							onClick={onRetry}
+							className="mt-1 flex items-center gap-1 text-[10px] text-destructive hover:underline"
+						>
+							<ArrowClockwiseIcon size={10} />
+							{t('chat.retry_send')}
+						</button>
+					)}
+				</div>
 			</div>
-		</div>
+		</MessageContextMenu>
 	)
 })

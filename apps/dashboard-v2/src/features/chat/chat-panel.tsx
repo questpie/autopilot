@@ -13,6 +13,7 @@ import { channelsQuery } from "./chat.queries"
 import { Conversation } from "./conversation"
 import { MessageInput } from "./message-input"
 import { ChatTabs, type ChatTab } from "./chat-tabs"
+import { ChatHeader } from "./chat-header"
 import { useChatContext } from "./use-chat-context"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 
@@ -177,6 +178,7 @@ export function ChatPanel() {
         {/* Conversation — fills remaining space */}
         {activeChannelId ? (
           <div className="flex min-h-0 flex-1 flex-col">
+            <ChatHeader channelId={activeChannelId} compact />
             <Conversation channelId={activeChannelId} compact />
             <MessageInput channelId={activeChannelId} compact />
           </div>
