@@ -14,6 +14,8 @@ import {
 } from "@phosphor-icons/react"
 import { useTranslation } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { useFileDropUpload } from "@/hooks/use-file-drop-upload"
+import { FileDropOverlay } from "@/components/file-drop-overlay"
 import type { FsEntry } from "./files.queries"
 import type { Icon } from "@phosphor-icons/react"
 
@@ -46,10 +48,6 @@ interface DirectoryListingProps {
   className?: string
 }
 
-/**
- * Directory listing table with sorting.
- * Shows name, type icon, size for each entry.
- */
 export function DirectoryListing({
   entries,
   parentPath,
@@ -59,8 +57,7 @@ export function DirectoryListing({
   const [sortKey, setSortKey] = useState<SortKey>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // Drop handler for file upload
-  const [isDragOver, setIsDragOver] = useState(false)
+  const { isDragOver, dragHandlers } = useFileDropUpload(parentPath)
 
   const handleSort = useCallback(
     (key: SortKey) => {
@@ -75,7 +72,6 @@ export function DirectoryListing({
   )
 
   const sorted = [...entries].sort((a, b) => {
-    // Directories always first
     if (a.type !== b.type) return a.type === "directory" ? -1 : 1
 
     let cmp = 0
@@ -100,18 +96,9 @@ export function DirectoryListing({
 
   return (
     <div
-      className={cn("flex flex-col", isDragOver && "ring-2 ring-inset ring-primary", className)}
-      onDragOver={(e) => {
-        e.preventDefault()
-        setIsDragOver(true)
-      }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={(e) => {
-        e.preventDefault()
-        setIsDragOver(false)
-      }}
+      className={cn("relative flex flex-col", className)}
+      {...dragHandlers}
     >
-      {/* Header */}
       <div className="flex items-center border-b border-border px-4 py-2">
         <button
           type="button"
@@ -131,7 +118,6 @@ export function DirectoryListing({
         </button>
       </div>
 
-      {/* Entries */}
       {sorted.map((entry) => {
         const fullPath = parentPath ? `${parentPath}/${entry.name}` : entry.name
         const EntryIcon = getEntryIcon(entry, parentPath)
@@ -154,12 +140,13 @@ export function DirectoryListing({
         )
       })}
 
-      {/* FileIcon count */}
       <div className="px-4 py-2">
         <span className="font-heading text-[10px] text-muted-foreground">
           {t("files.file_count", { count: entries.length })}
         </span>
       </div>
+
+      <FileDropOverlay visible={isDragOver} />
     </div>
   )
 }

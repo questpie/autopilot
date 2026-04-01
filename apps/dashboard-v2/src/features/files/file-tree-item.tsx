@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useState, useRef } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate, useMatches } from "@tanstack/react-router"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
@@ -19,6 +19,7 @@ import { directoryQuery, type FsEntry } from "./files.queries"
 import { FileTreeContextMenu } from "./file-tree-context-menu"
 import { cn } from "@/lib/utils"
 import { EASING, DURATION, useMotionPreference } from "@/lib/motion"
+import { useFileDropUpload } from "@/hooks/use-file-drop-upload"
 import type { Icon } from "@phosphor-icons/react"
 
 function getFileIcon(entry: FsEntry, path: string): Icon {
@@ -57,7 +58,6 @@ export function FileTreeItem({ entry, parentPath, depth }: FileTreeItemProps) {
   const isDir = entry.type === "directory"
   const IconCmp = getFileIcon(entry, fullPath)
 
-  // DnD Kit: every item is draggable, directories are also droppable
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: fullPath,
   })
@@ -66,7 +66,61 @@ export function FileTreeItem({ entry, parentPath, depth }: FileTreeItemProps) {
     disabled: !isDir,
   })
 
-  // Load children when expanded
+  // Native file drop -- needs stopPropagation to prevent bubbling to parent tree
+  const [isNativeDragOver, setIsNativeDragOver] = useState(false)
+  const nativeDragCounter = useRef(0)
+  const { upload } = useFileDropUpload(fullPath)
+
+  const handleNativeDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      if (!isDir) return
+      e.preventDefault()
+      e.stopPropagation()
+      nativeDragCounter.current++
+      if (e.dataTransfer.types.includes("Files")) {
+        setIsNativeDragOver(true)
+      }
+    },
+    [isDir],
+  )
+
+  const handleNativeDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!isDir) return
+      e.preventDefault()
+      e.stopPropagation()
+    },
+    [isDir],
+  )
+
+  const handleNativeDragLeave = useCallback(
+    (e: React.DragEvent) => {
+      if (!isDir) return
+      e.preventDefault()
+      e.stopPropagation()
+      nativeDragCounter.current--
+      if (nativeDragCounter.current <= 0) {
+        nativeDragCounter.current = 0
+        setIsNativeDragOver(false)
+      }
+    },
+    [isDir],
+  )
+
+  const handleNativeDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!isDir) return
+      e.preventDefault()
+      e.stopPropagation()
+      nativeDragCounter.current = 0
+      setIsNativeDragOver(false)
+      if (e.dataTransfer.files.length > 0) {
+        void upload(Array.from(e.dataTransfer.files))
+      }
+    },
+    [isDir, upload],
+  )
+
   const { data: children } = useQuery({
     ...directoryQuery(fullPath),
     enabled: isDir && isExpanded,
@@ -93,6 +147,10 @@ export function FileTreeItem({ entry, parentPath, depth }: FileTreeItemProps) {
         if (isDir) setDropRef(node)
       }}
       className={cn(isDragging && "opacity-40")}
+      onDragEnter={handleNativeDragEnter}
+      onDragOver={handleNativeDragOver}
+      onDragLeave={handleNativeDragLeave}
+      onDrop={handleNativeDrop}
     >
       <FileTreeContextMenu path={fullPath} isDirectory={isDir}>
         <button
@@ -103,7 +161,7 @@ export function FileTreeItem({ entry, parentPath, depth }: FileTreeItemProps) {
             isActive
               ? "bg-primary/5 text-foreground"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-            isOver && isDir && "ring-2 ring-inset ring-primary bg-primary/5",
+            (isOver || isNativeDragOver) && isDir && "ring-2 ring-inset ring-primary bg-primary/5",
           )}
           style={{ paddingLeft: `${depth * 12 + 8}px` }}
           title={fullPath}
@@ -125,7 +183,6 @@ export function FileTreeItem({ entry, parentPath, depth }: FileTreeItemProps) {
         </button>
       </FileTreeContextMenu>
 
-      {/* Children — animated expand/collapse */}
       {isDir && (
         <AnimatePresence initial={false}>
           {isExpanded && sortedChildren.length > 0 && (

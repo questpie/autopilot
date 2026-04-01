@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { queryKeys } from "@/lib/query-keys"
+import { useFileDropUpload } from "@/hooks/use-file-drop-upload"
+import { FileDropOverlay } from "@/components/file-drop-overlay"
 import { directoryQuery } from "./files.queries"
 import { FileTreeBookmarks } from "./file-tree-bookmarks"
 import { FileTreeItem } from "./file-tree-item"
@@ -20,29 +22,15 @@ interface FileTreeProps {
   onUploadClick?: () => void
 }
 
-/**
- * File tree panel — secondary left sidebar for the /files routes.
- * Shows bookmarks at top, then the full directory tree.
- */
 export function FileTree({ className, onUploadClick }: FileTreeProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data: rootEntries, isLoading } = useQuery(directoryQuery(""))
   const moveFile = useMoveFile()
 
-  // Native drag-drop upload handling
-  const [isDragOver, setIsDragOver] = useState(false)
-  // DnD Kit: track actively dragged item
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 
-  const handleNativeDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      setIsDragOver(false)
-      onUploadClick?.()
-    },
-    [onUploadClick],
-  )
+  const { isDragOver, dragHandlers } = useFileDropUpload("/")
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveDragId(event.active.id as string)
@@ -86,16 +74,10 @@ export function FileTree({ className, onUploadClick }: FileTreeProps) {
     <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div
         className={cn(
-          "flex h-full w-[240px] shrink-0 flex-col border-r border-border bg-sidebar",
-          isDragOver && "ring-2 ring-inset ring-primary",
+          "relative flex h-full w-[240px] shrink-0 flex-col border-r border-border bg-sidebar",
           className,
         )}
-        onDragOver={(e) => {
-          e.preventDefault()
-          setIsDragOver(true)
-        }}
-        onDragLeave={() => setIsDragOver(false)}
-        onDrop={handleNativeDrop}
+        {...dragHandlers}
       >
         <FileTreeBookmarks />
 
@@ -126,7 +108,6 @@ export function FileTree({ className, onUploadClick }: FileTreeProps) {
           </div>
         </ScrollArea>
 
-        {/* Bottom actions */}
         <div className="flex gap-1 border-t border-border p-2">
           <ContextNewButton currentDir="" />
           <Button
@@ -139,9 +120,10 @@ export function FileTree({ className, onUploadClick }: FileTreeProps) {
             {t("files.upload")}
           </Button>
         </div>
+
+        <FileDropOverlay visible={isDragOver} iconSize={24} textClassName="text-xs" />
       </div>
 
-      {/* DnD drag overlay */}
       <DragOverlay>
         {activeDragId ? (
           <div className="rounded-none border border-primary bg-card px-3 py-1 font-heading text-xs text-foreground shadow-md">
