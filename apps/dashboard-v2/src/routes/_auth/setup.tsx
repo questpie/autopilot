@@ -127,7 +127,13 @@ function SetupPage() {
 		return (
 			<div className="flex flex-col">
 				<WizardProgress />
-				<SetupHandoff fallbackOwner={fallbackOwner} />
+				<SetupHandoff
+					fallbackOwner={fallbackOwner}
+					onBack={() => {
+						setHandoffReady(false)
+						setStep(3)
+					}}
+				/>
 			</div>
 		)
 	}

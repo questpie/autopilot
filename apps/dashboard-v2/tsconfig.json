@@ -1,11 +1,8 @@
 {
   "include": ["**/*.ts", "**/*.tsx", "eslint.config.js", "prettier.config.js", "vite.config.js"],
   "exclude": [
-    "src/features/chat/**",
     "src/features/files/**",
-    "src/features/settings/**",
-    "src/features/tasks/**",
-    "src/features/team/**"
+    "src/features/settings/**"
   ],
 
   "compilerOptions": {

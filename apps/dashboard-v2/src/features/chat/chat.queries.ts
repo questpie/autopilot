@@ -1,142 +1,104 @@
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
-import {
-	ChannelMemberSchema,
-	MessageSchema,
-	PinnedMessageSchema,
-	ReactionSchema,
-} from '@questpie/autopilot-spec/schemas'
-import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
-import type { ChannelMember, Message, PinnedMessage, Reaction } from './chat.types'
+import { MessageSchema } from '@questpie/autopilot-spec/schemas'
+import { queryOptions } from '@tanstack/react-query'
+import type { Message } from './chat.types'
 
 const MessagesSchema = MessageSchema.array()
-const ChannelMembersSchema = ChannelMemberSchema.array()
-const PinnedMessagesSchema = PinnedMessageSchema.array()
-const ReactionsSchema = ReactionSchema.array()
 
-export const channelsQuery = queryOptions({
-	queryKey: queryKeys.channels.list(),
-	queryFn: async () => {
-		const res = await api.api.channels.$get()
-		if (!res.ok) throw new Error('Failed to fetch channels')
+export interface ChatSessionSummary {
+	id: string
+	agentId: string
+	agentName: string
+	status: string
+	startedAt: string
+	endedAt: string | null
+	channelId: string | null
+	firstMessage: string | null
+	toolCalls: number
+	tokensUsed: number
+}
+
+export interface ChatSessionDetail extends ChatSessionSummary {
+	streamUrl: string
+}
+
+export interface ChatSessionsResponse {
+	sessions: ChatSessionSummary[]
+}
+
+export interface StatusResponse {
+	company: string
+	userCount: number
+	setupCompleted: boolean
+	onboardingChatCompleted: boolean
+	agentCount: number
+	activeTasks: number
+	runningSessions: number
+	pendingApprovals: number
+}
+
+export const statusQuery = queryOptions({
+	queryKey: queryKeys.status.root,
+	queryFn: async (): Promise<StatusResponse> => {
+		const res = await api.api.status.$get()
+		if (!res.ok) throw new Error('Failed to fetch status')
 		return res.json()
 	},
 })
 
-export function channelDetailQuery(id: string) {
+export function chatSessionsQuery(limit = 20, offset = 0) {
 	return queryOptions({
-		queryKey: queryKeys.channels.detail(id),
-		queryFn: async () => {
-			const res = await api.api.channels[':id'].$get({
-				param: { id },
+		queryKey: queryKeys.sessions.list({ limit, offset }),
+		queryFn: async (): Promise<ChatSessionsResponse> => {
+			const res = await api.api['chat-sessions'].$get({
+				query: {
+					limit: String(limit),
+					offset: String(offset),
+				},
 			})
-			if (!res.ok) throw new Error('Failed to fetch channel')
+			if (!res.ok) throw new Error('Failed to fetch chat sessions')
 			return res.json()
 		},
-		enabled: !!id,
 	})
 }
 
-export function messagesQuery(channelId: string, limit = 50) {
+export function chatSessionDetailQuery(sessionId: string) {
 	return queryOptions({
-		queryKey: queryKeys.messages.list({ channel: channelId, limit }),
-		queryFn: async (): Promise<Message[]> => {
-			const res = await api.api.channels[':id'].messages.$get({
-				param: { id: channelId },
-				query: { limit: limit.toString() },
+		queryKey: queryKeys.sessions.detail(sessionId),
+		queryFn: async (): Promise<ChatSessionDetail> => {
+			const res = await api.api['chat-sessions'][':id'].$get({
+				param: { id: sessionId },
 			})
-			if (!res.ok) throw new Error('Failed to fetch messages')
-			return MessagesSchema.parse(await res.json())
-		},
-		enabled: !!channelId,
-	})
-}
-
-/**
- * Infinite query for cursor-based pagination of channel messages.
- * Each page fetches `PAGE_SIZE` messages; uses the oldest message ID as cursor for the next page.
- */
-const PAGE_SIZE = 50
-
-export function messagesInfiniteQuery(channelId: string) {
-	return infiniteQueryOptions({
-		queryKey: [...queryKeys.messages.list({ channel: channelId }), 'infinite'] as const,
-		queryFn: async ({ pageParam }): Promise<Message[]> => {
-			const query: Record<string, string> = { limit: PAGE_SIZE.toString() }
-			if (pageParam) {
-				query.before = pageParam as string
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({}))
+				throw new Error((body as { error?: string }).error ?? 'Failed to fetch chat session')
 			}
-			const res = await api.api.channels[':id'].messages.$get({
-				param: { id: channelId },
-				query,
-			})
-			if (!res.ok) throw new Error('Failed to fetch messages')
-			return MessagesSchema.parse(await res.json())
+			return res.json()
 		},
-		initialPageParam: undefined as string | undefined,
-		getNextPageParam: (lastPage) => {
-			// If we got fewer messages than requested, there are no more pages
-			if (lastPage.length < PAGE_SIZE) return undefined
-			// Use the oldest message ID as cursor
-			return lastPage[0]?.id
-		},
-		enabled: !!channelId,
+		enabled: !!sessionId,
 	})
 }
 
-export function threadMessagesQuery(channelId: string, threadId: string) {
+export function chatSessionMessagesQuery(sessionId: string, limit = 200, offset = 0) {
 	return queryOptions({
-		queryKey: queryKeys.messages.list({ channel: channelId, thread_id: threadId }),
+		queryKey: queryKeys.messages.list({ session: sessionId, limit, offset }),
 		queryFn: async (): Promise<Message[]> => {
-			const res = await api.api.channels[':id'].messages.$get({
-				param: { id: channelId },
-				query: { limit: '100', thread_id: threadId },
+			const res = await api.api['chat-sessions'][':id'].messages.$get({
+				param: { id: sessionId },
+				query: {
+					limit: String(limit),
+					offset: String(offset),
+				},
 			})
-			if (!res.ok) throw new Error('Failed to fetch thread messages')
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({}))
+				throw new Error(
+					(body as { error?: string }).error ?? 'Failed to fetch session messages',
+				)
+			}
 			return MessagesSchema.parse(await res.json())
 		},
-		enabled: !!channelId && !!threadId,
-	})
-}
-
-export function channelMembersQuery(channelId: string) {
-	return queryOptions({
-		queryKey: queryKeys.channels.detail(`${channelId}-members`),
-		queryFn: async (): Promise<ChannelMember[]> => {
-			const res = await api.api.channels[':id'].members.$get({
-				param: { id: channelId },
-			})
-			if (!res.ok) throw new Error('Failed to fetch members')
-			return ChannelMembersSchema.parse(await res.json())
-		},
-		enabled: !!channelId,
-	})
-}
-
-export function pinnedMessagesQuery(channelId: string) {
-	return queryOptions({
-		queryKey: queryKeys.pins.list({ channel: channelId }),
-		queryFn: async (): Promise<PinnedMessage[]> => {
-			const res = await api.api.channels[':id'].pins.$get({
-				param: { id: channelId },
-			})
-			if (!res.ok) throw new Error('Failed to fetch pinned messages')
-			return PinnedMessagesSchema.parse(await res.json())
-		},
-		enabled: !!channelId,
-	})
-}
-
-export function reactionsQuery(channelId: string, messageId: string) {
-	return queryOptions({
-		queryKey: queryKeys.reactions.detail(`${channelId}:${messageId}`),
-		queryFn: async (): Promise<Reaction[]> => {
-			const res = await api.api.channels[':id'].messages[':msgId'].reactions.$get({
-				param: { id: channelId, msgId: messageId },
-			})
-			if (!res.ok) throw new Error('Failed to fetch reactions')
-			return ReactionsSchema.parse(await res.json())
-		},
-		enabled: !!channelId && !!messageId,
+		enabled: !!sessionId,
 	})
 }

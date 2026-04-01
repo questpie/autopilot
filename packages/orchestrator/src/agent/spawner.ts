@@ -374,7 +374,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		if (active >= limits.maxAgents) {
 			const error = `Plan limit: max ${limits.maxAgents} concurrent agents`
 			if (hasPrecreatedSession) {
-				streamManager.emit(sessionId, { at: Date.now(), type: 'error', content: error })
+				streamManager.emit(sessionId, { at: Date.now(), type: 'error', content: error, errorCode: 'budget' })
 				streamManager.endStream(sessionId)
 				await updateSessionRecord(sessionId, {
 					status: 'failed',
@@ -402,7 +402,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 			if (used >= limits.maxTokensDay) {
 				const error = `Plan limit: daily token limit (${limits.maxTokensDay}) reached`
 				if (hasPrecreatedSession) {
-					streamManager.emit(sessionId, { at: Date.now(), type: 'error', content: error })
+					streamManager.emit(sessionId, { at: Date.now(), type: 'error', content: error, errorCode: 'budget' })
 					streamManager.endStream(sessionId)
 					await updateSessionRecord(sessionId, {
 						status: 'failed',
@@ -550,6 +550,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 			tool: event.tool,
 			toolCallId: event.toolCallId,
 			params: event.params,
+			errorCode: event.errorCode,
 		})
 
 		if (event.type === 'tool_call') {
@@ -610,7 +611,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	} catch (err) {
 		const error = err instanceof Error ? err.message : String(err)
 		sessionResult = { toolCalls: 0, error }
-		streamManager.emit(sessionId, { at: Date.now(), type: 'error', content: error })
+		streamManager.emit(sessionId, { at: Date.now(), type: 'error', content: error, errorCode: 'unknown' })
 	} finally {
 		// D9: Emit typing stopped
 		eventBus.emit({ type: 'agent_typing', agentId: agent.id, status: 'stopped', sessionId })

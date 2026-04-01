@@ -1,6 +1,1 @@
-export type {
-	ChannelMember,
-	Message,
-	PinnedMessage,
-	Reaction,
-} from '@questpie/autopilot-spec/types'
+export type { Message } from '@questpie/autopilot-spec/types'

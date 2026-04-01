@@ -1,26 +1,27 @@
-import { EmptyState } from "@/components/feedback"
-import { PageTransition } from "@/components/layouts/page-transition"
-import { SplitLayout } from "@/components/layouts/split-layout"
-import { ChannelsSidebar } from "@/features/channels/channels-sidebar"
-import { useTranslation } from "@/lib/i18n"
-import { createFileRoute } from "@tanstack/react-router"
+import { SplitLayout } from '@/components/layouts/split-layout'
+import { ChannelsSidebar } from '@/features/channels/channels-sidebar'
+import { NewChatView } from '@/features/chat/new-chat-view'
+import { chatSessionsQuery, statusQuery } from '@/features/chat/chat.queries'
+import { agentsQuery } from '@/features/team/team.queries'
+import { createFileRoute } from '@tanstack/react-router'
+import { useTranslation } from '@/lib/i18n'
 
-export const Route = createFileRoute("/_app/")({
-  component: NewChatPage,
+export const Route = createFileRoute('/_app/')({
+	loader: async ({ context }) => {
+		await Promise.all([
+			context.queryClient.ensureQueryData(statusQuery),
+			context.queryClient.ensureQueryData(agentsQuery),
+			context.queryClient.ensureQueryData(chatSessionsQuery()),
+		])
+	},
+	component: NewChatPage,
 })
 
 function NewChatPage() {
-  const { t } = useTranslation()
-
-  return (
-    <SplitLayout sidebar={<ChannelsSidebar />}>
-      <PageTransition className="flex flex-1 items-center justify-center p-6">
-        <EmptyState
-          logo
-          title={t("empty.new_chat_title")}
-          description={t("empty.new_chat_description")}
-        />
-      </PageTransition>
-    </SplitLayout>
-  )
+	const { t } = useTranslation()
+	return (
+		<SplitLayout sidebar={<ChannelsSidebar />} sidebarTitle={t('nav.channels')}>
+			<NewChatView />
+		</SplitLayout>
+	)
 }

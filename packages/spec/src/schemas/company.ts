@@ -110,4 +110,5 @@ export const CompanySchema = z.object({
 	setup_completed: z.preprocess(nullToUndefined, z.boolean().default(false)),
 	setup_completed_at: z.string().optional(),
 	setup_completed_by: z.string().optional(),
+	onboarding_chat_completed: z.preprocess(nullToUndefined, z.boolean().default(false)),
 })

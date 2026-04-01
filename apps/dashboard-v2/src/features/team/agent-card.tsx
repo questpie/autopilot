@@ -1,6 +1,5 @@
 import { CircleIcon } from "@phosphor-icons/react"
 import { m } from "framer-motion"
-import { Link } from "@tanstack/react-router"
 import { Badge } from "@/components/ui/badge"
 import { useTranslation } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -65,11 +64,7 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
         delay: shouldReduce ? 0 : clampedDelay(index, 50, 300),
       }}
     >
-      <Link
-        to="/team/$id"
-        params={{ id: agent.id }}
-        className="group flex flex-col items-center gap-2 border border-border p-4 transition-all duration-150 ease-out hover:-translate-y-0.5 hover:border-primary hover:bg-muted/30"
-      >
+      <div className="group flex flex-col items-center gap-2 border border-border p-4 transition-all duration-150 ease-out">
         {/* Square avatar */}
         <div
           className={cn(
@@ -81,7 +76,7 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
         </div>
 
         {/* Name */}
-        <span className="font-heading text-sm font-medium text-foreground group-hover:text-primary">
+        <span className="font-heading text-sm font-medium text-foreground">
           {agent.name}
         </span>
 
@@ -110,7 +105,7 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
         <span className="font-heading text-[10px] text-muted-foreground">
           {t("team.tasks_count", { count: taskCount })}
         </span>
-      </Link>
+      </div>
     </m.div>
   )
 }

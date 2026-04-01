@@ -5,6 +5,8 @@ import { TaskSchema } from './task'
 export const StatusResponseSchema = z.object({
 	company: z.string(),
 	userCount: z.number(),
+	setupCompleted: z.boolean(),
+	onboardingChatCompleted: z.boolean(),
 	agentCount: z.number(),
 	activeTasks: z.number(),
 	runningSessions: z.number(),

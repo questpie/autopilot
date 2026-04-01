@@ -62,16 +62,6 @@ export function registerTools(server: McpServer): void {
 		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
 	})
 
-	server.tool('agent_steer', 'Send a steering message to a running agent session', {
-		session_id: z.string().describe('Session ID'),
-		message: z.string().describe('Message to send'),
-	}, async (args) => {
-		const data = await apiPost(`/api/agent-sessions/${encodeURIComponent(args.session_id)}/steer`, {
-			message: args.message,
-		})
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
-
 	server.tool('status', 'Get system status', {}, async () => {
 		const data = await apiGet('/api/status')
 		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
@@ -125,38 +115,70 @@ export function registerTools(server: McpServer): void {
 		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
 	})
 
-	// ─── D35: Session + chat tools ──────────────────────────────────────
+	// ─── D35: Chat session tools ────────────────────────────────────────
 
-	server.tool('session_list', 'List active agent sessions', {}, async () => {
-		const data = await apiGet('/api/agent-sessions')
+	server.tool('chat_session_list', 'List chat sessions for the current user', {
+		limit: z.number().optional().describe('Max sessions to return (default 20)'),
+		offset: z.number().optional().describe('Pagination offset'),
+	}, async (args) => {
+		const params = new URLSearchParams()
+		if (args.limit) params.set('limit', String(args.limit))
+		if (args.offset) params.set('offset', String(args.offset))
+		const qs = params.toString()
+		const data = await apiGet(`/api/chat-sessions${qs ? `?${qs}` : ''}`)
 		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
 	})
 
-	server.tool('session_stream', 'Get session stream events', {
+	server.tool('chat_session_get', 'Get chat session metadata', {
+		session_id: z.string().describe('Chat session ID'),
+	}, async (args) => {
+		const data = await apiGet(`/api/chat-sessions/${encodeURIComponent(args.session_id)}`)
+		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+	})
+
+	server.tool('chat_session_stream', 'Get stream events for a chat session', {
 		session_id: z.string().describe('Session ID'),
 	}, async (args) => {
 		const data = await apiStream(`/api/agent-sessions/${encodeURIComponent(args.session_id)}/stream`)
 		return { content: [{ type: 'text', text: data }] }
 	})
 
-	server.tool('chat_send', 'Send a message to an agent via streaming chat', {
+	server.tool('chat_session_start', 'Start a new chat session with an agent', {
 		agent_id: z.string().describe('Agent ID'),
 		message: z.string().describe('Message to send'),
+		channel_id: z.string().optional().describe('Existing direct-message channel ID'),
 	}, async (args) => {
-		const data = await apiPost(`/api/chat/${encodeURIComponent(args.agent_id)}`, {
+		const data = await apiPost('/api/chat-sessions', {
+			agentId: args.agent_id,
 			message: args.message,
+			channelId: args.channel_id,
 		})
 		return { content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] }
 	})
 
-	server.tool('chat_history', 'Get chat history for a channel', {
-		channel_id: z.string().describe('Channel ID'),
-		limit: z.number().optional().describe('Max messages (default 50)'),
+	server.tool('chat_session_continue', 'Continue an existing chat session with another user turn', {
+		session_id: z.string().describe('Chat session ID'),
+		message: z.string().describe('Follow-up message'),
+	}, async (args) => {
+		const data = await apiPost(
+			`/api/chat-sessions/${encodeURIComponent(args.session_id)}/messages`,
+			{ message: args.message },
+		)
+		return { content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] }
+	})
+
+	server.tool('chat_session_messages', 'Get message history for a chat session', {
+		session_id: z.string().describe('Chat session ID'),
+		limit: z.number().optional().describe('Max messages (default 200)'),
+		offset: z.number().optional().describe('Pagination offset'),
 	}, async (args) => {
 		const params = new URLSearchParams()
 		if (args.limit) params.set('limit', String(args.limit))
+		if (args.offset) params.set('offset', String(args.offset))
 		const qs = params.toString()
-		const data = await apiGet(`/api/channels/${encodeURIComponent(args.channel_id)}/messages${qs ? `?${qs}` : ''}`)
+		const data = await apiGet(
+			`/api/chat-sessions/${encodeURIComponent(args.session_id)}/messages${qs ? `?${qs}` : ''}`,
+		)
 		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
 	})
 }

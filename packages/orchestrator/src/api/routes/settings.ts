@@ -73,6 +73,48 @@ const ProviderParamSchema = z.object({
 	provider: z.enum(['openrouter', 'gemini']),
 })
 
+const ModelListItemSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	provider: z.string(),
+	pricing: z.object({
+		prompt: z.string().nullable().optional(),
+		completion: z.string().nullable().optional(),
+	}),
+	context_length: z.number().nullable().optional(),
+	top_provider: z.boolean().default(false),
+})
+
+const ModelsResponseSchema = z.object({
+	models: z.array(ModelListItemSchema),
+})
+
+const OpenRouterModelsSchema = z.object({
+	data: z.array(
+		z
+			.object({
+				id: z.string(),
+				name: z.string().optional(),
+				context_length: z.number().nullable().optional(),
+				pricing: z
+					.object({
+						prompt: z.string().nullable().optional(),
+						completion: z.string().nullable().optional(),
+					})
+					.optional(),
+				architecture: z
+					.object({
+						modality: z.string().optional(),
+					})
+					.optional(),
+				top_provider: z.unknown().optional(),
+			})
+			.passthrough(),
+	),
+})
+
+type ModelsResponse = z.infer<typeof ModelsResponseSchema>
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
@@ -109,6 +151,63 @@ const PROVIDER_MODEL_MAP: Record<string, string> = {
 	gemini: 'gemini-2.0-flash',
 }
 
+const PROVIDER_UTILITY_MODEL_MAP: Record<string, string> = {
+	openrouter: 'google/gemini-3.1-flash-lite-preview',
+	gemini: 'gemini-2.0-flash',
+}
+
+const CURATED_MODELS: ModelsResponse = {
+	models: [
+		{
+			id: 'anthropic/claude-sonnet-4',
+			name: 'claude-sonnet-4',
+			provider: 'Anthropic',
+			pricing: { prompt: '3.00', completion: '15.00' },
+			context_length: 200000,
+			top_provider: true,
+		},
+		{
+			id: 'openai/gpt-4o',
+			name: 'gpt-4o',
+			provider: 'OpenAI',
+			pricing: { prompt: '2.50', completion: '10.00' },
+			context_length: 128000,
+			top_provider: true,
+		},
+		{
+			id: 'anthropic/claude-opus-4',
+			name: 'claude-opus-4',
+			provider: 'Anthropic',
+			pricing: { prompt: '15.00', completion: '75.00' },
+			context_length: 200000,
+			top_provider: false,
+		},
+		{
+			id: 'deepseek/deepseek-chat',
+			name: 'deepseek-chat',
+			provider: 'DeepSeek',
+			pricing: { prompt: '0.14', completion: '0.28' },
+			context_length: 64000,
+			top_provider: false,
+		},
+		{
+			id: 'google/gemini-2.5-pro',
+			name: 'gemini-2.5-pro',
+			provider: 'Google',
+			pricing: { prompt: '1.25', completion: '10.00' },
+			context_length: 1048576,
+			top_provider: false,
+		},
+	],
+}
+
+let modelsCache:
+	| {
+			expiresAt: number
+			data: ModelsResponse
+	  }
+	| null = null
+
 /** Key format validation patterns. */
 const KEY_PATTERNS: Record<string, RegExp> = {
 	openrouter: /^sk-or-/,
@@ -117,6 +216,73 @@ const KEY_PATTERNS: Record<string, RegExp> = {
 
 function providerSecretName(provider: string): string {
 	return `provider-${provider}`
+}
+
+function providerDisplayName(modelId: string): string {
+	const provider = modelId.split('/')[0] ?? ''
+	switch (provider) {
+		case 'anthropic':
+			return 'Anthropic'
+		case 'openai':
+			return 'OpenAI'
+		case 'google':
+			return 'Google'
+		case 'deepseek':
+			return 'DeepSeek'
+		default:
+			return provider || 'Unknown'
+	}
+}
+
+function modelPriority(modelId: string): number {
+	if (modelId.includes('claude-sonnet')) return 0
+	if (modelId.includes('gpt-4o')) return 1
+	if (modelId.includes('gemini')) return 2
+	if (modelId.includes('deepseek-chat')) return 3
+	return 10
+}
+
+async function getOpenRouterApiKey(root: string): Promise<string | undefined> {
+	const companyPath = join(root, 'company.yaml')
+	const company = (await fileExists(companyPath))
+		? ((await readYamlUnsafe(companyPath)) as Record<string, unknown>)
+		: {}
+	const settings = (company.settings as Record<string, unknown> | undefined) ?? {}
+	const aiProvider = (settings.ai_provider as Record<string, unknown> | undefined) ?? {}
+	const secretRef =
+		typeof aiProvider.secret_ref === 'string' && aiProvider.provider === 'openrouter'
+			? aiProvider.secret_ref
+			: undefined
+	const secret = secretRef ? await readSecretRecord(root, secretRef).catch(() => null) : null
+	return secret?.value ?? getEnv().OPENROUTER_API_KEY
+}
+
+function normalizeModels(models: z.infer<typeof OpenRouterModelsSchema>['data']): ModelsResponse {
+	return {
+		models: models
+			.filter((model) => {
+				const modality = model.architecture?.modality
+				return !modality || modality.includes('text')
+			})
+			.map((model) => ({
+				id: model.id,
+				name: model.name ?? model.id.split('/').pop() ?? model.id,
+				provider: providerDisplayName(model.id),
+				pricing: {
+					prompt: model.pricing?.prompt ?? null,
+					completion: model.pricing?.completion ?? null,
+				},
+				context_length: model.context_length ?? null,
+				top_provider: !!model.top_provider,
+			}))
+			.sort((left, right) => {
+				const priorityDiff = modelPriority(left.id) - modelPriority(right.id)
+				if (priorityDiff !== 0) return priorityDiff
+				const providerDiff = left.provider.localeCompare(right.provider)
+				if (providerDiff !== 0) return providerDiff
+				return left.name.localeCompare(right.name)
+			}),
+	}
 }
 
 async function updateCompanyProviderSettings(
@@ -142,6 +308,10 @@ async function updateCompanyProviderSettings(
 					typeof currentAiProvider.default_model === 'string'
 						? currentAiProvider.default_model
 						: PROVIDER_MODEL_MAP[provider],
+				utility_model:
+					typeof currentAiProvider.utility_model === 'string'
+						? currentAiProvider.utility_model
+						: PROVIDER_UTILITY_MODEL_MAP[provider],
 			}
 		: undefined
 	const { ai_provider: _unusedAiProvider, ...settingsWithoutAiProvider } = settings
@@ -240,6 +410,63 @@ const settings = new Hono<AppEnv>()
 			eventBus.emit({ type: 'settings_changed' })
 
 			return c.json({ ok: true as const }, 200)
+		},
+	)
+	.get(
+		'/models',
+		describeRoute({
+			tags: ['settings'],
+			description: 'List available chat models for onboarding and agent configuration.',
+			responses: {
+				200: {
+					description: 'Available models',
+					content: { 'application/json': { schema: resolver(ModelsResponseSchema) } },
+				},
+			},
+		}),
+		async (c) => {
+			if (modelsCache && modelsCache.expiresAt > Date.now()) {
+				return c.json(modelsCache.data, 200)
+			}
+
+			const root = c.get('companyRoot')
+			const apiKey = await getOpenRouterApiKey(root)
+
+			if (!apiKey) {
+				modelsCache = {
+					expiresAt: Date.now() + 60 * 60 * 1000,
+					data: CURATED_MODELS,
+				}
+				return c.json(CURATED_MODELS, 200)
+			}
+
+			try {
+				const resp = await fetch('https://openrouter.ai/api/v1/models', {
+					headers: {
+						Authorization: `Bearer ${apiKey}`,
+						'Content-Type': 'application/json',
+					},
+				})
+
+				if (!resp.ok) {
+					throw new Error(`OpenRouter returned ${resp.status}`)
+				}
+
+				const parsed = OpenRouterModelsSchema.parse(await resp.json())
+				const normalized = normalizeModels(parsed.data)
+				modelsCache = {
+					expiresAt: Date.now() + 60 * 60 * 1000,
+					data: normalized.models.length > 0 ? normalized : CURATED_MODELS,
+				}
+
+				return c.json(modelsCache.data, 200)
+			} catch {
+				modelsCache = {
+					expiresAt: Date.now() + 10 * 60 * 1000,
+					data: CURATED_MODELS,
+				}
+				return c.json(CURATED_MODELS, 200)
+			}
 		},
 	)
 	.get(

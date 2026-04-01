@@ -45,6 +45,10 @@ async function markSetupCompleted(root: string, actorId: string): Promise<void> 
 		setup_completed: true,
 		setup_completed_at: new Date().toISOString(),
 		setup_completed_by: actorId,
+		onboarding_chat_completed:
+			typeof existing.onboarding_chat_completed === 'boolean'
+				? existing.onboarding_chat_completed
+				: false,
 	})
 }
 

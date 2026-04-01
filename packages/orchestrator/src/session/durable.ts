@@ -114,16 +114,3 @@ export async function appendToSessionStream(sessionId: string, chunk: unknown): 
 		})
 	}
 }
-
-export async function steerSession(
-	sessionId: string,
-	message: string,
-	from = 'user',
-): Promise<void> {
-	await appendToSessionStream(sessionId, {
-		type: 'user_steer',
-		from,
-		content: message,
-		at: Date.now(),
-	})
-}

@@ -57,6 +57,7 @@ const status = new Hono<AppEnv>().get(
 			company: company.name,
 			userCount,
 			setupCompleted: company.setup_completed ?? false,
+			onboardingChatCompleted: company.onboarding_chat_completed ?? false,
 			agentCount: agents.length,
 			activeTasks: activeTasks.length,
 			runningSessions,

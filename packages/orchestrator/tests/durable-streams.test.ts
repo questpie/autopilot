@@ -9,7 +9,6 @@ import {
 	checkDurableStreamHealth,
 	createSessionStream,
 	appendToSessionStream,
-	steerSession,
 } from '../src/session/durable'
 
 const originalFetch = globalThis.fetch
@@ -120,31 +119,5 @@ describe('appendToSessionStream', () => {
 	test('does not throw on network error', async () => {
 		globalThis.fetch = (async () => { throw new Error('timeout') }) as typeof fetch
 		await appendToSessionStream('s-1', { type: 'text' }) // fire-and-forget
-	})
-})
-
-describe('steerSession', () => {
-	test('appends user_steer event', async () => {
-		let capturedBody: Record<string, unknown> | undefined
-		globalThis.fetch = (async (_: unknown, opts: unknown) => {
-			capturedBody = JSON.parse((opts as RequestInit).body as string)
-			return new Response('', { status: 200 })
-		}) as typeof fetch
-
-		await steerSession('s-1', 'Please focus on the bug', 'admin')
-		expect(capturedBody!.type).toBe('user_steer')
-		expect(capturedBody!.content).toBe('Please focus on the bug')
-		expect(capturedBody!.from).toBe('admin')
-	})
-
-	test('defaults from to "user"', async () => {
-		let capturedBody: Record<string, unknown> | undefined
-		globalThis.fetch = (async (_: unknown, opts: unknown) => {
-			capturedBody = JSON.parse((opts as RequestInit).body as string)
-			return new Response('', { status: 200 })
-		}) as typeof fetch
-
-		await steerSession('s-1', 'hello')
-		expect(capturedBody!.from).toBe('user')
 	})
 })

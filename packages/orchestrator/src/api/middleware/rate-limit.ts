@@ -2,9 +2,9 @@
  * Rate limiting middleware — sliding window via SQLite.
  *
  * Two layers:
- * - ipRateLimit(): 20 req/min by IP, BEFORE auth (protects unauthenticated endpoints)
- * - actorRateLimit(): per-actor limits AFTER auth (human 300/min, search 10/min, chat 20/min;
- *   agents 600/min general, 50/min search, 100/min chat; webhook source exempt)
+ * - ipRateLimit(): 120 req/min by IP, BEFORE auth (protects unauthenticated endpoints)
+ * - actorRateLimit(): per-actor limits AFTER auth (human 600/min, search 60/min, chat 120/min;
+ *   agents 600/min general, 50/min search, 200/min chat; webhook source exempt)
  */
 import { createMiddleware } from 'hono/factory'
 import type { Client } from '@libsql/client'
@@ -94,7 +94,7 @@ export function checkPasswordResetLimit(
 }
 
 /**
- * IP-based rate limiting — 20 req/min.
+ * IP-based rate limiting — 120 req/min.
  * Applied BEFORE auth middleware.
  * Exempt: /hooks/* and /api/status
  */
@@ -110,10 +110,10 @@ export function ipRateLimit() {
 		const db = c.get('db')
 		const key = `ip:${clientIp}`
 
-		const result = await checkRateLimit(db, key, 60, 20)
+		const result = await checkRateLimit(db, key, 60, 120)
 
 		// Always set headers
-		c.header('X-RateLimit-Limit', '20')
+		c.header('X-RateLimit-Limit', '120')
 		c.header('X-RateLimit-Remaining', String(result.remaining))
 		c.header('X-RateLimit-Reset', String(result.resetAt))
 
@@ -127,8 +127,8 @@ export function ipRateLimit() {
 
 /**
  * Actor-based rate limiting — applied AFTER auth middleware.
- * Human limits: 300/min general, 10/min search, 20/min chat.
- * Agent limits: 600/min general, 50/min search, 100/min chat.
+ * Human limits: 600/min general, 60/min search, 120/min chat.
+ * Agent limits: 600/min general, 50/min search, 200/min chat.
  * Webhook limits: 60/min per webhook path.
  */
 export function actorRateLimit() {
@@ -165,13 +165,13 @@ export function actorRateLimit() {
 
 		if (path.startsWith('/api/search')) {
 			key = `actor:${actor.id}:/api/search`
-			max = isAgent ? 50 : 10
+			max = isAgent ? 50 : 60
 		} else if (path.startsWith('/api/chat')) {
 			key = `actor:${actor.id}:/api/chat`
-			max = isAgent ? 100 : 20
+			max = isAgent ? 200 : 120
 		} else {
 			key = `actor:${actor.id}`
-			max = isAgent ? 600 : 300
+			max = isAgent ? 600 : 600
 		}
 
 		const result = await checkRateLimit(db, key, 60, max)

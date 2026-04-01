@@ -10,6 +10,7 @@ export interface AgentEvent {
 	tool?: string
 	toolCallId?: string
 	params?: Record<string, unknown>
+	errorCode?: 'rate_limit' | 'auth' | 'network' | 'provider' | 'budget' | 'unknown'
 }
 
 export interface AgentChatMessage {

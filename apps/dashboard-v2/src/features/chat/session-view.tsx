@@ -62,6 +62,17 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
 				streamingState={stream.state}
 				streamingAgentId={wantsStream ? session.agentId : undefined}
 				streamingAgentName={session.agentName}
+				onRetry={() => {
+					const lastUserMessage = [...messages]
+						.reverse()
+						.find((m) => m.external)
+					if (lastUserMessage) {
+						void continueSession.mutateAsync({
+							sessionId,
+							message: lastUserMessage.content,
+						})
+					}
+				}}
 			/>
 			<MessageComposer
 				onSend={async (message) => {

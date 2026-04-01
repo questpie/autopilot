@@ -14,12 +14,15 @@ export interface ToolCallState {
 	completedAt?: number
 }
 
+export type StreamErrorCode = 'rate_limit' | 'auth' | 'network' | 'provider' | 'budget' | 'unknown'
+
 export interface SessionStreamState {
 	status: 'idle' | 'connecting' | 'streaming' | 'completed' | 'error'
 	text: string
 	toolCalls: ToolCallState[]
 	thinkingText: string | null
 	error: string | null
+	errorCode: StreamErrorCode | null
 	offset: string
 }
 
@@ -30,6 +33,7 @@ interface StreamChunk {
 	tool?: string
 	toolCallId?: string
 	params?: Record<string, unknown>
+	errorCode?: StreamErrorCode
 }
 
 type StreamAction =
@@ -46,6 +50,7 @@ const INITIAL_STATE: SessionStreamState = {
 	toolCalls: [],
 	thinkingText: null,
 	error: null,
+	errorCode: null,
 	offset: INITIAL_OFFSET,
 }
 
@@ -160,6 +165,7 @@ function streamReducer(state: SessionStreamState, action: StreamAction): Session
 				status: 'streaming',
 				offset: action.offset,
 				error: null,
+				errorCode: null,
 			}
 
 			switch (action.chunk.type) {
@@ -227,6 +233,7 @@ function streamReducer(state: SessionStreamState, action: StreamAction): Session
 				case 'error':
 					nextState.status = 'error'
 					nextState.error = action.chunk.content ?? 'Unknown error'
+					nextState.errorCode = action.chunk.errorCode ?? 'unknown'
 					return nextState
 				default:
 					return nextState
@@ -243,6 +250,7 @@ function streamReducer(state: SessionStreamState, action: StreamAction): Session
 				...state,
 				status: 'error',
 				error: action.error,
+				errorCode: 'unknown',
 			}
 		case 'reset':
 			return INITIAL_STATE

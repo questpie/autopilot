@@ -3,6 +3,7 @@ Implement `dashboard-v3` phase-by-phase from the local specs. Do not expand scop
 Read first:
 - `local_specs/dashboard-v3/00-architecture.md`
 - `local_specs/dashboard-v3/INTERACTION-MATRIX.md`
+- `local_specs/dashboard-v3/MENTAL-MODEL-CHANGES.md`
 - `local_specs/dashboard-v3/00-ui-primitives.md`
 - `local_specs/dashboard-v3/CHANGELOG-v3-review.md`
 - `local_specs/dashboard-v3/01-strip-and-shell.md`
@@ -26,6 +27,8 @@ Core rules:
 6. `POST /api/chat-sessions` is the correct chat-session endpoint. Never use `/api/sessions` for chat.
 7. Minimal visual direction: no decorative grids or glows in content areas. Motion only when it improves orientation.
 8. Do not reintroduce deferred features into MVP.
+9. If implementation changes the product mental model, update `local_specs/dashboard-v3/MENTAL-MODEL-CHANGES.md` in the same pass.
+10. In Phase 2 chat, session = conversation thread. New chat creates sessions; `/s/:sessionId` continues them. Remove conflicting channel-first or steer-style behavior instead of preserving it.
 
 Execution mode:
 - Implement one phase at a time.
@@ -47,6 +50,7 @@ Output style:
 - Then implement.
 - End with:
   - what changed
+  - any mental model changes recorded
   - what was reused
   - what was verified
   - any open risks

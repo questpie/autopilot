@@ -1,6 +1,8 @@
+import { basename } from 'node:path'
 import { companyRootFactory, container } from '../container'
 import { getEnv } from '../env'
 import { loadCompany } from '../fs'
+import { logger } from '../logger'
 import { readSecretRecord } from '../secrets/store'
 import { OpenRouterAIProvider } from './openrouter-provider'
 import type { AIProvider } from './provider'
@@ -53,11 +55,26 @@ export async function createAIProviderForCompany(
 	const secretRef =
 		typeof providerConfig?.secret_ref === 'string' ? providerConfig.secret_ref : undefined
 	let apiKey: string | undefined
+	let source: 'company-secret' | 'env' | 'none' = 'none'
 
 	if (secretRef) {
 		const secret = await readSecretRecord(companyRoot, secretRef)
 		apiKey = secret?.value
+		source = 'company-secret'
+		if (!apiKey) {
+			throw new Error(`AI provider secret "${secretRef}" is missing or empty`)
+		}
+	} else if (env.OPENROUTER_API_KEY) {
+		source = 'env'
 	}
+
+	logger.info('ai', 'resolved AI provider configuration', {
+		companyRoot: basename(companyRoot),
+		deploymentMode: env.DEPLOYMENT_MODE,
+		provider: String(providerConfig?.provider ?? 'openrouter'),
+		source,
+		hasChatBaseUrl: !!providerConfig?.base_url,
+	})
 
 	return new OpenRouterAIProvider({
 		chatBaseUrl: providerConfig?.base_url as string | undefined,
@@ -70,10 +87,16 @@ export async function createAIProviderForCompany(
 /** DI container factory. */
 export const aiProviderFactory = container.registerAsync('aiProvider', async (c) => {
 	const { companyRoot } = c.resolve([companyRootFactory])
+	let companySettings: Record<string, unknown> | undefined
 	try {
 		const company = await loadCompany(companyRoot)
-		return createAIProviderForCompany(companyRoot, company.settings as Record<string, unknown>)
-	} catch {
-		return createAIProviderForCompany(companyRoot)
+		companySettings = company.settings as Record<string, unknown>
+	} catch (error) {
+		logger.warn('ai', 'failed to load company settings for AI provider; using env fallback only', {
+			companyRoot: basename(companyRoot),
+			error: error instanceof Error ? error.message : String(error),
+		})
 	}
+
+	return createAIProviderForCompany(companyRoot, companySettings)
 })

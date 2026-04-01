@@ -36,6 +36,7 @@ import {
 	artifacts,
 	channels,
 	chat,
+	chatSessions,
 	danger,
 	dashboard,
 	files,
@@ -193,6 +194,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/activity', activity)
 		.route('/api/inbox', inbox)
 		.route('/api/chat', chat)
+		.route('/api/chat-sessions', chatSessions)
 		.route('/api/channels', channels)
 		.route('/api/search', search)
 		.route('/api/artifacts', artifacts)

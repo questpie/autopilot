@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownIcon } from '@phosphor-icons/react'
+import { ArrowClockwiseIcon, ArrowDownIcon, WarningCircleIcon } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import { DayDivider } from './day-divider'
 import { MessageRow } from './message-row'
 import type { Message } from './chat.types'
-import type { SessionStreamState } from './use-session-stream'
+import type { SessionStreamState, StreamErrorCode } from './use-session-stream'
 import { useTranslation } from '@/lib/i18n'
 
 interface MessageListProps {
@@ -15,6 +15,7 @@ interface MessageListProps {
 	streamingAgentId?: string
 	streamingAgentName?: string
 	className?: string
+	onRetry?: () => void
 }
 
 type MessageListItem =
@@ -25,6 +26,15 @@ type MessageListItem =
 			message: Message
 			isGroupStart: boolean
 	  }
+
+const ERROR_CODE_I18N_KEY: Record<StreamErrorCode, string> = {
+	rate_limit: 'chat.error_rate_limit',
+	auth: 'chat.error_auth',
+	network: 'chat.error_network',
+	provider: 'chat.error_provider',
+	budget: 'chat.error_budget',
+	unknown: 'chat.error_unknown',
+}
 
 function buildMessageList(messages: Message[]): MessageListItem[] {
 	const sorted = [...messages].sort((left, right) => left.at.localeCompare(right.at))
@@ -68,6 +78,7 @@ export function MessageList({
 	streamingAgentId,
 	streamingAgentName,
 	className,
+	onRetry,
 }: MessageListProps): React.JSX.Element {
 	const containerRef = useRef<HTMLDivElement | null>(null)
 	const previousCountRef = useRef(0)
@@ -91,7 +102,8 @@ export function MessageList({
 			streamingState.status === 'completed') &&
 		(!!streamingState.text ||
 			streamingState.toolCalls.length > 0 ||
-			streamingState.status === 'connecting')
+			streamingState.status === 'connecting' ||
+			streamingState.status === 'error')
 
 	useEffect(() => {
 		const container = containerRef.current
@@ -151,22 +163,48 @@ export function MessageList({
 				)}
 
 				{hasStreamingMessage && streamingState && streamingAgentId ? (
-					<MessageRow
-						sender={{
-							id: streamingAgentId,
-							name: streamingAgentName ?? streamingAgentId,
-							type: 'agent',
-						}}
-						content={
-							streamingState.status === 'error' && !streamingState.text
-								? (streamingState.error ?? '')
-								: streamingState.text
-						}
-						timestamp={new Date().toISOString()}
-						isGroupStart
-						isStreaming={streamingState.status !== 'error'}
-						toolCalls={streamingState.toolCalls}
-					/>
+					<>
+						<MessageRow
+							sender={{
+								id: streamingAgentId,
+								name: streamingAgentName ?? streamingAgentId,
+								type: 'agent',
+							}}
+							content={streamingState.text}
+							timestamp={new Date().toISOString()}
+							isGroupStart
+							isStreaming={streamingState.status !== 'error'}
+							toolCalls={streamingState.toolCalls}
+						/>
+						{streamingState.status === 'error' ? (
+							<div className="mx-4 mb-2 flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+								<WarningCircleIcon className="mt-0.5 size-5 shrink-0 text-destructive" />
+								<div className="flex min-w-0 flex-1 flex-col gap-1">
+									<p className="text-sm font-medium text-destructive">
+										{t(ERROR_CODE_I18N_KEY[streamingState.errorCode ?? 'unknown'])}
+									</p>
+									{streamingState.error &&
+									streamingState.errorCode !== 'unknown' ? (
+										<p className="text-xs text-muted-foreground">
+											{streamingState.error}
+										</p>
+									) : null}
+								</div>
+								{onRetry ? (
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onClick={onRetry}
+										className="shrink-0"
+									>
+										<ArrowClockwiseIcon className="size-4" />
+										{t('chat.error_retry')}
+									</Button>
+								) : null}
+							</div>
+						) : null}
+					</>
 				) : null}
 			</div>
 

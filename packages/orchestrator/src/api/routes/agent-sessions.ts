@@ -1,15 +1,20 @@
 /**
  * Agent session stream routes — proxy to Durable Streams server.
  *
- * GET  /agent-sessions/:id/stream  → proxy read from durable stream (SSE live tailing)
- * POST /agent-sessions/:id/steer   → append user message to steer a running session
+ * GET /agent-sessions/:id/stream → proxy read from durable stream (SSE live tailing)
  */
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
-import { validator as zValidator } from 'hono-openapi'
-import { z } from 'zod'
-import { getDurableStreamBaseUrl, steerSession } from '../../session/durable'
+import { getDurableStreamBaseUrl } from '../../session/durable'
 import type { AppEnv } from '../app'
+
+function normalizeStreamOffset(offset: string | undefined): string {
+	if (!offset || offset.trim() === '' || offset === '0') {
+		return '-1'
+	}
+
+	return offset
+}
 
 const agentSessions = new Hono<AppEnv>()
 	// ── GET /agent-sessions/:id/stream — proxy durable stream read (SSE) ──
@@ -30,9 +35,9 @@ const agentSessions = new Hono<AppEnv>()
 
 			// Forward query params (offset, live=sse, etc.)
 			const url = new URL(streamUrl)
-			const queryOffset = c.req.query('offset')
+			const queryOffset = normalizeStreamOffset(c.req.query('offset'))
 			const queryLive = c.req.query('live')
-			if (queryOffset) url.searchParams.set('offset', queryOffset)
+			url.searchParams.set('offset', queryOffset)
 			if (queryLive) url.searchParams.set('live', queryLive)
 
 			try {
@@ -59,29 +64,6 @@ const agentSessions = new Hono<AppEnv>()
 			} catch (err) {
 				return c.json({ error: 'Durable Streams server unavailable' }, 502)
 			}
-		},
-	)
-	// ── POST /agent-sessions/:id/steer — send a steering message to a running session ──
-	.post(
-		'/:id/steer',
-		describeRoute({
-			tags: ['agent-sessions'],
-			description: 'Send a message to steer a running agent session',
-			responses: {
-				200: { description: 'Message sent' },
-			},
-		}),
-		zValidator('json', z.object({
-			message: z.string().min(1, 'Message is required'),
-		})),
-		async (c) => {
-			const sessionId = c.req.param('id')
-			const { message } = c.req.valid('json')
-			const actor = c.get('actor')
-
-			await steerSession(sessionId, message, actor?.name ?? 'user')
-
-			return c.json({ ok: true }, 200)
 		},
 	)
 

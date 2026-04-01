@@ -29,5 +29,9 @@ export const StreamChunkSchema = z.object({
 	type: z.enum(['thinking', 'text', 'text_delta', 'tool_call', 'tool_result', 'error', 'status']),
 	content: z.string().optional(),
 	tool: z.string().optional(),
+	toolCallId: z.string().optional(),
 	params: z.record(z.unknown()).optional(),
+	errorCode: z
+		.enum(['rate_limit', 'auth', 'network', 'provider', 'budget', 'unknown'])
+		.optional(),
 })

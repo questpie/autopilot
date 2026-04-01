@@ -139,6 +139,15 @@ function legacyConfigMigrationHint(file: string): string {
 	return `legacy file team/${file} is no longer supported; migrate to team/${base}/<id>.yaml files`
 }
 
+function isLongLivedStreamRequest(request: Request): boolean {
+	const pathname = new URL(request.url).pathname
+	return (
+		pathname === '/api/events' ||
+		pathname.startsWith('/api/agent-sessions/') && pathname.endsWith('/stream') ||
+		pathname.startsWith('/streams/')
+	)
+}
+
 /** Configuration options for the {@link Orchestrator}. */
 export interface OrchestratorOptions {
 	/** Absolute path to the company root directory on disk. */
@@ -403,7 +412,13 @@ export class Orchestrator {
 			})
 			this.apiServer = Bun.serve({
 				port: apiPort,
-				fetch: app.fetch,
+				idleTimeout: 255,
+				fetch: (request, server) => {
+					if (isLongLivedStreamRequest(request)) {
+						server.timeout(request, 0)
+					}
+					return app.fetch(request)
+				},
 			})
 			logger.info('orchestrator', `server started on port ${apiPort}`)
 		} catch (err) {

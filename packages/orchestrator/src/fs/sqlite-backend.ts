@@ -1,5 +1,5 @@
 import { container, companyRootFactory } from '../container'
-import { eq, and, sql, desc, asc } from 'drizzle-orm'
+import { eq, and, sql, desc, asc, type SQL } from 'drizzle-orm'
 import type { Client } from '@libsql/client'
 import { TaskSchema, MessageSchema } from '@questpie/autopilot-spec'
 import { createDb, initFts, type AutopilotDb } from '../db'
@@ -280,9 +280,17 @@ export class SqliteBackend implements StorageBackend {
 
 	async sendMessage(input: MessageCreateInput): Promise<Message> {
 		const msg = MessageSchema.parse(input)
+		const sessionId =
+			input.session_id ??
+			(typeof msg.metadata?.sessionId === 'string' ? msg.metadata.sessionId : null)
+		const metadata =
+			sessionId && msg.metadata?.sessionId !== sessionId
+				? { ...(msg.metadata ?? {}), sessionId }
+				: (msg.metadata ?? {})
 		await this.db.insert(schema.messages).values({
 			id: msg.id,
 			channel: msg.channel ?? null,
+			session_id: sessionId,
 			from_id: msg.from,
 			to_id: msg.to ?? null,
 			content: msg.content,
@@ -293,21 +301,25 @@ export class SqliteBackend implements StorageBackend {
 			thread: msg.thread ?? null,
 			transport: msg.transport ?? null,
 			external: msg.external,
-			metadata: JSON.stringify(msg.metadata ?? {}),
+			metadata: JSON.stringify(metadata),
 			attachments: JSON.stringify(msg.attachments ?? []),
 			thread_id: msg.thread_id ?? null,
 			edited_at: msg.edited_at ?? null,
 		})
 
-		return msg
+		return MessageSchema.parse({
+			...msg,
+			metadata,
+		})
 	}
 
 	async readMessages(filter: MessageFilter): Promise<Message[]> {
-		const conditions: ReturnType<typeof eq>[] = []
+		const conditions: SQL[] = []
 
 		if (filter.channel) conditions.push(eq(schema.messages.channel, filter.channel))
 		if (filter.from_id) conditions.push(eq(schema.messages.from_id, filter.from_id))
 		if (filter.to_id) conditions.push(eq(schema.messages.to_id, filter.to_id))
+		if (filter.session_id) conditions.push(eq(schema.messages.session_id, filter.session_id))
 		if (filter.thread) conditions.push(eq(schema.messages.thread, filter.thread))
 		if (filter.thread_id) conditions.push(eq(schema.messages.thread_id, filter.thread_id))
 

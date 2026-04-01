@@ -18,7 +18,7 @@ function ResourceLinkElement({
   return (
     <Link
       to={href}
-      className="inline-flex items-center gap-1 rounded-none border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-xs font-heading text-primary transition-colors hover:opacity-80"
+      className="inline font-mono text-[13px] text-primary underline-offset-4 hover:underline"
     >
       {label}
     </Link>

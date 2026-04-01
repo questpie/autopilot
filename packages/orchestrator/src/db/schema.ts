@@ -74,6 +74,7 @@ export const messages = sqliteTable(
 	{
 		id: text('id').primaryKey(),
 		channel: text('channel'),
+		session_id: text('session_id'),
 		from_id: text('from_id').notNull(),
 		to_id: text('to_id'),
 		content: text('content').notNull(),
@@ -91,6 +92,7 @@ export const messages = sqliteTable(
 	},
 	(table) => [
 		index('idx_messages_channel').on(table.channel),
+		index('idx_messages_session_created').on(table.session_id, table.created_at),
 		index('idx_messages_from').on(table.from_id),
 		index('idx_messages_to').on(table.to_id),
 		index('idx_messages_thread').on(table.thread),
@@ -126,6 +128,12 @@ export const agentSessions = sqliteTable(
 		id: text('id').primaryKey(),
 		agent_id: text('agent_id').notNull(),
 		task_id: text('task_id'),
+		initiated_by: text('initiated_by'),
+		channel_id: text('channel_id'),
+		first_message: text('first_message'),
+		summary: text('summary'),
+		summary_updated_at: text('summary_updated_at'),
+		last_summarized_message_id: text('last_summarized_message_id'),
 		trigger_type: text('trigger_type').notNull(),
 		status: text('status').notNull().default('running'),
 		started_at: text('started_at').notNull(),
@@ -138,6 +146,8 @@ export const agentSessions = sqliteTable(
 	(table) => [
 		index('idx_agent_sessions_agent').on(table.agent_id),
 		index('idx_agent_sessions_task').on(table.task_id),
+		index('idx_agent_sessions_initiated_by').on(table.initiated_by),
+		index('idx_agent_sessions_channel').on(table.channel_id),
 		index('idx_agent_sessions_status').on(table.status),
 		index('idx_agent_sessions_started').on(table.started_at),
 	],

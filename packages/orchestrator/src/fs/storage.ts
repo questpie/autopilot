@@ -12,8 +12,10 @@ export type Bookmark = z.output<typeof BookmarkSchema>
 /** Input type for creating a task — `id` is optional (auto-generated if omitted). */
 export type TaskCreateInput = Omit<z.input<typeof TaskSchema>, 'id'> & { id?: string }
 
-/** Input type for sending a message — mirrors the schema output (all fields provided). */
-export type MessageCreateInput = z.input<typeof MessageSchema>
+/** Input type for sending a message — mirrors the schema output plus internal session linkage. */
+export type MessageCreateInput = z.input<typeof MessageSchema> & {
+	session_id?: string | null
+}
 
 export interface TaskFilter {
 	status?: string
@@ -34,6 +36,7 @@ export interface MessageFilter {
 	channel?: string
 	from_id?: string
 	to_id?: string
+	session_id?: string
 	thread?: string
 	thread_id?: string
 	limit?: number

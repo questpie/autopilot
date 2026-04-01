@@ -26,6 +26,66 @@ import type {
 
 const DEFAULT_TOOL_RESULT_MAX_LENGTH = 2000
 
+type ErrorCode = 'rate_limit' | 'auth' | 'network' | 'provider' | 'budget' | 'unknown'
+
+/**
+ * Classify an error from the OpenRouter SDK/API into a structured error code.
+ */
+function classifyError(err: unknown): { code: ErrorCode; message: string } {
+	const message = err instanceof Error ? err.message : String(err)
+	const lower = message.toLowerCase()
+
+	// Rate limiting (429)
+	if (lower.includes('429') || lower.includes('rate limit') || lower.includes('too many requests')) {
+		return { code: 'rate_limit', message }
+	}
+
+	// Auth errors (401, 403)
+	if (
+		lower.includes('401') ||
+		lower.includes('403') ||
+		lower.includes('unauthorized') ||
+		lower.includes('forbidden') ||
+		lower.includes('invalid api key') ||
+		lower.includes('authentication')
+	) {
+		return { code: 'auth', message }
+	}
+
+	// Network / connectivity errors
+	if (
+		lower.includes('econnrefused') ||
+		lower.includes('econnreset') ||
+		lower.includes('etimedout') ||
+		lower.includes('fetch failed') ||
+		lower.includes('network') ||
+		lower.includes('dns') ||
+		lower.includes('socket')
+	) {
+		return { code: 'network', message }
+	}
+
+	// Token budget (our own)
+	if (lower.includes('token budget exceeded')) {
+		return { code: 'budget', message }
+	}
+
+	// Provider-level errors (5xx, model errors)
+	if (
+		lower.includes('500') ||
+		lower.includes('502') ||
+		lower.includes('503') ||
+		lower.includes('internal server error') ||
+		lower.includes('service unavailable') ||
+		lower.includes('model') ||
+		lower.includes('overloaded')
+	) {
+		return { code: 'provider', message }
+	}
+
+	return { code: 'unknown', message }
+}
+
 /**
  * Truncate a tool result string to avoid compounding context costs.
  * When the result exceeds maxLength, it is cut and a notice is appended.
@@ -173,6 +233,7 @@ export class OpenRouterAIProvider implements AIProvider {
 					onEvent({
 						type: 'error',
 						content: `Token budget exceeded (${totalTokensUsed}/${maxSessionTokens})`,
+						errorCode: 'budget',
 					})
 					ctx.abort('Token budget exceeded')
 				}
@@ -219,10 +280,11 @@ export class OpenRouterAIProvider implements AIProvider {
 			},
 
 			onError(_ctx: ChatMiddlewareContext, errorInfo) {
+				const classified = classifyError(errorInfo.error)
 				onEvent({
 					type: 'error',
-					content:
-						errorInfo.error instanceof Error ? errorInfo.error.message : String(errorInfo.error),
+					content: classified.message,
+					errorCode: classified.code,
 				})
 			},
 		}
@@ -268,8 +330,9 @@ export class OpenRouterAIProvider implements AIProvider {
 
 			return { result: finalText || undefined, toolCalls, error, usage }
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err)
-			onEvent({ type: 'error', content: error })
+			const classified = classifyError(err)
+			error = classified.message
+			onEvent({ type: 'error', content: error, errorCode: classified.code })
 			return { result: undefined, toolCalls, error }
 		}
 	}
@@ -464,7 +527,7 @@ export class OpenRouterAIProvider implements AIProvider {
 
 	// ── Internal helpers ────────────────────────────────────────────────────
 
-	private createAdapter<TModel extends Parameters<typeof createOpenRouterText>[0]>(model: TModel) {
+	private createAdapter(model: string) {
 		const apiKey = this.getApiKey()
 		// Inject cache_control into chat completion requests via beforeRequest hook.
 		// The SDK's Zod schema strips unknown top-level fields, but the OpenRouter
@@ -491,10 +554,23 @@ export class OpenRouterAIProvider implements AIProvider {
 			httpReferer: 'https://questpie.com',
 			xTitle: 'QUESTPIE Autopilot',
 			httpClient,
+			retryConfig: {
+				strategy: 'backoff',
+				backoff: {
+					initialInterval: 1000,
+					maxInterval: 30_000,
+					exponent: 2,
+					maxElapsedTime: 120_000,
+				},
+				retryConnectionErrors: true,
+			},
 		}
 		if (this.config.chatBaseUrl) {
 			config.serverURL = this.config.chatBaseUrl
 		}
+		// Model IDs are dynamic strings from YAML config — the SDK enumerates known
+		// models as a string-literal union but any valid OpenRouter model ID works at runtime.
+		// @ts-expect-error dynamic model string vs SDK literal union
 		return createOpenRouterText(model, apiKey, config)
 	}
 
