@@ -1,23 +1,10 @@
 import {
   ListIcon,
   MagnifyingGlassIcon,
-  ChatCircleIcon,
-  UserIcon,
-  SignOutIcon,
 } from "@phosphor-icons/react"
 import { m } from "framer-motion"
-import { useRouter } from "@tanstack/react-router"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
-import { useHapticPattern } from "@/hooks/use-haptic"
-import { NotificationBell } from "@/features/notifications/notification-bell"
-import { authClient } from "@/lib/auth"
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu"
 
 /** Hover/tap scale for icon buttons */
 const iconMotion = {
@@ -28,36 +15,13 @@ const iconMotion = {
 
 /**
  * TopBar — sits to the right of SideNav.
- * Contains: hamburger (mobile), search, notifications, chat toggle, user menu.
- * No logo/company name (that's in SideNav).
- * No inbox/settings icons (those are in SideNav).
+ * Contains only: hamburger (mobile) + search (Cmd+K).
+ * All other actions moved to sidebar bottom.
  */
 export function TopBar() {
   const { t } = useTranslation()
-  const router = useRouter()
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
-  const rightPanel = useAppStore((s) => s.rightPanel)
-  const setRightPanel = useAppStore((s) => s.setRightPanel)
-  const closeRightPanel = useAppStore((s) => s.closeRightPanel)
-  const { trigger } = useHapticPattern()
-
-  const handleLogout = async () => {
-    await authClient.signOut()
-    await router.invalidate()
-    await router.navigate({ to: "/login" })
-  }
-
-  const chatOpen = rightPanel.open && rightPanel.mode === "chat"
-
-  function handleChatToggle() {
-    trigger("tap")
-    if (chatOpen) {
-      closeRightPanel()
-    } else {
-      setRightPanel({ mode: "chat" })
-    }
-  }
 
   return (
     <header className="flex h-12 shrink-0 items-center border-b border-border bg-background px-4 font-heading">
@@ -72,13 +36,15 @@ export function TopBar() {
         <ListIcon size={20} weight="bold" aria-hidden="true" />
       </m.button>
 
-      {/* Search trigger — desktop: full bar, mobile: icon only */}
+      <div className="flex-1" />
+
+      {/* Search trigger — right-aligned. Desktop: bar, mobile: icon only */}
       <m.button
         type="button"
         onClick={() => setCommandPaletteOpen(true)}
         whileTap={{ scale: 0.97 }}
         transition={{ type: "spring", stiffness: 400, damping: 25 }}
-        className="hidden sm:flex mr-2 min-w-[196px] h-8 items-center gap-2 rounded-none border border-border bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted"
+        className="hidden sm:flex min-w-[196px] h-8 items-center gap-2 rounded-none border border-border bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted"
         aria-label={t("common.search")}
       >
         <MagnifyingGlassIcon size={14} aria-hidden="true" />
@@ -96,48 +62,6 @@ export function TopBar() {
       >
         <MagnifyingGlassIcon size={18} aria-hidden="true" />
       </m.button>
-
-      <div className="flex-1" />
-
-      {/* Notifications */}
-      <NotificationBell />
-
-      {/* Chat panel toggle */}
-      <m.button
-        type="button"
-        onClick={handleChatToggle}
-        {...iconMotion}
-        className={[
-          "relative flex min-h-[44px] min-w-[44px] items-center justify-center transition-colors",
-          chatOpen ? "text-primary" : "text-muted-foreground hover:text-foreground",
-        ].join(" ")}
-        aria-label={chatOpen ? t("chat.close_panel") : t("chat.open_panel")}
-        aria-pressed={chatOpen}
-      >
-        <ChatCircleIcon size={18} weight={chatOpen ? "fill" : "regular"} aria-hidden="true" />
-      </m.button>
-
-      {/* User menu */}
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <m.button
-              type="button"
-              {...iconMotion}
-              className="relative flex min-h-[44px] min-w-[44px] items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-              aria-label={t("nav.user_menu")}
-            />
-          }
-        >
-          <UserIcon size={18} aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" side="bottom" sideOffset={4}>
-          <DropdownMenuItem onClick={handleLogout}>
-            <SignOutIcon size={14} aria-hidden="true" />
-            {t("auth.sign_out")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </header>
   )
 }

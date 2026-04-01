@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import {
   ShieldCheckIcon,
-  KeyIcon,
   ArrowRightIcon,
 } from "@phosphor-icons/react"
 import { useTranslation } from "@/lib/i18n"
@@ -56,24 +55,6 @@ function SettingsSecurityPage() {
             </div>
           </Link>
 
-          {/* Secrets link */}
-          <Link
-            to="/settings/security/secrets"
-            className="flex items-center justify-between border border-border p-4 transition-colors hover:bg-muted/30"
-          >
-            <div className="flex items-center gap-3">
-              <KeyIcon size={20} className="text-primary" />
-              <div className="flex flex-col gap-0.5">
-                <span className="font-heading text-sm font-medium">
-                  {t("settings.secrets")}
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  {t("settings.security_secrets_link")}
-                </span>
-              </div>
-            </div>
-            <ArrowRightIcon size={14} className="text-muted-foreground" />
-          </Link>
         </div>
       </div>
     </div>

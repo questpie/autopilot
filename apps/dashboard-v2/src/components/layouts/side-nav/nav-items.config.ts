@@ -1,15 +1,8 @@
 import {
-  HouseIcon,
-  ListChecksIcon,
-  UsersIcon,
-  FolderOpenIcon,
-  PaintBrushIcon,
   ChatCircleIcon,
-  ChartBarIcon,
-  TrayIcon,
-  Link as LinkIcon,
-  GearIcon,
-  BookOpenIcon,
+  FolderOpenIcon,
+  UsersIcon,
+  ListChecksIcon,
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
 
@@ -22,26 +15,10 @@ export interface NavItem {
 }
 
 export const primaryItems: NavItem[] = [
-  { icon: HouseIcon, labelKey: "nav.dashboard", to: "/" },
-  { icon: ListChecksIcon, labelKey: "nav.tasks", to: "/tasks" },
-  { icon: UsersIcon, labelKey: "nav.team", to: "/team" },
+  { icon: ChatCircleIcon, labelKey: "nav.chat", to: "/" },
   { icon: FolderOpenIcon, labelKey: "nav.files", to: "/files" },
-  { icon: PaintBrushIcon, labelKey: "nav.artifacts", to: "/artifacts" },
-  { icon: ChatCircleIcon, labelKey: "nav.chat", to: "/chat" },
+  { icon: UsersIcon, labelKey: "nav.team", to: "/team" },
+  { icon: ListChecksIcon, labelKey: "nav.tasks", to: "/tasks" },
 ]
 
-export const secondaryItems: NavItem[] = [
-  { icon: TrayIcon, labelKey: "nav.inbox", to: "/inbox" },
-  { icon: ChartBarIcon, labelKey: "nav.activity", to: "/activity" },
-  { icon: LinkIcon, labelKey: "nav.integrations", to: "/integrations" },
-]
-
-export const bottomItems: NavItem[] = [
-  { icon: GearIcon, labelKey: "nav.settings", to: "/settings" },
-  {
-    icon: BookOpenIcon,
-    labelKey: "Docs",
-    to: "https://autopilot.questpie.com/docs",
-    external: true,
-  },
-]
+// Bottom items are now handled directly in nav-content.tsx (bell + profile dropdown)

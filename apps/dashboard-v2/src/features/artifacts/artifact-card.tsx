@@ -22,8 +22,8 @@ export function ArtifactCard({ artifact, view }: ArtifactCardProps) {
   if (view === "list") {
     return (
       <Link
-        to="/artifacts/$id"
-        params={{ id: artifact.id }}
+        to="/files/$"
+        params={{ _splat: `artifacts/${artifact.id}` }}
         className="flex items-center gap-4 border-b border-border/50 px-4 py-3 transition-colors hover:bg-muted/50"
       >
         <div className="flex size-8 items-center justify-center bg-muted">
@@ -56,8 +56,8 @@ export function ArtifactCard({ artifact, view }: ArtifactCardProps) {
 
   return (
     <Link
-      to="/artifacts/$id"
-      params={{ id: artifact.id }}
+      to="/files/$"
+      params={{ _splat: `artifacts/${artifact.id}` }}
       className="group flex flex-col border border-border transition-all duration-150 ease-out hover:-translate-y-1 hover:border-primary"
     >
       {/* Thumbnail area (16:10 ratio) */}

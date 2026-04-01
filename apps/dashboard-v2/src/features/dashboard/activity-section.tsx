@@ -64,7 +64,7 @@ export function ActivitySection() {
           {t("dashboard.recent_activity")}
         </h2>
         <Link
-          to="/activity"
+          to="/"
           className="flex items-center gap-1 font-heading text-[10px] text-muted-foreground transition-colors hover:text-foreground"
         >
           {t("dashboard.view_all")}

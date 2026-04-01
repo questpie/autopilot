@@ -59,9 +59,6 @@ function AuthPending() {
 function AppLayout() {
 	const navigate = useNavigate()
 	const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
-	const setRightPanel = useAppStore((s) => s.setRightPanel)
-	const rightPanel = useAppStore((s) => s.rightPanel)
-	const closeRightPanel = useAppStore((s) => s.closeRightPanel)
 	const [helpOpen, setHelpOpen] = useState(false)
 
 	// SSE connection
@@ -70,14 +67,6 @@ function AppLayout() {
 	// Global keyboard shortcuts
 	useGlobalShortcuts({
 		onCommandPalette: () => setCommandPaletteOpen(true),
-		onToggleChat: () => {
-			if (rightPanel.open && rightPanel.mode === 'chat') {
-				closeRightPanel()
-			} else {
-				setRightPanel({ mode: 'chat' })
-			}
-		},
-		onOpenInbox: () => void navigate({ to: '/inbox' }),
 		onShowHelp: () => setHelpOpen(true),
 		onCreateNew: () => {
 			// Context-dependent: navigate to task creation

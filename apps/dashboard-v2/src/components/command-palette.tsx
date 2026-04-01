@@ -6,9 +6,7 @@ import {
   ListChecksIcon,
   UsersIcon,
   FolderOpenIcon,
-  PaintBrushIcon,
   ChatCircleIcon,
-  ChartBarIcon,
   GearIcon,
   LightningIcon,
 } from "@phosphor-icons/react"
@@ -17,6 +15,7 @@ import {
   CommandDialog,
   CommandEmpty,
   CommandGroup,
+  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
@@ -119,24 +118,10 @@ export function CommandPalette() {
         category: "command_palette.navigate",
       },
       {
-        id: "nav-artifacts",
-        labelKey: "nav.artifacts",
-        icon: <PaintBrushIcon size={16} />,
-        action: () => void navigate({ to: "/artifacts" }),
-        category: "command_palette.navigate",
-      },
-      {
-        id: "nav-chat",
-        labelKey: "nav.chat",
+        id: "nav-inbox",
+        labelKey: "nav.inbox",
         icon: <ChatCircleIcon size={16} />,
-        action: () => void navigate({ to: "/chat" }),
-        category: "command_palette.navigate",
-      },
-      {
-        id: "nav-activity",
-        labelKey: "nav.activity",
-        icon: <ChartBarIcon size={16} />,
-        action: () => void navigate({ to: "/activity" }),
+        action: () => void navigate({ to: "/inbox" }),
         category: "command_palette.navigate",
       },
       {
@@ -197,7 +182,19 @@ export function CommandPalette() {
       description={
         isIntentMode ? t("command_palette.intent_hint") : undefined
       }
+      commandProps={{
+        shouldFilter: !isIntentMode,
+      }}
     >
+      <CommandInput
+        placeholder={
+          isIntentMode
+            ? t("command_palette.intent_hint")
+            : t("command_palette.placeholder")
+        }
+        value={inputValue}
+        onValueChange={setInputValue}
+      />
       <CommandList>
         {isIntentMode ? (
           <CommandGroup heading={t("command_palette.intent_hint")}>

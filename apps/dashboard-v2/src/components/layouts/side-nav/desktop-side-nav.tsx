@@ -26,10 +26,7 @@ export function DesktopSideNav() {
 
   const currentPath = matches[matches.length - 1]?.pathname ?? "/"
 
-  // Auto-collapse to icon rail when on routes with secondary sidebars
-  const hasSecondarySidebar =
-    currentPath.startsWith("/files") || currentPath.startsWith("/settings")
-  const collapsed = sidebarCollapsed || hasSecondarySidebar
+  const collapsed = sidebarCollapsed
 
   // Keyboard shortcut: Cmd+B to toggle sidebar
   useEffect(() => {
@@ -53,8 +50,8 @@ export function DesktopSideNav() {
       className="hidden shrink-0 flex-col border-r border-border bg-sidebar font-heading md:flex"
       aria-label={t("a11y.main_navigation")}
     >
-      {/* Header: logo + company name + collapse toggle */}
-      <div className="flex h-12 items-center border-b border-border px-2">
+      {/* Header: logo + company name */}
+      <div className="relative flex h-12 items-center border-b border-border px-2">
         <AnimatePresence>
           {!collapsed && (
             <m.div
@@ -80,13 +77,15 @@ export function DesktopSideNav() {
             </m.div>
           )}
         </AnimatePresence>
+
+        {/* Collapse toggle — tab sticking out to the right of sidebar */}
         <m.button
           type="button"
           onClick={toggleSidebarCollapsed}
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.92 }}
           transition={{ type: "spring", stiffness: 400, damping: 25 }}
-          className="flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          className="absolute top-1/2 -translate-y-1/2 -right-6 z-10 flex h-10 w-6 items-center justify-center border border-l-0 border-border bg-sidebar text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
           aria-label={
             collapsed
               ? t("nav.expand_sidebar")
