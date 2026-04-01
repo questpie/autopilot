@@ -23,7 +23,8 @@
     "expand_sidebar": "Expand sidebar",
     "notifications": "Notifications",
     "user_menu": "User menu",
-    "mobile_navigation": "Mobile navigation"
+    "mobile_navigation": "Mobile navigation",
+    "observability": "Observability"
   },
   "auth": {
     "sign_in": "Sign in",
@@ -833,6 +834,9 @@
     "toc": "On this page",
     "show_less": "Show less",
     "show_more_lines": "Show {{count}} more lines"
+  },
+  "observability": {
+    "title": "Observability"
   },
   "activity": {
     "filter_agent": "Agent",

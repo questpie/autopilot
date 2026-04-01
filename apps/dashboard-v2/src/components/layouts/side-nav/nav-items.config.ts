@@ -10,6 +10,7 @@ import {
   Link as LinkIcon,
   GearIcon,
   BookOpenIcon,
+  EyeIcon,
 } from "@phosphor-icons/react"
 import type { Icon } from "@phosphor-icons/react"
 
@@ -33,6 +34,7 @@ export const primaryItems: NavItem[] = [
 export const secondaryItems: NavItem[] = [
   { icon: TrayIcon, labelKey: "nav.inbox", to: "/inbox" },
   { icon: ChartBarIcon, labelKey: "nav.activity", to: "/activity" },
+  { icon: EyeIcon, labelKey: "nav.observability", to: "/observability" },
   { icon: LinkIcon, labelKey: "nav.integrations", to: "/integrations" },
 ]
 

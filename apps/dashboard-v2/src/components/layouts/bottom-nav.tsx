@@ -11,6 +11,7 @@ import {
   FolderOpenIcon,
   PaintBrushIcon,
   GearIcon,
+  EyeIcon,
 } from "@phosphor-icons/react"
 import { m, LayoutGroup } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
@@ -34,6 +35,7 @@ const primaryItems: BottomNavItem[] = [
 
 const moreItems: BottomNavItem[] = [
   { icon: ChartBarIcon, labelKey: "nav.activity", to: "/activity" },
+  { icon: EyeIcon, labelKey: "nav.observability", to: "/observability" },
   { icon: PlugsIcon, labelKey: "nav.integrations", to: "/integrations" },
   { icon: FolderOpenIcon, labelKey: "nav.files", to: "/files" },
   { icon: PaintBrushIcon, labelKey: "nav.artifacts", to: "/artifacts" },
