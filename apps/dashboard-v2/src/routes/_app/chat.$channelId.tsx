@@ -22,9 +22,19 @@ import { channelDetailQuery, messagesQuery } from "@/features/chat/chat.queries"
 import { Conversation } from "@/features/chat/conversation"
 import { MessageInput } from "@/features/chat/message-input"
 import { ChannelMembers } from "@/features/chat/channel-members"
+import { useStreamingChat } from "@/features/chat/use-streaming-chat"
+
+interface ChatSearchParams {
+  autoStart?: boolean
+  message?: string
+}
 
 export const Route = createFileRoute("/_app/chat/$channelId")({
   component: ChatConversationPage,
+  validateSearch: (search: Record<string, unknown>): ChatSearchParams => ({
+    autoStart: search.autoStart === true || search.autoStart === "true",
+    message: typeof search.message === "string" ? search.message : undefined,
+  }),
   loader: async ({ context, params }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(channelDetailQuery(params.channelId)),
@@ -36,7 +46,13 @@ export const Route = createFileRoute("/_app/chat/$channelId")({
 function ChatConversationPage() {
   const { t } = useTranslation()
   const { channelId } = Route.useParams()
+  const { autoStart, message } = Route.useSearch()
   const [membersOpen, setMembersOpen] = useState(false)
+
+  useStreamingChat({
+    channelId,
+    autoStartMessage: autoStart && message ? message : undefined,
+  })
 
   const { data: channel } = useQuery(channelDetailQuery(channelId))
   const channelData = channel as
