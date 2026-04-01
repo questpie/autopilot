@@ -27,7 +27,7 @@ export const primaryItems: NavItem[] = [
   { icon: UsersIcon, labelKey: "nav.team", to: "/team" },
   { icon: FolderOpenIcon, labelKey: "nav.files", to: "/files" },
   { icon: PaintBrushIcon, labelKey: "nav.artifacts", to: "/artifacts" },
-  { icon: ChatCircleIcon, labelKey: "nav.chat", to: "/chat" },
+  { icon: ChatCircleIcon, labelKey: "nav.chat", to: "/channels" },
 ]
 
 export const secondaryItems: NavItem[] = [

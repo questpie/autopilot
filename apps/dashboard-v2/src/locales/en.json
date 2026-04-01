@@ -265,7 +265,10 @@
     "context_dm": "DM: {{name}}",
     "context_file": "About: {{name}}",
     "context_channel": "#{{name}}",
-    "panel_toggle": "Toggle chat panel"
+    "panel_toggle": "Toggle chat panel",
+    "select_conversation": "Select a conversation",
+    "select_conversation_description": "Pick a channel, person, or task thread from the sidebar",
+    "pin": "Pin"
   },
   "files": {
     "title": "Files",
