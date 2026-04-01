@@ -167,6 +167,9 @@ function streamReducer(state: SessionStreamState, action: StreamAction): Session
 					nextState.text = `${state.text}${action.chunk.content ?? ''}`
 					return nextState
 				case 'text':
+					// Skip the final aggregated text event when we already have
+					// incrementally-streamed content — avoids a visual "jump".
+					if (state.text) return nextState
 					nextState.text = action.chunk.content ?? state.text
 					return nextState
 				case 'thinking':

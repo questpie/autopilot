@@ -28,27 +28,40 @@ function useSmoothText(text: string, isStreaming: boolean): string {
 		}
 	}, [text])
 
-	// Drain buffer word-by-word on an interval while streaming
+	// Drain buffer word-by-word on an interval
 	useEffect(() => {
-		if (!isStreaming) {
-			// Flush everything when streaming stops
+		if (!isStreaming && !bufferRef.current) {
+			// Nothing left to drain — sync displayed with final text
 			if (timerRef.current) {
 				clearInterval(timerRef.current)
 				timerRef.current = null
 			}
 			if (text !== displayedRef.current) {
 				displayedRef.current = text
-				bufferRef.current = ''
 				setDisplayed(text)
 			}
 			return
 		}
 
+		// Keep draining even after streaming stops (buffer may still have content)
 		if (timerRef.current) return
 
 		timerRef.current = setInterval(() => {
 			const buf = bufferRef.current
-			if (!buf) return
+			if (!buf) {
+				// Buffer drained — if streaming stopped, sync and stop timer
+				if (!isStreaming) {
+					if (timerRef.current) {
+						clearInterval(timerRef.current)
+						timerRef.current = null
+					}
+					if (text !== displayedRef.current) {
+						displayedRef.current = text
+						setDisplayed(text)
+					}
+				}
+				return
+			}
 
 			// Find the next word boundary (whitespace after non-whitespace)
 			const match = buf.match(/^\S*\s*/)
