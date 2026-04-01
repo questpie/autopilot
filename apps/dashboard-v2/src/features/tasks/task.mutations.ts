@@ -34,22 +34,23 @@ export function useCreateTask() {
     mutationFn: async (data: {
       title: string
       description?: string
-      type?: string
       priority?: string
       assigned_to?: string
       project?: string
       workflow?: string
+      labels?: string[]
     }) => {
       const res = await api.api.tasks.$post({
         json: {
           title: data.title,
           description: data.description ?? "",
-          type: (data.type ?? "implementation") as "implementation",
+          type: "implementation" as const,
           status: "backlog" as const,
           priority: (data.priority ?? "medium") as "medium",
           assigned_to: data.assigned_to,
           project: data.project,
           workflow: data.workflow,
+          labels: data.labels,
           created_by: "human",
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
