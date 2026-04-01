@@ -19,13 +19,13 @@ export function TwoFactorSetup() {
   if (totp.phase === "password") {
     return (
       <PasswordConfirm
-        is2FAEnabled={totp.is2FAEnabled}
+        intent={totp.intent}
         password={totp.password}
         error={totp.error}
         isLoading={totp.isLoading}
         onPasswordChange={totp.setPassword}
         onSubmit={() => {
-          if (totp.is2FAEnabled) {
+          if (totp.intent === "disable") {
             void totp.handleDisable()
           } else {
             void totp.handleEnable()

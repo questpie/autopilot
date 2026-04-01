@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { FormSection, FormSelect } from "@/components/forms"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+import { ModelPicker } from "@/components/model-picker"
 
 type ProviderName = "claude" | "openai" | "gemini"
 type ProviderStatus = { configured: boolean; model?: string }
@@ -31,19 +32,6 @@ const providerSchema = z.object({
 })
 
 type ProviderFormValues = z.infer<typeof providerSchema>
-
-const CLAUDE_MODELS = [
-  { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
-  { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
-  { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
-]
-
-const OPENAI_MODELS = [
-  { value: "gpt-4o", label: "GPT-4o" },
-  { value: "o3", label: "o3" },
-  { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { value: "codex-mini", label: "Codex Mini" },
-]
 
 const EMBEDDINGS_OPTIONS = [
   { value: "gemini", label: "Gemini embeddings" },
@@ -90,7 +78,6 @@ export function ProviderForm() {
           provider="claude"
           apiKeyName="claudeApiKey"
           modelName="claudeModel"
-          modelOptions={CLAUDE_MODELS}
           configured={providerStatus?.claude?.configured}
         />
 
@@ -100,7 +87,6 @@ export function ProviderForm() {
           provider="openai"
           apiKeyName="openaiApiKey"
           modelName="openaiModel"
-          modelOptions={OPENAI_MODELS}
           configured={providerStatus?.openai?.configured}
         />
 
@@ -124,7 +110,6 @@ function ProviderCard({
   provider,
   apiKeyName,
   modelName,
-  modelOptions,
   configured,
 }: {
   title: string
@@ -132,7 +117,6 @@ function ProviderCard({
   provider: ProviderName
   apiKeyName: string
   modelName: string
-  modelOptions: Array<{ value: string; label: string }>
   configured?: boolean
 }) {
   const { t } = useTranslation()
@@ -220,10 +204,21 @@ function ProviderCard({
           )}
         />
 
-        <FormSelect
+        <Controller
+          control={control}
           name={modelName}
-          label={t("settings.provider_model")}
-          options={modelOptions}
+          render={({ field }) => (
+            <div className="flex flex-col gap-1.5">
+              <label className="font-heading text-xs font-medium text-foreground">
+                {t("settings.provider_model")}
+              </label>
+              <ModelPicker
+                value={String(field.value ?? "")}
+                onValueChange={field.onChange}
+                size="sm"
+              />
+            </div>
+          )}
         />
 
         <div className="flex items-center gap-2">

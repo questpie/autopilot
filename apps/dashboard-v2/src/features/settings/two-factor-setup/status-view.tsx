@@ -9,10 +9,11 @@ import { useTranslation } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { FormSection } from "@/components/forms"
+import type { TotpIntent } from "./use-totp-setup"
 
 interface StatusViewProps {
   is2FAEnabled: boolean
-  onGoToPassword: () => void
+  onGoToPassword: (intent: TotpIntent) => void
 }
 
 export function StatusView({ is2FAEnabled, onGoToPassword }: StatusViewProps) {
@@ -48,7 +49,7 @@ export function StatusView({ is2FAEnabled, onGoToPassword }: StatusViewProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={onGoToPassword}
+                onClick={() => onGoToPassword("enable")}
               >
                 {t("settings.tfa_reconfigure")}
               </Button>
@@ -56,7 +57,7 @@ export function StatusView({ is2FAEnabled, onGoToPassword }: StatusViewProps) {
                 variant="outline"
                 size="sm"
                 className="text-destructive hover:text-destructive"
-                onClick={onGoToPassword}
+                onClick={() => onGoToPassword("disable")}
               >
                 {t("settings.tfa_disable")}
               </Button>
@@ -64,7 +65,7 @@ export function StatusView({ is2FAEnabled, onGoToPassword }: StatusViewProps) {
           ) : (
             <Button
               size="sm"
-              onClick={onGoToPassword}
+              onClick={() => onGoToPassword("enable")}
             >
               {t("settings.tfa_enable")}
             </Button>

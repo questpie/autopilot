@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
+import type { TotpIntent } from "./use-totp-setup"
 
 interface PasswordConfirmProps {
-  is2FAEnabled: boolean
+  intent: TotpIntent
   password: string
   error: string | null
   isLoading: boolean
@@ -17,7 +18,7 @@ interface PasswordConfirmProps {
 }
 
 export function PasswordConfirm({
-  is2FAEnabled,
+  intent,
   password,
   error,
   isLoading,
@@ -37,7 +38,7 @@ export function PasswordConfirm({
       )}
 
       <p className="text-sm text-muted-foreground">
-        {is2FAEnabled ? t("settings.tfa_disable_confirm") : t("settings.tfa_enable_confirm")}
+        {intent === "disable" ? t("settings.tfa_disable_confirm") : t("settings.tfa_enable_confirm")}
       </p>
 
       <div className="flex flex-col gap-1.5">

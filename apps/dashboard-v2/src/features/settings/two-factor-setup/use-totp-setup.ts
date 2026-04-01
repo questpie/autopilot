@@ -4,6 +4,7 @@ import { useTranslation } from "@/lib/i18n"
 import { authClient } from "@/lib/auth"
 
 export type Phase = "status" | "password" | "qr" | "verify" | "backup"
+export type TotpIntent = "enable" | "disable"
 
 export function useTotpSetup() {
   const { t } = useTranslation()
@@ -11,6 +12,7 @@ export function useTotpSetup() {
   const is2FAEnabled = session?.user?.twoFactorEnabled ?? false
 
   const [phase, setPhase] = useState<Phase>("status")
+  const [intent, setIntent] = useState<TotpIntent>("enable")
   const [password, setPassword] = useState("")
   const [totpURI, setTotpURI] = useState<string | null>(null)
   const [backupCodes, setBackupCodes] = useState<string[]>([])
@@ -21,7 +23,8 @@ export function useTotpSetup() {
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
-  const goToPassword = useCallback(() => {
+  const goToPassword = useCallback((passwordIntent: TotpIntent = "enable") => {
+    setIntent(passwordIntent)
     setPhase("password")
     setPassword("")
     setError(null)
@@ -151,6 +154,7 @@ export function useTotpSetup() {
   return {
     // state
     phase,
+    intent,
     password,
     totpURI,
     backupCodes,

@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router"
 import { PlusIcon } from "@phosphor-icons/react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/lib/i18n"
-import { AgentGrid } from "@/features/team/agent-grid"
+import { AgentTable } from "@/features/team/agent-table"
 import { PageTransition } from "@/components/layouts/page-transition"
 
 export const Route = createFileRoute("/_app/team")({
@@ -31,9 +31,9 @@ function TeamPage() {
         </Button>
       </div>
 
-      {/* Agent grid */}
+      {/* Agent table */}
       <div className="flex-1 overflow-y-auto p-6">
-        <AgentGrid />
+        <AgentTable />
       </div>
 
       {/* Outlet for nested routes (agent detail sheet) */}
