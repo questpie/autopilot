@@ -179,6 +179,16 @@ export class WorkflowRuntimeStore {
 		return rows[0]
 	}
 
+	async getWorkflowDefinition(taskId: string): Promise<CompiledWorkflow | null> {
+		const run = await this.getWorkflowRunByTaskId(taskId)
+		if (!run?.workflow_definition || run.workflow_definition === '{}') return null
+		try {
+			return JSON.parse(run.workflow_definition) as CompiledWorkflow
+		} catch {
+			return null
+		}
+	}
+
 	async listStepRuns(workflowRunId: string): Promise<StepRunRecord[]> {
 		return this.db
 			.select()
@@ -209,6 +219,10 @@ export class WorkflowRuntimeStore {
 					trigger_source: options.triggerSource,
 					parent_task_id: options.task.parent ?? existing.parent_task_id,
 					input_snapshot: toJson(options.task.context),
+					workflow_definition:
+						!existing.workflow_definition || existing.workflow_definition === '{}'
+							? toJson(options.workflow)
+							: existing.workflow_definition,
 					last_event: options.lastEvent ?? existing.last_event,
 					stream_id: `workflow-${options.task.id}`,
 					updated_at: timestamp,
@@ -230,6 +244,7 @@ export class WorkflowRuntimeStore {
 			parent_task_id: options.task.parent ?? null,
 			parent_run_id: null,
 			input_snapshot: toJson(options.task.context),
+			workflow_definition: toJson(options.workflow),
 			last_event: options.lastEvent ?? null,
 			stream_id: `workflow-${options.task.id}`,
 			created_at: timestamp,

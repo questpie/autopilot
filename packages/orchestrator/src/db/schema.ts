@@ -157,6 +157,7 @@ export const workflowRuns = sqliteTable(
 		parent_task_id: text('parent_task_id'),
 		parent_run_id: text('parent_run_id'),
 		input_snapshot: text('input_snapshot').default('{}'),
+		workflow_definition: text('workflow_definition').default('{}'),
 		last_event: text('last_event'),
 		stream_id: text('stream_id'),
 		created_at: text('created_at').notNull(),

@@ -519,6 +519,23 @@ export class Orchestrator {
 			this.apiServer = null
 		}
 
+		// H6: Mark in-flight agent sessions as interrupted before closing storage
+		try {
+			const { db: dbResult } = await container.resolveAsync([dbFactory])
+			const raw = (dbResult.db as unknown as { $client: import('@libsql/client').Client }).$client
+			const result = await raw.execute({
+				sql: `UPDATE agent_sessions SET status = 'interrupted', ended_at = ? WHERE status = 'running'`,
+				args: [new Date().toISOString()],
+			})
+			if (result.rowsAffected > 0) {
+				logger.info('orchestrator', `marked ${result.rowsAffected} in-flight sessions as interrupted`)
+			}
+		} catch (err) {
+			logger.warn('orchestrator', 'failed to mark sessions as interrupted', {
+				error: err instanceof Error ? err.message : String(err),
+			})
+		}
+
 		// Close storage via container before clearing instances
 		try {
 			const { storage } = await container.resolveAsync([storageFactory])
@@ -1133,16 +1150,105 @@ export class Orchestrator {
 										storage,
 										trigger: { type: 'task_assigned', task_id: taskId },
 									})
-										?.then((result) => {
+										?.then(async (spawnResult) => {
 											logger.info('orchestrator', `agent ${agent.id} finished`, {
-												toolCalls: result.toolCalls,
-												error: result.error,
+												toolCalls: spawnResult.toolCalls,
+												error: spawnResult.error,
 											})
+
+											// H2: If agent failed, apply failure policy
+											if (spawnResult.error && currentStep) {
+												const policy = currentStep.failurePolicy
+												const { db: dbResult } = await container.resolveAsync([dbFactory])
+												const raw = (
+													dbResult.db as unknown as {
+														$client: import('@libsql/client').Client
+													}
+												).$client
+
+												// Count previous attempts for this task+step
+												const attempts = await raw.execute({
+													sql: `SELECT COUNT(*) as count FROM agent_sessions WHERE task_id = ? AND status = 'failed'`,
+													args: [taskId],
+												})
+												const attemptCount = Number(attempts.rows[0]?.count ?? 0)
+
+												if (
+													policy.action === 'retry' &&
+													policy.maxRetries > 0 &&
+													attemptCount <= policy.maxRetries
+												) {
+													logger.info(
+														'orchestrator',
+														`retrying task ${taskId} (attempt ${attemptCount}/${policy.maxRetries})`,
+													)
+													this.queueTaskReevaluation(taskId)
+												} else if (policy.action === 'escalate') {
+													logger.info(
+														'orchestrator',
+														`escalating task ${taskId} after failure`,
+													)
+													await storage.moveTask(taskId, 'blocked', 'system', {
+														reason: `Agent failed: ${spawnResult.error}. Escalation requested.`,
+														assigned_to: 'human',
+													})
+													eventBus.emit({
+														type: 'task_changed',
+														taskId,
+														status: 'blocked',
+													})
+												} else if (policy.action === 'revise') {
+													logger.info(
+														'orchestrator',
+														`revising task ${taskId} after failure`,
+													)
+													// Re-queue — the agent will be re-spawned with the failure in task history
+													this.queueTaskReevaluation(taskId)
+												} else {
+													// Default: block
+													logger.info(
+														'orchestrator',
+														`blocking task ${taskId} after failure (${policy.action}, attempts: ${attemptCount})`,
+													)
+													await storage.moveTask(taskId, 'blocked', 'system', {
+														reason: `Agent failed: ${spawnResult.error}. Policy: ${policy.action}. Max retries exhausted.`,
+														assigned_to: 'human',
+													})
+													eventBus.emit({
+														type: 'task_changed',
+														taskId,
+														status: 'blocked',
+													})
+												}
+											}
 										})
-										.catch((err) => {
+										.catch(async (err) => {
 											logger.error('orchestrator', `agent ${agent.id} failed`, {
 												error: err instanceof Error ? err.message : String(err),
 											})
+											// H2: On spawn crash, block the task
+											try {
+												await storage.moveTask(taskId, 'blocked', 'system', {
+													reason: `Agent spawn crashed: ${err instanceof Error ? err.message : String(err)}`,
+													assigned_to: 'human',
+												})
+												eventBus.emit({
+													type: 'task_changed',
+													taskId,
+													status: 'blocked',
+												})
+											} catch (moveErr) {
+												logger.error(
+													'orchestrator',
+													`failed to block task ${taskId} after spawn crash`,
+													{
+														error:
+															moveErr instanceof Error
+																? moveErr.message
+																: String(moveErr),
+													},
+												)
+											}
 										})
 								}
 							}

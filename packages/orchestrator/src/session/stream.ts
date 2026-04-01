@@ -51,8 +51,12 @@ export class SessionStreamManager {
 			}
 		}
 
-		// Persist to durable stream (fire-and-forget)
-		appendToSessionStream(sessionId, chunk).catch(() => {})
+		// Persist to durable stream (best-effort, log failures)
+		appendToSessionStream(sessionId, chunk).catch((err) => {
+			logger.warn('session-stream', `durable stream append failed for ${sessionId}`, {
+				error: err instanceof Error ? err.message : String(err),
+			})
+		})
 	}
 
 	/** Subscribe to a session stream. Returns an unsubscribe function. */
