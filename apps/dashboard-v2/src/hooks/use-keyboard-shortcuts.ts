@@ -31,14 +31,12 @@ export function useKeyboardShortcuts(bindings: KeyBindings) {
 
 export function useGlobalShortcuts({
   onCommandPalette,
-  onToggleChat,
   onOpenInbox,
   onShowHelp,
   onCreateNew,
   onNavigate,
 }: {
   onCommandPalette: () => void
-  onToggleChat: () => void
   onOpenInbox: () => void
   onShowHelp: () => void
   onCreateNew: () => void
@@ -49,10 +47,6 @@ export function useGlobalShortcuts({
       "$mod+KeyK": (e: KeyboardEvent) => {
         e.preventDefault()
         onCommandPalette()
-      },
-      "$mod+Shift+KeyC": (e: KeyboardEvent) => {
-        e.preventDefault()
-        onToggleChat()
       },
       "$mod+Shift+KeyI": (e: KeyboardEvent) => {
         e.preventDefault()
@@ -83,17 +77,13 @@ export function useGlobalShortcuts({
         e.preventDefault()
         onNavigate("/files")
       }),
-      "g c": whenNotTyping((e) => {
-        e.preventDefault()
-        onNavigate("/chat")
-      }),
 
       "?": whenNotTyping((e) => {
         e.preventDefault()
         onShowHelp()
       }),
     }),
-    [onCommandPalette, onToggleChat, onOpenInbox, onShowHelp, onCreateNew, onNavigate],
+    [onCommandPalette, onOpenInbox, onShowHelp, onCreateNew, onNavigate],
   )
 
   useKeyboardShortcuts(bindings())

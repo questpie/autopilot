@@ -21,7 +21,6 @@ const SHORTCUT_GROUPS: Array<{
     groupKey: "shortcuts.global",
     shortcuts: [
       { keys: "\u2318K", labelKey: "shortcuts.command_palette" },
-      { keys: "\u2318\u21E7C", labelKey: "shortcuts.toggle_chat" },
       { keys: "\u2318\u21E7I", labelKey: "shortcuts.open_inbox" },
       { keys: "\u2318Enter", labelKey: "shortcuts.create_new" },
       { keys: "?", labelKey: "shortcuts.show_help" },
@@ -34,7 +33,6 @@ const SHORTCUT_GROUPS: Array<{
       { keys: "g t", labelKey: "shortcuts.go_tasks" },
       { keys: "g a", labelKey: "shortcuts.go_team" },
       { keys: "g f", labelKey: "shortcuts.go_files" },
-      { keys: "g c", labelKey: "shortcuts.go_chat" },
     ],
   },
   {

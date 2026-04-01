@@ -1,7 +1,6 @@
 import {
   ListIcon,
   MagnifyingGlassIcon,
-  ChatCircleIcon,
   UserIcon,
   SignOutIcon,
 } from "@phosphor-icons/react"
@@ -9,7 +8,6 @@ import { m } from "framer-motion"
 import { useRouter } from "@tanstack/react-router"
 import { useTranslation } from "@/lib/i18n"
 import { useAppStore } from "@/stores/app.store"
-import { useHapticPattern } from "@/hooks/use-haptic"
 import { NotificationBell } from "@/features/notifications/notification-bell"
 import { authClient } from "@/lib/auth"
 import {
@@ -37,27 +35,6 @@ export function TopBar() {
   const router = useRouter()
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen)
-  const rightPanel = useAppStore((s) => s.rightPanel)
-  const setRightPanel = useAppStore((s) => s.setRightPanel)
-  const closeRightPanel = useAppStore((s) => s.closeRightPanel)
-  const { trigger } = useHapticPattern()
-
-  const handleLogout = async () => {
-    await authClient.signOut()
-    await router.invalidate()
-    await router.navigate({ to: "/login" })
-  }
-
-  const chatOpen = rightPanel.open && rightPanel.mode === "chat"
-
-  function handleChatToggle() {
-    trigger("tap")
-    if (chatOpen) {
-      closeRightPanel()
-    } else {
-      setRightPanel({ mode: "chat" })
-    }
-  }
 
   return (
     <header className="flex h-12 shrink-0 items-center border-b border-border bg-background px-4 font-heading">
@@ -101,21 +78,6 @@ export function TopBar() {
 
       {/* Notifications */}
       <NotificationBell />
-
-      {/* Chat panel toggle */}
-      <m.button
-        type="button"
-        onClick={handleChatToggle}
-        {...iconMotion}
-        className={[
-          "relative flex min-h-[44px] min-w-[44px] items-center justify-center transition-colors",
-          chatOpen ? "text-primary" : "text-muted-foreground hover:text-foreground",
-        ].join(" ")}
-        aria-label={chatOpen ? t("chat.close_panel") : t("chat.open_panel")}
-        aria-pressed={chatOpen}
-      >
-        <ChatCircleIcon size={18} weight={chatOpen ? "fill" : "regular"} aria-hidden="true" />
-      </m.button>
 
       {/* User menu */}
       <DropdownMenu>
