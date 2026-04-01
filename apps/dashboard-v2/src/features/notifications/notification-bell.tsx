@@ -4,6 +4,7 @@ import { m, AnimatePresence } from "framer-motion"
 import { BellIcon } from "@phosphor-icons/react"
 import { useTranslation } from "@/lib/i18n"
 import { SPRING, useMotionPreference } from "@/lib/motion"
+import { BottomSheet } from "@/components/mobile/bottom-sheet"
 import { unreadNotificationsQuery } from "./notification.queries"
 import { NotificationDropdown } from "./notification-dropdown"
 import type { Notification } from "./notification-item"
@@ -17,7 +18,7 @@ export function NotificationBell() {
   const { data: unreadNotifications = [] } = useQuery(unreadNotificationsQuery())
   const unreadCount = (unreadNotifications as Notification[]).length
 
-  // Close on outside click
+  // Close on outside click (desktop only)
   useEffect(() => {
     if (!open) return
 
@@ -42,6 +43,8 @@ export function NotificationBell() {
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [open])
+
+  const handleClose = () => setOpen(false)
 
   return (
     <div ref={containerRef} className="relative">
@@ -73,7 +76,7 @@ export function NotificationBell() {
         </AnimatePresence>
       </m.button>
 
-      {/* Dropdown */}
+      {/* Desktop dropdown (hidden on mobile) */}
       <AnimatePresence>
         {open && (
           <m.div
@@ -81,12 +84,17 @@ export function NotificationBell() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={shouldReduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.97 }}
             transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
-            className="absolute right-0 top-full z-50 mt-1"
+            className="absolute right-0 top-full z-50 mt-1 hidden lg:block"
           >
-            <NotificationDropdown onClose={() => setOpen(false)} />
+            <NotificationDropdown onClose={handleClose} />
           </m.div>
         )}
       </AnimatePresence>
+
+      {/* Mobile bottom sheet (visible only on mobile via BottomSheet's lg:hidden) */}
+      <BottomSheet open={open} onClose={handleClose} snapPoints={[0.6, 0.92]}>
+        <NotificationDropdown onClose={handleClose} />
+      </BottomSheet>
     </div>
   )
 }

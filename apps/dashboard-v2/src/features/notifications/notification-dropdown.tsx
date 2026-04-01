@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence } from "framer-motion"
-import { CheckIcon } from "@phosphor-icons/react"
+import { CheckIcon, ArrowRightIcon } from "@phosphor-icons/react"
+import { Link } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useTranslation } from "@/lib/i18n"
@@ -40,7 +41,7 @@ export function NotificationDropdown({ onClose }: { onClose: () => void }) {
   const hasUnread = (notifications as Notification[]).some((n) => !n.read_at)
 
   return (
-    <div className="flex w-[360px] flex-col border border-border bg-background shadow-lg sm:w-[420px]">
+    <div className="flex w-full flex-col border border-border bg-background shadow-lg md:w-[420px]">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h3 className="font-heading text-sm font-semibold text-foreground">
@@ -98,6 +99,16 @@ export function NotificationDropdown({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </ScrollArea>
+
+      {/* Footer — link to full inbox */}
+      <Link
+        to="/inbox"
+        onClick={onClose}
+        className="flex items-center justify-center gap-1.5 border-t border-border px-3 py-2 font-heading text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+      >
+        {t("notifications.view_all")}
+        <ArrowRightIcon size={12} aria-hidden="true" />
+      </Link>
     </div>
   )
 }

@@ -947,7 +947,8 @@
     "quiet_hours_from": "From",
     "quiet_hours_to": "To",
     "quiet_hours_timezone": "Timezone",
-    "quiet_hours_except_urgent": "Always deliver urgent notifications"
+    "quiet_hours_except_urgent": "Always deliver urgent notifications",
+    "view_all": "View all notifications"
   },
   "time": {
     "today": "Today",

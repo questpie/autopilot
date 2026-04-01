@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { BottomSheet } from "@/components/mobile/bottom-sheet"
+import { useLongPress } from "@/hooks/use-long-press"
 import { useDeleteFile, useCreateFile } from "./files.mutations"
 
 interface FileTreeContextMenuProps {
@@ -24,9 +26,17 @@ interface FileTreeContextMenuProps {
   children: React.ReactNode
 }
 
+interface MenuAction {
+  icon: React.ComponentType<{ size?: number }>
+  label: string
+  onClick: () => void
+  destructive?: boolean
+}
+
 /**
  * Context menu wrapper for file tree items.
- * Shows a native-style right-click menu with file operations.
+ * Desktop: right-click shows a floating context menu.
+ * Mobile: long-press opens a bottom sheet with the same actions.
  */
 export function FileTreeContextMenu({
   path,
@@ -41,13 +51,24 @@ export function FileTreeContextMenu({
   const [showNewFileDialog, setShowNewFileDialog] = useState(false)
   const [newFileName, setNewFileName] = useState("")
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     setMenuPos({ x: e.clientX, y: e.clientY })
   }, [])
 
-  const closeMenu = useCallback(() => setMenuPos(null), [])
+  const closeMenu = useCallback(() => {
+    setMenuPos(null)
+    setMobileMenuOpen(false)
+  }, [])
+
+  const longPressHandlers = useLongPress({
+    duration: 500,
+    onLongPress: () => {
+      setMobileMenuOpen(true)
+    },
+  })
 
   const handleCopyPath = () => {
     void navigator.clipboard.writeText(path)
@@ -90,17 +111,49 @@ export function FileTreeContextMenu({
     )
   }
 
+  const menuActions: MenuAction[] = [
+    ...(isDirectory
+      ? [
+          {
+            icon: FilePlusIcon,
+            label: t("files.create_file"),
+            onClick: () => {
+              closeMenu()
+              setShowNewFileDialog(true)
+            },
+          },
+        ]
+      : []),
+    {
+      icon: CopySimpleIcon,
+      label: t("files.copy_path"),
+      onClick: handleCopyPath,
+    },
+    {
+      icon: TrashIcon,
+      label: t("files.delete"),
+      onClick: () => {
+        closeMenu()
+        setShowDeleteDialog(true)
+      },
+      destructive: true,
+    },
+  ]
+
   return (
     <>
-      {/* Wrap children with context menu handler */}
-      <div onContextMenu={handleContextMenu}>
+      {/* Wrap children with context menu + long-press handlers */}
+      <div
+        onContextMenu={handleContextMenu}
+        {...longPressHandlers}
+        style={{ touchAction: "pan-y" }}
+      >
         {children}
       </div>
 
-      {/* Custom context menu popup */}
+      {/* Desktop: floating context menu popup */}
       {menuPos && (
         <>
-          {/* Backdrop to close menu */}
           <div
             className="fixed inset-0 z-50"
             onClick={closeMenu}
@@ -113,42 +166,56 @@ export function FileTreeContextMenu({
             className="fixed z-50 min-w-[160px] border border-border bg-popover py-1 shadow-md"
             style={{ left: menuPos.x, top: menuPos.y }}
           >
-            {isDirectory && (
-              <button
-                type="button"
-                onClick={() => {
-                  closeMenu()
-                  setShowNewFileDialog(true)
-                }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 font-heading text-xs text-foreground hover:bg-muted/50"
-              >
-                <FilePlusIcon size={14} />
-                {t("files.create_file")}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleCopyPath}
-              className="flex w-full items-center gap-2 px-3 py-1.5 font-heading text-xs text-foreground hover:bg-muted/50"
-            >
-              <CopySimpleIcon size={14} />
-              {t("files.copy_path")}
-            </button>
-            <div className="my-1 border-t border-border" />
-            <button
-              type="button"
-              onClick={() => {
-                closeMenu()
-                setShowDeleteDialog(true)
-              }}
-              className="flex w-full items-center gap-2 px-3 py-1.5 font-heading text-xs text-destructive hover:bg-muted/50"
-            >
-              <TrashIcon size={14} />
-              {t("files.delete")}
-            </button>
+            {menuActions.map((action) => {
+              const Icon = action.icon
+              return (
+                <button
+                  key={action.label}
+                  type="button"
+                  onClick={action.onClick}
+                  className={[
+                    "flex w-full items-center gap-2 px-3 py-1.5 font-heading text-xs hover:bg-muted/50",
+                    action.destructive ? "text-destructive" : "text-foreground",
+                  ].join(" ")}
+                >
+                  <Icon size={14} />
+                  {action.label}
+                </button>
+              )
+            })}
           </div>
         </>
       )}
+
+      {/* Mobile: bottom sheet context menu */}
+      <BottomSheet
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        snapPoints={[0.3]}
+      >
+        <nav className="flex flex-col gap-1">
+          <p className="truncate px-4 pb-2 font-heading text-xs text-muted-foreground">
+            {path}
+          </p>
+          {menuActions.map((action) => {
+            const Icon = action.icon
+            return (
+              <button
+                key={action.label}
+                type="button"
+                onClick={action.onClick}
+                className={[
+                  "flex min-h-[44px] items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-muted",
+                  action.destructive ? "text-destructive" : "text-foreground",
+                ].join(" ")}
+              >
+                <Icon size={20} />
+                <span className="font-heading">{action.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+      </BottomSheet>
 
       {/* Delete confirmation */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

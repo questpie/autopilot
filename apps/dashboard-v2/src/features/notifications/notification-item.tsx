@@ -96,7 +96,7 @@ export function NotificationItem({
       transition={{ duration: DURATION.fast, ease: EASING.enter, layout: SPRING.snappy }}
       onClick={handleClick}
       className={cn(
-        "flex w-full items-start gap-2.5 border-l-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/50",
+        "group flex w-full items-start gap-2.5 border-l-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/50",
         PRIORITY_COLORS[notification.priority] ?? "border-l-transparent",
         isUnread ? "bg-primary/5" : "bg-transparent",
       )}
@@ -131,8 +131,7 @@ export function NotificationItem({
       <button
         type="button"
         onClick={handleDismiss}
-        className="mt-0.5 shrink-0 p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 [.group:hover_&]:opacity-100"
-        style={{ opacity: undefined }}
+        className="mt-0.5 shrink-0 p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
         aria-label={t("notifications.dismiss")}
       >
         <XIcon size={12} />
