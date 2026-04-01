@@ -211,6 +211,7 @@
         "@durable-streams/tanstack-ai-transport": "^0.0.2",
         "@hono/standard-validator": "^0.2.2",
         "@libsql/client": "^0.17.2",
+        "@openrouter/sdk": "0.3.15",
         "@questpie/autopilot-agents": "1.0.0",
         "@questpie/autopilot-spec": "1.0.0",
         "@scalar/hono-api-reference": "^0.10.4",

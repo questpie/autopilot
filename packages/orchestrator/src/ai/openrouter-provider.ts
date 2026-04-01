@@ -1,7 +1,14 @@
 import { chat, maxIterations } from '@tanstack/ai'
-import type { AfterToolCallInfo, ChatMiddleware, ChatMiddlewareContext } from '@tanstack/ai'
+import type {
+	AfterToolCallInfo,
+	ChatMiddleware,
+	ChatMiddlewareConfig,
+	ChatMiddlewareContext,
+	UsageInfo,
+} from '@tanstack/ai'
 import type { JSONSchema, Tool as TanStackTool } from '@tanstack/ai'
-import { openRouterText } from '@tanstack/ai-openrouter'
+import { HTTPClient } from '@openrouter/sdk'
+import { createOpenRouterText } from '@tanstack/ai-openrouter'
 import { executeTool } from '../agent/tools'
 import { zodToJsonSchema } from '../agent/utils/zod-to-json'
 import type { EmbeddingInput, EmbeddingTaskType } from '../embeddings/provider'
@@ -16,6 +23,17 @@ import type {
 	CompleteOptions,
 	WebSearchResult,
 } from './provider'
+
+const DEFAULT_TOOL_RESULT_MAX_LENGTH = 2000
+
+/**
+ * Truncate a tool result string to avoid compounding context costs.
+ * When the result exceeds maxLength, it is cut and a notice is appended.
+ */
+function truncateToolResult(text: string, maxLength = DEFAULT_TOOL_RESULT_MAX_LENGTH): string {
+	if (text.length <= maxLength) return text
+	return `${text.slice(0, maxLength)}\n\n[... truncated from ${text.length} chars to ${maxLength} chars]`
+}
 
 export interface OpenRouterConfig {
 	/** Base URL for chat completions. Default: undefined (= OpenRouter default). */
@@ -72,14 +90,36 @@ export class OpenRouterAIProvider implements AIProvider {
 		options: AgentSpawnOptions,
 		onEvent: (event: AgentEvent) => void,
 	): Promise<AgentSessionResult> {
-		const { systemPrompt, prompt, tools, toolContext, maxTurns = 50 } = options
+		const {
+			systemPrompt,
+			prompt,
+			messages,
+			tools,
+			toolContext,
+			maxTurns = 50,
+			maxSessionTokens,
+			sessionId,
+			agentId,
+		} = options
 		const model =
 			options.webSearch && !options.model.includes(':online')
 				? `${options.model}:online`
 				: options.model
+		const chatMessages =
+			messages && messages.length > 0
+				? messages
+				: prompt
+					? [{ role: 'user' as const, content: prompt }]
+					: []
 
 		let toolCalls = 0
 		let error: string | undefined
+		let finalText = ''
+
+		// Cumulative token usage across all iterations
+		let totalPromptTokens = 0
+		let totalCompletionTokens = 0
+		let totalTokensUsed = 0
 
 		const tanstackTools: TanStackTool[] = tools.map((t) => ({
 			name: t.name,
@@ -87,12 +127,56 @@ export class OpenRouterAIProvider implements AIProvider {
 			inputSchema: zodToJsonSchema(t.schema) as JSONSchema,
 			execute: async (args: unknown) => {
 				const result = await executeTool(tools, t.name, args, toolContext)
-				return result.content.map((c) => c.text).join('\n')
+				const fullText = result.content.map((c) => c.text).join('\n')
+				return truncateToolResult(fullText)
 			},
 		}))
 
 		const bridgeMiddleware: ChatMiddleware = {
 			name: 'autopilot-bridge',
+
+			onConfig(
+				_ctx: ChatMiddlewareContext,
+				config: ChatMiddlewareConfig,
+			): Partial<ChatMiddlewareConfig> | void {
+				// Inject trace metadata via modelOptions (updated per-iteration).
+				if (agentId) {
+					return {
+						modelOptions: {
+							...(config.modelOptions as Record<string, unknown> | undefined),
+							trace: {
+								trace_id: sessionId,
+								trace_name: `agent:${agentId}`,
+								generation_name: `turn-${_ctx.iteration}`,
+							},
+						},
+					}
+				}
+			},
+
+			onUsage(ctx: ChatMiddlewareContext, usage: UsageInfo) {
+				totalPromptTokens += usage.promptTokens
+				totalCompletionTokens += usage.completionTokens
+				totalTokensUsed += usage.totalTokens
+				logger.info('ai', 'iteration usage', {
+					iteration: ctx.iteration,
+					promptTokens: usage.promptTokens,
+					completionTokens: usage.completionTokens,
+					totalTokens: usage.totalTokens,
+					cumulativeTotal: totalTokensUsed,
+				})
+				if (maxSessionTokens && totalTokensUsed > maxSessionTokens) {
+					logger.warn(
+						'ai',
+						`token budget exceeded: ${totalTokensUsed}/${maxSessionTokens} — aborting session`,
+					)
+					onEvent({
+						type: 'error',
+						content: `Token budget exceeded (${totalTokensUsed}/${maxSessionTokens})`,
+					})
+					ctx.abort('Token budget exceeded')
+				}
+			},
 
 			onChunk(_ctx, chunk) {
 				if (chunk.type === 'TEXT_MESSAGE_CONTENT' && 'delta' in chunk) {
@@ -101,6 +185,10 @@ export class OpenRouterAIProvider implements AIProvider {
 						content: (chunk as { delta: string }).delta,
 					})
 				}
+			},
+
+			onFinish(_ctx: ChatMiddlewareContext, info) {
+				finalText = info.content
 			},
 
 			onBeforeToolCall(_ctx: ChatMiddlewareContext, hookCtx) {
@@ -122,7 +210,12 @@ export class OpenRouterAIProvider implements AIProvider {
 				} else {
 					content = JSON.stringify(info.result)
 				}
-				onEvent({ type: 'tool_result', tool: info.toolName, toolCallId: info.toolCallId, content })
+				onEvent({
+					type: 'tool_result',
+					tool: info.toolName,
+					toolCallId: info.toolCallId,
+					content,
+				})
 			},
 
 			onError(_ctx: ChatMiddlewareContext, errorInfo) {
@@ -135,19 +228,45 @@ export class OpenRouterAIProvider implements AIProvider {
 		}
 
 		try {
+			if (chatMessages.length === 0) {
+				throw new Error('No chat prompt provided')
+			}
+
 			const adapter = this.createAdapter(model)
 
-			const result = await (chat({
+			for await (const _chunk of chat({
 				adapter,
 				systemPrompts: [systemPrompt],
-				messages: [{ role: 'user', content: prompt }],
+				messages: chatMessages,
 				tools: tanstackTools,
 				agentLoopStrategy: maxIterations(maxTurns),
-				stream: false,
 				middleware: [bridgeMiddleware],
-			}) as Promise<string>)
+				// OpenRouter: sessionId maps to session_id for cost tracking.
+				// cache_control is injected via httpClient beforeRequest hook (SDK strips unknown top-level fields).
+				modelOptions: {
+					sessionId,
+				} as Record<string, unknown>,
+			}) as AsyncIterable<unknown>) {
+				// Streaming side-effects are bridged via middleware hooks.
+			}
 
-			return { result, toolCalls, error }
+			logger.info('ai', 'session total usage', {
+				promptTokens: totalPromptTokens,
+				completionTokens: totalCompletionTokens,
+				totalTokens: totalTokensUsed,
+				toolCalls,
+			})
+
+			const usage =
+				totalTokensUsed > 0
+					? {
+							promptTokens: totalPromptTokens,
+							completionTokens: totalCompletionTokens,
+							totalTokens: totalTokensUsed,
+						}
+					: undefined
+
+			return { result: finalText || undefined, toolCalls, error, usage }
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err)
 			onEvent({ type: 'error', content: error })
@@ -345,15 +464,38 @@ export class OpenRouterAIProvider implements AIProvider {
 
 	// ── Internal helpers ────────────────────────────────────────────────────
 
-	private createAdapter(model: string) {
-		const config: NonNullable<Parameters<typeof openRouterText>[1]> = {
+	private createAdapter<TModel extends Parameters<typeof createOpenRouterText>[0]>(model: TModel) {
+		const apiKey = this.getApiKey()
+		// Inject cache_control into chat completion requests via beforeRequest hook.
+		// The SDK's Zod schema strips unknown top-level fields, but the OpenRouter
+		// API accepts cache_control for Anthropic prompt caching.
+		const httpClient = new HTTPClient()
+		httpClient.addHook('beforeRequest', (req: Request) => {
+			if (req.method !== 'POST' || !req.url.includes('/chat/completions')) return
+			return req.clone().text().then((body) => {
+				try {
+					const parsed = JSON.parse(body)
+					parsed.cache_control = { type: 'ephemeral' }
+					return new Request(req.url, {
+						method: req.method,
+						headers: req.headers,
+						body: JSON.stringify(parsed),
+						signal: req.signal,
+					})
+				} catch {
+					return req
+				}
+			})
+		})
+		const config: NonNullable<Parameters<typeof createOpenRouterText>[2]> = {
 			httpReferer: 'https://questpie.com',
 			xTitle: 'QUESTPIE Autopilot',
+			httpClient,
 		}
 		if (this.config.chatBaseUrl) {
 			config.serverURL = this.config.chatBaseUrl
 		}
-		return openRouterText(model as Parameters<typeof openRouterText>[0], config)
+		return createOpenRouterText(model, apiKey, config)
 	}
 
 	private getApiKey(): string {

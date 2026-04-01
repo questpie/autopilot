@@ -12,12 +12,18 @@ export interface AgentEvent {
 	params?: Record<string, unknown>
 }
 
+export interface AgentChatMessage {
+	role: 'user' | 'assistant'
+	content: string
+}
+
 /**
  * Options for spawning an agent session.
  */
 export interface AgentSpawnOptions {
 	systemPrompt: string
-	prompt: string
+	prompt?: string
+	messages?: AgentChatMessage[]
 	model: string
 	tools: ToolDefinition[]
 	toolContext: ToolContext
@@ -28,6 +34,12 @@ export interface AgentSpawnOptions {
 	agentScope?: { fsRead?: string[]; fsWrite?: string[]; secrets?: string[] }
 	/** Enable OpenRouter :online web search for this agent */
 	webSearch?: boolean
+	/** Session ID for provider-side tracking (e.g. OpenRouter activity dashboard). */
+	sessionId?: string
+	/** Agent ID for trace metadata. */
+	agentId?: string
+	/** Per-session token budget. Provider aborts when cumulative usage exceeds this. Default: 200 000 */
+	maxSessionTokens?: number
 }
 
 /**
@@ -37,6 +49,12 @@ export interface AgentSessionResult {
 	result?: string
 	toolCalls: number
 	error?: string
+	/** Cumulative token usage across all iterations */
+	usage?: {
+		promptTokens: number
+		completionTokens: number
+		totalTokens: number
+	}
 }
 
 /**
