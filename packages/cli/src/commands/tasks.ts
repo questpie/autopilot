@@ -1,21 +1,19 @@
 import { Command } from 'commander'
 import { program } from '../program'
-import { findCompanyRoot } from '../utils/find-root'
-import { section, badge, dim, table, success, error, warning, separator } from '../utils/format'
-import { getClient } from '../utils/client'
+import { section, badge, dim, table, success, error, separator } from '../utils/format'
+import { createApiClient } from '../utils/client'
 
 const tasksCmd = new Command('tasks')
-	.description('List and manage tasks in the backlog')
-	.option('-s, --status <status>', 'Filter by task status (backlog, active, review, done, blocked)')
-	.option('-a, --agent <agent>', 'Filter by assigned agent ID')
-	.action(async (opts: { status?: string; agent?: string }) => {
+	.description('List and manage tasks')
+	.option('-s, --status <status>', 'Filter by task status')
+	.option('-a, --assigned <agent>', 'Filter by assigned agent ID')
+	.action(async (opts: { status?: string; assigned?: string }) => {
 		try {
-			await findCompanyRoot()
-			const client = getClient()
+			const client = createApiClient()
 
 			const query: Record<string, string> = {}
 			if (opts.status) query.status = opts.status
-			if (opts.agent) query.agent = opts.agent
+			if (opts.assigned) query.assigned_to = opts.assigned
 
 			const res = await client.api.tasks.$get({ query })
 			if (!res.ok) {
@@ -27,14 +25,19 @@ const tasksCmd = new Command('tasks')
 				id: string
 				status: string
 				title: string
-				assigned_to?: string
+				assigned_to?: string | null
+				type: string
 			}>
 
 			console.log(section('Tasks'))
 			if (tasks.length === 0) {
 				console.log(dim('  No tasks found'))
-				if (opts.status || opts.agent) {
-					console.log(dim(`  Filters: ${opts.status ? `status=${opts.status}` : ''} ${opts.agent ? `agent=${opts.agent}` : ''}`))
+				if (opts.status || opts.assigned) {
+					console.log(
+						dim(
+							`  Filters: ${opts.status ? `status=${opts.status}` : ''} ${opts.assigned ? `assigned_to=${opts.assigned}` : ''}`,
+						),
+					)
 				}
 				return
 			}
@@ -43,9 +46,16 @@ const tasksCmd = new Command('tasks')
 				table(
 					tasks.map((t) => [
 						dim(t.id),
-						badge(t.status, t.status === 'done' ? 'green' : t.status === 'blocked' ? 'red' : 'cyan'),
+						badge(
+							t.status,
+							t.status === 'done'
+								? 'green'
+								: t.status === 'blocked'
+									? 'red'
+									: 'cyan',
+						),
 						t.title,
-						t.assigned_to ? dim(`→ ${t.assigned_to}`) : '',
+						t.assigned_to ? dim(`-> ${t.assigned_to}`) : '',
 					]),
 				),
 			)
@@ -54,19 +64,17 @@ const tasksCmd = new Command('tasks')
 			console.log(dim(`${tasks.length} task(s)`))
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))
-			console.error(dim('Run "autopilot --help" for usage information.'))
 			process.exit(1)
 		}
 	})
 
 tasksCmd.addCommand(
 	new Command('show')
-		.description('Show detailed information about a specific task')
-		.argument('<id>', 'Task ID to inspect')
+		.description('Show detailed information about a task')
+		.argument('<id>', 'Task ID')
 		.action(async (id: string) => {
 			try {
-				await findCompanyRoot()
-				const client = getClient()
+				const client = createApiClient()
 
 				const res = await client.api.tasks[':id'].$get({ param: { id } })
 
@@ -81,13 +89,12 @@ tasksCmd.addCommand(
 					title: string
 					status: string
 					type: string
-					priority: string
-					assigned_to?: string
-					created_by: string
+					priority?: string
+					assigned_to?: string | null
+					created_by?: string
 					created_at: string
-					updated_at: string
-					description?: string
-					history: Array<{ at: string; by: string; action: string; note?: string }>
+					updated_at?: string
+					description?: string | null
 				}
 
 				console.log(section(task.title))
@@ -95,90 +102,122 @@ tasksCmd.addCommand(
 				console.log(`  ${dim('ID:')}          ${task.id}`)
 				console.log(`  ${dim('Status:')}      ${badge(task.status)}`)
 				console.log(`  ${dim('Type:')}        ${task.type}`)
-				console.log(`  ${dim('Priority:')}    ${task.priority}`)
+				if (task.priority) console.log(`  ${dim('Priority:')}    ${task.priority}`)
 				console.log(`  ${dim('Assigned:')}    ${task.assigned_to ?? 'unassigned'}`)
-				console.log(`  ${dim('Created by:')}  ${task.created_by}`)
+				if (task.created_by) console.log(`  ${dim('Created by:')}  ${task.created_by}`)
 				console.log(`  ${dim('Created at:')}  ${task.created_at}`)
-				console.log(`  ${dim('Updated at:')}  ${task.updated_at}`)
+				if (task.updated_at) console.log(`  ${dim('Updated at:')}  ${task.updated_at}`)
 
 				if (task.description) {
 					console.log('')
 					console.log(dim('Description:'))
 					console.log(`  ${task.description}`)
 				}
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
 
-				if (task.history.length > 0) {
-					console.log('')
-					console.log(dim('History:'))
-					for (const entry of task.history) {
-						console.log(`  ${dim(entry.at)} ${entry.by} ${entry.action}${entry.note ? ` — ${entry.note}` : ''}`)
+tasksCmd.addCommand(
+	new Command('create')
+		.description('Create a new task')
+		.requiredOption('-t, --title <title>', 'Task title')
+		.requiredOption('--type <type>', 'Task type (e.g. feature, bug, chore)')
+		.option('-d, --description <desc>', 'Task description')
+		.option('--priority <priority>', 'Priority (low, medium, high, critical)')
+		.option('--assign <agent>', 'Assign to agent ID')
+		.action(
+			async (opts: {
+				title: string
+				type: string
+				description?: string
+				priority?: string
+				assign?: string
+			}) => {
+				try {
+					const client = createApiClient()
+
+					const res = await client.api.tasks.$post({
+						json: {
+							title: opts.title,
+							type: opts.type,
+							description: opts.description,
+							priority: opts.priority,
+							assigned_to: opts.assign,
+						},
+					})
+
+					if (!res.ok) {
+						console.error(error('Failed to create task'))
+						process.exit(1)
 					}
+
+					const task = (await res.json()) as { id: string; title: string }
+					console.log(success(`Task created: ${task.id}`))
+					console.log(dim(`  ${task.title}`))
+				} catch (err) {
+					console.error(error(err instanceof Error ? err.message : String(err)))
+					process.exit(1)
 				}
-			} catch (err) {
-				console.error(error(err instanceof Error ? err.message : String(err)))
-				console.error(dim('Run "autopilot --help" for usage information.'))
-				process.exit(1)
-			}
-		}),
+			},
+		),
 )
 
 tasksCmd.addCommand(
-	new Command('approve')
-		.description('Approve a task and move it to done')
-		.argument('<id>', 'Task ID to approve')
-		.action(async (id: string) => {
-			try {
-				await findCompanyRoot()
-				const client = getClient()
+	new Command('update')
+		.description('Update a task')
+		.argument('<id>', 'Task ID')
+		.option('-s, --status <status>', 'New status')
+		.option('-t, --title <title>', 'New title')
+		.option('-d, --description <desc>', 'New description')
+		.option('--priority <priority>', 'New priority')
+		.option('--assign <agent>', 'Assign to agent ID')
+		.action(
+			async (
+				id: string,
+				opts: {
+					status?: string
+					title?: string
+					description?: string
+					priority?: string
+					assign?: string
+				},
+			) => {
+				try {
+					const client = createApiClient()
 
-				const res = await client.api.tasks[':id'].approve.$post({ param: { id } })
+					const body: Record<string, string> = {}
+					if (opts.status) body.status = opts.status
+					if (opts.title) body.title = opts.title
+					if (opts.description) body.description = opts.description
+					if (opts.priority) body.priority = opts.priority
+					if (opts.assign) body.assigned_to = opts.assign
 
-				if (!res.ok) {
-					console.error(error(`Task not found: ${id}`))
-					console.error(dim('Use "autopilot tasks" to list all tasks.'))
+					if (Object.keys(body).length === 0) {
+						console.error(error('No updates provided. Use --status, --title, etc.'))
+						process.exit(1)
+					}
+
+					const res = await client.api.tasks[':id'].$patch({
+						param: { id },
+						json: body,
+					})
+
+					if (!res.ok) {
+						console.error(error(`Failed to update task: ${id}`))
+						process.exit(1)
+					}
+
+					const task = (await res.json()) as { id: string; status: string }
+					console.log(success(`Task ${task.id} updated (status: ${task.status})`))
+				} catch (err) {
+					console.error(error(err instanceof Error ? err.message : String(err)))
 					process.exit(1)
 				}
-
-				console.log(success(`Task ${id} approved and moved to done.`))
-			} catch (err) {
-				console.error(error(err instanceof Error ? err.message : String(err)))
-				console.error(dim('Run "autopilot --help" for usage information.'))
-				process.exit(1)
-			}
-		}),
-)
-
-tasksCmd.addCommand(
-	new Command('reject')
-		.description('Reject a task and move it to blocked')
-		.argument('<id>', 'Task ID to reject')
-		.argument('[reason]', 'Reason for rejection')
-		.action(async (id: string, reason?: string) => {
-			try {
-				await findCompanyRoot()
-				const client = getClient()
-
-				const res = await client.api.tasks[':id'].reject.$post({
-					param: { id },
-					json: { reason: reason ?? 'Rejected by human' },
-				})
-
-				if (!res.ok) {
-					console.error(error(`Task not found: ${id}`))
-					console.error(dim('Use "autopilot tasks" to list all tasks.'))
-					process.exit(1)
-				}
-
-				console.log(warning(`Task ${id} rejected and moved to blocked.`))
-				if (reason) {
-					console.log(dim(`  Reason: ${reason}`))
-				}
-			} catch (err) {
-				console.error(error(err instanceof Error ? err.message : String(err)))
-				console.error(dim('Run "autopilot --help" for usage information.'))
-				process.exit(1)
-			}
-		}),
+			},
+		),
 )
 
 program.addCommand(tasksCmd)

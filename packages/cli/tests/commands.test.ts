@@ -4,55 +4,49 @@ import { program } from '../src/index'
 describe('command registration', () => {
 	const commandNames = program.commands.map((c) => c.name())
 
-	it('registers the init command', () => {
-		expect(commandNames).toContain('init')
-	})
-
-	it('registers the status command', () => {
-		expect(commandNames).toContain('status')
-	})
-
-	it('registers the ask command', () => {
-		expect(commandNames).toContain('ask')
+	it('registers the start command', () => {
+		expect(commandNames).toContain('start')
 	})
 
 	it('registers the tasks command', () => {
 		expect(commandNames).toContain('tasks')
 	})
 
-	it('registers the agents command', () => {
-		expect(commandNames).toContain('agents')
+	it('registers the runs command', () => {
+		expect(commandNames).toContain('runs')
 	})
 
-	it('registers the inbox command', () => {
-		expect(commandNames).toContain('inbox')
+	it('registers the auth command', () => {
+		expect(commandNames).toContain('auth')
 	})
 
-	it('registers the attach command', () => {
-		expect(commandNames).toContain('attach')
+	it('has exactly 4 top-level commands', () => {
+		expect(program.commands.length).toBe(4)
 	})
 
-	it('registers the start command', () => {
-		expect(commandNames).toContain('start')
-	})
-
-	it('has exactly 21 commands', () => {
-		expect(program.commands.length).toBe(22)
-	})
-
-	it('has tasks subcommands', () => {
+	it('has tasks subcommands: show, create, update', () => {
 		const tasksCmd = program.commands.find((c) => c.name() === 'tasks')
 		expect(tasksCmd).toBeDefined()
 		const subNames = tasksCmd!.commands.map((c) => c.name())
 		expect(subNames).toContain('show')
-		expect(subNames).toContain('approve')
-		expect(subNames).toContain('reject')
+		expect(subNames).toContain('create')
+		expect(subNames).toContain('update')
 	})
 
-	it('has agents subcommands', () => {
-		const agentsCmd = program.commands.find((c) => c.name() === 'agents')
-		expect(agentsCmd).toBeDefined()
-		const subNames = agentsCmd!.commands.map((c) => c.name())
+	it('has runs subcommands: show', () => {
+		const runsCmd = program.commands.find((c) => c.name() === 'runs')
+		expect(runsCmd).toBeDefined()
+		const subNames = runsCmd!.commands.map((c) => c.name())
 		expect(subNames).toContain('show')
+	})
+
+	it('has auth subcommands: login, setup, status, logout', () => {
+		const authCmd = program.commands.find((c) => c.name() === 'auth')
+		expect(authCmd).toBeDefined()
+		const subNames = authCmd!.commands.map((c) => c.name())
+		expect(subNames).toContain('login')
+		expect(subNames).toContain('setup')
+		expect(subNames).toContain('status')
+		expect(subNames).toContain('logout')
 	})
 })

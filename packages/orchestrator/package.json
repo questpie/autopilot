@@ -6,7 +6,8 @@
 	"description": "QUESTPIE Autopilot orchestrator — state machine + API + MCP + observability",
 	"main": "src/index.ts",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./api": "./src/api/index.ts"
 	},
 	"files": ["src/"],
 	"scripts": {

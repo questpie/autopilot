@@ -42,10 +42,11 @@
 		"prepublishOnly": "rm -rf ./templates && cp -r ../../templates ./templates"
 	},
 	"dependencies": {
-		"@questpie/autopilot-orchestrator": "1.0.0",
+		"@questpie/autopilot-orchestrator": "2.0.0",
+		"@questpie/autopilot-worker": "1.0.0",
 		"@questpie/autopilot-spec": "1.0.0",
 		"commander": "^13.0.0",
-		"simple-git": "^3.27.0",
+		"hono": "^4.12.9",
 		"yaml": "^2.7.0"
 	},
 	"devDependencies": {
