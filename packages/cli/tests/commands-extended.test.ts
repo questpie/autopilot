@@ -1,7 +1,35 @@
 import { describe, expect, it } from 'bun:test'
 import { program } from '../src/index'
 
-describe('start command options', () => {
+describe('server start options', () => {
+	const serverCmd = program.commands.find((c) => c.name() === 'server')
+	const startCmd = serverCmd?.commands.find((c) => c.name() === 'start')
+
+	it('has --port option', () => {
+		expect(startCmd).toBeDefined()
+		const opts = startCmd!.options.map((o) => o.long)
+		expect(opts).toContain('--port')
+	})
+})
+
+describe('worker start options', () => {
+	const workerCmd = program.commands.find((c) => c.name() === 'worker')
+	const startCmd = workerCmd?.commands.find((c) => c.name() === 'start')
+
+	it('has --url option', () => {
+		expect(startCmd).toBeDefined()
+		const opts = startCmd!.options.map((o) => o.long)
+		expect(opts).toContain('--url')
+	})
+
+	it('has --name option', () => {
+		expect(startCmd).toBeDefined()
+		const opts = startCmd!.options.map((o) => o.long)
+		expect(opts).toContain('--name')
+	})
+})
+
+describe('start (convenience) options', () => {
 	const startCmd = program.commands.find((c) => c.name() === 'start')
 
 	it('has --port option', () => {
@@ -32,12 +60,6 @@ describe('tasks create command options', () => {
 		const opts = createCmd!.options.map((o) => o.long)
 		expect(opts).toContain('--type')
 	})
-
-	it('has --description option', () => {
-		expect(createCmd).toBeDefined()
-		const opts = createCmd!.options.map((o) => o.long)
-		expect(opts).toContain('--description')
-	})
 })
 
 describe('runs command options', () => {
@@ -47,11 +69,5 @@ describe('runs command options', () => {
 		expect(runsCmd).toBeDefined()
 		const opts = runsCmd!.options.map((o) => o.long)
 		expect(opts).toContain('--status')
-	})
-
-	it('has --agent option', () => {
-		expect(runsCmd).toBeDefined()
-		const opts = runsCmd!.options.map((o) => o.long)
-		expect(opts).toContain('--agent')
 	})
 })

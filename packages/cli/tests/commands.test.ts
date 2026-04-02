@@ -4,24 +4,46 @@ import { program } from '../src/index'
 describe('command registration', () => {
 	const commandNames = program.commands.map((c) => c.name())
 
-	it('registers the start command', () => {
+	it('registers server command', () => {
+		expect(commandNames).toContain('server')
+	})
+
+	it('registers worker command', () => {
+		expect(commandNames).toContain('worker')
+	})
+
+	it('registers start command (convenience wrapper)', () => {
 		expect(commandNames).toContain('start')
 	})
 
-	it('registers the tasks command', () => {
+	it('registers tasks command', () => {
 		expect(commandNames).toContain('tasks')
 	})
 
-	it('registers the runs command', () => {
+	it('registers runs command', () => {
 		expect(commandNames).toContain('runs')
 	})
 
-	it('registers the auth command', () => {
+	it('registers auth command', () => {
 		expect(commandNames).toContain('auth')
 	})
 
-	it('has exactly 4 top-level commands', () => {
-		expect(program.commands.length).toBe(4)
+	it('has exactly 6 top-level commands', () => {
+		expect(program.commands.length).toBe(6)
+	})
+
+	it('server has start subcommand', () => {
+		const serverCmd = program.commands.find((c) => c.name() === 'server')
+		expect(serverCmd).toBeDefined()
+		const subNames = serverCmd!.commands.map((c) => c.name())
+		expect(subNames).toContain('start')
+	})
+
+	it('worker has start subcommand', () => {
+		const workerCmd = program.commands.find((c) => c.name() === 'worker')
+		expect(workerCmd).toBeDefined()
+		const subNames = workerCmd!.commands.map((c) => c.name())
+		expect(subNames).toContain('start')
 	})
 
 	it('has tasks subcommands: show, create, update', () => {

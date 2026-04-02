@@ -1,5 +1,7 @@
 export { program } from './program'
 
+import './commands/server'
+import './commands/worker'
 import './commands/start'
 import './commands/tasks'
 import './commands/runs'
