@@ -5,8 +5,8 @@
  * - Runs without targeting are claimable by any worker
  * - required_runtime blocks ineligible workers (allow_fallback=false)
  * - required_runtime with fallback allows any worker
- * - required_capabilities blocks ineligible workers
- * - preferred_worker_id in targeting routes to specific worker
+ * - required_worker_tags blocks ineligible workers
+ * - required_worker_id in targeting pins to specific worker
  * - WorkflowEngine resolves targeting from step hints
  * - Continuation runs inherit targeting
  * - Task assignment is NOT used as worker routing
@@ -39,7 +39,7 @@ const TARGETED_WORKFLOW: Workflow = {
 			instructions: 'Run on codex',
 			targeting: {
 				required_runtime: 'codex',
-				required_capabilities: [],
+				required_worker_tags: [],
 				allow_fallback: false,
 			},
 		},
@@ -58,7 +58,7 @@ const FALLBACK_WORKFLOW: Workflow = {
 			agent_id: 'dev',
 			instructions: 'Needs GPU',
 			targeting: {
-				required_capabilities: ['gpu'],
+				required_worker_tags: ['gpu'],
 				allow_fallback: true,
 			},
 		},
@@ -218,7 +218,7 @@ describe('Execution Targeting', () => {
 			initiated_by: 'test',
 			targeting: JSON.stringify({
 				required_runtime: 'codex',
-				required_capabilities: [],
+				required_worker_tags: [],
 				allow_fallback: false,
 			}),
 		})
@@ -246,7 +246,7 @@ describe('Execution Targeting', () => {
 			initiated_by: 'test',
 			targeting: JSON.stringify({
 				required_runtime: 'codex',
-				required_capabilities: [],
+				required_worker_tags: [],
 				allow_fallback: true,
 			}),
 		})
@@ -257,9 +257,9 @@ describe('Execution Targeting', () => {
 		expect(claimed!.id).toBe(runId)
 	})
 
-	// ── required_capabilities ─────────────────────────────────────────────
+	// ── required_worker_tags ─────────────────────────────────────────────
 
-	test('required_capabilities blocks ineligible worker when allow_fallback=false', async () => {
+	test('required_worker_tags blocks ineligible worker when allow_fallback=false', async () => {
 		const runId = `run-cap-strict-${Date.now()}`
 		await runService.create({
 			id: runId,
@@ -267,7 +267,7 @@ describe('Execution Targeting', () => {
 			runtime: 'claude-code',
 			initiated_by: 'test',
 			targeting: JSON.stringify({
-				required_capabilities: ['gpu', 'large-context'],
+				required_worker_tags: ['gpu', 'large-context'],
 				allow_fallback: false,
 			}),
 		})
@@ -284,7 +284,7 @@ describe('Execution Targeting', () => {
 		expect(claimed!.id).toBe(runId)
 	})
 
-	test('required_capabilities with allow_fallback=true allows any worker', async () => {
+	test('required_worker_tags with allow_fallback=true allows any worker', async () => {
 		const runId = `run-cap-fallback-${Date.now()}`
 		await runService.create({
 			id: runId,
@@ -292,7 +292,7 @@ describe('Execution Targeting', () => {
 			runtime: 'claude-code',
 			initiated_by: 'test',
 			targeting: JSON.stringify({
-				required_capabilities: ['gpu'],
+				required_worker_tags: ['gpu'],
 				allow_fallback: true,
 			}),
 		})
@@ -303,9 +303,9 @@ describe('Execution Targeting', () => {
 		expect(claimed!.id).toBe(runId)
 	})
 
-	// ── preferred_worker_id in targeting ──────────────────────────────────
+	// ── required_worker_id in targeting ──────────────────────────────────
 
-	test('targeting preferred_worker_id routes to specific worker', async () => {
+	test('targeting required_worker_id pins to specific worker', async () => {
 		const runId = `run-pref-target-${Date.now()}`
 		await runService.create({
 			id: runId,
@@ -313,7 +313,7 @@ describe('Execution Targeting', () => {
 			runtime: 'claude-code',
 			initiated_by: 'test',
 			targeting: JSON.stringify({
-				preferred_worker_id: 'worker-special',
+				required_worker_id: 'worker-special',
 				allow_fallback: false,
 			}),
 		})
@@ -390,7 +390,7 @@ describe('Execution Targeting', () => {
 		const originalId = `run-cont-orig-${Date.now()}`
 		const targeting = JSON.stringify({
 			required_runtime: 'codex',
-			required_capabilities: ['gpu'],
+			required_worker_tags: ['gpu'],
 			allow_fallback: false,
 		})
 

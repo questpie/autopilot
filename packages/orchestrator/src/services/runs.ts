@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm'
-import type { WorkerCapability } from '@questpie/autopilot-spec'
+import type { WorkerCapability, ExecutionTarget } from '@questpie/autopilot-spec'
 import { runs, runEvents } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
@@ -212,26 +212,22 @@ function isEligible(run: RunRow, workerId: string, workerTags: Set<string>): boo
 	if (!run.targeting) return true
 
 	try {
-		const t = JSON.parse(run.targeting) as {
-			preferred_worker_id?: string
-			required_runtime?: string
-			required_capabilities?: string[]
-			allow_fallback?: boolean
-		}
+		const t = JSON.parse(run.targeting) as ExecutionTarget
 		const allowFallback = t.allow_fallback !== false
 
-		if (t.preferred_worker_id && t.preferred_worker_id !== workerId) {
-			logSkip(run.id, workerId, `targeting prefers ${t.preferred_worker_id}`)
+		// Hard pin — required_worker_id is never relaxed by allow_fallback
+		if (t.required_worker_id && t.required_worker_id !== workerId) {
+			logSkip(run.id, workerId, `required_worker_id is ${t.required_worker_id}`)
 			return false
 		}
 		if (t.required_runtime && !workerTags.has(t.required_runtime) && !allowFallback) {
 			logSkip(run.id, workerId, `requires runtime "${t.required_runtime}", worker has [${[...workerTags]}]`)
 			return false
 		}
-		if (t.required_capabilities?.length) {
-			const missing = t.required_capabilities.filter((tag) => !workerTags.has(tag))
+		if (t.required_worker_tags?.length) {
+			const missing = t.required_worker_tags.filter((tag) => !workerTags.has(tag))
 			if (missing.length > 0 && !allowFallback) {
-				logSkip(run.id, workerId, `missing capabilities: [${missing}]`)
+				logSkip(run.id, workerId, `missing worker tags: [${missing}]`)
 				return false
 			}
 		}

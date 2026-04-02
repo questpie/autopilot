@@ -294,17 +294,17 @@ export class WorkflowEngine {
 		if (!step.targeting) return undefined
 
 		const target: ExecutionTarget = {
-			preferred_worker_id: step.targeting.preferred_worker_id,
+			required_worker_id: step.targeting.required_worker_id,
 			required_runtime: step.targeting.required_runtime,
-			required_capabilities: step.targeting.required_capabilities ?? [],
+			required_worker_tags: step.targeting.required_worker_tags ?? [],
 			allow_fallback: step.targeting.allow_fallback ?? true,
 		}
 
 		// Only store if there are actual constraints
 		const hasConstraints =
-			target.preferred_worker_id ||
+			target.required_worker_id ||
 			target.required_runtime ||
-			target.required_capabilities.length > 0
+			target.required_worker_tags.length > 0
 
 		if (!hasConstraints) return undefined
 		return JSON.stringify(target)

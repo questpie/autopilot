@@ -1,14 +1,14 @@
 import { z } from 'zod'
 
-/** Execution targeting hints — where a run should execute. */
+/** Execution targeting constraints — where a run should execute. */
 export const ExecutionTargetSchema = z.object({
-	/** Route to a specific worker. */
-	preferred_worker_id: z.string().optional(),
+	/** Hard pin: only this worker may claim the run. */
+	required_worker_id: z.string().optional(),
 	/** Runtime the run must execute on (e.g. 'claude-code'). */
 	required_runtime: z.string().optional(),
-	/** Capability tags the claiming worker must advertise. */
-	required_capabilities: z.array(z.string()).default([]),
-	/** If true, relax matching when no exact match is available. Default true. */
+	/** Tags (runtime names, model names) the claiming worker must advertise. */
+	required_worker_tags: z.array(z.string()).default([]),
+	/** If true, relax runtime/tag matching when no exact match is available. Default true. */
 	allow_fallback: z.boolean().default(true),
 })
 

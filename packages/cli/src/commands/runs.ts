@@ -147,9 +147,9 @@ runsCmd.addCommand(
 						console.log('')
 						console.log(dim('Targeting:'))
 						if (t.required_runtime) console.log(`  ${dim('Runtime:')} ${t.required_runtime}`)
-						if (t.preferred_worker_id) console.log(`  ${dim('Worker:')} ${t.preferred_worker_id}`)
-						if (Array.isArray(t.required_capabilities) && t.required_capabilities.length > 0) {
-							console.log(`  ${dim('Capabilities:')} ${t.required_capabilities.join(', ')}`)
+						if (t.required_worker_id) console.log(`  ${dim('Worker (pinned):')} ${t.required_worker_id}`)
+						if (Array.isArray(t.required_worker_tags) && t.required_worker_tags.length > 0) {
+							console.log(`  ${dim('Worker tags:')} ${t.required_worker_tags.join(', ')}`)
 						}
 						console.log(`  ${dim('Fallback:')} ${t.allow_fallback !== false ? 'yes' : 'no'}`)
 					} catch {
