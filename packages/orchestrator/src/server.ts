@@ -6,10 +6,9 @@
  * 3. Create company.db + index.db
  * 4. Load YAML config (agents, workflows, company)
  * 5. Create services
- * 6. Create inference service (if AI_GATEWAY_API_KEY set)
- * 7. Create auth
- * 8. Create Hono app
- * 9. Bun.serve on port 7778
+ * 6. Create auth
+ * 7. Create Hono app
+ * 8. Bun.serve on port 7778
  */
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -19,14 +18,7 @@ import type { Services } from './api/app'
 import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
-import {
-	TaskService,
-	RunService,
-	MessageService,
-	WorkerService,
-	WorkflowRunService,
-	InferenceService,
-} from './services'
+import { TaskService, RunService, WorkerService } from './services'
 
 export interface StartServerOptions {
 	/** Absolute path to the company root directory. Defaults to first CLI arg or cwd. */
@@ -63,32 +55,15 @@ export async function startServer(options?: StartServerOptions) {
 	// ── 5. Create services ───────────────────────────────────────────────
 	const taskService = new TaskService(companyDb)
 	const runService = new RunService(companyDb)
-	const messageService = new MessageService(companyDb)
 	const workerService = new WorkerService(companyDb)
-	const workflowRunService = new WorkflowRunService(companyDb)
-
-	// ── 6. Optional inference service ────────────────────────────────────
-	let inferenceService: InferenceService | null = null
-	if (env.AI_GATEWAY_API_KEY) {
-		inferenceService = new InferenceService({
-			apiKey: env.AI_GATEWAY_API_KEY,
-			gatewayBaseUrl: 'https://ai-gateway.vercel.sh/v1',
-			textModel: 'google/gemini-2.5-flash',
-			embeddingModel: 'google/gemini-embedding-2',
-		})
-		console.log('[server] inference service enabled')
-	}
 
 	const services: Services = {
 		taskService,
 		runService,
-		messageService,
 		workerService,
-		workflowRunService,
-		inferenceService,
 	}
 
-	// ── 7. Create Hono app ───────────────────────────────────────────────
+	// ── 6. Create Hono app ───────────────────────────────────────────────
 	const app = createApp({
 		companyRoot,
 		db: companyDb,
@@ -97,7 +72,7 @@ export async function startServer(options?: StartServerOptions) {
 		corsOrigin: env.CORS_ORIGIN,
 	})
 
-	// ── 8. Start HTTP server ─────────────────────────────────────────────
+	// ── 7. Start HTTP server ─────────────────────────────────────────────
 	const server = Bun.serve({
 		fetch: app.fetch,
 		port,

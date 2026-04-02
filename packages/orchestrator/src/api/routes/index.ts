@@ -1,7 +1,4 @@
 export { tasks } from './tasks'
 export { runs } from './runs'
 export { workers } from './workers'
-export { channels } from './channels'
 export { events } from './events'
-export { search } from './search'
-export { settings, settingsPublic } from './settings'

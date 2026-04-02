@@ -5,16 +5,9 @@
 
 export interface Actor {
 	id: string
-	type: 'human' | 'agent' | 'api' | 'mcp'
+	type: 'human' | 'agent' | 'api'
 	name: string
 	role: 'owner' | 'admin' | 'member' | 'viewer' | 'agent'
-	permissions: Record<string, string[]>
-	scope?: {
-		fsRead?: string[]
-		fsWrite?: string[]
-		projects?: string[]
-		secrets?: string[]
-	}
-	source: 'cli' | 'dashboard' | 'api' | 'internal' | 'mcp'
+	source: 'cli' | 'dashboard' | 'api' | 'internal'
 	ip?: string
 }

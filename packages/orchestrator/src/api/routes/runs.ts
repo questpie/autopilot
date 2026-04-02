@@ -1,7 +1,11 @@
 import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import { WorkerEventSchema, RunCompletionSchema } from '@questpie/autopilot-spec'
+import {
+	WorkerEventSchema,
+	RunCompletionSchema,
+	CreateRunRequestSchema,
+} from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
 
@@ -49,38 +53,26 @@ const runs = new Hono<AppEnv>()
 		},
 	)
 	// POST /runs — create a new pending run
-	.post(
-		'/',
-		zValidator(
-			'json',
-			z.object({
-				agent_id: z.string().min(1),
-				task_id: z.string().optional(),
-				runtime: z.string().min(1),
-				initiated_by: z.string().optional(),
-			}),
-		),
-		async (c) => {
-			const { runService } = c.get('services')
-			const actor = c.get('actor')
-			const body = c.req.valid('json')
-			const id = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-			const run = await runService.create({
-				id,
-				...body,
-				initiated_by: body.initiated_by ?? actor?.id ?? 'system',
-			})
-			if (!run) return c.json({ error: 'failed to create run' }, 500)
+	.post('/', zValidator('json', CreateRunRequestSchema), async (c) => {
+		const { runService } = c.get('services')
+		const actor = c.get('actor')
+		const body = c.req.valid('json')
+		const id = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+		const run = await runService.create({
+			id,
+			...body,
+			initiated_by: body.initiated_by ?? actor?.id ?? 'system',
+		})
+		if (!run) return c.json({ error: 'failed to create run' }, 500)
 
-			eventBus.emit({
-				type: 'run_started',
-				runId: id,
-				agentId: body.agent_id,
-			})
+		eventBus.emit({
+			type: 'run_started',
+			runId: id,
+			agentId: body.agent_id,
+		})
 
-			return c.json(run, 201)
-		},
-	)
+		return c.json(run, 201)
+	})
 	// POST /runs/:id/events — append event (from worker)
 	.post(
 		'/:id/events',

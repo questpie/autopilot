@@ -4,8 +4,6 @@
  * Creates a configured Hono instance with CORS, auth, and all API routes.
  * Routes receive services via Hono context variables (set by closure over the services bag).
  */
-import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
@@ -13,33 +11,20 @@ import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type {
-	TaskService,
-	RunService,
-	MessageService,
-	WorkerService,
-	WorkflowRunService,
-	InferenceService,
-} from '../services'
+import type { TaskService, RunService, WorkerService } from '../services'
 import type { Actor } from '../auth/types'
 import { authMiddleware } from './middleware/auth'
 import { events } from './routes/events'
 import { tasks } from './routes/tasks'
 import { runs } from './routes/runs'
 import { workers } from './routes/workers'
-import { channels } from './routes/channels'
-import { settings, settingsPublic } from './routes/settings'
-import { search } from './routes/search'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface Services {
 	taskService: TaskService
 	runService: RunService
-	messageService: MessageService
 	workerService: WorkerService
-	workflowRunService: WorkflowRunService
-	inferenceService: InferenceService | null
 }
 
 export interface AppEnv {
@@ -114,7 +99,6 @@ export function createApp(config: AppConfig) {
 
 	// ── 6. Public API routes (no auth required) ──────────────────────────
 	app.get('/api/health', (c) => c.json({ ok: true, ts: new Date().toISOString() }))
-	app.route('/api/settings', settingsPublic)
 
 	// ── 7. Auth middleware on /api/* ──────────────────────────────────────
 	app.use('/api/*', authMiddleware())
@@ -124,52 +108,9 @@ export function createApp(config: AppConfig) {
 		.route('/api/tasks', tasks)
 		.route('/api/runs', runs)
 		.route('/api/workers', workers)
-		.route('/api/channels', channels)
-		.route('/api/search', search)
-		.route('/api/settings', settings)
 		.route('/api/events', events)
 
-	// ── 9. Static dashboard fallback ─────────────────────────────────────
-	const dashboardDir = resolveDashboardDir()
-	if (dashboardDir) {
-		typedApp.get('/*', async (c) => {
-			const url = new URL(c.req.url)
-			const filePath = join(dashboardDir, url.pathname === '/' ? 'index.html' : url.pathname)
-
-			try {
-				const file = Bun.file(filePath)
-				if (await file.exists()) {
-					return new Response(file.stream(), {
-						headers: { 'Content-Type': file.type || 'application/octet-stream' },
-					})
-				}
-				// SPA fallback
-				const indexFile = Bun.file(join(dashboardDir, 'index.html'))
-				if (await indexFile.exists()) {
-					return new Response(indexFile.stream(), {
-						headers: { 'Content-Type': 'text/html' },
-					})
-				}
-			} catch {
-				// Fall through
-			}
-			return c.text('Not Found', 404)
-		})
-	}
-
 	return typedApp
-}
-
-function resolveDashboardDir(): string | null {
-	const candidates = [
-		resolve(__dirname, '..', '..', '..', '..', 'apps', 'dashboard-v2', '.output', 'public'),
-		resolve(__dirname, '..', '..', '..', '..', 'apps', 'dashboard-v2', 'dist'),
-		'/app/apps/dashboard-v2/.output/public',
-	]
-	for (const dir of candidates) {
-		if (existsSync(dir)) return dir
-	}
-	return null
 }
 
 /** App type for SDK / hono client type inference. */

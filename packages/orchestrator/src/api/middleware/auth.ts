@@ -58,7 +58,6 @@ async function resolveActor(request: Request, auth: Auth): Promise<Actor | null>
 			type: 'human',
 			name: session.user.name ?? session.user.email,
 			role,
-			permissions: {},
 			source: detectSource(request),
 			ip: request.headers.get('x-forwarded-for') ?? undefined,
 		}
@@ -84,7 +83,6 @@ async function resolveActor(request: Request, auth: Auth): Promise<Actor | null>
 						type: 'api',
 						name: data.key.name ?? 'api-client',
 						role: 'member',
-						permissions: {},
 						source: detectSource(request),
 						ip: request.headers.get('x-forwarded-for') ?? undefined,
 					}

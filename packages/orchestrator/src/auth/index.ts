@@ -1,18 +1,13 @@
 import { apiKey } from '@better-auth/api-key'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
-/**
- * Better Auth instance for QUESTPIE Autopilot.
- *
- * Uses the Drizzle adapter so that all tables are managed by Drizzle
- * migrations — no more Kysely internal migrations.
- */
 import { betterAuth } from 'better-auth'
 import { hashPassword, verifyPassword } from 'better-auth/crypto'
-import { admin, bearer, openAPI, twoFactor } from 'better-auth/plugins'
-import { and, eq, gt, isNull, or, sql } from 'drizzle-orm'
+import { bearer } from 'better-auth/plugins'
+import { eq, sql } from 'drizzle-orm'
 import type { CompanyDb } from '../db'
 import * as authSchema from '../db/auth-schema'
 import { env } from '../env'
+
 /** Minimal mail service interface for email verification. */
 interface MailService {
 	send(opts: { to: string; subject: string; html: string }): Promise<void>
@@ -27,36 +22,9 @@ function createMailService(): MailService {
 	}
 }
 
-const PASSWORD_COMPLEXITY_RE = /^(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/
-
-function validatePasswordComplexity(password: string): void {
-	if (!PASSWORD_COMPLEXITY_RE.test(password)) {
-		throw new Error(
-			'Password must be at least 12 characters and include at least one digit and one special character.',
-		)
-	}
-}
-
 async function getUserCount(db: CompanyDb): Promise<number> {
 	const row = await db.select({ count: sql<number>`count(*)` }).from(authSchema.user).get()
 	return Number(row?.count ?? 0)
-}
-
-async function getActiveInvite(db: CompanyDb, email: string) {
-	const normalizedEmail = email.trim().toLowerCase()
-	const now = new Date()
-
-	return db
-		.select()
-		.from(authSchema.invite)
-		.where(
-			and(
-				eq(authSchema.invite.email, normalizedEmail),
-				isNull(authSchema.invite.acceptedAt),
-				or(isNull(authSchema.invite.expiresAt), gt(authSchema.invite.expiresAt, now)),
-			),
-		)
-		.get()
 }
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
@@ -87,7 +55,6 @@ export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: Mai
 			requireEmailVerification: true,
 			password: {
 				hash: async (password: string) => {
-					validatePasswordComplexity(password)
 					return hashPassword(password)
 				},
 				verify: ({ hash, password }: { hash: string; password: string }) => {
@@ -133,6 +100,7 @@ export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: Mai
 						const emailLower = user.email.toLowerCase()
 						const userCount = await getUserCount(db)
 
+						// First user is always owner
 						if (userCount === 0) {
 							return {
 								data: {
@@ -143,89 +111,23 @@ export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: Mai
 							}
 						}
 
-						const invite = await getActiveInvite(db, emailLower)
-						if (!invite) {
-							throw new Error('Registration is invite-only. Your email is not on the invite list.')
-						}
-
+						// Subsequent users default to member
 						return {
 							data: {
 								...user,
 								email: emailLower,
-								role: invite.role,
+								role: 'member',
 							},
-						}
-					},
-				},
-			},
-			session: {
-				create: {
-					after: async (session: { userId: string; [key: string]: unknown }) => {
-						try {
-							const currentUser = await db
-								.select({
-									email: authSchema.user.email,
-									banned: authSchema.user.banned,
-								})
-								.from(authSchema.user)
-								.where(eq(authSchema.user.id, session.userId))
-								.get()
-
-							if (currentUser?.email) {
-								await db
-									.update(authSchema.invite)
-									.set({
-										acceptedAt: new Date(),
-										updatedAt: new Date(),
-									})
-									.where(
-										and(
-											eq(authSchema.invite.email, currentUser.email.toLowerCase()),
-											isNull(authSchema.invite.acceptedAt),
-										),
-									)
-							}
-
-							// Banned user logout: reject session creation for banned users
-							if (currentUser?.banned === true) {
-								const authApi = auth.api as Record<
-									string,
-									((args: unknown) => Promise<unknown>) | undefined
-								>
-								const revokeSessionFn = authApi.revokeSession
-								if (revokeSessionFn) {
-									await revokeSessionFn({
-										body: { token: (session as { token?: string }).token },
-									}).catch(() => {})
-								}
-								throw new Error('Your account has been banned.')
-							}
-						} catch (err) {
-							// Re-throw ban errors, swallow lookup failures
-							if ((err as Error).message === 'Your account has been banned.') throw err
 						}
 					},
 				},
 			},
 		},
 
-		plugins: [
-			bearer(),
-			apiKey(),
-			admin(),
-			openAPI(),
-			twoFactor({
-				issuer: 'QUESTPIE Autopilot',
-				backupCodeOptions: { amount: 10 },
-				trustDeviceMaxAge: 60 * 60 * 24 * 30, // 30 days
-			}),
-		],
+		plugins: [bearer(), apiKey()],
 	})
-
-	// No runMigrations() — Drizzle migrations handle all table creation now.
 
 	return auth
 }
 
 export type Auth = Awaited<ReturnType<typeof createAuth>>
-

@@ -14,6 +14,7 @@ export class RunService {
 		task_id?: string
 		runtime: string
 		initiated_by?: string
+		instructions?: string
 	}): Promise<RunRow | undefined> {
 		const now = new Date().toISOString()
 		await this.db.insert(runs).values({

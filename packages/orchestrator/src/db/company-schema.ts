@@ -56,6 +56,7 @@ export const runs = sqliteTable(
 		runtime: text('runtime').notNull(), // claude-code | codex | opencode | direct-api
 		status: text('status').notNull().default('pending'), // pending | claimed | running | completed | failed
 		initiated_by: text('initiated_by'),
+		instructions: text('instructions'),
 		summary: text('summary'),
 		tokens_input: integer('tokens_input').default(0),
 		tokens_output: integer('tokens_output').default(0),

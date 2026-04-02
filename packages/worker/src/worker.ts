@@ -16,30 +16,34 @@ export interface WorkerConfig {
   pollInterval?: number // ms, default 5_000
 }
 
-interface RegisterResponse {
-  workerId: string
+interface ClaimResponseRun {
+  id: string
+  agent_id: string
+  task_id: string | null
+  runtime: string
+  status: string
+  task_title: string | null
+  task_description: string | null
+  instructions: string | null
 }
 
 interface ClaimResponse {
-  run: {
-    id: string
-    agentId: string
-    taskId: string | null
-    context: Record<string, unknown>
-    instructions: string | null
-    runtime: string
-    model: string | null
-  } | null
+  run: ClaimResponseRun | null
+  lease_id: string | null
 }
 
 export class AutopilotWorker {
-  private workerId: string | null = null
+  private workerId: string
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private pollTimer: ReturnType<typeof setInterval> | null = null
   private running = false
+  private activeRunId: string | null = null
   private adapters = new Map<string, RuntimeAdapter>()
 
-  constructor(private config: WorkerConfig) {}
+  constructor(private config: WorkerConfig) {
+    // Worker generates its own id at construction
+    this.workerId = `worker-${config.deviceId}-${Math.random().toString(36).slice(2, 8)}`
+  }
 
   /** Register a runtime adapter. */
   registerAdapter(runtime: string, adapter: RuntimeAdapter): void {
@@ -50,17 +54,17 @@ export class AutopilotWorker {
   async start(): Promise<void> {
     this.running = true
 
-    // Register with orchestrator
-    const res = await this.api('/api/workers/register', {
+    // Register with orchestrator using shared contract
+    const res = (await this.api('/api/workers/register', {
       method: 'POST',
       body: {
-        deviceId: this.config.deviceId,
+        id: this.workerId,
+        device_id: this.config.deviceId,
         name: this.config.name,
         capabilities: this.config.capabilities,
       },
-    })
-    this.workerId = (res as RegisterResponse).workerId
-    console.log(`[worker] registered as ${this.workerId}`)
+    })) as { workerId: string; status: string }
+    console.log(`[worker] registered as ${res.workerId}`)
 
     // Start heartbeat
     this.heartbeatTimer = setInterval(
@@ -81,24 +85,21 @@ export class AutopilotWorker {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     if (this.pollTimer) clearInterval(this.pollTimer)
 
-    if (this.workerId) {
-      try {
-        await this.api('/api/workers/deregister', {
-          method: 'POST',
-          body: { workerId: this.workerId },
-        })
-      } catch {
-        // Best effort
-      }
+    try {
+      await this.api('/api/workers/deregister', {
+        method: 'POST',
+        body: { worker_id: this.workerId },
+      })
+    } catch {
+      // Best effort
     }
   }
 
   private async heartbeat(): Promise<void> {
-    if (!this.workerId) return
     try {
       await this.api('/api/workers/heartbeat', {
         method: 'POST',
-        body: { workerId: this.workerId },
+        body: { worker_id: this.workerId },
       })
     } catch (err) {
       console.error('[worker] heartbeat failed:', err)
@@ -106,25 +107,33 @@ export class AutopilotWorker {
   }
 
   private async poll(): Promise<void> {
-    if (!this.workerId || !this.running) return
+    if (!this.running) return
+
+    // Concurrency: don't poll when already running a task
+    if (this.activeRunId !== null) return
+
     try {
       const res = (await this.api('/api/workers/claim', {
         method: 'POST',
-        body: { workerId: this.workerId },
+        body: { worker_id: this.workerId },
       })) as ClaimResponse
 
       if (res.run) {
-        // Don't await — run in background
-        this.executeRun(res.run).catch((err) => {
-          console.error('[worker] run failed:', err)
-        })
+        this.activeRunId = res.run.id
+        this.executeRun(res.run)
+          .catch((err) => {
+            console.error('[worker] run failed:', err)
+          })
+          .finally(() => {
+            this.activeRunId = null
+          })
       }
     } catch (err) {
       console.error('[worker] poll failed:', err)
     }
   }
 
-  private async executeRun(run: NonNullable<ClaimResponse['run']>): Promise<void> {
+  private async executeRun(run: ClaimResponseRun): Promise<void> {
     const adapter = this.adapters.get(run.runtime)
     if (!adapter) {
       await this.postEvent(run.id, {
@@ -140,11 +149,14 @@ export class AutopilotWorker {
 
     const context: RunContext = {
       runId: run.id,
-      agentId: run.agentId,
-      taskId: run.taskId,
-      context: run.context,
+      agentId: run.agent_id,
+      taskId: run.task_id,
+      context: {
+        task_title: run.task_title,
+        task_description: run.task_description,
+      },
       instructions: run.instructions,
-      model: run.model,
+      model: null,
       orchestratorUrl: this.config.orchestratorUrl,
       apiKey: this.config.apiKey,
     }
