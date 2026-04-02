@@ -25,10 +25,10 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
 	const { data: messages = [] } = useSuspenseQuery(chatSessionMessagesQuery(sessionId))
 	const continueSession = useContinueChatSession()
 	const wantsStream = session.status === 'running'
-	const stream = useSessionStream(
-		wantsStream ? session.id : null,
-		session.streamOffset,
-	)
+	// Always replay from the beginning — the agent's in-progress response
+	// isn't in DB messages yet, so we need the full stream to render it.
+	// The persisted offset is only used for server-side tracking.
+	const stream = useSessionStream(wantsStream ? session.id : null)
 	// Keep showing stream blocks until DB messages include the agent response.
 	// Without this, the streaming row disappears before the DB catches up.
 	const lastDbMessage = messages.length > 0 ? messages[messages.length - 1] : null

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { ArrowClockwiseIcon, ArrowDownIcon, WarningCircleIcon } from '@phosphor-icons/react'
+import { StickToBottom, useStickToBottomContext } from 'use-stick-to-bottom'
 import { Button } from '@/components/ui/button'
 import {
 	getMessageRunError,
@@ -43,8 +44,6 @@ const ERROR_CODE_I18N_KEY: Record<StreamErrorCode, string> = {
 	unknown: 'chat.error_unknown',
 }
 
-const NEAR_BOTTOM_THRESHOLD = 120
-
 function buildMessageList(messages: Message[]): MessageListItem[] {
 	const sorted = [...messages].sort((left, right) => left.at.localeCompare(right.at))
 	const items: MessageListItem[] = []
@@ -79,20 +78,48 @@ function buildMessageList(messages: Message[]): MessageListItem[] {
 	return items
 }
 
-function isNearBottom(el: HTMLElement): boolean {
-	return el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD
+// ── Scroll-to-bottom button (reads context from StickToBottom) ──────
+
+function ScrollToBottomButton(): React.JSX.Element | null {
+	const { isAtBottom, scrollToBottom } = useStickToBottomContext()
+	const { t } = useTranslation()
+
+	if (isAtBottom) return null
+
+	return (
+		<div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+			<Button
+				type="button"
+				size="sm"
+				className="pointer-events-auto"
+				onClick={() => scrollToBottom()}
+			>
+				<ArrowDownIcon className="size-4" />
+				{t('chat.scroll_to_bottom')}
+			</Button>
+		</div>
+	)
 }
 
-function scrollToBottom(el: HTMLElement): void {
-	el.scrollTop = el.scrollHeight
+// ── Force scroll on new user message ────────────────────────────────
+
+function ScrollOnUserMessage({ messages }: { messages: Message[] }): null {
+	const { scrollToBottom } = useStickToBottomContext()
+	const lastUserMessageId = useMemo(
+		() => [...messages].reverse().find((m) => m.external)?.id,
+		[messages],
+	)
+
+	useEffect(() => {
+		if (lastUserMessageId) {
+			scrollToBottom()
+		}
+	}, [lastUserMessageId, scrollToBottom])
+
+	return null
 }
 
-// ── Scroll state machine ────────────────────────────────────────────
-// "following" = auto-scroll on new content
-// "detached"  = user scrolled up, leave them alone
-//
-// following → detached : user scrolls up past threshold
-// detached  → following: user scrolls back to bottom OR clicks button OR sends message
+// ── Main component ──────────────────────────────────────────────────
 
 export function MessageList({
 	messages,
@@ -106,9 +133,6 @@ export function MessageList({
 	className,
 	onRetry,
 }: MessageListProps): React.JSX.Element {
-	const containerRef = useRef<HTMLDivElement | null>(null)
-	const [scrollMode, setScrollMode] = useState<'following' | 'detached'>('following')
-	const isUserScrolling = useRef(false)
 	const { t } = useTranslation()
 
 	const items = useMemo(() => buildMessageList(messages), [messages])
@@ -132,89 +156,13 @@ export function MessageList({
 	const isStreamingLive =
 		streamingState?.status === 'connecting' || streamingState?.status === 'streaming'
 
-	// When a new user message appears, snap to following mode.
-	const lastUserMessage = useMemo(
-		() => [...messages].reverse().find((m) => m.external),
-		[messages],
-	)
-	useEffect(() => {
-		if (lastUserMessage) {
-			setScrollMode('following')
-		}
-	}, [lastUserMessage?.id])
-
-	// Auto-scroll when in following mode and content height grows.
-	// ResizeObserver fires whenever children resize (new blocks, text growth, tool cards).
-	useLayoutEffect(() => {
-		const el = containerRef.current
-		if (!el) return
-
-		// Initial scroll.
-		scrollToBottom(el)
-
-		const observer = new ResizeObserver(() => {
-			if (scrollMode === 'following') {
-				scrollToBottom(el)
-			}
-		})
-
-		// Observe the scroll container's first child (the content wrapper).
-		// If there are direct children, observe each — ResizeObserver fires
-		// when any observed element's size changes.
-		for (const child of el.children) {
-			observer.observe(child)
-		}
-		// Also observe the container itself for layout shifts.
-		observer.observe(el)
-
-		return () => observer.disconnect()
-	}, [scrollMode])
-
-	const handleScroll = useCallback(() => {
-		const el = containerRef.current
-		if (!el) return
-
-		// Ignore programmatic scrolls — only react to user-initiated scrolling.
-		if (!isUserScrolling.current) return
-
-		if (isNearBottom(el)) {
-			setScrollMode('following')
-		} else {
-			setScrollMode('detached')
-		}
-	}, [])
-
-	// Track whether scrolling is user-initiated vs programmatic.
-	const handlePointerDown = useCallback(() => {
-		isUserScrolling.current = true
-	}, [])
-	const handlePointerUp = useCallback(() => {
-		// Small delay so the scroll event from the pointer action still registers.
-		setTimeout(() => { isUserScrolling.current = false }, 50)
-	}, [])
-	// Wheel scrolling is always user-initiated.
-	const handleWheel = useCallback(() => {
-		isUserScrolling.current = true
-		setTimeout(() => { isUserScrolling.current = false }, 100)
-	}, [])
-
-	const scrollToBottomAndFollow = useCallback(() => {
-		const el = containerRef.current
-		if (!el) return
-		scrollToBottom(el)
-		setScrollMode('following')
-	}, [])
-
 	return (
-		<div className="relative flex min-h-0 flex-1">
-			<div
-				ref={containerRef}
-				className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${className ?? ''}`}
-				onScroll={handleScroll}
-				onPointerDown={handlePointerDown}
-				onPointerUp={handlePointerUp}
-				onWheel={handleWheel}
-			>
+		<StickToBottom
+			className={`relative flex min-h-0 flex-1 overflow-hidden ${className ?? ''}`}
+			resize="smooth"
+			initial="instant"
+		>
+			<StickToBottom.Content className="flex flex-col">
 				{items.length === 0 && !hasStreamingMessage ? (
 					<div className="flex flex-1 items-center justify-center px-6 py-10 text-sm text-muted-foreground">
 						No messages yet.
@@ -292,21 +240,10 @@ export function MessageList({
 						) : null}
 					</>
 				) : null}
-			</div>
+			</StickToBottom.Content>
 
-			{scrollMode === 'detached' ? (
-				<div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
-					<Button
-						type="button"
-						size="sm"
-						className="pointer-events-auto"
-						onClick={scrollToBottomAndFollow}
-					>
-						<ArrowDownIcon className="size-4" />
-						{t('chat.scroll_to_bottom')}
-					</Button>
-				</div>
-			) : null}
-		</div>
+			<ScrollOnUserMessage messages={messages} />
+			<ScrollToBottomButton />
+		</StickToBottom>
 	)
 }
