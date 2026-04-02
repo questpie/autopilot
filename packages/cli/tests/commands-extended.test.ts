@@ -27,6 +27,30 @@ describe('worker start options', () => {
 		const opts = startCmd!.options.map((o) => o.long)
 		expect(opts).toContain('--name')
 	})
+
+	it('has --runtime option', () => {
+		expect(startCmd).toBeDefined()
+		const opts = startCmd!.options.map((o) => o.long)
+		expect(opts).toContain('--runtime')
+	})
+
+	it('has --binary option', () => {
+		expect(startCmd).toBeDefined()
+		const opts = startCmd!.options.map((o) => o.long)
+		expect(opts).toContain('--binary')
+	})
+
+	it('has --session-persistence option', () => {
+		expect(startCmd).toBeDefined()
+		const opts = startCmd!.options.map((o) => o.long)
+		expect(opts).toContain('--session-persistence')
+	})
+
+	it('has --token option', () => {
+		expect(startCmd).toBeDefined()
+		const opts = startCmd!.options.map((o) => o.long)
+		expect(opts).toContain('--token')
+	})
 })
 
 describe('start (convenience) options', () => {
@@ -69,5 +93,22 @@ describe('runs command options', () => {
 		expect(runsCmd).toBeDefined()
 		const opts = runsCmd!.options.map((o) => o.long)
 		expect(opts).toContain('--status')
+	})
+})
+
+describe('runs continue command options', () => {
+	const runsCmd = program.commands.find((c) => c.name() === 'runs')
+	const continueCmd = runsCmd?.commands.find((c) => c.name() === 'continue')
+
+	it('has --message required option', () => {
+		expect(continueCmd).toBeDefined()
+		const opts = continueCmd!.options.map((o) => o.long)
+		expect(opts).toContain('--message')
+	})
+
+	it('requires a run ID argument', () => {
+		expect(continueCmd).toBeDefined()
+		const args = continueCmd!.registeredArguments?.map((a: { name: () => string }) => a.name()) ?? []
+		expect(args).toContain('id')
 	})
 })

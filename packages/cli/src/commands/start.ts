@@ -24,7 +24,7 @@ program.addCommand(
 				const port = Number.parseInt(opts.port, 10)
 
 				// ── 1. Start orchestrator ─────────────────────────────────────
-				const { server } = await startServer({ companyRoot: root, port })
+				const { server } = await startServer({ companyRoot: root, port, allowLocalDevBypass: true })
 				const orchestratorUrl = `http://localhost:${server.port}`
 
 				// ── 2. Start local worker ─────────────────────────────────────

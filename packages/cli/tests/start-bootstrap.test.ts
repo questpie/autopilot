@@ -12,12 +12,21 @@ import { tmpdir } from 'node:os'
 import { createCompanyDb, type CompanyDbResult } from '../../orchestrator/src/db'
 import { createAuth, type Auth } from '../../orchestrator/src/auth'
 import { createApp } from '../../orchestrator/src/api/app'
-import { TaskService, RunService, WorkerService } from '../../orchestrator/src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine } from '../../orchestrator/src/services'
 
 function post(body: unknown): RequestInit {
 	return {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body),
+	}
+}
+
+/** POST with X-Local-Dev header for worker/run routes. */
+function workerPost(body: unknown): RequestInit {
+	return {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', 'X-Local-Dev': 'true' },
 		body: JSON.stringify(body),
 	}
 }
@@ -50,17 +59,25 @@ describe('start bootstrap: auth + MCP', () => {
 				runtime TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
 				initiated_by TEXT, instructions TEXT, summary TEXT,
 				tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0,
-				error TEXT, started_at TEXT, ended_at TEXT, created_at TEXT NOT NULL
+				error TEXT, started_at TEXT, ended_at TEXT, created_at TEXT NOT NULL,
+				runtime_session_ref TEXT, resumed_from_run_id TEXT,
+				preferred_worker_id TEXT, resumable INTEGER DEFAULT 0
 			)`,
 			`CREATE TABLE IF NOT EXISTS run_events (
 				id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
 				type TEXT NOT NULL, summary TEXT, metadata TEXT DEFAULT '{}',
 				created_at TEXT NOT NULL
 			)`,
+			`CREATE TABLE IF NOT EXISTS join_tokens (
+				id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL, description TEXT,
+				created_by TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+				used_at TEXT, used_by_worker_id TEXT
+			)`,
 			`CREATE TABLE IF NOT EXISTS workers (
 				id TEXT PRIMARY KEY, device_id TEXT, name TEXT,
 				status TEXT NOT NULL DEFAULT 'offline', capabilities TEXT DEFAULT '[]',
-				registered_at TEXT NOT NULL, last_heartbeat TEXT
+				registered_at TEXT NOT NULL, last_heartbeat TEXT,
+				machine_secret_hash TEXT
 			)`,
 			`CREATE TABLE IF NOT EXISTS worker_leases (
 				id TEXT PRIMARY KEY, worker_id TEXT NOT NULL, run_id TEXT NOT NULL,
@@ -73,14 +90,27 @@ describe('start bootstrap: auth + MCP', () => {
 
 		auth = await createAuth(dbResult.db, companyRoot)
 
+		const taskService = new TaskService(dbResult.db)
+		const runService = new RunService(dbResult.db)
+		const workflowEngine = new WorkflowEngine(
+			{
+				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, settings: { auto_assign: true, require_approval: [], max_concurrent_agents: 1, budget: { daily_token_limit: 0, alert_at: 0 }, auth: {}, inference: { gateway_base_url: '', text_model: '', embedding_model: '', embedding_dimensions: 768 }, default_runtime: 'claude-code' }, setup_completed: false },
+				agents: new Map(),
+				workflows: new Map(),
+			},
+			taskService,
+			runService,
+		)
 		const services = {
-			taskService: new TaskService(dbResult.db),
-			runService: new RunService(dbResult.db),
+			taskService,
+			runService,
 			workerService: new WorkerService(dbResult.db),
+			enrollmentService: new EnrollmentService(dbResult.db),
+			workflowEngine,
 		}
 
-		// Use the REAL createApp — with real auth middleware
-		app = createApp({ companyRoot, db: dbResult.db, auth, services })
+		// Use the REAL createApp — local dev mode for these tests
+		app = createApp({ companyRoot, db: dbResult.db, auth, services, allowLocalDevBypass: true })
 	})
 
 	afterAll(async () => {
@@ -88,31 +118,27 @@ describe('start bootstrap: auth + MCP', () => {
 		await rm(companyRoot, { recursive: true, force: true })
 	})
 
-	test('worker routes are accessible without auth', async () => {
-		// Register — no auth header
+	test('worker routes accept local dev bypass', async () => {
 		const regRes = await app.request(
 			'/api/workers/register',
-			post({ id: 'test-worker-1', name: 'Test Worker' }),
+			workerPost({ id: 'test-worker-1', name: 'Test Worker' }),
 		)
 		expect(regRes.status).toBe(201)
 
-		// Heartbeat — no auth header
 		const hbRes = await app.request(
 			'/api/workers/heartbeat',
-			post({ worker_id: 'test-worker-1' }),
+			workerPost({ worker_id: 'test-worker-1' }),
 		)
 		expect(hbRes.status).toBe(200)
 
-		// Claim — no auth header (no pending runs, but should not 401)
 		const claimRes = await app.request(
 			'/api/workers/claim',
-			post({ worker_id: 'test-worker-1' }),
+			workerPost({ worker_id: 'test-worker-1' }),
 		)
 		expect(claimRes.status).toBe(200)
 	})
 
-	test('run routes are accessible without auth', async () => {
-		// Create run — no auth header
+	test('run event/complete routes accept local dev bypass', async () => {
 		const createRes = await app.request(
 			'/api/runs',
 			post({ agent_id: 'test-agent', runtime: 'claude-code' }),
@@ -120,17 +146,15 @@ describe('start bootstrap: auth + MCP', () => {
 		expect(createRes.status).toBe(201)
 		const run = (await createRes.json()) as { id: string }
 
-		// Post event — no auth header
 		const evtRes = await app.request(
 			`/api/runs/${run.id}/events`,
-			post({ type: 'started', summary: 'Testing' }),
+			workerPost({ type: 'started', summary: 'Testing' }),
 		)
 		expect(evtRes.status).toBe(200)
 
-		// Complete — no auth header
 		const complRes = await app.request(
 			`/api/runs/${run.id}/complete`,
-			post({ status: 'completed', summary: 'Done' }),
+			workerPost({ status: 'completed', summary: 'Done' }),
 		)
 		expect(complRes.status).toBe(200)
 	})
@@ -155,7 +179,7 @@ describe('start bootstrap: auth + MCP', () => {
 		expect(typeof adapter.start).toBe('function')
 	})
 
-	test('full worker flow: register → claim → events → complete (no auth)', async () => {
+	test('full worker flow: register → claim → events → complete (local dev)', async () => {
 		// Create a pending run
 		const runRes = await app.request(
 			'/api/runs',
@@ -165,22 +189,22 @@ describe('start bootstrap: auth + MCP', () => {
 		const run = (await runRes.json()) as { id: string }
 
 		// Register worker
-		await app.request('/api/workers/register', post({ id: 'w-full-test' }))
+		await app.request('/api/workers/register', workerPost({ id: 'w-full-test' }))
 
 		// Claim
-		const claimRes = await app.request('/api/workers/claim', post({ worker_id: 'w-full-test' }))
+		const claimRes = await app.request('/api/workers/claim', workerPost({ worker_id: 'w-full-test' }))
 		const claim = (await claimRes.json()) as { run: { id: string } | null }
 		expect(claim.run).not.toBeNull()
 		expect(claim.run!.id).toBe(run.id)
 
 		// Events
-		await app.request(`/api/runs/${run.id}/events`, post({ type: 'started', summary: 'Go' }))
-		await app.request(`/api/runs/${run.id}/events`, post({ type: 'progress', summary: 'Working' }))
+		await app.request(`/api/runs/${run.id}/events`, workerPost({ type: 'started', summary: 'Go' }))
+		await app.request(`/api/runs/${run.id}/events`, workerPost({ type: 'progress', summary: 'Working' }))
 
 		// Complete
 		const complRes = await app.request(
 			`/api/runs/${run.id}/complete`,
-			post({ status: 'completed', summary: 'All done' }),
+			workerPost({ status: 'completed', summary: 'All done' }),
 		)
 		expect(complRes.status).toBe(200)
 

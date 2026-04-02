@@ -11,6 +11,10 @@ export interface RunContext {
   instructions: string | null
   orchestratorUrl: string
   apiKey: string
+  /** For continuation runs: the worker-local session ID to resume. */
+  runtimeSessionRef: string | null
+  /** Per-run isolated workspace path. Overrides adapter's default workDir. */
+  workDir: string | null
 }
 
 /** Result returned by a runtime adapter after completing. */
@@ -18,6 +22,8 @@ export interface RuntimeResult {
   summary?: string
   tokens?: { input: number; output: number }
   artifacts?: Array<{ path: string; action: string }>
+  /** Worker-local session ID for future resume. */
+  sessionId?: string
 }
 
 /**

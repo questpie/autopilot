@@ -18,13 +18,17 @@ import type { Services } from './api/app'
 import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
-import { TaskService, RunService, WorkerService } from './services'
+import { loadCompany, loadAgents, loadWorkflows } from './config/loader'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine } from './services'
+import type { AuthoredConfig } from './services'
 
 export interface StartServerOptions {
 	/** Absolute path to the company root directory. Defaults to first CLI arg or cwd. */
 	companyRoot?: string
 	/** HTTP port. Defaults to 7778. */
 	port?: number
+	/** Allow X-Local-Dev bypass for worker auth. Only for `autopilot start` convenience. */
+	allowLocalDevBypass?: boolean
 }
 
 export async function startServer(options?: StartServerOptions) {
@@ -49,18 +53,42 @@ export async function startServer(options?: StartServerOptions) {
 
 	console.log('[server] databases initialized')
 
-	// ── 4. Create auth ───────────────────────────────────────────────────
+	// ── 4. Load authored config ──────────────────────────────────────────
+	const company = await loadCompany(companyRoot)
+	const agentList = await loadAgents(companyRoot)
+	const workflowList = await loadWorkflows(companyRoot)
+
+	const agents = new Map(agentList.map((a) => [a.id, a]))
+	const workflows = new Map(workflowList.map((w) => [w.id, w]))
+
+	const authoredConfig: AuthoredConfig = { company, agents, workflows }
+	console.log(
+		`[server] config loaded: ${agents.size} agents, ${workflows.size} workflows`,
+	)
+
+	// ── 5. Create auth ───────────────────────────────────────────────────
 	const auth = await createAuth(companyDb, companyRoot)
 
-	// ── 5. Create services ───────────────────────────────────────────────
+	// ── 6. Create services ───────────────────────────────────────────────
 	const taskService = new TaskService(companyDb)
 	const runService = new RunService(companyDb)
 	const workerService = new WorkerService(companyDb)
+	const enrollmentService = new EnrollmentService(companyDb)
+
+	const workflowEngine = new WorkflowEngine(authoredConfig, taskService, runService)
+
+	// Validate config references
+	const configIssues = workflowEngine.validate()
+	for (const issue of configIssues) {
+		console.warn(`[server] config warning: ${issue}`)
+	}
 
 	const services: Services = {
 		taskService,
 		runService,
 		workerService,
+		enrollmentService,
+		workflowEngine,
 	}
 
 	// ── 6. Create Hono app ───────────────────────────────────────────────
@@ -70,6 +98,7 @@ export async function startServer(options?: StartServerOptions) {
 		auth,
 		services,
 		corsOrigin: env.CORS_ORIGIN,
+		allowLocalDevBypass: options?.allowLocalDevBypass,
 	})
 
 	// ── 7. Start HTTP server ─────────────────────────────────────────────

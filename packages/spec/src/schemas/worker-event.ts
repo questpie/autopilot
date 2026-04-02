@@ -39,4 +39,8 @@ export const RunCompletionSchema = z.object({
 		)
 		.optional(),
 	error: z.string().optional(),
+	/** Worker-local runtime session ID (e.g. Claude session_id). Enables same-worker resume. */
+	runtime_session_ref: z.string().optional(),
+	/** Whether this run can be continued on the same worker. */
+	resumable: z.boolean().optional(),
 })

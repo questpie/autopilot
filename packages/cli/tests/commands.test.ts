@@ -39,11 +39,12 @@ describe('command registration', () => {
 		expect(subNames).toContain('start')
 	})
 
-	it('worker has start subcommand', () => {
+	it('worker has start and token subcommands', () => {
 		const workerCmd = program.commands.find((c) => c.name() === 'worker')
 		expect(workerCmd).toBeDefined()
 		const subNames = workerCmd!.commands.map((c) => c.name())
 		expect(subNames).toContain('start')
+		expect(subNames).toContain('token')
 	})
 
 	it('has tasks subcommands: show, create, update', () => {
@@ -55,11 +56,12 @@ describe('command registration', () => {
 		expect(subNames).toContain('update')
 	})
 
-	it('has runs subcommands: show', () => {
+	it('has runs subcommands: show, continue', () => {
 		const runsCmd = program.commands.find((c) => c.name() === 'runs')
 		expect(runsCmd).toBeDefined()
 		const subNames = runsCmd!.commands.map((c) => c.name())
 		expect(subNames).toContain('show')
+		expect(subNames).toContain('continue')
 	})
 
 	it('has auth subcommands: login, setup, status, logout', () => {

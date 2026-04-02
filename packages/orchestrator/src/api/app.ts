@@ -1,10 +1,11 @@
 /**
  * Hono app factory for the QUESTPIE Autopilot orchestrator API.
  *
- * Routes receive services via Hono context variables (set by closure over the services bag).
- *
  * Auth model:
- * - Worker routes (/api/workers, /api/runs) are public (machine-to-machine)
+ * - Worker routes (/api/workers, /api/runs) require machine auth (X-Worker-Secret)
+ *   or local dev bypass (X-Local-Dev: true)
+ * - Enrollment (/api/enrollment/enroll) is public (consumes join token)
+ * - Token creation (/api/enrollment/tokens) requires user auth
  * - Task routes (/api/tasks) require user auth (session/API key)
  * - Events SSE (/api/events) requires user auth
  */
@@ -15,13 +16,15 @@ import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine } from '../services'
 import type { Actor } from '../auth/types'
 import { authMiddleware } from './middleware/auth'
+import { workerAuthMiddleware } from './middleware/worker-auth'
 import { events } from './routes/events'
 import { tasks } from './routes/tasks'
 import { runs } from './routes/runs'
 import { workers } from './routes/workers'
+import { enrollment } from './routes/enrollment'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -29,11 +32,14 @@ export interface Services {
 	taskService: TaskService
 	runService: RunService
 	workerService: WorkerService
+	enrollmentService: EnrollmentService
+	workflowEngine: WorkflowEngine
 }
 
 export interface AppEnv {
 	Variables: {
 		actor: Actor | null
+		workerId: string | null
 		companyRoot: string
 		db: CompanyDb
 		auth: Auth
@@ -47,6 +53,12 @@ export interface AppConfig {
 	db: CompanyDb
 	auth: Auth
 	services: Services
+	/**
+	 * Allow X-Local-Dev bypass for worker auth.
+	 * Only set to true by `autopilot start` (local convenience mode).
+	 * NEVER set in production or multi-machine setups.
+	 */
+	allowLocalDevBypass?: boolean
 }
 
 // ─── App Factory ────────────────────────────────────────────────────────────
@@ -64,7 +76,7 @@ export function createApp(config: AppConfig) {
 		cors({
 			origin: corsOrigin,
 			allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-			allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+			allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Worker-Secret', 'X-Local-Dev'],
 			credentials: true,
 		}),
 	)
@@ -89,6 +101,8 @@ export function createApp(config: AppConfig) {
 		c.set('db', config.db)
 		c.set('auth', config.auth)
 		c.set('services', config.services)
+		c.set('actor', null)
+		c.set('workerId', null)
 		await next()
 	})
 
@@ -97,16 +111,28 @@ export function createApp(config: AppConfig) {
 		return config.auth.handler(c.req.raw)
 	})
 
-	// ── Auth middleware for human-facing routes only ──────────────────────
+	// ── Public routes ────────────────────────────────────────────────────
+	app.get('/api/health', (c) => c.json({ ok: true, ts: new Date().toISOString() }))
+
+	// ── Enrollment: enroll is public, tokens requires user auth ──────────
+	app.use('/api/enrollment/tokens', authMiddleware())
+	// /api/enrollment/enroll is public (worker uses join token, not session)
+
+	// ── User auth for human-facing routes ────────────────────────────────
 	app.use('/api/tasks/*', authMiddleware())
 	app.use('/api/tasks', authMiddleware())
 	app.use('/api/events', authMiddleware())
 
-	// ── Public routes ────────────────────────────────────────────────────
-	app.get('/api/health', (c) => c.json({ ok: true, ts: new Date().toISOString() }))
+	// ── Worker auth for machine routes ───────────────────────────────────
+	const workerAuth = workerAuthMiddleware({ allowLocalDevBypass: config.allowLocalDevBypass ?? false })
+	app.use('/api/workers/*', workerAuth)
+	app.use('/api/workers', workerAuth)
+	app.use('/api/runs/*/events', workerAuth)
+	app.use('/api/runs/*/complete', workerAuth)
 
 	// ── All API routes (typed chain for Hono client inference) ───────────
 	const typedApp = app
+		.route('/api/enrollment', enrollment)
 		.route('/api/workers', workers)
 		.route('/api/runs', runs)
 		.route('/api/tasks', tasks)

@@ -45,6 +45,12 @@ export const CompanySettingsSchema = z.object({
 			})
 			.default({}),
 	),
+	/** Agent ID that owns new tasks when no explicit assignee is provided. */
+	default_task_assignee: z.preprocess(nullToUndefined, z.string().optional()),
+	/** Workflow ID attached to new tasks when no explicit workflow is provided. */
+	default_workflow: z.preprocess(nullToUndefined, z.string().optional()),
+	/** Default runtime for auto-created runs from workflow agent steps. */
+	default_runtime: z.preprocess(nullToUndefined, z.string().default('claude-code')),
 })
 
 export const CompanySchema = z.object({

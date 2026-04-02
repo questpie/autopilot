@@ -16,7 +16,7 @@ import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { migrate } from 'drizzle-orm/libsql/migrator'
 import { companySchema, type CompanyDb } from '../src/db'
-import { TaskService, RunService, WorkerService } from '../src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine } from '../src/services'
 import type { AppEnv, Services } from '../src/api/app'
 import type { Actor } from '../src/auth/types'
 import { runs } from '../src/api/routes/runs'
@@ -43,6 +43,7 @@ function buildTestApp(companyRoot: string, db: CompanyDb, services: Services) {
 		c.set('auth', {} as never) // unused in these routes
 		c.set('services', services)
 		c.set('actor', FAKE_ACTOR)
+		c.set('workerId', null)
 		await next()
 	})
 
@@ -99,7 +100,11 @@ describe('execution loop', () => {
 				error TEXT,
 				started_at TEXT,
 				ended_at TEXT,
-				created_at TEXT NOT NULL
+				created_at TEXT NOT NULL,
+				runtime_session_ref TEXT,
+				resumed_from_run_id TEXT,
+				preferred_worker_id TEXT,
+				resumable INTEGER DEFAULT 0
 			)
 		`)
 		await rawClient.execute(`
@@ -113,6 +118,13 @@ describe('execution loop', () => {
 			)
 		`)
 		await rawClient.execute(`
+			CREATE TABLE IF NOT EXISTS join_tokens (
+				id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL, description TEXT,
+				created_by TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+				used_at TEXT, used_by_worker_id TEXT
+			)
+		`)
+		await rawClient.execute(`
 			CREATE TABLE IF NOT EXISTS workers (
 				id TEXT PRIMARY KEY,
 				device_id TEXT,
@@ -120,7 +132,8 @@ describe('execution loop', () => {
 				status TEXT NOT NULL DEFAULT 'offline',
 				capabilities TEXT DEFAULT '[]',
 				registered_at TEXT NOT NULL,
-				last_heartbeat TEXT
+				last_heartbeat TEXT,
+				machine_secret_hash TEXT
 			)
 		`)
 		await rawClient.execute(`
@@ -134,10 +147,23 @@ describe('execution loop', () => {
 			)
 		`)
 
+		const taskService = new TaskService(db)
+		const runService = new RunService(db)
+		const workflowEngine = new WorkflowEngine(
+			{
+				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, settings: { auto_assign: true, require_approval: [], max_concurrent_agents: 1, budget: { daily_token_limit: 0, alert_at: 0 }, auth: {}, inference: { gateway_base_url: '', text_model: '', embedding_model: '', embedding_dimensions: 768 }, default_runtime: 'claude-code' }, setup_completed: false },
+				agents: new Map(),
+				workflows: new Map(),
+			},
+			taskService,
+			runService,
+		)
 		const services: Services = {
-			taskService: new TaskService(db),
-			runService: new RunService(db),
+			taskService,
+			runService,
 			workerService: new WorkerService(db),
+			enrollmentService: new EnrollmentService(db),
+			workflowEngine,
 		}
 
 		app = buildTestApp(companyRoot, db, services)

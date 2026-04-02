@@ -5,6 +5,7 @@ import {
 	WorkerEventSchema,
 	RunCompletionSchema,
 	CreateRunRequestSchema,
+	ContinueRunRequestSchema,
 } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
@@ -86,6 +87,12 @@ const runs = new Hono<AppEnv>()
 			const run = await runService.get(id)
 			if (!run) return c.json({ error: 'run not found' }, 404)
 
+			// Verify authenticated worker owns this run
+			const authWorkerId = c.get('workerId')
+			if (authWorkerId && run.worker_id && run.worker_id !== authWorkerId) {
+				return c.json({ error: `Run ${id} belongs to worker ${run.worker_id}, not ${authWorkerId}` }, 403)
+			}
+
 			// If first event is 'started', transition to running
 			if (run.status === 'claimed' && body.type === 'started') {
 				await runService.start(id)
@@ -113,12 +120,18 @@ const runs = new Hono<AppEnv>()
 		zValidator('param', z.object({ id: z.string() })),
 		zValidator('json', RunCompletionSchema),
 		async (c) => {
-			const { runService, workerService } = c.get('services')
+			const { runService, workerService, workflowEngine } = c.get('services')
 			const { id } = c.req.valid('param')
 			const body = c.req.valid('json')
 
 			const run = await runService.get(id)
 			if (!run) return c.json({ error: 'run not found' }, 404)
+
+			// Verify authenticated worker owns this run
+			const authWorkerId = c.get('workerId')
+			if (authWorkerId && run.worker_id && run.worker_id !== authWorkerId) {
+				return c.json({ error: `Run ${id} belongs to worker ${run.worker_id}, not ${authWorkerId}` }, 403)
+			}
 
 			const result = await runService.complete(id, {
 				status: body.status,
@@ -126,6 +139,8 @@ const runs = new Hono<AppEnv>()
 				tokens_input: body.tokens?.input,
 				tokens_output: body.tokens?.output,
 				error: body.error,
+				runtime_session_ref: body.runtime_session_ref,
+				resumable: body.resumable,
 			})
 
 			// Release worker lease + set worker back to online
@@ -143,7 +158,65 @@ const runs = new Hono<AppEnv>()
 				status: body.status,
 			})
 
+			// Workflow progression: if run completed successfully and has a task, advance workflow
+			if (body.status === 'completed' && run.task_id) {
+				await workflowEngine.advance(run.task_id)
+			}
+
 			return c.json(result, 200)
+		},
+	)
+	// POST /runs/:id/continue — create a continuation run
+	.post(
+		'/:id/continue',
+		zValidator('param', z.object({ id: z.string() })),
+		zValidator('json', ContinueRunRequestSchema),
+		async (c) => {
+			const { runService, workerService } = c.get('services')
+			const { id } = c.req.valid('param')
+			const body = c.req.valid('json')
+			const actor = c.get('actor')
+
+			const original = await runService.get(id)
+			if (!original) return c.json({ error: 'run not found' }, 404)
+
+			if (original.status !== 'completed' && original.status !== 'failed') {
+				return c.json({ error: 'can only continue completed or failed runs' }, 400)
+			}
+
+			if (!original.resumable) {
+				return c.json({ error: 'run is not resumable (no local session)' }, 400)
+			}
+
+			// Check if preferred worker is online
+			if (original.worker_id) {
+				const worker = await workerService.get(original.worker_id)
+				if (!worker || worker.status === 'offline') {
+					return c.json(
+						{
+							error: `original worker ${original.worker_id} is offline — cannot resume session`,
+						},
+						409,
+					)
+				}
+			}
+
+			const continuation = await runService.createContinuation(id, {
+				message: body.message,
+				initiated_by: body.initiated_by ?? actor?.id ?? 'system',
+			})
+
+			if (!continuation) {
+				return c.json({ error: 'failed to create continuation run' }, 500)
+			}
+
+			eventBus.emit({
+				type: 'task_changed',
+				taskId: continuation.task_id ?? continuation.id,
+				status: 'pending',
+			})
+
+			return c.json(continuation, 201)
 		},
 	)
 

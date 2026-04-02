@@ -64,12 +64,18 @@ export const runs = sqliteTable(
 		started_at: text('started_at'),
 		ended_at: text('ended_at'),
 		created_at: text('created_at').notNull(),
+		// Session continuation fields
+		runtime_session_ref: text('runtime_session_ref'), // worker-local session ID (e.g. Claude session_id)
+		resumed_from_run_id: text('resumed_from_run_id'), // previous run in continuation chain
+		preferred_worker_id: text('preferred_worker_id'), // route continuation to specific worker
+		resumable: integer('resumable', { mode: 'boolean' }).default(false),
 	},
 	(table) => [
 		index('idx_runs_status').on(table.status),
 		index('idx_runs_agent').on(table.agent_id),
 		index('idx_runs_task').on(table.task_id),
 		index('idx_runs_worker').on(table.worker_id),
+		index('idx_runs_resumed_from').on(table.resumed_from_run_id),
 	],
 )
 
@@ -151,6 +157,28 @@ export const channelMembers = sqliteTable(
 	],
 )
 
+// ─── Join Tokens ──────────────────────────────────────────────────────────
+
+export const joinTokens = sqliteTable(
+	'join_tokens',
+	{
+		id: text('id').primaryKey(),
+		/** SHA-256 hash of the token secret. */
+		secret_hash: text('secret_hash').notNull(),
+		description: text('description'),
+		created_by: text('created_by').notNull(),
+		created_at: text('created_at').notNull(),
+		expires_at: text('expires_at').notNull(),
+		/** Set when consumed by enrollment. */
+		used_at: text('used_at'),
+		/** Worker ID that consumed this token. */
+		used_by_worker_id: text('used_by_worker_id'),
+	},
+	(table) => [
+		index('idx_join_tokens_expires').on(table.expires_at),
+	],
+)
+
 // ─── Workers ───────────────────────────────────────────────────────────────
 
 export const workers = sqliteTable(
@@ -163,6 +191,8 @@ export const workers = sqliteTable(
 		capabilities: text('capabilities').default('[]'),
 		registered_at: text('registered_at').notNull(),
 		last_heartbeat: text('last_heartbeat'),
+		/** SHA-256 hash of the durable machine secret. Null for legacy/local workers. */
+		machine_secret_hash: text('machine_secret_hash'),
 	},
 	(table) => [
 		index('idx_workers_device').on(table.device_id),
@@ -186,26 +216,6 @@ export const workerLeases = sqliteTable(
 		index('idx_leases_worker').on(table.worker_id),
 		index('idx_leases_run').on(table.run_id),
 		index('idx_leases_status').on(table.status),
-	],
-)
-
-// ─── Workflow Runs ─────────────────────────────────────────────────────────
-
-export const workflowRuns = sqliteTable(
-	'workflow_runs',
-	{
-		id: text('id').primaryKey(),
-		task_id: text('task_id').notNull(),
-		workflow_id: text('workflow_id').notNull(),
-		current_step: text('current_step'),
-		status: text('status').notNull().default('pending'), // pending | running | completed | failed
-		created_at: text('created_at').notNull(),
-		updated_at: text('updated_at').notNull(),
-	},
-	(table) => [
-		index('idx_workflow_runs_task').on(table.task_id),
-		index('idx_workflow_runs_workflow').on(table.workflow_id, table.status),
-		index('idx_workflow_runs_updated').on(table.updated_at),
 	],
 )
 

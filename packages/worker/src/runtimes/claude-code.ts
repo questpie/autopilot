@@ -12,6 +12,12 @@ export interface ClaudeCodeConfig {
   useMcp?: boolean
   /** Custom path to MCP server binary. */
   mcpBinaryPath?: string
+  /**
+   * Session persistence mode.
+   * - 'local': sessions saved to disk, can be resumed (default for dogfooding)
+   * - 'off': no session persistence, each run is ephemeral
+   */
+  sessionPersistence?: 'local' | 'off'
 }
 
 /** MCP tool names exposed by the autopilot MCP server. */
@@ -26,8 +32,12 @@ const MCP_TOOL_NAMES = [
 
 /**
  * Claude Code runtime adapter.
- * Spawns the `claude` CLI as a subprocess in bare mode,
+ * Spawns the `claude` CLI as a subprocess,
  * captures JSON output, and normalizes to RuntimeResult.
+ *
+ * Supports two modes:
+ * - Fresh run: spawns with -p (print mode) and a prompt
+ * - Resume: spawns with --resume <session-id> -p and a continuation message
  */
 export class ClaudeCodeAdapter implements RuntimeAdapter {
   private eventHandler: ((event: WorkerEvent) => void) | null = null
@@ -45,18 +55,28 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
   async start(context: RunContext): Promise<RuntimeResult | undefined> {
     const prompt = this.buildPrompt(context)
     const binaryPath = this.config.binaryPath ?? 'claude'
+    const persistence = this.config.sessionPersistence ?? 'local'
+    const isResume = !!context.runtimeSessionRef
 
-    const args = [
-      '--bare',
-      '-p',
-      prompt,
-      '--output-format',
-      'json',
-      '--no-session-persistence',
+    const args: string[] = ['--bare']
+
+    // Resume vs fresh run
+    if (isResume) {
+      args.push('--resume', context.runtimeSessionRef!)
+    }
+
+    args.push('-p', prompt, '--output-format', 'json')
+
+    // Session persistence
+    if (persistence === 'off') {
+      args.push('--no-session-persistence')
+    }
+
+    args.push(
       '--dangerously-skip-permissions',
       '--max-turns',
       String(this.config.maxTurns ?? 50),
-    ]
+    )
 
     // Add MCP config if enabled
     let mcpCleanup: (() => Promise<void>) | null = null
@@ -71,11 +91,14 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       mcpCleanup = mcp.cleanup
     }
 
-    this.emit({ type: 'progress', summary: 'Launching Claude Code' })
+    this.emit({
+      type: 'progress',
+      summary: isResume ? `Resuming Claude Code session ${context.runtimeSessionRef}` : 'Launching Claude Code',
+    })
 
     try {
       const proc = Bun.spawn([binaryPath, ...args], {
-        cwd: this.config.workDir ?? process.cwd(),
+        cwd: context.workDir ?? this.config.workDir ?? process.cwd(),
         stdout: 'pipe',
         stderr: 'pipe',
         env: {
@@ -119,6 +142,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
               output: result.usage.output_tokens ?? 0,
             }
           : undefined,
+        sessionId: persistence === 'local' ? result.session_id : undefined,
       }
     } finally {
       if (mcpCleanup) await mcpCleanup()

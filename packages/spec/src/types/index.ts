@@ -24,6 +24,9 @@ export type RunCompletion = z.infer<typeof schemas.RunCompletionSchema>
 export type ClaimedRun = z.infer<typeof schemas.ClaimedRunSchema>
 export type WorkerClaimResponse = z.infer<typeof schemas.WorkerClaimResponseSchema>
 export type WorkerRegisterResponse = z.infer<typeof schemas.WorkerRegisterResponseSchema>
+export type ContinueRunRequest = z.infer<typeof schemas.ContinueRunRequestSchema>
+export type WorkerEnrollRequest = z.infer<typeof schemas.WorkerEnrollRequestSchema>
+export type WorkerEnrollResponse = z.infer<typeof schemas.WorkerEnrollResponseSchema>
 
 // Schedules
 export type Schedule = z.infer<typeof schemas.ScheduleSchema>

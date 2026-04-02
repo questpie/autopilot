@@ -27,6 +27,8 @@ const runsCmd = new Command('runs')
 				agent_id: string
 				runtime: string
 				task_id?: string | null
+				resumable?: boolean | null
+				resumed_from_run_id?: string | null
 				created_at: string
 			}>
 
@@ -53,6 +55,8 @@ const runsCmd = new Command('runs')
 						r.agent_id,
 						r.runtime,
 						r.task_id ? dim(`task:${r.task_id}`) : '',
+						r.resumable ? badge('resumable', 'green') : '',
+						r.resumed_from_run_id ? dim(`<- ${r.resumed_from_run_id}`) : '',
 					]),
 				),
 			)
@@ -97,6 +101,10 @@ runsCmd.addCommand(
 					started_at?: string | null
 					ended_at?: string | null
 					created_at: string
+					resumable?: boolean | null
+					resumed_from_run_id?: string | null
+					preferred_worker_id?: string | null
+					runtime_session_ref?: string | null
 				}
 
 				console.log(section(`Run ${run.id}`))
@@ -116,6 +124,21 @@ runsCmd.addCommand(
 						`  ${dim('Tokens:')}      ${run.tokens_input ?? 0} in / ${run.tokens_output ?? 0} out`,
 					)
 				}
+
+				// Continuation / session info
+				if (run.resumable) {
+					console.log(`  ${dim('Resumable:')}   ${badge('yes', 'green')}`)
+				}
+				if (run.resumed_from_run_id) {
+					console.log(`  ${dim('Continued from:')} ${run.resumed_from_run_id}`)
+				}
+				if (run.preferred_worker_id) {
+					console.log(`  ${dim('Preferred worker:')} ${run.preferred_worker_id}`)
+				}
+				if (run.runtime_session_ref) {
+					console.log(`  ${dim('Session ref:')} ${run.runtime_session_ref}`)
+				}
+
 				if (run.summary) {
 					console.log('')
 					console.log(dim('Summary:'))
@@ -145,6 +168,51 @@ runsCmd.addCommand(
 						}
 					}
 				}
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+runsCmd.addCommand(
+	new Command('continue')
+		.description('Continue a completed run with new instructions (same worker/session)')
+		.argument('<id>', 'Run ID to continue')
+		.requiredOption('-m, --message <message>', 'Continuation instructions')
+		.action(async (id: string, opts: { message: string }) => {
+			try {
+				const client = createApiClient()
+
+				const res = await client.api.runs[':id'].continue.$post({
+					param: { id },
+					json: { message: opts.message },
+				})
+
+				if (!res.ok) {
+					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
+						error: string
+					}
+					console.error(error(`Cannot continue run: ${body.error}`))
+					process.exit(1)
+				}
+
+				const continuation = (await res.json()) as {
+					id: string
+					status: string
+					resumed_from_run_id?: string | null
+					preferred_worker_id?: string | null
+				}
+
+				console.log(success(`Continuation run created: ${continuation.id}`))
+				console.log(dim(`  Status: ${continuation.status}`))
+				if (continuation.resumed_from_run_id) {
+					console.log(dim(`  Continues: ${continuation.resumed_from_run_id}`))
+				}
+				if (continuation.preferred_worker_id) {
+					console.log(dim(`  Routed to worker: ${continuation.preferred_worker_id}`))
+				}
+				console.log(dim(`  The run will be picked up by the worker on next poll.`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				process.exit(1)

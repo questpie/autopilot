@@ -73,6 +73,8 @@ exit 0
       instructions: 'Verify MCP config is passed',
       orchestratorUrl: 'http://localhost:7778',
       apiKey: 'test-key-123',
+      runtimeSessionRef: null,
+      workDir: null,
     }
 
     const result = await adapter.start(context)
@@ -100,6 +102,8 @@ exit 0
       instructions: null,
       orchestratorUrl: 'http://localhost:7778',
       apiKey: 'test-key',
+      runtimeSessionRef: null,
+      workDir: null,
     }
 
     const result = await adapter.start(context)

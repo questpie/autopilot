@@ -46,6 +46,9 @@ export const ClaimedRunSchema = z.object({
 	task_title: z.string().nullable().optional(),
 	task_description: z.string().nullable().optional(),
 	instructions: z.string().nullable().optional(),
+	// Session continuation context
+	runtime_session_ref: z.string().nullable().optional(),
+	resumed_from_run_id: z.string().nullable().optional(),
 })
 
 export const WorkerClaimResponseSchema = z.object({
@@ -73,4 +76,63 @@ export const CreateRunRequestSchema = z.object({
 	runtime: z.string().min(1).default('claude-code'),
 	initiated_by: z.string().optional(),
 	instructions: z.string().optional(),
+	/** For continuation runs: the run being continued. */
+	resumed_from_run_id: z.string().optional(),
+	/** For continuation runs: the worker-local session to resume. */
+	runtime_session_ref: z.string().optional(),
+	/** For continuation runs: route to this specific worker. */
+	preferred_worker_id: z.string().optional(),
+})
+
+// ─── Run Continuation ──────────────────────────────────────────────────────
+
+export const ContinueRunRequestSchema = z.object({
+	/** New instructions / steering message for the continuation. */
+	message: z.string().min(1),
+	/** Override initiator (defaults to original run's initiator). */
+	initiated_by: z.string().optional(),
+})
+
+// ─── Worker Enrollment ─────────────────────────────────────────────────────
+
+export const CreateJoinTokenRequestSchema = z.object({
+	/** Human-readable description (e.g. "Andrej laptop"). */
+	description: z.string().optional(),
+	/** Token lifetime in seconds. Default 3600 (1 hour). */
+	ttl_seconds: z.number().int().positive().default(3600),
+})
+
+export const CreateJoinTokenResponseSchema = z.object({
+	/** Token ID (for reference/revocation). */
+	token_id: z.string(),
+	/** The secret to pass to the worker. Only returned once. */
+	secret: z.string(),
+	/** When the token expires. */
+	expires_at: z.string(),
+})
+
+export const WorkerEnrollRequestSchema = z.object({
+	/** The join token secret. */
+	token: z.string().min(1),
+	/** Worker's self-chosen display name. */
+	name: z.string().min(1),
+	/** Device identifier. */
+	device_id: z.string().min(1),
+	/** Runtime capabilities. */
+	capabilities: z
+		.array(
+			z.object({
+				runtime: z.string(),
+				models: z.array(z.string()).default([]),
+				maxConcurrent: z.number().int().default(1),
+			}),
+		)
+		.default([]),
+})
+
+export const WorkerEnrollResponseSchema = z.object({
+	/** Durable worker ID assigned by orchestrator. */
+	worker_id: z.string(),
+	/** Durable machine secret for subsequent API calls. */
+	machine_secret: z.string(),
 })

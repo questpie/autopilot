@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os'
 import { Hono } from 'hono'
 import { createCompanyDb, type CompanyDb } from '../src/db'
 import type { CompanyDbResult } from '../src/db'
-import { TaskService, RunService, WorkerService } from '../src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine } from '../src/services'
 import type { Services, AppEnv } from '../src/api/app'
 import { createAuth, type Auth } from '../src/auth'
 import type { Actor } from '../src/auth/types'
@@ -58,6 +58,7 @@ function buildBootstrapApp(config: {
 		c.set('auth', config.auth)
 		c.set('services', config.services)
 		c.set('actor', FAKE_ACTOR)
+		c.set('workerId', null)
 		await next()
 	})
 
@@ -108,7 +109,9 @@ describe('bootstrap', () => {
 				runtime TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
 				initiated_by TEXT, instructions TEXT, summary TEXT,
 				tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0,
-				error TEXT, started_at TEXT, ended_at TEXT, created_at TEXT NOT NULL
+				error TEXT, started_at TEXT, ended_at TEXT, created_at TEXT NOT NULL,
+				runtime_session_ref TEXT, resumed_from_run_id TEXT,
+				preferred_worker_id TEXT, resumable INTEGER DEFAULT 0
 			)
 		`)
 		await dbResult.raw.execute(`
@@ -119,10 +122,18 @@ describe('bootstrap', () => {
 			)
 		`)
 		await dbResult.raw.execute(`
+			CREATE TABLE IF NOT EXISTS join_tokens (
+				id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL, description TEXT,
+				created_by TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+				used_at TEXT, used_by_worker_id TEXT
+			)
+		`)
+		await dbResult.raw.execute(`
 			CREATE TABLE IF NOT EXISTS workers (
 				id TEXT PRIMARY KEY, device_id TEXT, name TEXT,
 				status TEXT NOT NULL DEFAULT 'offline', capabilities TEXT DEFAULT '[]',
-				registered_at TEXT NOT NULL, last_heartbeat TEXT
+				registered_at TEXT NOT NULL, last_heartbeat TEXT,
+				machine_secret_hash TEXT
 			)
 		`)
 		await dbResult.raw.execute(`
@@ -140,7 +151,17 @@ describe('bootstrap', () => {
 		const taskService = new TaskService(dbResult.db)
 		const runService = new RunService(dbResult.db)
 		const workerService = new WorkerService(dbResult.db)
-		services = { taskService, runService, workerService }
+		const enrollmentService = new EnrollmentService(dbResult.db)
+		const workflowEngine = new WorkflowEngine(
+			{
+				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, settings: { auto_assign: true, require_approval: [], max_concurrent_agents: 1, budget: { daily_token_limit: 0, alert_at: 0 }, auth: {}, inference: { gateway_base_url: '', text_model: '', embedding_model: '', embedding_dimensions: 768 }, default_runtime: 'claude-code' }, setup_completed: false },
+				agents: new Map(),
+				workflows: new Map(),
+			},
+			taskService,
+			runService,
+		)
+		services = { taskService, runService, workerService, enrollmentService, workflowEngine }
 
 		// App with real routes, fake auth
 		app = buildBootstrapApp({

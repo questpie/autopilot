@@ -45,6 +45,8 @@ exit 0
       instructions: 'Fix the email validation in src/auth/login.ts',
       orchestratorUrl: 'http://localhost:7778',
       apiKey: 'test-key',
+      runtimeSessionRef: null,
+      workDir: null,
     }
 
     const result = await adapter.start(context)
@@ -52,6 +54,8 @@ exit 0
     expect(result).toBeDefined()
     expect(result!.summary).toContain('Task completed successfully')
     expect(result!.tokens).toEqual({ input: 150, output: 50 })
+    // Session ID should be captured (default persistence = 'local')
+    expect(result!.sessionId).toBe('test-session-123')
 
     // Verify events were emitted (progress: launching + progress: completed)
     expect(events.length).toBeGreaterThanOrEqual(2)
@@ -83,6 +87,8 @@ exit 0
       instructions: null,
       orchestratorUrl: 'http://localhost:7778',
       apiKey: 'bad-key',
+      runtimeSessionRef: null,
+      workDir: null,
     }
 
     await expect(adapter.start(context)).rejects.toThrow('API key invalid')
@@ -123,6 +129,8 @@ exit 0
       instructions: 'Focus on edge cases',
       orchestratorUrl: 'http://localhost:7778',
       apiKey: 'test-key',
+      runtimeSessionRef: null,
+      workDir: null,
     }
 
     const result = await adapter.start(context)
@@ -151,6 +159,8 @@ exit 0
       instructions: null,
       orchestratorUrl: 'http://localhost:7778',
       apiKey: 'test-key',
+      runtimeSessionRef: null,
+      workDir: null,
     }
 
     const result = await adapter.start(context)
@@ -180,6 +190,8 @@ exit 0
       instructions: null,
       orchestratorUrl: 'http://localhost:7778',
       apiKey: 'test-key',
+      runtimeSessionRef: null,
+      workDir: null,
     }
 
     // Start in background and then stop

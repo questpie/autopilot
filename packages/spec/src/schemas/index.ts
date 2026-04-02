@@ -9,4 +9,18 @@ export {
 	NotificationRoutingSchema,
 	QuietHoursSchema,
 } from './human'
-export * from './api-contracts'
+export {
+	WorkerRegisterRequestSchema,
+	WorkerRegisterResponseSchema,
+	WorkerHeartbeatRequestSchema,
+	WorkerClaimRequestSchema,
+	ClaimedRunSchema,
+	WorkerClaimResponseSchema,
+	WorkerDeregisterRequestSchema,
+	CreateRunRequestSchema,
+	ContinueRunRequestSchema,
+	CreateJoinTokenRequestSchema,
+	CreateJoinTokenResponseSchema,
+	WorkerEnrollRequestSchema,
+	WorkerEnrollResponseSchema,
+} from './api-contracts'

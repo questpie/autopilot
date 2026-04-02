@@ -55,7 +55,7 @@ const tasks = new Hono<AppEnv>()
 			}),
 		),
 		async (c) => {
-			const { taskService } = c.get('services')
+			const { taskService, workflowEngine } = c.get('services')
 			const actor = c.get('actor')
 			const body = c.req.valid('json')
 			const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -65,7 +65,13 @@ const tasks = new Hono<AppEnv>()
 				created_by: body.created_by ?? actor?.id ?? 'system',
 			})
 			if (!task) return c.json({ error: 'failed to create task' }, 500)
-			return c.json(task, 201)
+
+			// Workflow-driven intake: resolve assignee, attach workflow, process first step
+			const intakeResult = await workflowEngine.intake(id)
+
+			// Return the task after intake (may have updated fields)
+			const final = intakeResult?.task ?? task
+			return c.json(final, 201)
 		},
 	)
 	// PATCH /tasks/:id — update task
@@ -102,6 +108,22 @@ const tasks = new Hono<AppEnv>()
 				taskId: id,
 				status: result.status,
 			})
+
+			return c.json(result, 200)
+		},
+	)
+	// POST /tasks/:id/approve — approve a human_approval step
+	.post(
+		'/:id/approve',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { workflowEngine } = c.get('services')
+			const { id } = c.req.valid('param')
+
+			const result = await workflowEngine.approve(id)
+			if (!result) {
+				return c.json({ error: 'task not found or not on a human_approval step' }, 400)
+			}
 
 			return c.json(result, 200)
 		},

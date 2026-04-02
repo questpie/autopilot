@@ -52,16 +52,18 @@ describe('process model: server/worker split', () => {
 		expect(worker).toBeDefined()
 		expect(typeof worker.start).toBe('function')
 		expect(typeof worker.stop).toBe('function')
-		expect(typeof worker.registerAdapter).toBe('function')
+		expect(typeof worker.getResolvedRuntimes).toBe('function')
 	})
 
-	test('createLocalWorker registers claude-code adapter with MCP', () => {
-		// createLocalWorker pre-registers the adapter
+	test('createLocalWorker resolves claude-code runtime with MCP', () => {
 		const worker = createLocalWorker({
 			orchestratorUrl: 'http://localhost:7778',
 			workDir: '/tmp/test',
 		})
-		// The adapter is registered internally — we can verify by checking the worker exists
-		expect(worker).toBeDefined()
+		const runtimes = worker.getResolvedRuntimes()
+		expect(runtimes.length).toBe(1)
+		expect(runtimes[0]!.config.runtime).toBe('claude-code')
+		expect(runtimes[0]!.config.useMcp).toBe(true)
+		expect(runtimes[0]!.resolvedBinaryPath).toBeTruthy()
 	})
 })
