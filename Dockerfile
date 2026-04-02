@@ -92,9 +92,6 @@ COPY packages/mcp-server packages/mcp-server
 COPY --from=dashboard-build /app/apps/dashboard-v2/.output apps/dashboard-v2/.output
 COPY --from=dashboard-build /app/apps/dashboard-v2/package.json apps/dashboard-v2/package.json
 
-# Copy company templates (used by `autopilot init`)
-COPY templates templates
-
 # Copy entrypoint
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh

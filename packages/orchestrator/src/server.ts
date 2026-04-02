@@ -81,5 +81,5 @@ export async function startServer(options?: StartServerOptions) {
 
 	console.log(`[server] listening on http://localhost:${server.port}`)
 
-	return { server, app, services, companyRoot }
+	return { server, app, services, companyRoot, auth, db: companyDb }
 }

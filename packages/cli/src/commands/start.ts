@@ -19,18 +19,13 @@ program.addCommand(
 
 				// ── 1. Start orchestrator ─────────────────────────────────────
 				const { server } = await startServer({ companyRoot: root, port })
+				const orchestratorUrl = `http://localhost:${server.port}`
 
 				// ── 2. Start local worker ─────────────────────────────────────
 				if (opts.worker) {
-					const orchestratorUrl = `http://localhost:${server.port}`
-					// For local mode, use a known local API key (no auth bypass needed
-					// because the worker authenticates via X-API-Key header which the
-					// auth middleware accepts)
-					const localApiKey = `local-worker-${Date.now()}`
-
 					worker = new AutopilotWorker({
 						orchestratorUrl,
-						apiKey: localApiKey,
+						apiKey: '', // Worker routes are public (machine-to-machine)
 						deviceId: `local-${process.pid}`,
 						name: 'local-worker',
 						capabilities: [
@@ -44,7 +39,13 @@ program.addCommand(
 						heartbeatInterval: 15_000,
 					})
 
-					worker.registerAdapter('claude-code', new ClaudeCodeAdapter())
+					worker.registerAdapter(
+						'claude-code',
+						new ClaudeCodeAdapter({
+							useMcp: true,
+							workDir: root,
+						}),
+					)
 
 					await worker.start()
 				}
@@ -54,17 +55,17 @@ program.addCommand(
 				console.log(brandHeader(root))
 				console.log('')
 				console.log(dim('  Endpoints:'))
-				console.log(dim(`    API        http://localhost:${server.port}/api`))
-				console.log(dim(`    Health     http://localhost:${server.port}/api/health`))
-				console.log(dim(`    Tasks      http://localhost:${server.port}/api/tasks`))
-				console.log(dim(`    Runs       http://localhost:${server.port}/api/runs`))
-				console.log(dim(`    Workers    http://localhost:${server.port}/api/workers`))
-				console.log(dim(`    Events     http://localhost:${server.port}/api/events`))
+				console.log(dim(`    API        ${orchestratorUrl}/api`))
+				console.log(dim(`    Health     ${orchestratorUrl}/api/health`))
+				console.log(dim(`    Tasks      ${orchestratorUrl}/api/tasks`))
+				console.log(dim(`    Runs       ${orchestratorUrl}/api/runs`))
+				console.log(dim(`    Workers    ${orchestratorUrl}/api/workers`))
+				console.log(dim(`    Events     ${orchestratorUrl}/api/events`))
 				console.log('')
 				console.log(separator())
 				console.log(`${dot('green')} ${success('Orchestrator is running.')}`)
 				if (worker) {
-					console.log(`${dot('green')} ${success('Local worker started (claude-code).')}`)
+					console.log(`${dot('green')} ${success('Local worker started (claude-code + MCP).')}`)
 				}
 				console.log(dim('Press Ctrl+C to stop'))
 				console.log('')

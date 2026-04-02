@@ -1,8 +1,12 @@
 /**
  * Hono app factory for the QUESTPIE Autopilot orchestrator API.
  *
- * Creates a configured Hono instance with CORS, auth, and all API routes.
  * Routes receive services via Hono context variables (set by closure over the services bag).
+ *
+ * Auth model:
+ * - Worker routes (/api/workers, /api/runs) are public (machine-to-machine)
+ * - Task routes (/api/tasks) require user auth (session/API key)
+ * - Events SSE (/api/events) requires user auth
  */
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -54,7 +58,7 @@ export function createApp(config: AppConfig) {
 		? rawOrigin.split(',').map((o: string) => o.trim())
 		: ['http://localhost:3000', 'http://localhost:3001']
 
-	// ── 1. CORS ──────────────────────────────────────────────────────────
+	// ── Global middleware ─────────────────────────────────────────────────
 	app.use(
 		'*',
 		cors({
@@ -64,8 +68,6 @@ export function createApp(config: AppConfig) {
 			credentials: true,
 		}),
 	)
-
-	// ── 2. Body size limit (1 MB default) ────────────────────────────────
 	app.use(
 		'*',
 		bodyLimit({
@@ -73,8 +75,6 @@ export function createApp(config: AppConfig) {
 			onError: (c) => c.json({ error: 'request body too large' }, 413),
 		}),
 	)
-
-	// ── 3. Global error handler ──────────────────────────────────────────
 	app.onError((err, c) => {
 		if (err instanceof HTTPException) {
 			return c.json({ error: err.message }, err.status)
@@ -83,7 +83,7 @@ export function createApp(config: AppConfig) {
 		return c.json({ error: 'internal server error' }, 500)
 	})
 
-	// ── 4. Context injection (from config closure) ───────────────────────
+	// ── Context injection ─────────────────────────────────────────────────
 	app.use('*', async (c, next) => {
 		c.set('companyRoot', config.companyRoot)
 		c.set('db', config.db)
@@ -92,22 +92,24 @@ export function createApp(config: AppConfig) {
 		await next()
 	})
 
-	// ── 5. Better Auth passthrough ───────────────────────────────────────
+	// ── Better Auth passthrough ───────────────────────────────────────────
 	app.all('/api/auth/*', async (c) => {
 		return config.auth.handler(c.req.raw)
 	})
 
-	// ── 6. Public API routes (no auth required) ──────────────────────────
+	// ── Auth middleware for human-facing routes only ──────────────────────
+	app.use('/api/tasks/*', authMiddleware())
+	app.use('/api/tasks', authMiddleware())
+	app.use('/api/events', authMiddleware())
+
+	// ── Public routes ────────────────────────────────────────────────────
 	app.get('/api/health', (c) => c.json({ ok: true, ts: new Date().toISOString() }))
 
-	// ── 7. Auth middleware on /api/* ──────────────────────────────────────
-	app.use('/api/*', authMiddleware())
-
-	// ── 8. Authenticated API routes ──────────────────────────────────────
+	// ── All API routes (typed chain for Hono client inference) ───────────
 	const typedApp = app
-		.route('/api/tasks', tasks)
-		.route('/api/runs', runs)
 		.route('/api/workers', workers)
+		.route('/api/runs', runs)
+		.route('/api/tasks', tasks)
 		.route('/api/events', events)
 
 	return typedApp
