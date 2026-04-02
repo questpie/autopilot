@@ -4,34 +4,33 @@ import { type Client, createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { migrate } from 'drizzle-orm/libsql/migrator'
 import { env } from '../env'
-import * as schema from './schema'
+import * as companySchema from './company-schema'
+import * as indexSchema from './index-schema'
 
-export type AutopilotDb = ReturnType<typeof drizzle<typeof schema>>
+export type CompanyDb = ReturnType<typeof drizzle<typeof companySchema>>
+export type IndexDb = ReturnType<typeof drizzle<typeof indexSchema>>
 
-export interface DbResult {
-	db: AutopilotDb
+export interface CompanyDbResult {
+	db: CompanyDb
+	raw: Client
+}
+
+export interface IndexDbResult {
+	db: IndexDb
 	raw: Client
 }
 
 /**
- * Create a Drizzle-wrapped libSQL database for the given company root.
+ * Create the company database (operational truth — never rebuilt).
  *
- * The DB file is stored at `<companyRoot>/.data/autopilot.db` with WAL mode
- * enabled for concurrent read performance.
- *
- * Runs Drizzle migrations (including custom SQL for FTS5 / vec0 virtual tables).
- *
- * Returns both the Drizzle ORM instance and the raw libSQL Client
- * so callers (e.g. Better Auth) can share the same underlying connection.
+ * Stored at `<companyRoot>/.data/company.db` with WAL mode enabled.
+ * Runs Drizzle migrations for schema changes.
  */
-export async function createDb(
-	companyRoot: string,
-	_opts?: { embeddingDimensions?: number },
-): Promise<DbResult> {
+export async function createCompanyDb(companyRoot: string): Promise<CompanyDbResult> {
 	const dataDir = join(companyRoot, '.data')
 	await mkdir(dataDir, { recursive: true })
 
-	const dbPath = join(dataDir, 'autopilot.db')
+	const dbPath = join(dataDir, 'company.db')
 	const client = createClient({
 		url: env.DATABASE_URL ?? `file:${dbPath}`,
 		syncUrl: env.TURSO_SYNC_URL,
@@ -43,17 +42,47 @@ export async function createDb(
 	await client.execute('PRAGMA foreign_keys = ON')
 	await client.execute('PRAGMA busy_timeout = 5000')
 
-	const db = drizzle(client, { schema })
+	const db = drizzle(client, { schema: companySchema })
 
 	// Run drizzle migrations (regular tables)
 	await migrate(db, { migrationsFolder: join(__dirname, '..', '..', 'drizzle') })
 
-	// Create FTS5 virtual table + triggers for unified search index
-	// (must be raw SQL — drizzle migrator cannot handle trigger semicolons)
+	// FTS5 for messages full-text search
+	await initMessagesFts(client)
+
+	return { db, raw: client }
+}
+
+/**
+ * Create the index database (derived search/embedding state — fully rebuildable).
+ *
+ * Stored at `<companyRoot>/.data/index.db` with WAL mode enabled.
+ * Creates FTS5 virtual tables and DiskANN vector indexes via raw SQL.
+ */
+export async function createIndexDb(companyRoot: string): Promise<IndexDbResult> {
+	const dataDir = join(companyRoot, '.data')
+	await mkdir(dataDir, { recursive: true })
+
+	const dbPath = join(dataDir, 'index.db')
+	const client = createClient({ url: `file:${dbPath}` })
+
+	await client.execute('PRAGMA journal_mode = WAL')
+	await client.execute('PRAGMA synchronous = NORMAL')
+	await client.execute('PRAGMA foreign_keys = ON')
+	await client.execute('PRAGMA busy_timeout = 5000')
+
+	const db = drizzle(client, { schema: indexSchema })
+
+	// Run drizzle migrations for index tables
+	await migrate(db, { migrationsFolder: join(__dirname, '..', '..', 'drizzle-index') })
+
+	// FTS5 virtual tables for search_index
 	await initSearchFts(client)
 
-	// libSQL native vector indexes (DiskANN) — F32_BLOB columns added via migration 0007
-	// Indexes created here because drizzle cannot manage libsql_vector_idx
+	// FTS5 virtual tables for chunks
+	await initChunksFts(client)
+
+	// DiskANN vector indexes (libSQL native)
 	try {
 		await client.execute(
 			'CREATE INDEX IF NOT EXISTS search_vec_idx ON search_index (libsql_vector_idx(embedding))',
@@ -69,60 +98,13 @@ export async function createDb(
 		/* index exists or libSQL version without vector support */
 	}
 
-	// D25: FTS5 virtual tables for chunks
-	await initChunksFts(client)
-
-	// Cleanup expired rate limit entries on startup and every 5 minutes
-	try {
-		await client.execute('DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()')
-	} catch {
-		/* table may not exist yet */
-	}
-	setInterval(
-		() => {
-			client.execute('DELETE FROM rate_limit_entries WHERE expires_at < unixepoch()').catch(() => {
-				/* db closed */
-			})
-		},
-		5 * 60 * 1000,
-	)
-
-	// Cleanup expired file locks on startup and every minute
-	const nowMs = Date.now()
-	try {
-		await client.execute(`DELETE FROM file_locks WHERE expires_at < ${nowMs}`)
-	} catch {
-		/* table may not exist yet */
-	}
-	setInterval(() => {
-		client.execute(`DELETE FROM file_locks WHERE expires_at < ${Date.now()}`).catch(() => {
-			/* db closed */
-		})
-	}, 60 * 1000)
-
-	// Cleanup expired pins on startup and every 5 minutes
-	try {
-		await client.execute(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${nowMs}`)
-	} catch {
-		/* table may not exist yet */
-	}
-	setInterval(
-		() => {
-			client
-				.execute(`DELETE FROM pins WHERE expires_at IS NOT NULL AND expires_at < ${Date.now()}`)
-				.catch(() => {
-					/* db closed */
-				})
-		},
-		5 * 60 * 1000,
-	)
-
 	return { db, raw: client }
 }
 
+// ─── FTS5 Initialization ───────────────────────────────────────────────────
+
 /**
- * Initialize FTS5 virtual table and triggers for the unified search_index table.
- * Uses raw SQL because Drizzle ORM does not support virtual tables or triggers.
+ * FTS5 virtual table + triggers for the search_index table.
  */
 async function initSearchFts(client: Client): Promise<void> {
 	try {
@@ -135,7 +117,7 @@ async function initSearchFts(client: Client): Promise<void> {
 			)
 		`)
 	} catch {
-		// Already exists
+		/* already exists */
 	}
 
 	try {
@@ -156,13 +138,12 @@ async function initSearchFts(client: Client): Promise<void> {
 			END
 		`)
 	} catch {
-		// Triggers already exist
+		/* triggers already exist */
 	}
 }
 
 /**
- * D25: Initialize FTS5 virtual tables for chunks table.
- * Vector indexes are created in createDb() via libsql_vector_idx.
+ * FTS5 virtual table + triggers for the chunks table.
  */
 async function initChunksFts(client: Client): Promise<void> {
 	try {
@@ -201,14 +182,11 @@ async function initChunksFts(client: Client): Promise<void> {
 }
 
 /**
- * Initialize FTS5 virtual tables and triggers for message full-text search.
- * Uses raw SQL because Drizzle ORM does not support virtual tables.
+ * FTS5 virtual table + triggers for messages full-text search (company DB).
  */
-export async function initFts(db: AutopilotDb): Promise<void> {
-	const raw = (db as unknown as { $client: Client }).$client
-
+async function initMessagesFts(client: Client): Promise<void> {
 	try {
-		await raw.execute(`
+		await client.execute(`
 			CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
 				content,
 				content=messages,
@@ -216,50 +194,29 @@ export async function initFts(db: AutopilotDb): Promise<void> {
 			)
 		`)
 	} catch {
-		// Already exists — FTS5 virtual tables may not support IF NOT EXISTS in all versions
+		/* already exists */
 	}
 
-	// Triggers for automatic FTS sync
 	try {
-		await raw.execute(`
+		await client.execute(`
 			CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
 				INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
 			END
 		`)
-		await raw.execute(`
+		await client.execute(`
 			CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
 				INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
 			END
 		`)
-		await raw.execute(`
+		await client.execute(`
 			CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
 				INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
 				INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
 			END
 		`)
 	} catch {
-		// Triggers already exist
+		/* triggers already exist */
 	}
 }
 
-export { schema }
-
-import { companyRootFactory, container } from '../container'
-import { loadCompany } from '../fs'
-
-export const dbFactory = container.registerAsync('db', async (c) => {
-	const { companyRoot } = c.resolve([companyRootFactory])
-
-	// Read embedding dimensions from company config so the vec0 table matches the provider
-	let embeddingDimensions: number | undefined
-	try {
-		const company = await loadCompany(companyRoot)
-		const settings = company.settings as Record<string, unknown> | undefined
-		const embeddingsConfig = settings?.embeddings as { dimensions?: number } | undefined
-		embeddingDimensions = embeddingsConfig?.dimensions
-	} catch {
-		// Config not available yet — use default
-	}
-
-	return createDb(companyRoot, { embeddingDimensions })
-})
+export { companySchema, indexSchema }

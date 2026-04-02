@@ -25,7 +25,6 @@
 		"@hookform/resolvers": "^5.2.2",
 		"@phosphor-icons/react": "^2.1.10",
 		"@questpie/autopilot-spec": "1.0.0",
-		"@questpie/avatar": "workspace:*",
 		"@t3-oss/env-core": "^0.13.8",
 		"@tailwindcss/vite": "^4.2.1",
 		"@tanstack/react-devtools": "^0.10.0",

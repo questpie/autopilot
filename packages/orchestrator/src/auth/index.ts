@@ -10,10 +10,22 @@ import { betterAuth } from 'better-auth'
 import { hashPassword, verifyPassword } from 'better-auth/crypto'
 import { admin, bearer, openAPI, twoFactor } from 'better-auth/plugins'
 import { and, eq, gt, isNull, or, sql } from 'drizzle-orm'
-import type { AutopilotDb } from '../db'
+import type { CompanyDb } from '../db'
 import * as authSchema from '../db/auth-schema'
 import { env } from '../env'
-import { type MailService, createMailService } from '../mail'
+/** Minimal mail service interface for email verification. */
+interface MailService {
+	send(opts: { to: string; subject: string; html: string }): Promise<void>
+}
+
+/** No-op mail service — logs emails to console in dev. */
+function createMailService(): MailService {
+	return {
+		async send(opts) {
+			console.log(`[mail] would send to ${opts.to}: ${opts.subject}`)
+		},
+	}
+}
 
 const PASSWORD_COMPLEXITY_RE = /^(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/
 
@@ -25,12 +37,12 @@ function validatePasswordComplexity(password: string): void {
 	}
 }
 
-async function getUserCount(db: AutopilotDb): Promise<number> {
+async function getUserCount(db: CompanyDb): Promise<number> {
 	const row = await db.select({ count: sql<number>`count(*)` }).from(authSchema.user).get()
 	return Number(row?.count ?? 0)
 }
 
-async function getActiveInvite(db: AutopilotDb, email: string) {
+async function getActiveInvite(db: CompanyDb, email: string) {
 	const normalizedEmail = email.trim().toLowerCase()
 	const now = new Date()
 
@@ -48,7 +60,7 @@ async function getActiveInvite(db: AutopilotDb, email: string) {
 }
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export async function createAuth(db: AutopilotDb, _companyRoot: string, mail?: MailService) {
+export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: MailService) {
 	const mailService = mail ?? createMailService()
 
 	const auth = betterAuth({
@@ -217,10 +229,3 @@ export async function createAuth(db: AutopilotDb, _companyRoot: string, mail?: M
 
 export type Auth = Awaited<ReturnType<typeof createAuth>>
 
-import { companyRootFactory, container } from '../container'
-import { dbFactory } from '../db'
-
-export const authFactory = container.registerAsync('auth', async (c) => {
-	const { db: dbResult, companyRoot } = await c.resolveAsync([dbFactory, companyRootFactory])
-	return createAuth(dbResult.db, companyRoot)
-})

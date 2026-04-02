@@ -6,12 +6,10 @@ import {
 	HumanSchema,
 	PATHS,
 	ScheduleSchema,
-	WebhookSchema,
 	WorkflowSchema,
 	workflowPath,
 } from '@questpie/autopilot-spec'
-import type { Agent, Human, Schedule, Webhook } from '@questpie/autopilot-spec'
-import { logger } from '../logger'
+import type { Agent, Human, Schedule } from '@questpie/autopilot-spec'
 import { readYaml, writeYaml } from './yaml'
 
 function resolvePath(companyRoot: string, relativePath: string): string {
@@ -20,29 +18,20 @@ function resolvePath(companyRoot: string, relativePath: string): string {
 
 /**
  * Read and validate `company.yaml`.
- *
- * If the file is missing or unreadable the schema defaults are used and the
- * file is re-written so subsequent reads succeed normally.
+ * If missing or unreadable, schema defaults are used and the file is re-written.
  */
 export async function loadCompany(companyRoot: string) {
 	const configPath = resolvePath(companyRoot, PATHS.COMPANY_CONFIG)
-
 	try {
 		return await readYaml(configPath, CompanySchema)
-	} catch (err) {
-		logger.warn('company', 'company.yaml missing or invalid — using defaults', {
-			error: err instanceof Error ? err.message : String(err),
-		})
-
+	} catch {
 		const defaults = CompanySchema.parse({})
 		await writeYaml(configPath, defaults)
-
-		logger.info('company', 'regenerated company.yaml with defaults')
 		return defaults
 	}
 }
 
-/** Read `team/agents/*.yaml` and return an array of validated agents. */
+/** Read `team/agents/*.yaml` and return validated agents. */
 export async function loadAgents(companyRoot: string) {
 	const dir = resolvePath(companyRoot, PATHS.AGENTS_DIR)
 	const agents: Agent[] = []
@@ -53,16 +42,14 @@ export async function loadAgents(companyRoot: string) {
 		try {
 			const agent = await readYaml(join(dir, file), AgentSchema)
 			agents.push(agent)
-		} catch (err) {
-			logger.warn('company', `skipping invalid agent file ${file}`, {
-				error: err instanceof Error ? err.message : String(err),
-			})
+		} catch {
+			console.warn(`[config] skipping invalid agent file ${file}`)
 		}
 	}
 	return agents
 }
 
-/** Read `team/humans/*.yaml` and return an array of validated humans. */
+/** Read `team/humans/*.yaml` and return validated humans. */
 export async function loadHumans(companyRoot: string) {
 	const dir = resolvePath(companyRoot, PATHS.HUMANS_DIR)
 	const humans: Human[] = []
@@ -73,10 +60,8 @@ export async function loadHumans(companyRoot: string) {
 		try {
 			const human = await readYaml(join(dir, file), HumanSchema)
 			humans.push(human)
-		} catch (err) {
-			logger.warn('company', `skipping invalid human file ${file}`, {
-				error: err instanceof Error ? err.message : String(err),
-			})
+		} catch {
+			console.warn(`[config] skipping invalid human file ${file}`)
 		}
 	}
 	return humans
@@ -87,7 +72,7 @@ export async function loadWorkflow(companyRoot: string, id: string) {
 	return readYaml(resolvePath(companyRoot, workflowPath(id)), WorkflowSchema)
 }
 
-/** Read `team/schedules/*.yaml` and return an array of validated schedules. */
+/** Read `team/schedules/*.yaml` and return validated schedules. */
 export async function loadSchedules(companyRoot: string) {
 	const schedulesDir = resolvePath(companyRoot, PATHS.SCHEDULES_DIR)
 	const schedules: Schedule[] = []
@@ -98,31 +83,9 @@ export async function loadSchedules(companyRoot: string) {
 		try {
 			const schedule = await readYaml(join(schedulesDir, file), ScheduleSchema)
 			schedules.push(schedule)
-		} catch (err) {
-			logger.warn('company', `skipping invalid schedule file ${file}`, {
-				error: err instanceof Error ? err.message : String(err),
-			})
+		} catch {
+			console.warn(`[config] skipping invalid schedule file ${file}`)
 		}
 	}
 	return schedules
-}
-
-/** Read `team/webhooks/*.yaml` and return an array of validated webhooks. */
-export async function loadWebhooks(companyRoot: string) {
-	const dir = resolvePath(companyRoot, PATHS.WEBHOOKS_DIR)
-	const webhooks: Webhook[] = []
-	if (!existsSync(dir)) return webhooks
-
-	const files = readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
-	for (const file of files) {
-		try {
-			const webhook = await readYaml(join(dir, file), WebhookSchema)
-			webhooks.push(webhook)
-		} catch (err) {
-			logger.warn('company', `skipping invalid webhook file ${file}`, {
-				error: err instanceof Error ? err.message : String(err),
-			})
-		}
-	}
-	return webhooks
 }

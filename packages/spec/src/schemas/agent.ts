@@ -1,9 +1,8 @@
 import { z } from 'zod'
-import { AGENT_ROLES } from '../constants'
 
 export const FsScopeSchema = z.object({
-	read: z.array(z.string()),
-	write: z.array(z.string()),
+	read: z.array(z.string()).default([]),
+	write: z.array(z.string()).default([]),
 })
 
 export const AgentTriggerSchema = z.object({
@@ -12,24 +11,12 @@ export const AgentTriggerSchema = z.object({
 	cron: z.string().optional(),
 })
 
-/** Supported agent provider backends. */
-export const AGENT_PROVIDERS = ['tanstack-ai'] as const
-
 export const AgentSchema = z.object({
 	id: z.string().regex(/^[a-z0-9-]+$/),
 	name: z.string(),
-	role: z.enum(AGENT_ROLES),
-	description: z.string(),
-	provider: z.enum(AGENT_PROVIDERS).default('tanstack-ai'),
-	model: z.string().default('anthropic/claude-sonnet-4'),
-	/** Enable web search via OpenRouter :online plugin. Adds real-time web access to this agent. */
-	web_search: z.boolean().default(false),
-	fs_scope: FsScopeSchema,
-	tools: z.array(z.string()).default(['fs', 'terminal']),
-	mcps: z.array(z.string()).default([]),
+	role: z.string(),
+	description: z.string().default(''),
+	model: z.string().optional(),
+	fs_scope: FsScopeSchema.optional(),
 	triggers: z.array(AgentTriggerSchema).default([]),
-	keywords: z.array(z.string()).optional(),
 })
-
-/** @deprecated Use AgentSchema directly — agents are now individual files in AGENTS_DIR */
-export const AgentsFileSchema = AgentSchema
