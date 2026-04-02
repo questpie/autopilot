@@ -4,7 +4,8 @@ import { connectAgentStream } from '@/lib/sse-transport'
 import type { ToolCallState } from './chat-message-metadata'
 
 const INITIAL_OFFSET = '-1'
-const STREAM_OFFSET_PERSIST_DEBOUNCE_MS = 250
+const OFFSET_PERSIST_DEBOUNCE_MS = 250
+const SESSION_POLL_INTERVAL_MS = 5_000
 const sessionOffsetMemory = new Map<string, string>()
 
 export type StreamErrorCode = 'rate_limit' | 'auth' | 'network' | 'provider' | 'budget' | 'unknown'
@@ -36,7 +37,7 @@ interface StreamChunk {
 	errorCode?: StreamErrorCode
 }
 
-type TerminalStreamStatus = Extract<SessionStreamState['status'], 'completed' | 'error'>
+type TerminalStatus = 'completed' | 'error'
 
 type StreamAction =
 	| { type: 'connecting'; offset: string }
@@ -53,50 +54,15 @@ const INITIAL_STATE: SessionStreamState = {
 	offset: INITIAL_OFFSET,
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────
+
 function normalizeOffset(value: unknown): string {
-	if (typeof value !== 'string') {
-		return INITIAL_OFFSET
-	}
-
-	const offset = value.trim()
-	if (!offset || offset === '0') {
-		return INITIAL_OFFSET
-	}
-
-	return offset
+	if (typeof value !== 'string') return INITIAL_OFFSET
+	const trimmed = value.trim()
+	return !trimmed || trimmed === '0' ? INITIAL_OFFSET : trimmed
 }
 
-async function persistSessionOffset(
-	sessionId: string,
-	offset: string,
-	_keepalive = false,
-): Promise<string | null> {
-	try {
-		const response = await api.api['chat-sessions'][':id']['stream-offset'].$patch({
-			param: { id: sessionId },
-			json: { offset },
-		})
-
-		if (!response.ok) {
-			return null
-		}
-
-		const body = await response.json().catch(() => null)
-		return normalizeOffset((body as { streamOffset?: string } | null)?.streamOffset ?? offset)
-	} catch {
-		return null
-	}
-}
-
-function getResumeOffset(sessionId: string, initialOffset: string): string {
-	if (initialOffset !== INITIAL_OFFSET) {
-		return initialOffset
-	}
-
-	return sessionOffsetMemory.get(sessionId) ?? INITIAL_OFFSET
-}
-
-function parseSseEvent(event: string): {
+function parseSseEvent(raw: string): {
 	eventType: string | null
 	data: string[]
 	id: string | null
@@ -105,55 +71,54 @@ function parseSseEvent(event: string): {
 	let id: string | null = null
 	let eventType: string | null = null
 
-	for (const line of event.split('\n')) {
-		if (line.startsWith('data:')) {
-			data.push(line.slice(5).trimStart())
-			continue
-		}
-
-		if (line.startsWith('id:')) {
-			id = line.slice(3).trimStart()
-			continue
-		}
-
-		if (line.startsWith('event:')) {
-			eventType = line.slice(6).trimStart()
-		}
+	for (const line of raw.split('\n')) {
+		if (line.startsWith('data:')) data.push(line.slice(5).trimStart())
+		else if (line.startsWith('id:')) id = line.slice(3).trimStart()
+		else if (line.startsWith('event:')) eventType = line.slice(6).trimStart()
 	}
 
 	return { eventType, data, id }
 }
 
-interface ControlEvent {
-	streamNextOffset?: string
-	streamCursor?: string
-	upToDate?: boolean
-	streamClosed?: boolean
-}
-
-function getTerminalStreamStatus(chunk: StreamChunk): TerminalStreamStatus | null {
-	if (chunk.type === 'error') {
-		return 'error'
-	}
-
-	if (
-		chunk.type === 'status' &&
-		(chunk.content === 'completed' || chunk.content === 'error')
-	) {
+function getTerminalStatus(chunk: StreamChunk): TerminalStatus | null {
+	if (chunk.type === 'error') return 'error'
+	if (chunk.type === 'status' && (chunk.content === 'completed' || chunk.content === 'error')) {
 		return chunk.content
 	}
-
 	return null
+}
+
+async function checkSessionCompleted(sessionId: string): Promise<TerminalStatus | null> {
+	try {
+		const res = await api.api['chat-sessions'][':id'].$get({ param: { id: sessionId } })
+		if (!res.ok) return null
+		const session = await res.json()
+		if (session.status === 'completed') return 'completed'
+		if (session.status === 'failed') return 'error'
+		return null
+	} catch {
+		return null
+	}
+}
+
+async function persistOffset(sessionId: string, offset: string): Promise<string | null> {
+	try {
+		const res = await api.api['chat-sessions'][':id']['stream-offset'].$patch({
+			param: { id: sessionId },
+			json: { offset },
+		})
+		if (!res.ok) return null
+		const body = await res.json().catch(() => null)
+		return normalizeOffset((body as { streamOffset?: string } | null)?.streamOffset ?? offset)
+	} catch {
+		return null
+	}
 }
 
 // ── Block helpers ────────────────────────────────────────────────────
 
-function lastBlock(blocks: StreamBlock[]): StreamBlock | undefined {
-	return blocks[blocks.length - 1]
-}
-
 function appendTextDelta(blocks: StreamBlock[], delta: string): StreamBlock[] {
-	const last = lastBlock(blocks)
+	const last = blocks[blocks.length - 1]
 	if (last?.kind === 'text') {
 		const updated = [...blocks]
 		updated[updated.length - 1] = { kind: 'text', content: last.content + delta }
@@ -163,14 +128,13 @@ function appendTextDelta(blocks: StreamBlock[], delta: string): StreamBlock[] {
 }
 
 function setFullText(blocks: StreamBlock[], text: string): StreamBlock[] {
-	// If we already have text blocks from deltas, don't overwrite
 	if (blocks.some((b) => b.kind === 'text')) return blocks
 	return [...blocks, { kind: 'text', content: text }]
 }
 
 function appendOrUpdateThinking(blocks: StreamBlock[], content: string | null): StreamBlock[] {
 	if (!content) return blocks
-	const last = lastBlock(blocks)
+	const last = blocks[blocks.length - 1]
 	if (last?.kind === 'thinking') {
 		const updated = [...blocks]
 		updated[updated.length - 1] = { kind: 'thinking', content }
@@ -179,14 +143,7 @@ function appendOrUpdateThinking(blocks: StreamBlock[], content: string | null): 
 	return [...blocks, { kind: 'thinking', content }]
 }
 
-function appendToolCall(blocks: StreamBlock[], toolCall: ToolCallState): StreamBlock[] {
-	return [...blocks, { kind: 'tool_call', toolCall }]
-}
-
-function updateToolCall(
-	blocks: StreamBlock[],
-	chunk: StreamChunk,
-): StreamBlock[] {
+function updateToolCall(blocks: StreamBlock[], chunk: StreamChunk): StreamBlock[] {
 	return blocks.map((block) => {
 		if (block.kind !== 'tool_call') return block
 		const tc = block.toolCall
@@ -200,7 +157,7 @@ function updateToolCall(
 				...tc,
 				displayLabel: chunk.displayLabel ?? tc.displayLabel,
 				displayMeta: chunk.displayMeta ?? tc.displayMeta,
-				status: chunk.tool === 'error' ? 'error' as const : 'completed' as const,
+				status: chunk.tool === 'error' ? ('error' as const) : ('completed' as const),
 				result: chunk.content ?? '',
 				completedAt: chunk.at,
 			},
@@ -213,13 +170,10 @@ function updateToolCall(
 function streamReducer(state: SessionStreamState, action: StreamAction): SessionStreamState {
 	switch (action.type) {
 		case 'connecting':
-			return {
-				...INITIAL_STATE,
-				status: 'connecting',
-				offset: action.offset,
-			}
+			return { ...INITIAL_STATE, status: 'connecting', offset: action.offset }
+
 		case 'chunk': {
-			const nextState: SessionStreamState = {
+			const base: SessionStreamState = {
 				...state,
 				status: 'streaming',
 				offset: action.offset,
@@ -229,36 +183,36 @@ function streamReducer(state: SessionStreamState, action: StreamAction): Session
 
 			switch (action.chunk.type) {
 				case 'text_delta':
-					return { ...nextState, blocks: appendTextDelta(state.blocks, action.chunk.content ?? '') }
+					return { ...base, blocks: appendTextDelta(state.blocks, action.chunk.content ?? '') }
 				case 'text':
-					return { ...nextState, blocks: setFullText(state.blocks, action.chunk.content ?? '') }
+					return { ...base, blocks: setFullText(state.blocks, action.chunk.content ?? '') }
 				case 'thinking':
-					return { ...nextState, blocks: appendOrUpdateThinking(state.blocks, action.chunk.content ?? null) }
+					return { ...base, blocks: appendOrUpdateThinking(state.blocks, action.chunk.content ?? null) }
 				case 'tool_call':
 					return {
-						...nextState,
-						blocks: appendToolCall(state.blocks, {
-							id:
-								action.chunk.toolCallId ??
-								`tool-${action.offset}-${action.chunk.at}-${action.chunk.tool ?? 'unknown'}`,
-							tool: action.chunk.tool ?? 'unknown',
-							toolCallId: action.chunk.toolCallId,
-							params: action.chunk.params,
-							displayLabel: action.chunk.displayLabel,
-							displayMeta: action.chunk.displayMeta,
-							status: 'running',
-							startedAt: action.chunk.at,
-						}),
+						...base,
+						blocks: [
+							...state.blocks,
+							{
+								kind: 'tool_call',
+								toolCall: {
+									id: action.chunk.toolCallId ?? `tool-${action.offset}-${action.chunk.at}-${action.chunk.tool ?? 'unknown'}`,
+									tool: action.chunk.tool ?? 'unknown',
+									toolCallId: action.chunk.toolCallId,
+									params: action.chunk.params,
+									displayLabel: action.chunk.displayLabel,
+									displayMeta: action.chunk.displayMeta,
+									status: 'running',
+									startedAt: action.chunk.at,
+								},
+							},
+						],
 					}
 				case 'tool_result':
-					return { ...nextState, blocks: updateToolCall(state.blocks, action.chunk) }
+					return { ...base, blocks: updateToolCall(state.blocks, action.chunk) }
 				case 'status':
 					if (action.chunk.content === 'started') {
-						return {
-							...nextState,
-							blocks: [],
-							error: null,
-						}
+						return { ...base, blocks: [], error: null }
 					}
 					if (action.chunk.content === 'completed') {
 						return { ...state, status: 'completed', offset: action.offset }
@@ -272,35 +226,35 @@ function streamReducer(state: SessionStreamState, action: StreamAction): Session
 							offset: action.offset,
 						}
 					}
-					return nextState
+					return base
 				case 'error':
 					return {
-						...nextState,
+						...base,
 						status: 'error',
 						error: action.chunk.content ?? 'Unknown error',
 						errorCode: action.chunk.errorCode ?? 'unknown',
 					}
 				default:
-					return nextState
+					return base
 			}
 		}
+
 		case 'completed':
-			return {
-				...state,
-				status: 'completed',
-			}
+			return { ...state, status: 'completed' }
 		case 'error':
-			return {
-				...state,
-				status: 'error',
-				error: action.error,
-				errorCode: 'unknown',
-			}
+			return { ...state, status: 'error', error: action.error, errorCode: 'unknown' }
 		case 'reset':
 			return INITIAL_STATE
 		default:
 			return state
 	}
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────
+
+interface ControlEvent {
+	streamNextOffset?: string
+	streamClosed?: boolean
 }
 
 export function useSessionStream(
@@ -312,15 +266,15 @@ export function useSessionStream(
 } {
 	const [state, dispatch] = useReducer(streamReducer, INITIAL_STATE)
 	const abortRef = useRef<AbortController | null>(null)
-	const offsetPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const pendingOffsetRef = useRef<string | null>(null)
 	const persistedOffsetRef = useRef(INITIAL_OFFSET)
 
 	useEffect(() => {
 		if (!sessionId) {
-			if (offsetPersistTimerRef.current) {
-				clearTimeout(offsetPersistTimerRef.current)
-				offsetPersistTimerRef.current = null
+			if (persistTimerRef.current) {
+				clearTimeout(persistTimerRef.current)
+				persistTimerRef.current = null
 			}
 			pendingOffsetRef.current = null
 			persistedOffsetRef.current = INITIAL_OFFSET
@@ -331,90 +285,84 @@ export function useSessionStream(
 		const controller = new AbortController()
 		abortRef.current = controller
 
-		const offset = getResumeOffset(sessionId, normalizeOffset(initialOffset))
-		sessionOffsetMemory.set(sessionId, offset)
-		persistedOffsetRef.current = offset
+		const startOffset = normalizeOffset(initialOffset) !== INITIAL_OFFSET
+			? normalizeOffset(initialOffset)
+			: sessionOffsetMemory.get(sessionId) ?? INITIAL_OFFSET
+
+		sessionOffsetMemory.set(sessionId, startOffset)
+		persistedOffsetRef.current = startOffset
 		pendingOffsetRef.current = null
-		dispatch({ type: 'connecting', offset })
+		dispatch({ type: 'connecting', offset: startOffset })
 
-		const flushPendingOffset = async (keepalive = false): Promise<void> => {
-			const nextOffset = pendingOffsetRef.current
-			if (!nextOffset || nextOffset === persistedOffsetRef.current) {
+		// ── Offset persistence (debounced) ────────────────────────
+
+		const flushOffset = async (_keepalive = false): Promise<void> => {
+			const next = pendingOffsetRef.current
+			if (!next || next === persistedOffsetRef.current) {
 				pendingOffsetRef.current = null
 				return
 			}
 
-			const confirmedOffset = await persistSessionOffset(sessionId, nextOffset, keepalive)
-			if (!confirmedOffset) {
-				return
-			}
+			const confirmed = await persistOffset(sessionId, next)
+			if (!confirmed) return
 
-			persistedOffsetRef.current = confirmedOffset
-			sessionOffsetMemory.set(sessionId, confirmedOffset)
-			if (pendingOffsetRef.current === nextOffset) {
-				pendingOffsetRef.current = null
-			}
+			persistedOffsetRef.current = confirmed
+			sessionOffsetMemory.set(sessionId, confirmed)
+			if (pendingOffsetRef.current === next) pendingOffsetRef.current = null
 
-			if (
-				pendingOffsetRef.current &&
-				pendingOffsetRef.current !== persistedOffsetRef.current &&
-				!offsetPersistTimerRef.current
-			) {
-				offsetPersistTimerRef.current = setTimeout(() => {
-					offsetPersistTimerRef.current = null
-					void flushPendingOffset()
-				}, STREAM_OFFSET_PERSIST_DEBOUNCE_MS)
+			// If more offsets queued while we were persisting, schedule another flush.
+			if (pendingOffsetRef.current && pendingOffsetRef.current !== persistedOffsetRef.current && !persistTimerRef.current) {
+				persistTimerRef.current = setTimeout(() => {
+					persistTimerRef.current = null
+					void flushOffset()
+				}, OFFSET_PERSIST_DEBOUNCE_MS)
 			}
 		}
 
-		const queueOffsetPersist = (offsetValue: string, immediate = false): void => {
-			const normalizedOffset = normalizeOffset(offsetValue)
-			if (
-				normalizedOffset === INITIAL_OFFSET ||
-				normalizedOffset === persistedOffsetRef.current
-			) {
-				return
-			}
+		const queuePersist = (value: string, immediate = false): void => {
+			const normalized = normalizeOffset(value)
+			if (normalized === INITIAL_OFFSET || normalized === persistedOffsetRef.current) return
 
-			pendingOffsetRef.current = normalizedOffset
-			sessionOffsetMemory.set(sessionId, normalizedOffset)
+			pendingOffsetRef.current = normalized
+			sessionOffsetMemory.set(sessionId, normalized)
 
 			if (immediate) {
-				if (offsetPersistTimerRef.current) {
-					clearTimeout(offsetPersistTimerRef.current)
-					offsetPersistTimerRef.current = null
+				if (persistTimerRef.current) {
+					clearTimeout(persistTimerRef.current)
+					persistTimerRef.current = null
 				}
-				void flushPendingOffset(true)
+				void flushOffset(true)
 				return
 			}
 
-			if (offsetPersistTimerRef.current) {
-				return
+			if (!persistTimerRef.current) {
+				persistTimerRef.current = setTimeout(() => {
+					persistTimerRef.current = null
+					void flushOffset()
+				}, OFFSET_PERSIST_DEBOUNCE_MS)
 			}
-
-			offsetPersistTimerRef.current = setTimeout(() => {
-				offsetPersistTimerRef.current = null
-				void flushPendingOffset()
-			}, STREAM_OFFSET_PERSIST_DEBOUNCE_MS)
 		}
+
+		// ── Pagehide flush ────────────────────────────────────────
 
 		const handlePageHide = (): void => {
 			if (pendingOffsetRef.current && pendingOffsetRef.current !== persistedOffsetRef.current) {
-				void flushPendingOffset(true)
+				void flushOffset(true)
 			}
 		}
-
 		if (typeof window !== 'undefined') {
 			window.addEventListener('pagehide', handlePageHide)
 		}
 
+		// ── SSE connection loop ───────────────────────────────────
+
 		const connect = async () => {
-			let currentOffset = offset
+			let currentOffset = startOffset
 
 			while (!controller.signal.aborted) {
 				let streamClosed = false
 				let nextOffset = currentOffset
-				let terminalStatus: TerminalStreamStatus | null = null
+				let terminal: TerminalStatus | null = null
 
 				try {
 					const { reader, streamNextOffset } = await connectAgentStream(
@@ -425,142 +373,119 @@ export function useSessionStream(
 
 					const decoder = new TextDecoder()
 					let buffer = ''
+					let lastDataAt = Date.now()
 					nextOffset = normalizeOffset(streamNextOffset ?? currentOffset)
-					queueOffsetPersist(nextOffset)
+					queuePersist(nextOffset)
 
-					while (true) {
-						const { done, value } = await reader.read()
-						if (done) break
+					// Heartbeat: periodically check session status while SSE is
+					// alive but idle — the durable stream may have the completed
+					// event but the live SSE push can miss it.
+					const heartbeat = setInterval(async () => {
+						if (Date.now() - lastDataAt < SESSION_POLL_INTERVAL_MS) return
+						const status = await checkSessionCompleted(sessionId)
+						if (status) {
+							terminal = status
+							// Reader.cancel() will cause reader.read() to return done=true.
+							reader.cancel().catch(() => {})
+						}
+					}, SESSION_POLL_INTERVAL_MS)
 
-						buffer += decoder.decode(value, { stream: true })
-						const events = buffer.split('\n\n')
-						buffer = events.pop() ?? ''
+					try {
+						while (true) {
+							const { done, value } = await reader.read()
+							if (done) break
 
-						for (const event of events) {
-							const parsedEvent = parseSseEvent(event)
-							if (parsedEvent.id) {
-								nextOffset = normalizeOffset(parsedEvent.id)
-								queueOffsetPersist(nextOffset)
-							}
+							buffer += decoder.decode(value, { stream: true })
+							const events = buffer.split('\n\n')
+							buffer = events.pop() ?? ''
 
-							if (parsedEvent.data.length === 0) continue
-
-							if (parsedEvent.eventType === 'control') {
-								try {
-									const ctrl = JSON.parse(
-										parsedEvent.data.join('\n'),
-									) as ControlEvent
-									if (ctrl.streamNextOffset) {
-										nextOffset = normalizeOffset(ctrl.streamNextOffset)
-										queueOffsetPersist(
-											nextOffset,
-											terminalStatus !== null,
-										)
-									}
-									if (ctrl.streamClosed) {
-										streamClosed = true
-									}
-								} catch {
-									// Malformed control event — ignore.
+							for (const event of events) {
+								const parsed = parseSseEvent(event)
+								if (parsed.id) {
+									nextOffset = normalizeOffset(parsed.id)
+									queuePersist(nextOffset)
 								}
-								continue
-							}
 
-							try {
-								const raw = JSON.parse(parsedEvent.data.join('\n')) as
-									| StreamChunk
-									| StreamChunk[]
+								if (parsed.data.length === 0) continue
+
+								if (parsed.eventType === 'control') {
+									try {
+										const ctrl = JSON.parse(parsed.data.join('\n')) as ControlEvent
+										if (ctrl.streamNextOffset) {
+											nextOffset = normalizeOffset(ctrl.streamNextOffset)
+											queuePersist(nextOffset, terminal !== null)
+										}
+										if (ctrl.streamClosed) streamClosed = true
+									} catch { /* malformed control */ }
+									continue
+								}
+
+								lastDataAt = Date.now()
+
+								try {
+									const raw = JSON.parse(parsed.data.join('\n')) as StreamChunk | StreamChunk[]
 									const chunks = Array.isArray(raw) ? raw : [raw]
 									for (const chunk of chunks) {
 										if (chunk.type === 'status' && chunk.content === 'started') {
-											terminalStatus = null
+											terminal = null
 										}
 										dispatch({ type: 'chunk', chunk, offset: nextOffset })
-
-										const nextTerminalStatus = getTerminalStreamStatus(chunk)
-										if (nextTerminalStatus) {
-											terminalStatus = nextTerminalStatus
-										}
+										terminal = getTerminalStatus(chunk) ?? terminal
 									}
-							} catch {
-								// Ignore malformed data chunks.
+								} catch { /* malformed data */ }
 							}
 						}
+					} finally {
+						clearInterval(heartbeat)
 					}
 				} catch (error) {
-					if ((error as Error).name === 'AbortError') {
-						return
-					}
-					// If the stream previously delivered a terminal status chunk,
-					// we're done regardless of the connection error.
-					if (terminalStatus) {
-						queueOffsetPersist(nextOffset, true)
+					if ((error as Error).name === 'AbortError') return
+
+					if (terminal) {
+						queuePersist(nextOffset, true)
 						return
 					}
 
-					// Connection error on reconnect — don't immediately give up.
-					// The agent may have completed and the durable stream closed.
-					// Try one more reconnect; if that also fails, report error.
-					if (currentOffset !== offset) {
-						// We've already received data — this is a reconnect failure.
-						// Wait briefly and retry once more before giving up.
+					// On reconnect failure, retry once after a delay.
+					if (currentOffset !== startOffset) {
 						await new Promise((r) => setTimeout(r, 1000))
 						if (controller.signal.aborted) return
 						currentOffset = nextOffset
 						continue
 					}
 
-					dispatch({
-						type: 'error',
-						error: error instanceof Error ? error.message : 'Stream error',
-					})
+					dispatch({ type: 'error', error: error instanceof Error ? error.message : 'Stream error' })
 					return
 				}
 
-				// Stream reader finished (done=true).
-				// If we saw a terminal status chunk, we're done.
-				if (terminalStatus) {
-					queueOffsetPersist(nextOffset, true)
+				if (terminal) {
+					queuePersist(nextOffset, true)
+					if (terminal === 'error') {
+						dispatch({ type: 'error', error: 'Session failed' })
+					}
 					return
 				}
 
-				// If the server signaled stream closed (no more data ever), complete.
 				if (streamClosed) {
-					queueOffsetPersist(nextOffset, true)
+					queuePersist(nextOffset, true)
 					dispatch({ type: 'completed' })
 					return
 				}
 
-				if (controller.signal.aborted) {
+				if (controller.signal.aborted) return
+
+				// Before reconnecting, check if session already completed.
+				const polledStatus = await checkSessionCompleted(sessionId)
+				if (polledStatus) {
+					queuePersist(nextOffset, true)
+					if (polledStatus === 'error') {
+						dispatch({ type: 'error', error: 'Session failed' })
+					} else {
+						dispatch({ type: 'completed' })
+					}
 					return
 				}
 
-				// Server closed SSE for rotation — check if the session actually
-				// completed while we were disconnected. The durable stream may have
-				// the status:completed event, but the reconnect window is tight.
-				// Poll session status as a fallback to avoid hanging indefinitely.
-				try {
-					const sessionRes = await api.api['chat-sessions'][':id'].$get({
-						param: { id: sessionId },
-					})
-					if (sessionRes.ok) {
-						const session = await sessionRes.json()
-						if (session.status === 'completed') {
-							queueOffsetPersist(nextOffset, true)
-							dispatch({ type: 'completed' })
-							return
-						}
-						if (session.status === 'failed') {
-							queueOffsetPersist(nextOffset, true)
-							dispatch({ type: 'error', error: 'Session failed' })
-							return
-						}
-					}
-				} catch {
-					// Session check failed — continue with reconnect.
-				}
-
-				// Reconnect from where we left off.
 				currentOffset = nextOffset
 			}
 		}
@@ -571,12 +496,12 @@ export function useSessionStream(
 			if (typeof window !== 'undefined') {
 				window.removeEventListener('pagehide', handlePageHide)
 			}
-			if (offsetPersistTimerRef.current) {
-				clearTimeout(offsetPersistTimerRef.current)
-				offsetPersistTimerRef.current = null
+			if (persistTimerRef.current) {
+				clearTimeout(persistTimerRef.current)
+				persistTimerRef.current = null
 			}
 			if (pendingOffsetRef.current && pendingOffsetRef.current !== persistedOffsetRef.current) {
-				void flushPendingOffset(true)
+				void flushOffset(true)
 			}
 			controller.abort()
 		}
