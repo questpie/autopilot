@@ -535,7 +535,32 @@ export function useSessionStream(
 					return
 				}
 
-				// Server closed the SSE connection for rotation — reconnect from where we left off.
+				// Server closed SSE for rotation — check if the session actually
+				// completed while we were disconnected. The durable stream may have
+				// the status:completed event, but the reconnect window is tight.
+				// Poll session status as a fallback to avoid hanging indefinitely.
+				try {
+					const sessionRes = await api.api['chat-sessions'][':id'].$get({
+						param: { id: sessionId },
+					})
+					if (sessionRes.ok) {
+						const session = await sessionRes.json()
+						if (session.status === 'completed') {
+							queueOffsetPersist(nextOffset, true)
+							dispatch({ type: 'completed' })
+							return
+						}
+						if (session.status === 'failed') {
+							queueOffsetPersist(nextOffset, true)
+							dispatch({ type: 'error', error: 'Session failed' })
+							return
+						}
+					}
+				} catch {
+					// Session check failed — continue with reconnect.
+				}
+
+				// Reconnect from where we left off.
 				currentOffset = nextOffset
 			}
 		}
