@@ -1,6 +1,6 @@
 import { join } from 'node:path'
-import { MessageSchema } from '@questpie/autopilot-spec/schemas'
-import { and, desc, eq, max } from 'drizzle-orm'
+import { AttachmentSchema, MessageSchema } from '@questpie/autopilot-spec/schemas'
+import { and, desc, eq, max, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
 import { resolver, validator as zValidator } from 'hono-openapi'
@@ -17,11 +17,21 @@ import type { AppEnv } from '../app'
 const ONBOARDING_TRIGGER_MESSAGE = '__onboarding__'
 const ONBOARDING_DISPLAY_MESSAGE = "Let's set up my company."
 
-const CreateChatSessionSchema = z.object({
-	agentId: z.string().min(1),
-	message: z.string().min(1),
-	channelId: z.string().min(1).optional(),
+const ChatAttachmentSchema = AttachmentSchema.extend({
+	url: z.string().min(1),
 })
+
+const CreateChatSessionSchema = z
+	.object({
+		agentId: z.string().min(1),
+		message: z.string().trim().default(''),
+		attachments: z.array(ChatAttachmentSchema).default([]),
+		channelId: z.string().min(1).optional(),
+	})
+	.refine((value) => value.message.length > 0 || value.attachments.length > 0, {
+		message: 'Provide a message or at least one attachment',
+		path: ['message'],
+	})
 
 const ChatSessionListQuerySchema = z.object({
 	limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -37,9 +47,15 @@ const ChatSessionParamSchema = z.object({
 	id: z.string().min(1),
 })
 
-const ChatSessionMessageCreateSchema = z.object({
-	message: z.string().min(1),
-})
+const ChatSessionMessageCreateSchema = z
+	.object({
+		message: z.string().trim().default(''),
+		attachments: z.array(ChatAttachmentSchema).default([]),
+	})
+	.refine((value) => value.message.length > 0 || value.attachments.length > 0, {
+		message: 'Provide a message or at least one attachment',
+		path: ['message'],
+	})
 
 const ChatSessionSummarySchema = z.object({
 	id: z.string(),
@@ -62,12 +78,22 @@ const ChatSessionListSchema = z.object({
 
 const ChatSessionDetailSchema = ChatSessionSummarySchema.extend({
 	streamUrl: z.string(),
+	streamOffset: z.string(),
 })
 
 const ChatSessionStreamSchema = z.object({
 	sessionId: z.string(),
 	channelId: z.string().optional(),
 	streamUrl: z.string(),
+	streamOffset: z.string(),
+})
+
+const ChatSessionStreamOffsetSchema = z.object({
+	streamOffset: z.string(),
+})
+
+const ChatSessionStreamOffsetUpdateSchema = z.object({
+	offset: z.string().min(1),
 })
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -106,8 +132,75 @@ function getStreamUrl(sessionId: string): string {
 	return `/api/agent-sessions/${encodeURIComponent(sessionId)}/stream?live=sse`
 }
 
+function normalizeStreamOffset(offset: string | null | undefined): string {
+	if (!offset) {
+		return '-1'
+	}
+
+	const trimmed = offset.trim()
+	if (!trimmed || trimmed === '0') {
+		return '-1'
+	}
+
+	return trimmed
+}
+
+function buildStreamOffsetUpdateSql(normalizedOffset: string) {
+	const currentOffset = schema.agentSessions.stream_offset
+
+	if (normalizedOffset === '-1') {
+		return sql<string>`CASE
+			WHEN ${currentOffset} IS NULL OR trim(${currentOffset}) = '' THEN '-1'
+			ELSE ${currentOffset}
+		END`
+	}
+
+	// Durable Streams offsets are opaque tokens, but the current server
+	// implementation zero-pads them specifically so lexicographic ordering is
+	// the correct monotonic comparison for saved checkpoints.
+	return sql<string>`CASE
+		WHEN ${currentOffset} IS NULL
+			OR trim(${currentOffset}) = ''
+			OR ${currentOffset} = '-1'
+		THEN ${normalizedOffset}
+		WHEN ${currentOffset} < ${normalizedOffset}
+		THEN ${normalizedOffset}
+		ELSE ${currentOffset}
+	END`
+}
+
 function createMessageId(actorId: string): string {
 	return `msg-${Date.now().toString(36)}-${actorId}`
+}
+
+function normalizeAttachmentPath(value: string): string {
+	return value.replace(/\\/g, '/').replace(/^\/+/, '').trim()
+}
+
+function normalizeAttachments(
+	attachments: z.infer<typeof ChatAttachmentSchema>[],
+): z.infer<typeof ChatAttachmentSchema>[] {
+	return attachments
+		.map((attachment) => ({
+			...attachment,
+			url: normalizeAttachmentPath(attachment.url),
+		}))
+		.filter((attachment) => attachment.url.length > 0)
+}
+
+function buildSessionPreview(
+	message: string,
+	attachments: z.infer<typeof ChatAttachmentSchema>[],
+): string {
+	if (message.trim().length > 0) {
+		return message
+	}
+
+	if (attachments.length === 1) {
+		return `Attached ${attachments[0]!.filename}`
+	}
+
+	return `Attached ${attachments.length} files`
 }
 
 function createSessionSummaryQuery(db: AppEnv['Variables']['db']) {
@@ -133,6 +226,7 @@ function createSessionSummaryQuery(db: AppEnv['Variables']['db']) {
 			last_message_at: sessionLastMessage.last_message_at,
 			tool_calls: schema.agentSessions.tool_calls,
 			tokens_used: schema.agentSessions.tokens_used,
+			stream_offset: schema.agentSessions.stream_offset,
 		})
 		.from(schema.agentSessions)
 		.leftJoin(schema.channels, eq(schema.channels.id, schema.agentSessions.channel_id))
@@ -278,10 +372,16 @@ const chatSessions = new Hono<AppEnv>()
 
 			const sessionId = `session-${crypto.randomUUID()}`
 			const startedAt = new Date().toISOString()
+			const attachments = normalizeAttachments(body.attachments ?? [])
+			if (body.message.length === 0 && attachments.length === 0) {
+				return c.json({ error: 'Provide a message or at least one attachment' }, 400)
+			}
 			const triggerMessage =
 				body.message === ONBOARDING_TRIGGER_MESSAGE ? ONBOARDING_TRIGGER_MESSAGE : body.message
 			const displayMessage =
-				body.message === ONBOARDING_TRIGGER_MESSAGE ? ONBOARDING_DISPLAY_MESSAGE : body.message
+				body.message === ONBOARDING_TRIGGER_MESSAGE
+					? ONBOARDING_DISPLAY_MESSAGE
+					: buildSessionPreview(body.message, attachments)
 			const { streamManager } = container.resolve([streamManagerFactory])
 			let streamCreated = false
 
@@ -301,6 +401,7 @@ const chatSessions = new Hono<AppEnv>()
 					started_at: startedAt,
 					tool_calls: 0,
 					tokens_used: 0,
+					stream_offset: '-1',
 				})
 
 				await storage.sendMessage({
@@ -308,7 +409,7 @@ const chatSessions = new Hono<AppEnv>()
 					channel: channelId,
 					session_id: sessionId,
 					from: actor.id,
-					content: displayMessage,
+					content: body.message,
 					at: startedAt,
 					mentions: [],
 					references: [],
@@ -316,6 +417,7 @@ const chatSessions = new Hono<AppEnv>()
 					thread: null,
 					external: true,
 					metadata: { sessionId },
+					attachments,
 				})
 
 				if (body.message === ONBOARDING_TRIGGER_MESSAGE) {
@@ -347,6 +449,7 @@ const chatSessions = new Hono<AppEnv>()
 						sessionId,
 						channelId,
 						streamUrl: getStreamUrl(sessionId),
+						streamOffset: '-1',
 					},
 					200,
 				)
@@ -449,6 +552,68 @@ const chatSessions = new Hono<AppEnv>()
 				{
 					...session,
 					streamUrl: getStreamUrl(session.id),
+					streamOffset: normalizeStreamOffset(sessionLookup.row.stream_offset),
+				},
+				200,
+			)
+		},
+	)
+	.patch(
+		'/:id/stream-offset',
+		describeRoute({
+			tags: ['chat-sessions'],
+			description: 'Persist the last seen durable stream offset for the current session owner.',
+			responses: {
+				200: {
+					description: 'Stream offset persisted',
+					content: { 'application/json': { schema: resolver(ChatSessionStreamOffsetSchema) } },
+				},
+				403: { description: 'Access denied' },
+				404: { description: 'Chat session not found' },
+			},
+		}),
+		zValidator('param', ChatSessionParamSchema),
+		zValidator('json', ChatSessionStreamOffsetUpdateSchema),
+		async (c) => {
+			const actor = c.get('actor')
+			if (!actor || actor.type !== 'human') {
+				return c.json({ error: 'Only authenticated humans can update chat stream offsets' }, 403)
+			}
+
+			const db = c.get('db')
+			const { id } = c.req.valid('param')
+			const { offset } = c.req.valid('json')
+			const normalizedOffset = normalizeStreamOffset(offset)
+			const sessionLookup = await getOwnedSessionRow(db, id, actor.id)
+
+			if (sessionLookup.kind === 'forbidden') {
+				return c.json({ error: 'Access denied' }, 403)
+			}
+
+			if (sessionLookup.kind === 'missing') {
+				return c.json({ error: 'Chat session not found' }, 404)
+			}
+
+			await db
+				.update(schema.agentSessions)
+				.set({
+					stream_offset: buildStreamOffsetUpdateSql(normalizedOffset),
+				})
+				.where(
+					and(
+						eq(schema.agentSessions.id, id),
+						eq(schema.agentSessions.initiated_by, actor.id),
+					),
+				)
+
+			const updatedSessionLookup = await getOwnedSessionRow(db, id, actor.id)
+			if (updatedSessionLookup.kind !== 'owned') {
+				return c.json({ error: 'Chat session not found' }, 404)
+			}
+
+			return c.json(
+				{
+					streamOffset: normalizeStreamOffset(updatedSessionLookup.row.stream_offset),
 				},
 				200,
 			)
@@ -526,7 +691,7 @@ const chatSessions = new Hono<AppEnv>()
 			const storage = c.get('storage')
 			const db = c.get('db')
 			const { id } = c.req.valid('param')
-			const { message } = c.req.valid('json')
+			const { message, attachments: rawAttachments } = c.req.valid('json')
 			const sessionLookup = await getOwnedSessionRow(db, id, actor.id)
 
 			if (sessionLookup.kind === 'forbidden') {
@@ -557,6 +722,10 @@ const chatSessions = new Hono<AppEnv>()
 
 			const { streamManager } = container.resolve([streamManagerFactory])
 			const messageAt = new Date().toISOString()
+			const attachments = normalizeAttachments(rawAttachments ?? [])
+			if (message.length === 0 && attachments.length === 0) {
+				return c.json({ error: 'Provide a message or at least one attachment' }, 400)
+			}
 			let streamCreated = false
 
 			try {
@@ -585,6 +754,7 @@ const chatSessions = new Hono<AppEnv>()
 					thread: null,
 					external: true,
 					metadata: { sessionId: id },
+					attachments,
 				})
 
 				const company = await loadCompany(root)
@@ -612,6 +782,7 @@ const chatSessions = new Hono<AppEnv>()
 						sessionId: id,
 						channelId,
 						streamUrl: getStreamUrl(id),
+						streamOffset: normalizeStreamOffset(sessionRow.stream_offset),
 					},
 					200,
 				)

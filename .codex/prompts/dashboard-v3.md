@@ -10,6 +10,7 @@ Read first:
 - `local_specs/dashboard-v3/02-ai-chat.md`
 - `local_specs/dashboard-v3/02a-onboarding-to-chat.md`
 - `local_specs/dashboard-v3/02b-references-and-mentions.md`
+- `local_specs/dashboard-v3/02d-inference-adapters.md`
 - `local_specs/dashboard-v3/03-channels-and-dms.md`
 - `local_specs/dashboard-v3/03a-user-invites.md`
 - `local_specs/dashboard-v3/05-workflow.md`
@@ -29,6 +30,8 @@ Core rules:
 8. Do not reintroduce deferred features into MVP.
 9. If implementation changes the product mental model, update `local_specs/dashboard-v3/MENTAL-MODEL-CHANGES.md` in the same pass.
 10. In Phase 2 chat, session = conversation thread. New chat creates sessions; `/s/:sessionId` continues them. Remove conflicting channel-first or steer-style behavior instead of preserving it.
+11. Before starting Phase 3, complete the Phase 2 polish checkpoint: GPT-style composer, direct chat uploads, and DB-backed tool-call history for completed runs.
+12. AI runtime and provider code must stay behind the internal `TextInference` and `EmbeddingInference` contracts. Do not leak TanStack AI, OpenRouter, or other SDK/provider-specific types into product-facing code.
 
 Execution mode:
 - Implement one phase at a time.
@@ -40,10 +43,11 @@ Execution mode:
 Phase order:
 1. Phase 0+1: shell, routes, empty states
 2. Phase 2: AI chat + onboarding
-3. Phase 3: channels + DMs
-4. Phase 4: workflow + inbox + settings
-5. Phase 5: FS
-6. Phase 6: polish
+3. Phase 2 polish: composer, uploads, DB-backed tool-call history
+4. Phase 3: channels + DMs
+5. Phase 4: workflow + inbox + settings
+6. Phase 5: FS
+7. Phase 6: polish
 
 Output style:
 - Start by summarizing what you will inspect and implement in the current phase.

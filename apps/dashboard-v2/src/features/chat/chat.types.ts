@@ -5,3 +5,5 @@ export type Message = InferResponseType<
 	(typeof api.api)['chat-sessions'][':id']['messages']['$get'],
 	200
 >[number]
+
+export type MessageAttachment = NonNullable<Message['attachments']>[number]

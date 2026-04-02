@@ -1,9 +1,9 @@
 import { QUESTPIESpinner } from '@/components/brand'
 import { PageError } from '@/components/feedback'
 import { AppShell } from '@/components/layouts/app-shell'
+import { Toaster } from '@/components/ui/sonner'
 import { checkAuthServer } from '@/lib/auth.fn'
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { Toaster } from 'sonner'
 
 export const Route = createFileRoute('/_app')({
 	beforeLoad: async ({ location }) => {
@@ -55,8 +55,6 @@ function AppLayout() {
 				gap={8}
 				visibleToasts={5}
 				toastOptions={{
-					className:
-						'rounded-none border border-border bg-card text-card-foreground font-heading text-xs',
 					duration: 4000,
 				}}
 			/>

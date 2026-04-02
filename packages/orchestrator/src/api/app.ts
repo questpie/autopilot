@@ -114,7 +114,7 @@ export function createApp(config: AppConfig) {
 	// ── 1.5. Security headers ────────────────────────────────────────────
 	app.use('*', securityHeaders())
 
-	// ── 1.6. Body size limit (1 MB default; 10 MB for uploads; none for artifact proxy) ─
+	// ── 1.6. Body size limit (1 MB default; 50 MB for uploads; none for artifact proxy) ─
 	// Use a single middleware that applies different limits based on path.
 	app.use('*', async (c, next) => {
 		const path = new URL(c.req.url).pathname
@@ -122,7 +122,7 @@ export function createApp(config: AppConfig) {
 		if (path.startsWith('/artifacts/')) return next()
 		// The upload endpoint is POST /api/upload
 		const isUpload = path.startsWith('/api/upload')
-		const limit = isUpload ? 10 * 1024 * 1024 : 1 * 1024 * 1024
+		const limit = isUpload ? 50 * 1024 * 1024 : 1 * 1024 * 1024
 		return bodyLimit({
 			maxSize: limit,
 			onError: (c) => c.json({ error: 'request body too large' }, 413),

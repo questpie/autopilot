@@ -68,8 +68,8 @@ export function NewChatView(): React.JSX.Element {
 					}
 				/>
 				<MessageComposer
-					onSend={async (message, agentId) => {
-						const session = await createSession.mutateAsync({ agentId, message })
+					onSend={async ({ message, agentId, attachments }) => {
+						const session = await createSession.mutateAsync({ agentId, message, attachments })
 						await navigate({
 							to: '/s/$sessionId',
 							params: { sessionId: session.sessionId },

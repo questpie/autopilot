@@ -315,7 +315,7 @@
 		"error_network": "Could not reach the AI provider. Check your network connection.",
 		"error_provider": "The AI provider returned an error. The service may be temporarily unavailable.",
 		"error_budget": "Token or session budget has been exceeded.",
-		"error_unknown": "An unexpected error occurred.",
+		"error_unknown": "The run stopped before the assistant could finish.",
 		"error_retry": "Retry"
 	},
 	"files": {

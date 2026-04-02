@@ -140,6 +140,7 @@ export const agentSessions = sqliteTable(
 		ended_at: text('ended_at'),
 		tool_calls: integer('tool_calls').default(0),
 		tokens_used: integer('tokens_used').default(0),
+		stream_offset: text('stream_offset').default('-1'),
 		error: text('error'),
 		log_path: text('log_path'),
 	},

@@ -3,16 +3,19 @@ import { queryKeys } from '@/lib/query-keys'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { InferResponseType } from 'hono/client'
 import type { ChatSessionDetail } from './chat.queries'
+import type { MessageAttachment } from './chat.types'
 
 export interface CreateChatSessionInput {
 	agentId: string
 	message: string
+	attachments?: MessageAttachment[]
 	channelId?: string
 }
 
 export interface ContinueChatSessionInput {
 	sessionId: string
 	message: string
+	attachments?: MessageAttachment[]
 }
 
 type CreateChatSessionResult = InferResponseType<(typeof api.api)['chat-sessions']['$post'], 200>
@@ -59,7 +62,7 @@ export function useContinueChatSession() {
 		): Promise<ContinueChatSessionResult> => {
 			const res = await api.api['chat-sessions'][':id'].messages.$post({
 				param: { id: data.sessionId },
-				json: { message: data.message },
+				json: { message: data.message, attachments: data.attachments },
 			})
 			if (!res.ok) {
 				const body = await res.json().catch(() => ({}))
@@ -77,6 +80,7 @@ export function useContinueChatSession() {
 								status: 'running',
 								endedAt: null,
 								streamUrl: data.streamUrl,
+								streamOffset: data.streamOffset,
 							}
 						: previous,
 			)

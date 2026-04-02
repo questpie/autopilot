@@ -1,4 +1,4 @@
-import type { Agent, Task } from '@questpie/autopilot-spec'
+import { AttachmentSchema, type Agent, type Task } from '@questpie/autopilot-spec'
 import { createAIProviderForCompany } from '../ai'
 import { companyRootFactory, container } from '../container'
 import { assembleContext } from '../context/assembler'
@@ -61,11 +61,29 @@ interface SessionTranscriptMessage {
 	from: string
 	content: string
 	at: string
+	attachments: Array<{
+		id: string
+		filename: string
+		size: number
+		mime_type: string
+		url: string
+	}>
 }
 
 interface ConversationPromptContext {
 	summary: string | null
 	tailMessages: AgentChatMessage[]
+}
+
+interface PersistedToolCallState {
+	id: string
+	tool: string
+	toolCallId?: string
+	params?: Record<string, unknown>
+	status: 'running' | 'completed' | 'error'
+	result?: string
+	startedAt: number
+	completedAt?: number
 }
 
 /**
@@ -123,7 +141,7 @@ async function readSessionTranscript(sessionId: string): Promise<SessionTranscri
 	const raw = await getRawClient()
 	const result = await raw.execute({
 		sql: `
-			SELECT id, from_id, content, created_at
+			SELECT id, from_id, content, created_at, attachments
 			FROM messages
 			WHERE session_id = ?
 			ORDER BY created_at ASC
@@ -136,6 +154,7 @@ async function readSessionTranscript(sessionId: string): Promise<SessionTranscri
 		from: String(row.from_id),
 		content: String(row.content),
 		at: String(row.created_at),
+		attachments: parseTranscriptAttachments(row.attachments),
 	}))
 }
 
@@ -155,37 +174,49 @@ function getUnsummarizedTranscript(
 	return transcript.slice(boundaryIndex + 1)
 }
 
-function replaceLatestUserMessage(
-	messages: AgentChatMessage[],
-	currentInput?: string,
-): AgentChatMessage[] {
-	if (!currentInput) {
-		return messages
+function parseTranscriptAttachments(value: unknown): SessionTranscriptMessage['attachments'] {
+	if (typeof value !== 'string' || value.trim().length === 0) {
+		return []
 	}
 
-	const nextMessages = [...messages]
-	for (let index = nextMessages.length - 1; index >= 0; index -= 1) {
-		if (nextMessages[index]?.role === 'user') {
-			nextMessages[index] = {
-				role: 'user',
-				content: currentInput,
-			}
-			return nextMessages
-		}
+	try {
+		const parsed = JSON.parse(value)
+		return AttachmentSchema.array().parse(parsed)
+	} catch {
+		return []
 	}
-
-	nextMessages.push({ role: 'user', content: currentInput })
-	return nextMessages
 }
 
-function formatTranscriptChunk(
-	messages: SessionTranscriptMessage[],
-	agentId: string,
-): string {
+function normalizeAttachmentPromptPath(value: string): string {
+	return value.replace(/\\/g, '/').replace(/^\/+/, '').trim()
+}
+
+function formatTranscriptMessageContent(message: SessionTranscriptMessage): string {
+	if (message.attachments.length === 0) {
+		return message.content
+	}
+
+	const attachmentLines = message.attachments
+		.map((attachment) => {
+			const path = normalizeAttachmentPromptPath(attachment.url)
+			if (!path) return null
+			return `- ${attachment.filename} (${path})`
+		})
+		.filter((line): line is string => !!line)
+
+	if (attachmentLines.length === 0) {
+		return message.content
+	}
+
+	const attachmentBlock = `Attached files (use read_file with these relative paths if needed):\n${attachmentLines.join('\n')}`
+	return [message.content, attachmentBlock].filter(Boolean).join('\n\n')
+}
+
+function formatTranscriptChunk(messages: SessionTranscriptMessage[], agentId: string): string {
 	return messages
 		.map((message) => {
 			const role = message.from === agentId ? 'Assistant' : 'User'
-			return `[${message.at}] ${role}: ${message.content}`
+			return `[${message.at}] ${role}: ${formatTranscriptMessageContent(message)}`
 		})
 		.join('\n\n')
 }
@@ -193,18 +224,12 @@ function formatTranscriptChunk(
 async function buildConversationPromptContext(
 	sessionId: string,
 	agentId: string,
-	currentInput?: string,
 ): Promise<ConversationPromptContext | null> {
 	const promptState = await readSessionPromptState(sessionId)
 	const transcript = await readSessionTranscript(sessionId)
 
 	if (transcript.length === 0) {
-		return currentInput
-			? {
-					summary: promptState.summary,
-					tailMessages: [{ role: 'user', content: currentInput }],
-				}
-			: null
+		return null
 	}
 
 	const unsummarizedTranscript = getUnsummarizedTranscript(
@@ -223,20 +248,102 @@ async function buildConversationPromptContext(
 		)
 	}
 
-	const tailMessages = replaceLatestUserMessage(
-		unsummarizedTranscript
-			.slice(-SESSION_PROMPT_RAW_TAIL_MESSAGES)
-			.map<AgentChatMessage>((message) => ({
-				role: message.from === agentId ? 'assistant' : 'user',
-				content: message.content,
-			})),
-		currentInput,
-	)
+	const tailMessages = unsummarizedTranscript
+		.slice(-SESSION_PROMPT_RAW_TAIL_MESSAGES)
+		.map<AgentChatMessage>((message) => ({
+			role: message.from === agentId ? 'assistant' : 'user',
+			content: formatTranscriptMessageContent(message),
+		}))
 
 	return {
 		summary: promptState.summary,
 		tailMessages,
 	}
+}
+
+function upsertPersistedToolCall(
+	toolCalls: PersistedToolCallState[],
+	event: AgentEvent,
+): PersistedToolCallState[] {
+	if (event.type === 'tool_call') {
+		return [
+			...toolCalls,
+			{
+				id:
+					event.toolCallId ??
+					`tool-${toolCalls.length}-${Date.now()}-${event.tool ?? 'unknown'}`,
+				tool: event.tool ?? 'unknown',
+				toolCallId: event.toolCallId,
+				params: event.params,
+				status: 'running',
+				startedAt: Date.now(),
+			},
+		]
+	}
+
+	if (event.type !== 'tool_result') {
+		return toolCalls
+	}
+
+	let matched = false
+	const completedAt = Date.now()
+	const nextStatus: PersistedToolCallState['status'] =
+		event.tool === 'error' ? 'error' : 'completed'
+	const nextToolCalls = toolCalls.map((toolCall) => {
+		if (
+			(event.toolCallId && toolCall.toolCallId === event.toolCallId) ||
+			(!event.toolCallId && toolCall.tool === event.tool && toolCall.status === 'running')
+		) {
+			matched = true
+			return {
+				...toolCall,
+				status: nextStatus,
+				result: event.content ?? '',
+				completedAt,
+			}
+		}
+
+		return toolCall
+	})
+
+	if (matched) {
+		return nextToolCalls
+	}
+
+	return [
+		...nextToolCalls,
+		{
+			id: event.toolCallId ?? `tool-${nextToolCalls.length}-${completedAt}-${event.tool ?? 'unknown'}`,
+			tool: event.tool ?? 'unknown',
+			toolCallId: event.toolCallId,
+			params: event.params,
+			status: nextStatus,
+			result: event.content ?? '',
+			startedAt: completedAt,
+			completedAt,
+		},
+	]
+}
+
+function finalizePersistedToolCalls(
+	toolCalls: PersistedToolCallState[],
+	runError?: string,
+): PersistedToolCallState[] {
+	if (!runError) {
+		return toolCalls
+	}
+
+	const completedAt = Date.now()
+	return toolCalls.map((toolCall): PersistedToolCallState =>
+		toolCall.status === 'running'
+			? {
+					...toolCall,
+					status: 'error',
+					result: toolCall.result ?? runError,
+					completedAt,
+				}
+			: toolCall,
+	)
 }
 
 async function updateSessionRecord(
@@ -375,6 +482,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 			const error = `Plan limit: max ${limits.maxAgents} concurrent agents`
 			if (hasPrecreatedSession) {
 				streamManager.emit(sessionId, { at: Date.now(), type: 'error', content: error, errorCode: 'budget' })
+				streamManager.emit(sessionId, { at: Date.now(), type: 'status', content: 'error' })
 				streamManager.endStream(sessionId)
 				await updateSessionRecord(sessionId, {
 					status: 'failed',
@@ -403,6 +511,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 				const error = `Plan limit: daily token limit (${limits.maxTokensDay}) reached`
 				if (hasPrecreatedSession) {
 					streamManager.emit(sessionId, { at: Date.now(), type: 'error', content: error, errorCode: 'budget' })
+					streamManager.emit(sessionId, { at: Date.now(), type: 'status', content: 'error' })
 					streamManager.endStream(sessionId)
 					await updateSessionRecord(sessionId, {
 						status: 'failed',
@@ -483,14 +592,17 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	const toolContext: ToolContext = { companyRoot, agentId: agent.id, storage, eventBus }
 
 	// 4. Build prompt
-	const prompt = message
-		? message
-		: task
-			? `Work on task: ${task.title}\n\nDescription: ${task.description || 'No description'}\nPriority: ${task.priority}\nStatus: ${task.status}\n\nDo your work using the available tools. When done, update the task status.`
-			: `You have been triggered by: ${trigger.type}. Check your current tasks and act accordingly.`
+	const prompt =
+		mode === 'chat'
+			? message || 'Respond to the latest user turn in the conversation.'
+			: message
+				? message
+				: task
+					? `Work on task: ${task.title}\n\nDescription: ${task.description || 'No description'}\nPriority: ${task.priority}\nStatus: ${task.status}\n\nDo your work using the available tools. When done, update the task status.`
+					: `You have been triggered by: ${trigger.type}. Check your current tasks and act accordingly.`
 	const conversationPromptContext =
 		mode === 'chat'
-			? await buildConversationPromptContext(sessionId, agent.id, message)
+			? await buildConversationPromptContext(sessionId, agent.id)
 			: null
 
 	// D10: In chat mode, add instruction to respond directly via text (not message tool)
@@ -533,6 +645,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	streamManager.emit(sessionId, { at: Date.now(), type: 'status', content: 'started' })
 	let streamedText = ''
 	let sawTextDelta = false
+	let persistedToolCalls: PersistedToolCallState[] = []
 	const onEvent = (event: AgentEvent) => {
 		if (event.type === 'text_delta') {
 			sawTextDelta = true
@@ -542,6 +655,8 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		if (event.type === 'text') {
 			streamedText = event.content ?? streamedText
 		}
+
+		persistedToolCalls = upsertPersistedToolCall(persistedToolCalls, event)
 
 		streamManager.emit(sessionId, {
 			at: Date.now(),
@@ -578,7 +693,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	const estimatedTokens = Math.ceil((systemPrompt.length + tailChars + prompt.length) / 3.5)
 	logger.info('agent', `[ctx:${sessionId}] system=${systemPrompt.length}ch messages=${tailMsgs.length}(${tailChars}ch) prompt=${prompt.length}ch ~${estimatedTokens}tok model=${agent.model || DEFAULT_MODEL}`)
 
-	let sessionResult: { result?: string; toolCalls: number; error?: string }
+	let sessionResult: { result?: string; toolCalls: number; error?: string } | null = null
 
 	try {
 		sessionResult = await aiProvider.spawn(
@@ -613,51 +728,67 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		sessionResult = { toolCalls: 0, error }
 		streamManager.emit(sessionId, { at: Date.now(), type: 'error', content: error, errorCode: 'unknown' })
 	} finally {
+		const finalizedSessionResult = sessionResult ?? {
+			toolCalls: 0,
+			error: 'Session aborted before completion',
+		}
+		persistedToolCalls = finalizePersistedToolCalls(
+			persistedToolCalls,
+			finalizedSessionResult.error,
+		)
 		// D9: Emit typing stopped
 		eventBus.emit({ type: 'agent_typing', agentId: agent.id, status: 'stopped', sessionId })
 		// Signal stream consumers that this run is done before tearing down the in-memory stream.
 		streamManager.emit(sessionId, {
 			at: Date.now(),
 			type: 'status',
-			content: sessionResult!.error ? 'error' : 'completed',
+			content: finalizedSessionResult.error ? 'error' : 'completed',
 		})
 		streamManager.endStream(sessionId)
 
 		// H1: Update session record with final status
 		await updateSessionRecord(sessionId, {
-			status: sessionResult!.error ? 'failed' : 'completed',
+			status: finalizedSessionResult.error ? 'failed' : 'completed',
 			endedAt: new Date().toISOString(),
-			toolCallsDelta: sessionResult!.toolCalls,
-			error: sessionResult!.error ?? null,
+			toolCallsDelta: finalizedSessionResult.toolCalls,
+			error: finalizedSessionResult.error ?? null,
 		})
 
 		await storage.appendActivity({
 			at: new Date().toISOString(),
 			agent: agent.id,
 			type: 'session_end',
-			summary: sessionResult!.error
-				? `Session failed: ${sessionResult!.error}`
-				: `Session completed (${sessionResult!.toolCalls} tool calls)`,
-			details: { sessionId, ...sessionResult! },
+			summary: finalizedSessionResult.error
+				? `Session failed: ${finalizedSessionResult.error}`
+				: `Session completed (${finalizedSessionResult.toolCalls} tool calls)`,
+			details: { sessionId, ...finalizedSessionResult },
 		})
 		eventBus.emit({ type: 'agent_session', agentId: agent.id, status: 'ended', sessionId })
 
 		// D12: Save final text as DM message on chat session end
-		if (mode === 'chat' && channelId && sessionResult!.result) {
+		if (
+			mode === 'chat' &&
+			channelId &&
+			(finalizedSessionResult.result || persistedToolCalls.length > 0)
+		) {
 			try {
 				await storage.sendMessage({
 					id: `msg-${Date.now().toString(36)}-${agent.id}`,
 					channel: channelId,
 					session_id: sessionId,
 					from: agent.id,
-					content: sessionResult!.result,
+					content: finalizedSessionResult.result ?? '',
 					at: new Date().toISOString(),
 					mentions: [],
 					references: [],
 					reactions: [],
 					thread: null,
 					external: false,
-					metadata: { sessionId },
+					metadata: {
+						sessionId,
+						toolCalls: persistedToolCalls,
+						error: finalizedSessionResult.error ?? null,
+					},
 				})
 			} catch (err) {
 				logger.warn('agent', `failed to save chat response for ${agent.id}/${sessionId}`, {
@@ -687,5 +818,11 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		}
 	}
 
-	return { sessionId, ...sessionResult! }
+	return {
+		sessionId,
+		...(sessionResult ?? {
+			toolCalls: 0,
+			error: 'Session aborted before completion',
+		}),
+	}
 }
