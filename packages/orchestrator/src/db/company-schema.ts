@@ -69,6 +69,8 @@ export const runs = sqliteTable(
 		resumed_from_run_id: text('resumed_from_run_id'), // previous run in continuation chain
 		preferred_worker_id: text('preferred_worker_id'), // route continuation to specific worker
 		resumable: integer('resumable', { mode: 'boolean' }).default(false),
+		// Execution targeting — JSON-serialized ExecutionTarget, null = no constraints
+		targeting: text('targeting'),
 	},
 	(table) => [
 		index('idx_runs_status').on(table.status),

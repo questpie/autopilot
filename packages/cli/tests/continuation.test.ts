@@ -93,7 +93,8 @@ describe('Continuation flow', () => {
 				tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0,
 				error TEXT, started_at TEXT, ended_at TEXT, created_at TEXT NOT NULL,
 				runtime_session_ref TEXT, resumed_from_run_id TEXT,
-				preferred_worker_id TEXT, resumable INTEGER DEFAULT 0
+				preferred_worker_id TEXT, resumable INTEGER DEFAULT 0,
+				targeting TEXT
 			)
 		`)
 		await dbResult.raw.execute(`

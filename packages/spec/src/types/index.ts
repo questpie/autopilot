@@ -14,6 +14,7 @@ export type AgentTrigger = z.infer<typeof schemas.AgentTriggerSchema>
 // Workflows
 export type Workflow = z.infer<typeof schemas.WorkflowSchema>
 export type WorkflowStep = z.infer<typeof schemas.WorkflowStepSchema>
+export type ExecutionTarget = z.infer<typeof schemas.ExecutionTargetSchema>
 
 // Worker Events
 export type WorkerEventType = z.infer<typeof schemas.WorkerEventTypeSchema>
@@ -21,6 +22,7 @@ export type WorkerEvent = z.infer<typeof schemas.WorkerEventSchema>
 export type RunCompletion = z.infer<typeof schemas.RunCompletionSchema>
 
 // Worker API Contracts
+export type WorkerCapability = z.infer<typeof schemas.WorkerCapabilitySchema>
 export type ClaimedRun = z.infer<typeof schemas.ClaimedRunSchema>
 export type WorkerClaimResponse = z.infer<typeof schemas.WorkerClaimResponseSchema>
 export type WorkerRegisterResponse = z.infer<typeof schemas.WorkerRegisterResponseSchema>

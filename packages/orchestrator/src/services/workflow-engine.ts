@@ -1,4 +1,4 @@
-import type { Agent, Workflow, WorkflowStep, Company } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, WorkflowStep, Company, ExecutionTarget } from '@questpie/autopilot-spec'
 import type { TaskService, TaskRow } from './tasks'
 import type { RunService } from './runs'
 import { eventBus } from '../events/event-bus'
@@ -129,11 +129,15 @@ export class WorkflowEngine {
 			await this.taskService.update(taskId, updates)
 		}
 
-		// Re-fetch task with updates applied, then process first workflow step
+		// Process first workflow step (re-fetch once to pick up updates)
 		const updated = (await this.taskService.get(taskId))!
 		const runId = await this.processCurrentStep(updated, actions)
 
-		return { task: (await this.taskService.get(taskId))!, runId, actions }
+		// Re-fetch only if processCurrentStep may have changed the task
+		const final = runId !== null || actions.includes('done') || actions.includes('approval_needed')
+			? (await this.taskService.get(taskId))!
+			: updated
+		return { task: final, runId, actions }
 	}
 
 	/**
@@ -157,7 +161,7 @@ export class WorkflowEngine {
 
 		const actions: string[] = ['advanced']
 
-		// Update workflow step (and ownership if agent step)
+		// Update workflow step (and ownership if agent step) in one write
 		const stepUpdates: Record<string, string> = { workflow_step: nextStep.id }
 		if (nextStep.type === 'agent' && nextStep.agent_id) {
 			stepUpdates.assigned_to = nextStep.agent_id
@@ -165,11 +169,13 @@ export class WorkflowEngine {
 		}
 		await this.taskService.update(taskId, stepUpdates)
 
-		// Process the new step
 		const updated = (await this.taskService.get(taskId))!
 		const runId = await this.processCurrentStep(updated, actions)
 
-		return { task: (await this.taskService.get(taskId))!, runId, actions }
+		const final = runId !== null || actions.includes('done') || actions.includes('approval_needed')
+			? (await this.taskService.get(taskId))!
+			: updated
+		return { task: final, runId, actions }
 	}
 
 	/**
@@ -223,15 +229,20 @@ export class WorkflowEngine {
 				// Update task to active
 				await this.taskService.update(task.id, { status: 'active' })
 
+				// Resolve execution targeting from step hints + defaults
+				const targeting = this.resolveTargeting(step)
+				const runtime = step.targeting?.required_runtime ?? this.defaultRuntime
+
 				// Create a pending run
 				const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 				await this.runService.create({
 					id: runId,
 					agent_id: agentId,
 					task_id: task.id,
-					runtime: this.defaultRuntime,
+					runtime,
 					initiated_by: 'workflow-engine',
 					instructions: step.instructions,
+					targeting,
 				})
 				actions.push('run_created')
 
@@ -273,6 +284,30 @@ export class WorkflowEngine {
 			default:
 				return null
 		}
+	}
+
+	/**
+	 * Resolve execution targeting from a workflow step's hints.
+	 * Returns JSON string or undefined if no meaningful constraints.
+	 */
+	private resolveTargeting(step: WorkflowStep): string | undefined {
+		if (!step.targeting) return undefined
+
+		const target: ExecutionTarget = {
+			preferred_worker_id: step.targeting.preferred_worker_id,
+			required_runtime: step.targeting.required_runtime,
+			required_capabilities: step.targeting.required_capabilities ?? [],
+			allow_fallback: step.targeting.allow_fallback ?? true,
+		}
+
+		// Only store if there are actual constraints
+		const hasConstraints =
+			target.preferred_worker_id ||
+			target.required_runtime ||
+			target.required_capabilities.length > 0
+
+		if (!hasConstraints) return undefined
+		return JSON.stringify(target)
 	}
 
 	/**

@@ -59,10 +59,12 @@ const runs = new Hono<AppEnv>()
 		const actor = c.get('actor')
 		const body = c.req.valid('json')
 		const id = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+		const { targeting, ...rest } = body
 		const run = await runService.create({
 			id,
-			...body,
+			...rest,
 			initiated_by: body.initiated_by ?? actor?.id ?? 'system',
+			targeting: targeting ? JSON.stringify(targeting) : undefined,
 		})
 		if (!run) return c.json({ error: 'failed to create run' }, 500)
 

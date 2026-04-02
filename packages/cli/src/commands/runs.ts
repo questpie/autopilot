@@ -105,6 +105,7 @@ runsCmd.addCommand(
 					resumed_from_run_id?: string | null
 					preferred_worker_id?: string | null
 					runtime_session_ref?: string | null
+					targeting?: string | null
 				}
 
 				console.log(section(`Run ${run.id}`))
@@ -137,6 +138,23 @@ runsCmd.addCommand(
 				}
 				if (run.runtime_session_ref) {
 					console.log(`  ${dim('Session ref:')} ${run.runtime_session_ref}`)
+				}
+
+				// Execution targeting
+				if (run.targeting) {
+					try {
+						const t = JSON.parse(run.targeting) as Record<string, unknown>
+						console.log('')
+						console.log(dim('Targeting:'))
+						if (t.required_runtime) console.log(`  ${dim('Runtime:')} ${t.required_runtime}`)
+						if (t.preferred_worker_id) console.log(`  ${dim('Worker:')} ${t.preferred_worker_id}`)
+						if (Array.isArray(t.required_capabilities) && t.required_capabilities.length > 0) {
+							console.log(`  ${dim('Capabilities:')} ${t.required_capabilities.join(', ')}`)
+						}
+						console.log(`  ${dim('Fallback:')} ${t.allow_fallback !== false ? 'yes' : 'no'}`)
+					} catch {
+						// ignore parse errors
+					}
 				}
 
 				if (run.summary) {

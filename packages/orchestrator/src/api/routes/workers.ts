@@ -87,7 +87,13 @@ const workers = new Hono<AppEnv>()
 			return c.json({ run: null, lease_id: null }, 200)
 		}
 
-		const run = await runService.claim(workerId, body.runtime)
+		// Look up worker capabilities for targeting-aware claim
+		const workerRecord = await workerService.get(workerId)
+		const workerCaps = workerRecord?.capabilities
+			? JSON.parse(workerRecord.capabilities)
+			: []
+
+		const run = await runService.claim(workerId, body.runtime, workerCaps)
 		if (!run) return c.json({ run: null, lease_id: null }, 200)
 
 		// Create a lease for the claimed run
@@ -125,6 +131,7 @@ const workers = new Hono<AppEnv>()
 					instructions: run.instructions ?? null,
 					runtime_session_ref: run.runtime_session_ref ?? null,
 					resumed_from_run_id: run.resumed_from_run_id ?? null,
+					targeting: run.targeting ? JSON.parse(run.targeting) : null,
 				},
 				lease_id: leaseId,
 			},

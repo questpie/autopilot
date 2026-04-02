@@ -1,5 +1,5 @@
 export { AgentSchema, FsScopeSchema, AgentTriggerSchema } from './agent'
-export { WorkflowSchema, WorkflowStepSchema } from './workflow'
+export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema } from './workflow'
 export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema } from './company'
 export { WorkerEventTypeSchema, WorkerEventSchema, RunCompletionSchema } from './worker-event'
 export { ScheduleSchema, SchedulesFileSchema } from './schedule'
@@ -11,6 +11,7 @@ export {
 } from './human'
 export {
 	WorkerRegisterRequestSchema,
+	WorkerCapabilitySchema,
 	WorkerRegisterResponseSchema,
 	WorkerHeartbeatRequestSchema,
 	WorkerClaimRequestSchema,

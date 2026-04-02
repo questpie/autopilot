@@ -69,7 +69,7 @@ export async function startServer(options?: StartServerOptions) {
 	// ── 5. Create auth ───────────────────────────────────────────────────
 	const auth = await createAuth(companyDb, companyRoot)
 
-	// ── 6. Create services ───────────────────────────────────────────────
+	// ── 6. Create services + workflow engine ─────────────────────────────
 	const taskService = new TaskService(companyDb)
 	const runService = new RunService(companyDb)
 	const workerService = new WorkerService(companyDb)
@@ -91,7 +91,7 @@ export async function startServer(options?: StartServerOptions) {
 		workflowEngine,
 	}
 
-	// ── 6. Create Hono app ───────────────────────────────────────────────
+	// ── 7. Create Hono app ───────────────────────────────────────────────
 	const app = createApp({
 		companyRoot,
 		db: companyDb,
@@ -101,7 +101,7 @@ export async function startServer(options?: StartServerOptions) {
 		allowLocalDevBypass: options?.allowLocalDevBypass,
 	})
 
-	// ── 7. Start HTTP server ─────────────────────────────────────────────
+	// ── 8. Start HTTP server ─────────────────────────────────────────────
 	const server = Bun.serve({
 		fetch: app.fetch,
 		port,

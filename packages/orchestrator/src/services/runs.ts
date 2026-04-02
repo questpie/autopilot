@@ -1,4 +1,5 @@
 import { eq, and } from 'drizzle-orm'
+import type { WorkerCapability } from '@questpie/autopilot-spec'
 import { runs, runEvents } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
@@ -18,6 +19,7 @@ export class RunService {
 		resumed_from_run_id?: string
 		runtime_session_ref?: string
 		preferred_worker_id?: string
+		targeting?: string
 	}): Promise<RunRow | undefined> {
 		const now = new Date().toISOString()
 		await this.db.insert(runs).values({
@@ -51,8 +53,12 @@ export class RunService {
 			.all()
 	}
 
-	/** Claim the oldest pending run for a worker. Respects preferred_worker_id for continuation runs. */
-	async claim(workerId: string, runtime?: string): Promise<RunRow | undefined> {
+	/** Claim the oldest pending run for a worker. Filters by targeting constraints. */
+	async claim(
+		workerId: string,
+		runtime?: string,
+		workerCapabilities?: WorkerCapability[],
+	): Promise<RunRow | undefined> {
 		const conditions = [eq(runs.status, 'pending')]
 		if (runtime) conditions.push(eq(runs.runtime, runtime))
 
@@ -64,15 +70,14 @@ export class RunService {
 
 		if (pending.length === 0) return undefined
 
-		// Find a run this worker can claim:
-		// 1. Continuation runs with preferred_worker_id only go to that worker
-		// 2. Regular runs go to any worker
-		const claimable = pending.find((r) => {
-			if (r.preferred_worker_id) {
-				return r.preferred_worker_id === workerId
-			}
-			return true
-		})
+		// Build a flat set of tags this worker advertises (runtimes + models)
+		const workerTags = new Set<string>()
+		for (const cap of workerCapabilities ?? []) {
+			workerTags.add(cap.runtime)
+			for (const m of cap.models) workerTags.add(m)
+		}
+
+		const claimable = pending.find((r) => isEligible(r, workerId, workerTags))
 
 		if (!claimable) return undefined
 
@@ -183,9 +188,60 @@ export class RunService {
 			resumed_from_run_id: originalRunId,
 			runtime_session_ref: original.runtime_session_ref,
 			preferred_worker_id: original.worker_id,
+			targeting: original.targeting,
 			created_at: now,
 		})
 
 		return this.get(id)
 	}
+}
+
+// ─── Targeting ──────────────────────────────────────────────────────────────
+
+/** Check if a worker is eligible to claim a run based on continuation and targeting constraints. */
+function isEligible(run: RunRow, workerId: string, workerTags: Set<string>): boolean {
+	// Continuation runs with preferred_worker_id only go to that worker
+	if (run.preferred_worker_id) {
+		if (run.preferred_worker_id !== workerId) {
+			logSkip(run.id, workerId, `continuation pinned to ${run.preferred_worker_id}`)
+			return false
+		}
+		return true
+	}
+
+	if (!run.targeting) return true
+
+	try {
+		const t = JSON.parse(run.targeting) as {
+			preferred_worker_id?: string
+			required_runtime?: string
+			required_capabilities?: string[]
+			allow_fallback?: boolean
+		}
+		const allowFallback = t.allow_fallback !== false
+
+		if (t.preferred_worker_id && t.preferred_worker_id !== workerId) {
+			logSkip(run.id, workerId, `targeting prefers ${t.preferred_worker_id}`)
+			return false
+		}
+		if (t.required_runtime && !workerTags.has(t.required_runtime) && !allowFallback) {
+			logSkip(run.id, workerId, `requires runtime "${t.required_runtime}", worker has [${[...workerTags]}]`)
+			return false
+		}
+		if (t.required_capabilities?.length) {
+			const missing = t.required_capabilities.filter((tag) => !workerTags.has(tag))
+			if (missing.length > 0 && !allowFallback) {
+				logSkip(run.id, workerId, `missing capabilities: [${missing}]`)
+				return false
+			}
+		}
+	} catch {
+		// Malformed targeting — treat as unconstrained
+	}
+
+	return true
+}
+
+function logSkip(runId: string, workerId: string, reason: string): void {
+	console.log(`[targeting] skip run=${runId} worker=${workerId}: ${reason}`)
 }

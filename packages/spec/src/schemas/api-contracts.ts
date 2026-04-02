@@ -1,4 +1,14 @@
 import { z } from 'zod'
+import { ExecutionTargetSchema } from './workflow'
+
+// ─── Shared ────────────────────────────────────────────────────────────────
+
+/** A single runtime capability a worker advertises. */
+export const WorkerCapabilitySchema = z.object({
+	runtime: z.string(),
+	models: z.array(z.string()).default([]),
+	maxConcurrent: z.number().int().default(1),
+})
 
 // ─── Worker Registration ────────────────────────────────────────────────────
 
@@ -6,15 +16,7 @@ export const WorkerRegisterRequestSchema = z.object({
 	id: z.string().min(1),
 	device_id: z.string().optional(),
 	name: z.string().optional(),
-	capabilities: z
-		.array(
-			z.object({
-				runtime: z.string(),
-				models: z.array(z.string()).default([]),
-				maxConcurrent: z.number().int().default(1),
-			}),
-		)
-		.default([]),
+	capabilities: z.array(WorkerCapabilitySchema).default([]),
 })
 
 export const WorkerRegisterResponseSchema = z.object({
@@ -49,6 +51,8 @@ export const ClaimedRunSchema = z.object({
 	// Session continuation context
 	runtime_session_ref: z.string().nullable().optional(),
 	resumed_from_run_id: z.string().nullable().optional(),
+	// Execution targeting
+	targeting: z.record(z.unknown()).nullable().optional(),
 })
 
 export const WorkerClaimResponseSchema = z.object({
@@ -82,6 +86,8 @@ export const CreateRunRequestSchema = z.object({
 	runtime_session_ref: z.string().optional(),
 	/** For continuation runs: route to this specific worker. */
 	preferred_worker_id: z.string().optional(),
+	/** Execution targeting hints (resolved by orchestrator or passed explicitly). */
+	targeting: ExecutionTargetSchema.optional(),
 })
 
 // ─── Run Continuation ──────────────────────────────────────────────────────
@@ -119,15 +125,7 @@ export const WorkerEnrollRequestSchema = z.object({
 	/** Device identifier. */
 	device_id: z.string().min(1),
 	/** Runtime capabilities. */
-	capabilities: z
-		.array(
-			z.object({
-				runtime: z.string(),
-				models: z.array(z.string()).default([]),
-				maxConcurrent: z.number().int().default(1),
-			}),
-		)
-		.default([]),
+	capabilities: z.array(WorkerCapabilitySchema).default([]),
 })
 
 export const WorkerEnrollResponseSchema = z.object({

@@ -66,10 +66,7 @@ const tasks = new Hono<AppEnv>()
 			})
 			if (!task) return c.json({ error: 'failed to create task' }, 500)
 
-			// Workflow-driven intake: resolve assignee, attach workflow, process first step
 			const intakeResult = await workflowEngine.intake(id)
-
-			// Return the task after intake (may have updated fields)
 			const final = intakeResult?.task ?? task
 			return c.json(final, 201)
 		},
