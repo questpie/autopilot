@@ -2,17 +2,18 @@ import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import { toast } from "sonner"
 import { useTranslation } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
-import { API_BASE } from "@/lib/api"
+import { authClient } from "@/lib/auth"
 import type { TeamMember } from "./team-types"
 
 export function useTeamMembers() {
   return useSuspenseQuery({
     queryKey: queryKeys.team.list(),
     queryFn: async (): Promise<TeamMember[]> => {
-      const res = await fetch(`${API_BASE}/api/auth/admin/list-users`, { credentials: "include" })
-      if (!res.ok) return []
-      const data = (await res.json()) as { users?: TeamMember[] }
-      return data.users ?? []
+      const { data, error } = await authClient.admin.listUsers({
+        query: { limit: 100 },
+      })
+      if (error) return []
+      return (data?.users as TeamMember[] | undefined) ?? []
     },
     staleTime: 30_000,
   })
@@ -24,14 +25,10 @@ export function useBanMutation() {
 
   return useMutation({
     mutationFn: async ({ userId, ban }: { userId: string; ban: boolean }) => {
-      const endpoint = ban ? "ban-user" : "unban-user"
-      const res = await fetch(`${API_BASE}/api/auth/admin/${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ userId }),
-      })
-      if (!res.ok) throw new Error(`Failed to ${ban ? "ban" : "unban"} user`)
+      const result = ban
+        ? await authClient.admin.banUser({ userId })
+        : await authClient.admin.unbanUser({ userId })
+      if (result.error) throw new Error(`Failed to ${ban ? "ban" : "unban"} user`)
     },
     onSuccess: (_, vars) => {
       toast.success(vars.ban ? t("settings.team_user_banned") : t("settings.team_user_unbanned"))
@@ -47,13 +44,8 @@ export function useRoleMutation() {
 
   return useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      const res = await fetch(`${API_BASE}/api/auth/admin/set-role`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ userId, role }),
-      })
-      if (!res.ok) throw new Error("Failed to change role")
+      const { error } = await authClient.admin.setRole({ userId, role })
+      if (error) throw new Error("Failed to change role")
     },
     onSuccess: () => {
       toast.success(t("settings.team_role_changed"))

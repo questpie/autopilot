@@ -24,8 +24,17 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
 	const { data: session } = useSuspenseQuery(chatSessionDetailQuery(sessionId))
 	const { data: messages = [] } = useSuspenseQuery(chatSessionMessagesQuery(sessionId))
 	const continueSession = useContinueChatSession()
-	const wantsStream = session.status === 'running' || continueSession.isPending
-	const stream = useSessionStream(wantsStream ? session.id : null)
+	const wantsStream = session.status === 'running'
+	const stream = useSessionStream(
+		wantsStream ? session.id : null,
+		session.streamOffset,
+	)
+	// Keep showing stream blocks until DB messages include the agent response.
+	// Without this, the streaming row disappears before the DB catches up.
+	const lastDbMessage = messages.length > 0 ? messages[messages.length - 1] : null
+	const dbHasAgentResponse = !!lastDbMessage && !lastDbMessage.external
+	const showStreamBlocks =
+		wantsStream || (stream.state.blocks.length > 0 && !dbHasAgentResponse)
 	const latestVisibleMessageAt =
 		messages[messages.length - 1]?.at ?? session.lastMessageAt ?? session.startedAt
 
@@ -67,8 +76,10 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
 				messages={messages}
 				currentUserId={currentUserId}
 				currentUserName={currentUserName}
+				sessionAgentId={session.agentId}
+				sessionAgentName={session.agentName}
 				streamingState={stream.state}
-				streamingAgentId={wantsStream ? session.agentId : undefined}
+				streamingAgentId={showStreamBlocks ? session.agentId : undefined}
 				streamingAgentName={session.agentName}
 				onRetry={() => {
 					const lastUserMessage = [...messages]
@@ -78,19 +89,23 @@ export function SessionView({ sessionId }: SessionViewProps): React.JSX.Element 
 						void continueSession.mutateAsync({
 							sessionId,
 							message: lastUserMessage.content,
+							attachments: lastUserMessage.attachments ?? [],
 						})
 					}
 				}}
 			/>
 			<MessageComposer
-				onSend={async (message) => {
+				onSend={async ({ message, attachments }) => {
 					await continueSession.mutateAsync({
 						sessionId,
 						message,
+						attachments,
 					})
 				}}
 				defaultAgentId={session.agentId}
 				lockAgentId
+				sessionId={session.id}
+				agentName={session.agentName}
 				disabled={continueSession.isPending || session.status === 'running'}
 			/>
 		</PageTransition>

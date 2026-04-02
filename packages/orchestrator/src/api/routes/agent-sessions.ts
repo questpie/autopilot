@@ -5,8 +5,15 @@
  */
 import { Hono } from 'hono'
 import { describeRoute } from 'hono-openapi'
+import { validator as zValidator } from 'hono-openapi'
+import { z } from 'zod'
 import { getDurableStreamBaseUrl } from '../../session/durable'
 import type { AppEnv } from '../app'
+
+const StreamQuerySchema = z.object({
+	offset: z.string().optional(),
+	live: z.string().optional(),
+})
 
 function normalizeStreamOffset(offset: string | undefined): string {
 	if (!offset || offset.trim() === '' || offset === '0') {
@@ -28,15 +35,15 @@ const agentSessions = new Hono<AppEnv>()
 				502: { description: 'Durable Streams server unavailable' },
 			},
 		}),
+		zValidator('query', StreamQuerySchema),
 		async (c) => {
 			const sessionId = c.req.param('id')
+			const { offset: rawOffset, live: queryLive } = c.req.valid('query')
 			const baseUrl = getDurableStreamBaseUrl()
 			const streamUrl = `${baseUrl}/v1/stream/sessions/${encodeURIComponent(sessionId)}`
 
-			// Forward query params (offset, live=sse, etc.)
 			const url = new URL(streamUrl)
-			const queryOffset = normalizeStreamOffset(c.req.query('offset'))
-			const queryLive = c.req.query('live')
+			const queryOffset = normalizeStreamOffset(rawOffset)
 			url.searchParams.set('offset', queryOffset)
 			if (queryLive) url.searchParams.set('live', queryLive)
 

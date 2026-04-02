@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowClockwiseIcon, ArrowDownIcon, WarningCircleIcon } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
+import {
+	getMessageRunError,
+	getMessageToolCalls,
+	summarizeErrorDetail,
+} from './chat-message-metadata'
 import { DayDivider } from './day-divider'
 import { MessageRow } from './message-row'
 import type { Message } from './chat.types'
@@ -11,6 +16,8 @@ interface MessageListProps {
 	messages: Message[]
 	currentUserId: string
 	currentUserName: string
+	sessionAgentId?: string
+	sessionAgentName?: string
 	streamingState?: SessionStreamState
 	streamingAgentId?: string
 	streamingAgentName?: string
@@ -74,6 +81,8 @@ export function MessageList({
 	messages,
 	currentUserId,
 	currentUserName,
+	sessionAgentId,
+	sessionAgentName,
 	streamingState,
 	streamingAgentId,
 	streamingAgentName,
@@ -100,10 +109,12 @@ export function MessageList({
 			streamingState.status === 'streaming' ||
 			streamingState.status === 'error' ||
 			streamingState.status === 'completed') &&
-		(!!streamingState.text ||
-			streamingState.toolCalls.length > 0 ||
+		(streamingState.blocks.length > 0 ||
 			streamingState.status === 'connecting' ||
 			streamingState.status === 'error')
+	const streamingErrorDetail = summarizeErrorDetail(streamingState?.error)
+	const isStreamingLive =
+		streamingState?.status === 'connecting' || streamingState?.status === 'streaming'
 
 	useEffect(() => {
 		const container = containerRef.current
@@ -120,7 +131,7 @@ export function MessageList({
 		}
 
 		previousCountRef.current = count
-	}, [messages.length, hasStreamingMessage, streamingState?.text, streamingState?.toolCalls.length])
+	}, [messages.length, hasStreamingMessage, streamingState?.blocks.length])
 
 	return (
 		<div className="relative flex min-h-0 flex-1">
@@ -152,12 +163,17 @@ export function MessageList({
 										? currentUserName
 										: item.message.external
 											? item.message.from
-											: item.message.from,
+											: item.message.from === sessionAgentId
+												? (sessionAgentName ?? item.message.from)
+												: item.message.from,
 								type: item.message.external ? 'human' : 'agent',
 							}}
 							content={item.message.content}
 							timestamp={item.message.at}
 							isGroupStart={item.isGroupStart}
+							toolCalls={getMessageToolCalls(item.message)}
+							attachments={item.message.attachments ?? []}
+							runError={getMessageRunError(item.message)}
 						/>
 					),
 				)}
@@ -170,23 +186,22 @@ export function MessageList({
 								name: streamingAgentName ?? streamingAgentId,
 								type: 'agent',
 							}}
-							content={streamingState.text}
+							content=""
 							timestamp={new Date().toISOString()}
 							isGroupStart
-							isStreaming={streamingState.status !== 'error'}
-							toolCalls={streamingState.toolCalls}
+							isStreaming={isStreamingLive}
+							streamBlocks={streamingState.blocks}
 						/>
 						{streamingState.status === 'error' ? (
-							<div className="mx-4 mb-2 flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+							<div className="mx-4 mb-2 flex items-start gap-3 border border-destructive/30 bg-destructive/5 px-4 py-3">
 								<WarningCircleIcon className="mt-0.5 size-5 shrink-0 text-destructive" />
 								<div className="flex min-w-0 flex-1 flex-col gap-1">
 									<p className="text-sm font-medium text-destructive">
 										{t(ERROR_CODE_I18N_KEY[streamingState.errorCode ?? 'unknown'])}
 									</p>
-									{streamingState.error &&
-									streamingState.errorCode !== 'unknown' ? (
+									{streamingErrorDetail ? (
 										<p className="text-xs text-muted-foreground">
-											{streamingState.error}
+											{streamingErrorDetail}
 										</p>
 									) : null}
 								</div>

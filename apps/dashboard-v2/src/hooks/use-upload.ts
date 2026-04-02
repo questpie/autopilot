@@ -1,8 +1,9 @@
 import { useState, useCallback } from "react"
-import { API_BASE } from "@/lib/api"
+import { api } from "@/lib/api"
 
 interface UploadProgress {
   fileName: string
+  size: number
   progress: number
   status: "uploading" | "extracting" | "complete" | "error"
   error?: string
@@ -61,7 +62,7 @@ export function useUpload(options: UseUploadOptions = {}) {
   )
 
   const upload = useCallback(
-    async (files: File[]) => {
+    async (files: File[], targetPathOverride?: string) => {
       const validationError = validateFiles(files)
       if (validationError) {
         onError?.(validationError)
@@ -73,6 +74,7 @@ export function useUpload(options: UseUploadOptions = {}) {
 
       const initialProgress: UploadProgress[] = files.map((f) => ({
         fileName: f.name,
+        size: f.size,
         progress: 0,
         status: f.name.endsWith(".zip") ? "extracting" : "uploading",
       }))
@@ -84,19 +86,21 @@ export function useUpload(options: UseUploadOptions = {}) {
         try {
           const formData = new FormData()
           formData.append("file", file)
-          formData.append("path", targetPath)
+          formData.append("path", targetPathOverride ?? targetPath)
 
-          const response = await fetch(`${API_BASE}/api/upload`, {
-            method: "POST",
-            credentials: "include",
-            body: formData,
-          })
+          // Upload endpoint reads formData directly (no zValidator),
+          // so we use the Hono client's $url() for the typed path
+          // and pass the FormData body via init override.
+          const response = await api.api.upload.$post(
+            {} as never,
+            { init: { body: formData } },
+          )
 
           if (!response.ok) {
             throw new Error(`Upload failed: ${response.statusText}`)
           }
 
-          const data = (await response.json()) as { path: string }
+          const data = await response.json()
 
           setFileProgress((prev) =>
             prev.map((p, j) =>

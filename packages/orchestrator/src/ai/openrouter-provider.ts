@@ -180,6 +180,7 @@ export class OpenRouterAIProvider implements AIProvider {
 		let totalPromptTokens = 0
 		let totalCompletionTokens = 0
 		let totalTokensUsed = 0
+		let streamedTextLength = 0
 
 		const tanstackTools: TanStackTool[] = tools.map((t) => ({
 			name: t.name,
@@ -240,16 +241,120 @@ export class OpenRouterAIProvider implements AIProvider {
 			},
 
 			onChunk(_ctx, chunk) {
-				if (chunk.type === 'TEXT_MESSAGE_CONTENT' && 'delta' in chunk) {
-					onEvent({
-						type: 'text_delta',
-						content: (chunk as { delta: string }).delta,
-					})
+				const c = chunk as unknown as Record<string, unknown>
+				const chunkType = c.type as string | undefined
+
+				switch (chunkType) {
+					// ── Text streaming ──────────────────────────────────
+					case 'TEXT_MESSAGE_CONTENT': {
+						if ('delta' in c && typeof c.delta === 'string') {
+							streamedTextLength += c.delta.length
+							onEvent({ type: 'text_delta', content: c.delta })
+						}
+						break
+					}
+
+					// ── Thinking / reasoning (extended thinking, Claude, etc.) ──
+					case 'STEP_STARTED': {
+						const stepType = typeof c.stepType === 'string' ? c.stepType : 'thinking'
+						logger.info('ai', `step started: ${stepType}`, { sessionId, stepId: c.stepId })
+						onEvent({ type: 'thinking', content: '' })
+						break
+					}
+					case 'STEP_FINISHED': {
+						const thinkingContent = typeof c.delta === 'string' ? c.delta : ''
+						if (thinkingContent) {
+							onEvent({ type: 'thinking', content: thinkingContent })
+						}
+						break
+					}
+
+					// ── Provider errors (silent — TanStack AI does NOT throw) ──
+					case 'RUN_ERROR': {
+						const runError = c as { error?: { message?: string; code?: string } }
+						const errorMsg = runError.error?.message || 'Provider returned an error'
+						const classified = classifyError(new Error(errorMsg))
+						error = classified.message
+						logger.error('ai', 'RUN_ERROR from provider', {
+							sessionId, agentId, model,
+							errorCode: classified.code,
+							chunk: c,
+						})
+						onEvent({ type: 'error', content: classified.message, errorCode: classified.code })
+						break
+					}
+
+					// ── Run lifecycle (log for observability) ──────────
+					case 'RUN_STARTED':
+						logger.info('ai', 'run started', { sessionId, runId: c.runId, model: c.model })
+						break
+					case 'RUN_FINISHED':
+						logger.info('ai', 'run finished', {
+							sessionId,
+							finishReason: c.finishReason,
+							usage: c.usage,
+						})
+						break
+
+					// ── Message boundaries (logged, not actionable) ────
+					case 'TEXT_MESSAGE_START':
+					case 'TEXT_MESSAGE_END':
+						break
+
+					// ── Tool call streaming (tool execution uses onBeforeToolCall/onAfterToolCall,
+					//    but we log the raw tool chunks for observability) ──
+					case 'TOOL_CALL_START':
+						logger.info('ai', 'tool_call_start', {
+							sessionId,
+							toolCallId: c.toolCallId,
+							toolName: c.toolName,
+						})
+						break
+					case 'TOOL_CALL_ARGS':
+						// Streamed JSON argument deltas — no action needed,
+						// final args come via onBeforeToolCall hook.
+						break
+					case 'TOOL_CALL_END':
+						logger.info('ai', 'tool_call_end', {
+							sessionId,
+							toolCallId: c.toolCallId,
+							toolName: c.toolName,
+						})
+						break
+
+					// ── State/snapshot events (unused in autopilot) ────
+					case 'MESSAGES_SNAPSHOT':
+					case 'STATE_SNAPSHOT':
+					case 'STATE_DELTA':
+					case 'CUSTOM':
+						logger.debug('ai', `onChunk: ${chunkType}`, { sessionId, chunk: c })
+						break
+
+					default:
+						// Unknown chunk type — log it so we notice new additions.
+						logger.warn('ai', `unknown onChunk type: ${chunkType}`, { sessionId, chunk: c })
+						break
 				}
 			},
 
 			onFinish(_ctx: ChatMiddlewareContext, info) {
+				logger.debug('ai', 'onFinish', { sessionId, contentLength: info.content?.length, info })
 				finalText = info.content
+				// If onFinish has more text than what was streamed via deltas,
+				// emit the missing tail so the client gets the full response.
+				if (finalText.length > streamedTextLength) {
+					const missingLength = finalText.length - streamedTextLength
+					logger.warn('ai', 'onFinish text longer than streamed deltas — emitting tail', {
+						sessionId,
+						streamedLength: streamedTextLength,
+						finalLength: finalText.length,
+						missingChars: missingLength,
+					})
+					onEvent({
+						type: 'text_delta',
+						content: finalText.slice(streamedTextLength),
+					})
+				}
 			},
 
 			onBeforeToolCall(_ctx: ChatMiddlewareContext, hookCtx) {
