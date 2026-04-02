@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowClockwiseIcon, ArrowDownIcon, WarningCircleIcon } from '@phosphor-icons/react'
 import { Button } from '@/components/ui/button'
 import {
@@ -43,6 +43,8 @@ const ERROR_CODE_I18N_KEY: Record<StreamErrorCode, string> = {
 	unknown: 'chat.error_unknown',
 }
 
+const NEAR_BOTTOM_THRESHOLD = 120
+
 function buildMessageList(messages: Message[]): MessageListItem[] {
 	const sorted = [...messages].sort((left, right) => left.at.localeCompare(right.at))
 	const items: MessageListItem[] = []
@@ -77,6 +79,21 @@ function buildMessageList(messages: Message[]): MessageListItem[] {
 	return items
 }
 
+function isNearBottom(el: HTMLElement): boolean {
+	return el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD
+}
+
+function scrollToBottom(el: HTMLElement): void {
+	el.scrollTop = el.scrollHeight
+}
+
+// ── Scroll state machine ────────────────────────────────────────────
+// "following" = auto-scroll on new content
+// "detached"  = user scrolled up, leave them alone
+//
+// following → detached : user scrolls up past threshold
+// detached  → following: user scrolls back to bottom OR clicks button OR sends message
+
 export function MessageList({
 	messages,
 	currentUserId,
@@ -90,13 +107,12 @@ export function MessageList({
 	onRetry,
 }: MessageListProps): React.JSX.Element {
 	const containerRef = useRef<HTMLDivElement | null>(null)
-	const previousCountRef = useRef(0)
-	const [showScrollButton, setShowScrollButton] = useState(false)
+	const [scrollMode, setScrollMode] = useState<'following' | 'detached'>('following')
+	const isUserScrolling = useRef(false)
 	const { t } = useTranslation()
 
 	const items = useMemo(() => buildMessageList(messages), [messages])
-	// After stream completion, check whether the DB already contains the agent response.
-	// If it does, suppress the streaming row to avoid showing a duplicate.
+
 	const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null
 	const dbHasAgentResponse =
 		streamingState?.status === 'completed' && !!lastMessage && !lastMessage.external
@@ -116,33 +132,75 @@ export function MessageList({
 	const isStreamingLive =
 		streamingState?.status === 'connecting' || streamingState?.status === 'streaming'
 
+	// When a new user message appears, snap to following mode.
+	const lastUserMessage = useMemo(
+		() => [...messages].reverse().find((m) => m.external),
+		[messages],
+	)
 	useEffect(() => {
-		const container = containerRef.current
-		if (!container) return
-
-		const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120
-		const count = messages.length + (hasStreamingMessage ? 1 : 0)
-
-		if (isNearBottom || count <= previousCountRef.current) {
-			container.scrollTop = container.scrollHeight
-			setShowScrollButton(false)
-		} else {
-			setShowScrollButton(true)
+		if (lastUserMessage) {
+			setScrollMode('following')
 		}
+	}, [lastUserMessage?.id])
 
-		previousCountRef.current = count
-	}, [messages.length, hasStreamingMessage, streamingState?.blocks.length])
+	// Auto-scroll when in following mode and content changes.
+	const contentSignal = `${messages.length}:${streamingState?.blocks.length ?? 0}:${hasStreamingMessage}`
+	useLayoutEffect(() => {
+		const el = containerRef.current
+		if (!el || scrollMode !== 'following') return
+		scrollToBottom(el)
+	}, [scrollMode, contentSignal])
+
+	// Initial scroll to bottom on mount.
+	useLayoutEffect(() => {
+		const el = containerRef.current
+		if (el) scrollToBottom(el)
+	}, [])
+
+	const handleScroll = useCallback(() => {
+		const el = containerRef.current
+		if (!el) return
+
+		// Ignore programmatic scrolls — only react to user-initiated scrolling.
+		if (!isUserScrolling.current) return
+
+		if (isNearBottom(el)) {
+			setScrollMode('following')
+		} else {
+			setScrollMode('detached')
+		}
+	}, [])
+
+	// Track whether scrolling is user-initiated vs programmatic.
+	const handlePointerDown = useCallback(() => {
+		isUserScrolling.current = true
+	}, [])
+	const handlePointerUp = useCallback(() => {
+		// Small delay so the scroll event from the pointer action still registers.
+		setTimeout(() => { isUserScrolling.current = false }, 50)
+	}, [])
+	// Wheel scrolling is always user-initiated.
+	const handleWheel = useCallback(() => {
+		isUserScrolling.current = true
+		setTimeout(() => { isUserScrolling.current = false }, 100)
+	}, [])
+
+	const scrollToBottomAndFollow = useCallback(() => {
+		const el = containerRef.current
+		if (!el) return
+		scrollToBottom(el)
+		setScrollMode('following')
+	}, [])
 
 	return (
 		<div className="relative flex min-h-0 flex-1">
 			<div
 				ref={containerRef}
 				className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${className ?? ''}`}
-				onScroll={(event) => {
-					const target = event.currentTarget
-					const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 120
-					setShowScrollButton(!isNearBottom)
-				}}
+				onScroll={handleScroll}
+				onPointerDown={handlePointerDown}
+				onPointerUp={handlePointerUp}
+				onWheel={handleWheel}
 			>
 				{items.length === 0 && !hasStreamingMessage ? (
 					<div className="flex flex-1 items-center justify-center px-6 py-10 text-sm text-muted-foreground">
@@ -223,17 +281,13 @@ export function MessageList({
 				) : null}
 			</div>
 
-			{showScrollButton ? (
+			{scrollMode === 'detached' ? (
 				<div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
 					<Button
 						type="button"
 						size="sm"
 						className="pointer-events-auto"
-						onClick={() => {
-							if (!containerRef.current) return
-							containerRef.current.scrollTop = containerRef.current.scrollHeight
-							setShowScrollButton(false)
-						}}
+						onClick={scrollToBottomAndFollow}
 					>
 						<ArrowDownIcon className="size-4" />
 						{t('chat.scroll_to_bottom')}
