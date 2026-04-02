@@ -460,9 +460,11 @@ export function useSessionStream(
 
 				if (terminal) {
 					queuePersist(nextOffset, true)
-					if (terminal === 'error') {
-						dispatch({ type: 'error', error: 'Session failed' })
-					}
+					dispatch(
+						terminal === 'error'
+							? { type: 'error', error: 'Session failed' }
+							: { type: 'completed' },
+					)
 					return
 				}
 

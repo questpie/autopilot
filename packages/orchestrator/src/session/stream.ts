@@ -73,6 +73,28 @@ export class SessionStreamManager {
 		}
 	}
 
+	/** Push a chunk and wait for durable stream persistence before returning. */
+	async emitAndWait(sessionId: string, chunk: StreamChunk): Promise<void> {
+		const stream = this.streams.get(sessionId)
+		if (!stream) return
+
+		for (const listener of stream.listeners) {
+			try {
+				listener(chunk)
+			} catch (err) {
+				logger.error('session-stream', `listener error for ${sessionId}`, { error: err instanceof Error ? err.message : String(err) })
+			}
+		}
+
+		try {
+			await appendToSessionStream(sessionId, chunk)
+		} catch (err) {
+			logger.warn('session-stream', `durable stream append failed for ${sessionId}`, {
+				error: err instanceof Error ? err.message : String(err),
+			})
+		}
+	}
+
 	/** Close a stream, clear listeners, and remove it from the map. */
 	endStream(sessionId: string): void {
 		const stream = this.streams.get(sessionId)

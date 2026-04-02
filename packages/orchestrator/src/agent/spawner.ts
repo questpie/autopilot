@@ -739,7 +739,9 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		// D9: Emit typing stopped
 		eventBus.emit({ type: 'agent_typing', agentId: agent.id, status: 'stopped', sessionId })
 		// Signal stream consumers that this run is done before tearing down the in-memory stream.
-		streamManager.emit(sessionId, {
+		// Use emitAndWait to ensure the terminal event is persisted to the durable stream
+		// before endStream clears listeners — prevents SSE clients from missing it.
+		await streamManager.emitAndWait(sessionId, {
 			at: Date.now(),
 			type: 'status',
 			content: finalizedSessionResult.error ? 'error' : 'completed',
