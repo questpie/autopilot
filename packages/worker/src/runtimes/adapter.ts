@@ -1,3 +1,6 @@
+import type { WorkerEvent } from '@questpie/autopilot-spec'
+export type { WorkerEvent } from '@questpie/autopilot-spec'
+
 /** Context passed to a runtime adapter when starting a run. */
 export interface RunContext {
   runId: string
@@ -15,13 +18,6 @@ export interface RuntimeResult {
   summary?: string
   tokens?: { input: number; output: number }
   artifacts?: Array<{ path: string; action: string }>
-}
-
-/** Normalized event from runtime adapter -> worker -> orchestrator. */
-export interface WorkerEvent {
-  type: string
-  summary: string
-  metadata?: Record<string, unknown>
 }
 
 /**

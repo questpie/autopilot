@@ -1,3 +1,4 @@
+import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
 
 export interface WorkerCapability {
@@ -14,22 +15,6 @@ export interface WorkerConfig {
   capabilities: WorkerCapability[]
   heartbeatInterval?: number // ms, default 30_000
   pollInterval?: number // ms, default 5_000
-}
-
-interface ClaimResponseRun {
-  id: string
-  agent_id: string
-  task_id: string | null
-  runtime: string
-  status: string
-  task_title: string | null
-  task_description: string | null
-  instructions: string | null
-}
-
-interface ClaimResponse {
-  run: ClaimResponseRun | null
-  lease_id: string | null
 }
 
 export class AutopilotWorker {
@@ -63,7 +48,7 @@ export class AutopilotWorker {
         name: this.config.name,
         capabilities: this.config.capabilities,
       },
-    })) as { workerId: string; status: string }
+    })) as WorkerRegisterResponse
     console.log(`[worker] registered as ${res.workerId}`)
 
     // Start heartbeat
@@ -116,7 +101,7 @@ export class AutopilotWorker {
       const res = (await this.api('/api/workers/claim', {
         method: 'POST',
         body: { worker_id: this.workerId },
-      })) as ClaimResponse
+      })) as WorkerClaimResponse
 
       if (res.run) {
         this.activeRunId = res.run.id
@@ -133,7 +118,7 @@ export class AutopilotWorker {
     }
   }
 
-  private async executeRun(run: ClaimResponseRun): Promise<void> {
+  private async executeRun(run: ClaimedRun): Promise<void> {
     const adapter = this.adapters.get(run.runtime)
     if (!adapter) {
       await this.postEvent(run.id, {
@@ -155,7 +140,7 @@ export class AutopilotWorker {
         task_title: run.task_title,
         task_description: run.task_description,
       },
-      instructions: run.instructions,
+      instructions: run.instructions ?? null,
       model: null,
       orchestratorUrl: this.config.orchestratorUrl,
       apiKey: this.config.apiKey,
@@ -184,7 +169,7 @@ export class AutopilotWorker {
 
   private async postEvent(
     runId: string,
-    event: { type: string; summary: string; metadata?: Record<string, unknown> },
+    event: WorkerEvent,
   ): Promise<void> {
     await this.api(`/api/runs/${runId}/events`, {
       method: 'POST',
@@ -192,7 +177,7 @@ export class AutopilotWorker {
     })
   }
 
-  private async completeRun(runId: string, completion: Record<string, unknown>): Promise<void> {
+  private async completeRun(runId: string, completion: RunCompletion): Promise<void> {
     await this.api(`/api/runs/${runId}/complete`, {
       method: 'POST',
       body: completion,

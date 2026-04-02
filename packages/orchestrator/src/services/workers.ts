@@ -65,38 +65,27 @@ export class WorkerService {
 
 	/** Mark a worker as offline. */
 	async setOffline(workerId: string): Promise<void> {
-		await this.db
-			.update(workers)
-			.set({ status: 'offline' })
-			.where(eq(workers.id, workerId))
+		await this.db.update(workers).set({ status: 'offline' }).where(eq(workers.id, workerId))
 	}
 
 	/** Mark a worker as busy. */
 	async setBusy(workerId: string): Promise<void> {
-		await this.db
-			.update(workers)
-			.set({ status: 'busy' })
-			.where(eq(workers.id, workerId))
+		await this.db.update(workers).set({ status: 'busy' }).where(eq(workers.id, workerId))
 	}
 
 	/** Mark a worker as online (idle). */
 	async setOnline(workerId: string): Promise<void> {
-		await this.db
-			.update(workers)
-			.set({ status: 'online' })
-			.where(eq(workers.id, workerId))
+		await this.db.update(workers).set({ status: 'online' }).where(eq(workers.id, workerId))
 	}
 
 	/**
 	 * Detect stale workers whose last heartbeat is older than `thresholdMs`
 	 * and mark them offline.
 	 */
-	async expireStale(thresholdMs: number = 60_000): Promise<string[]> {
+	async expireStale(thresholdMs = 60_000): Promise<string[]> {
 		const cutoff = new Date(Date.now() - thresholdMs).toISOString()
 		const allOnline = await this.list({ status: 'online' })
-		const stale = allOnline.filter(
-			(w) => w.last_heartbeat !== null && w.last_heartbeat < cutoff,
-		)
+		const stale = allOnline.filter((w) => w.last_heartbeat !== null && w.last_heartbeat < cutoff)
 		for (const w of stale) {
 			await this.setOffline(w.id)
 		}
@@ -132,16 +121,14 @@ export class WorkerService {
 	}
 
 	async completeLease(leaseId: string, status: 'completed' | 'failed'): Promise<void> {
-		await this.db
-			.update(workerLeases)
-			.set({ status })
-			.where(eq(workerLeases.id, leaseId))
+		await this.db.update(workerLeases).set({ status }).where(eq(workerLeases.id, leaseId))
 	}
 
 	/**
 	 * Expire leases that have passed their expires_at timestamp.
+	 * Returns the expired lease rows (with worker_id and run_id intact).
 	 */
-	async expireLeases(): Promise<string[]> {
+	async expireLeases(): Promise<WorkerLeaseRow[]> {
 		const now = new Date().toISOString()
 		const active = await this.db
 			.select()
@@ -156,6 +143,47 @@ export class WorkerService {
 				.set({ status: 'expired' })
 				.where(eq(workerLeases.id, lease.id))
 		}
-		return expired.map((l) => l.id)
+		return expired
+	}
+
+	/**
+	 * Expire stale leases and recover affected runs + workers.
+	 *
+	 * 1. Expires any leases past their `expires_at`
+	 * 2. Marks the associated run as `failed` with error "lease expired"
+	 * 3. For each affected worker with no remaining active leases, sets status back to `online`
+	 */
+	async expireStaleAndRecover(
+		failRun: (runId: string) => Promise<void>,
+	): Promise<{ expiredLeaseIds: string[]; failedRunIds: string[]; recoveredWorkerIds: string[] }> {
+		const expired = await this.expireLeases()
+		if (expired.length === 0) {
+			return { expiredLeaseIds: [], failedRunIds: [], recoveredWorkerIds: [] }
+		}
+
+		const failedRunIds: string[] = []
+		const affectedWorkerIds = new Set<string>()
+
+		for (const lease of expired) {
+			await failRun(lease.run_id)
+			failedRunIds.push(lease.run_id)
+			affectedWorkerIds.add(lease.worker_id)
+		}
+
+		// Recover workers that have no remaining active leases
+		const recoveredWorkerIds: string[] = []
+		for (const workerId of affectedWorkerIds) {
+			const activeLease = await this.getActiveLeaseForWorker(workerId)
+			if (!activeLease) {
+				await this.setOnline(workerId)
+				recoveredWorkerIds.push(workerId)
+			}
+		}
+
+		return {
+			expiredLeaseIds: expired.map((l) => l.id),
+			failedRunIds,
+			recoveredWorkerIds,
+		}
 	}
 }
