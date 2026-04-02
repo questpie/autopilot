@@ -1,5 +1,6 @@
-import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse } from '@questpie/autopilot-spec'
+import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse, ExternalAction, SecretRef } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
+import { executeActions } from './actions/webhook'
 import { WorkspaceManager, type WorkspaceInfo } from './workspace'
 import { resolveRuntime, type RuntimeConfig, type ResolvedRuntime } from './runtime-config'
 import { loadCredential, saveCredential, type StoredCredential } from './credentials'
@@ -8,6 +9,7 @@ export interface WorkerCapability {
   runtime: 'claude-code' | 'codex' | 'opencode' | 'direct-api'
   models: string[]
   maxConcurrent: number
+  tags: string[]
 }
 
 export interface WorkerConfig {
@@ -28,6 +30,8 @@ export interface WorkerConfig {
    * Only for `autopilot start` convenience. Not for real multi-machine use.
    */
   localDev?: boolean
+  /** Explicit worker-level tags (e.g. 'staging', 'prod'). Merged with per-runtime tags. */
+  tags?: string[]
 }
 
 export class AutopilotWorker {
@@ -54,11 +58,17 @@ export class AutopilotWorker {
       throw new Error('WorkerConfig.runtimes must contain at least one runtime config.')
     }
 
+    const workerTags = config.tags ?? []
     for (const rtConfig of config.runtimes) {
       const resolved = resolveRuntime(rtConfig)
       this.resolvedRuntimes.push(resolved)
       this.adapters.set(rtConfig.runtime, resolved.adapter)
-      this.resolvedCapabilities.push(resolved.capability)
+      // Merge worker-level tags into per-runtime capability
+      const mergedCap: WorkerCapability = {
+        ...resolved.capability,
+        tags: [...new Set([...workerTags, ...resolved.capability.tags])],
+      }
+      this.resolvedCapabilities.push(mergedCap)
     }
   }
 
@@ -275,6 +285,9 @@ export class AutopilotWorker {
       const result = await adapter.start(context)
       const resumable = !!result?.sessionId
 
+      // Execute post-run external actions from targeting (before completing)
+      await this.runPostActions(run)
+
       await this.completeRun(run.id, {
         status: 'completed',
         summary: result?.summary,
@@ -296,6 +309,23 @@ export class AutopilotWorker {
         await this.workspace.release({ runId: run.id, resumable: false })
       }
     }
+  }
+
+  /** Execute post-run external actions if targeting includes them. */
+  private async runPostActions(run: ClaimedRun): Promise<void> {
+    if (!run.targeting) return
+
+    const targeting = run.targeting as Record<string, unknown>
+    const actions = targeting.actions as ExternalAction[] | undefined
+    if (!actions || actions.length === 0) return
+
+    const secretRefs = (targeting.secret_refs ?? []) as SecretRef[]
+
+    await executeActions(
+      actions,
+      (event) => { this.postEvent(run.id, event).catch(() => {}) },
+      secretRefs,
+    )
   }
 
   private async postEvent(runId: string, event: WorkerEvent): Promise<void> {

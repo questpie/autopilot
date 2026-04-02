@@ -70,11 +70,12 @@ export class RunService {
 
 		if (pending.length === 0) return undefined
 
-		// Build a flat set of tags this worker advertises (runtimes + models)
+		// Build a flat set of tags this worker advertises (runtimes + models + explicit tags)
 		const workerTags = new Set<string>()
 		for (const cap of workerCapabilities ?? []) {
 			workerTags.add(cap.runtime)
 			for (const m of cap.models) workerTags.add(m)
+			for (const t of cap.tags ?? []) workerTags.add(t)
 		}
 
 		const claimable = pending.find((r) => isEligible(r, workerId, workerTags))

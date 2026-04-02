@@ -18,8 +18,8 @@ import type { Services } from './api/app'
 import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
-import { loadCompany, loadAgents, loadWorkflows } from './config/loader'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine } from './services'
+import { loadCompany, loadAgents, loadWorkflows, loadEnvironments } from './config/loader'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService } from './services'
 import type { AuthoredConfig } from './services'
 
 export interface StartServerOptions {
@@ -57,13 +57,15 @@ export async function startServer(options?: StartServerOptions) {
 	const company = await loadCompany(companyRoot)
 	const agentList = await loadAgents(companyRoot)
 	const workflowList = await loadWorkflows(companyRoot)
+	const environmentList = await loadEnvironments(companyRoot)
 
 	const agents = new Map(agentList.map((a) => [a.id, a]))
 	const workflows = new Map(workflowList.map((w) => [w.id, w]))
+	const environments = new Map(environmentList.map((e) => [e.id, e]))
 
-	const authoredConfig: AuthoredConfig = { company, agents, workflows }
+	const authoredConfig: AuthoredConfig = { company, agents, workflows, environments }
 	console.log(
-		`[server] config loaded: ${agents.size} agents, ${workflows.size} workflows`,
+		`[server] config loaded: ${agents.size} agents, ${workflows.size} workflows, ${environments.size} environments`,
 	)
 
 	// ── 5. Create auth ───────────────────────────────────────────────────
@@ -74,8 +76,9 @@ export async function startServer(options?: StartServerOptions) {
 	const runService = new RunService(companyDb)
 	const workerService = new WorkerService(companyDb)
 	const enrollmentService = new EnrollmentService(companyDb)
+	const activityService = new ActivityService(companyDb)
 
-	const workflowEngine = new WorkflowEngine(authoredConfig, taskService, runService)
+	const workflowEngine = new WorkflowEngine(authoredConfig, taskService, runService, activityService)
 
 	// Validate config references
 	const configIssues = workflowEngine.validate()
@@ -88,6 +91,7 @@ export async function startServer(options?: StartServerOptions) {
 		runService,
 		workerService,
 		enrollmentService,
+		activityService,
 		workflowEngine,
 	}
 

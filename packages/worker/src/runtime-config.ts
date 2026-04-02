@@ -32,6 +32,8 @@ export interface RuntimeConfig {
   sessionPersistence?: 'local' | 'off'
   /** Max agentic turns per run. Default 50. */
   maxTurns?: number
+  /** Explicit tags for this runtime (e.g. 'gpu', 'staging'). Merged with worker-level tags. */
+  tags?: string[]
 }
 
 /** Result of resolving a RuntimeConfig — validated and ready to use. */
@@ -163,5 +165,6 @@ function deriveCapability(config: RuntimeConfig): WorkerCapability {
     runtime: config.runtime,
     models: config.models ?? DEFAULT_MODELS[config.runtime] ?? [],
     maxConcurrent: config.maxConcurrent ?? 1,
+    tags: config.tags ?? [],
   }
 }

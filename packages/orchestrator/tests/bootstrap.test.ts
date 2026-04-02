@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os'
 import { Hono } from 'hono'
 import { createCompanyDb, type CompanyDb } from '../src/db'
 import type { CompanyDbResult } from '../src/db'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine } from '../src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService } from '../src/services'
 import type { Services, AppEnv } from '../src/api/app'
 import { createAuth, type Auth } from '../src/auth'
 import type { Actor } from '../src/auth/types'
@@ -152,6 +152,7 @@ describe('bootstrap', () => {
 		const runService = new RunService(dbResult.db)
 		const workerService = new WorkerService(dbResult.db)
 		const enrollmentService = new EnrollmentService(dbResult.db)
+		const activityService = new ActivityService(dbResult.db)
 		const workflowEngine = new WorkflowEngine(
 			{
 				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, settings: { auto_assign: true, require_approval: [], max_concurrent_agents: 1, budget: { daily_token_limit: 0, alert_at: 0 }, auth: {}, inference: { gateway_base_url: '', text_model: '', embedding_model: '', embedding_dimensions: 768 }, default_runtime: 'claude-code' }, setup_completed: false },
@@ -161,7 +162,7 @@ describe('bootstrap', () => {
 			taskService,
 			runService,
 		)
-		services = { taskService, runService, workerService, enrollmentService, workflowEngine }
+		services = { taskService, runService, workerService, enrollmentService, activityService, workflowEngine }
 
 		// App with real routes, fake auth
 		app = buildBootstrapApp({

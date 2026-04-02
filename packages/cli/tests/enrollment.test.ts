@@ -18,7 +18,7 @@ import { workerAuthMiddleware } from '../../orchestrator/src/api/middleware/work
 import { createCompanyDb, type CompanyDb, type CompanyDbResult } from '../../orchestrator/src/db'
 import { createAuth, type Auth } from '../../orchestrator/src/auth'
 import type { Actor } from '../../orchestrator/src/auth/types'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine } from '../../orchestrator/src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService } from '../../orchestrator/src/services'
 
 const FAKE_ACTOR: Actor = {
 	id: 'admin',
@@ -130,6 +130,7 @@ describe('Worker enrollment', () => {
 		const runService = new RunService(dbResult.db)
 		const workerService = new WorkerService(dbResult.db)
 		const enrollmentService = new EnrollmentService(dbResult.db)
+		const activityService = new ActivityService(dbResult.db)
 		const workflowEngine = new WorkflowEngine(
 			{
 				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, settings: { auto_assign: true, require_approval: [], max_concurrent_agents: 1, budget: { daily_token_limit: 0, alert_at: 0 }, auth: {}, inference: { gateway_base_url: '', text_model: '', embedding_model: '', embedding_dimensions: 768 }, default_runtime: 'claude-code' }, setup_completed: false },
@@ -139,7 +140,7 @@ describe('Worker enrollment', () => {
 			taskService,
 			runService,
 		)
-		services = { taskService, runService, workerService, enrollmentService, workflowEngine }
+		services = { taskService, runService, workerService, enrollmentService, activityService, workflowEngine }
 		app = buildTestApp({ companyRoot, db: dbResult.db, auth, services })
 	})
 
@@ -443,6 +444,7 @@ describe('Local dev bypass scope', () => {
 			runService: runService2,
 			workerService: new WorkerService(dbResult2.db),
 			enrollmentService: new EnrollmentService(dbResult2.db),
+			activityService: new ActivityService(dbResult2.db),
 			workflowEngine: workflowEngine2,
 		}
 

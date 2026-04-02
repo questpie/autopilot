@@ -8,6 +8,8 @@ export const WorkerCapabilitySchema = z.object({
 	runtime: z.string(),
 	models: z.array(z.string()).default([]),
 	maxConcurrent: z.number().int().default(1),
+	/** Explicit tags this worker advertises (e.g. 'staging', 'gpu', 'github'). */
+	tags: z.array(z.string()).default([]),
 })
 
 // ─── Worker Registration ────────────────────────────────────────────────────

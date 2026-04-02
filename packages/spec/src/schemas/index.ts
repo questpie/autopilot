@@ -1,5 +1,8 @@
 export { AgentSchema, FsScopeSchema, AgentTriggerSchema } from './agent'
 export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema } from './workflow'
+export { EnvironmentSchema } from './environment'
+export { SecretRefSchema } from './secret-ref'
+export { ExternalActionSchema } from './external-action'
 export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema } from './company'
 export { WorkerEventTypeSchema, WorkerEventSchema, RunCompletionSchema } from './worker-event'
 export { ScheduleSchema, SchedulesFileSchema } from './schedule'

@@ -11,6 +11,7 @@ export const PATHS = {
 	HUMANS_DIR: '/team/humans',
 	ROLES_DIR: '/team/roles',
 	WORKFLOWS_DIR: '/team/workflows',
+	ENVIRONMENTS_DIR: '/team/environments',
 	SCHEDULES_DIR: '/team/schedules',
 	WEBHOOKS_DIR: '/team/webhooks',
 	WATCHERS: '/team/watchers.yaml',

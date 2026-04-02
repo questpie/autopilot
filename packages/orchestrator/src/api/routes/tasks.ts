@@ -115,14 +115,64 @@ const tasks = new Hono<AppEnv>()
 		zValidator('param', z.object({ id: z.string() })),
 		async (c) => {
 			const { workflowEngine } = c.get('services')
+			const actor = c.get('actor')
 			const { id } = c.req.valid('param')
 
-			const result = await workflowEngine.approve(id)
+			const result = await workflowEngine.approve(id, actor?.id)
 			if (!result) {
 				return c.json({ error: 'task not found or not on a human_approval step' }, 400)
 			}
 
 			return c.json(result, 200)
+		},
+	)
+	// POST /tasks/:id/reject — reject a human_approval step
+	.post(
+		'/:id/reject',
+		zValidator('param', z.object({ id: z.string() })),
+		zValidator('json', z.object({ message: z.string().min(1) })),
+		async (c) => {
+			const { workflowEngine } = c.get('services')
+			const actor = c.get('actor')
+			const { id } = c.req.valid('param')
+			const { message } = c.req.valid('json')
+
+			const result = await workflowEngine.reject(id, message, actor?.id)
+			if (!result) {
+				return c.json({ error: 'task not found or not on a human_approval step' }, 400)
+			}
+
+			return c.json(result, 200)
+		},
+	)
+	// POST /tasks/:id/reply — reply to a human_approval step with a message
+	.post(
+		'/:id/reply',
+		zValidator('param', z.object({ id: z.string() })),
+		zValidator('json', z.object({ message: z.string().min(1) })),
+		async (c) => {
+			const { workflowEngine } = c.get('services')
+			const actor = c.get('actor')
+			const { id } = c.req.valid('param')
+			const { message } = c.req.valid('json')
+
+			const result = await workflowEngine.reply(id, message, actor?.id)
+			if (!result) {
+				return c.json({ error: 'task not found or not on a human_approval step' }, 400)
+			}
+
+			return c.json(result, 200)
+		},
+	)
+	// GET /tasks/:id/activity — approval/rejection/reply history
+	.get(
+		'/:id/activity',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { activityService } = c.get('services')
+			const { id } = c.req.valid('param')
+			const entries = await activityService.listForTask(id)
+			return c.json(entries, 200)
 		},
 	)
 

@@ -11,6 +11,7 @@ export const WorkerEventTypeSchema = z.enum([
 	'approval_needed',
 	'error',
 	'completed',
+	'external_action',
 ])
 
 /** Normalized event from worker -> orchestrator. */

@@ -91,6 +91,8 @@ tasksCmd.addCommand(
 					type: string
 					priority?: string
 					assigned_to?: string | null
+					workflow_id?: string | null
+					workflow_step?: string | null
 					created_by?: string
 					created_at: string
 					updated_at?: string
@@ -100,18 +102,46 @@ tasksCmd.addCommand(
 				console.log(section(task.title))
 				console.log('')
 				console.log(`  ${dim('ID:')}          ${task.id}`)
-				console.log(`  ${dim('Status:')}      ${badge(task.status)}`)
+				console.log(`  ${dim('Status:')}      ${badge(task.status, task.status === 'blocked' ? 'red' : task.status === 'done' ? 'green' : 'cyan')}`)
 				console.log(`  ${dim('Type:')}        ${task.type}`)
 				if (task.priority) console.log(`  ${dim('Priority:')}    ${task.priority}`)
 				console.log(`  ${dim('Assigned:')}    ${task.assigned_to ?? 'unassigned'}`)
+				if (task.workflow_id) console.log(`  ${dim('Workflow:')}    ${task.workflow_id}`)
+				if (task.workflow_step) console.log(`  ${dim('Step:')}        ${task.workflow_step}`)
 				if (task.created_by) console.log(`  ${dim('Created by:')}  ${task.created_by}`)
 				console.log(`  ${dim('Created at:')}  ${task.created_at}`)
 				if (task.updated_at) console.log(`  ${dim('Updated at:')}  ${task.updated_at}`)
+
+				if (task.status === 'blocked') {
+					console.log('')
+					console.log(`  ${badge('WAITING FOR APPROVAL', 'red')}`)
+					console.log(dim('  Use: autopilot tasks approve|reject|reply ' + task.id))
+				}
 
 				if (task.description) {
 					console.log('')
 					console.log(dim('Description:'))
 					console.log(`  ${task.description}`)
+				}
+
+				// Show approval history
+				try {
+					const actRes = await client.api.tasks[':id'].activity.$get({ param: { id } })
+					if (actRes.ok) {
+						const entries = (await actRes.json()) as Array<{
+							type: string; actor: string; summary: string; created_at: string
+						}>
+						if (entries.length > 0) {
+							console.log('')
+							console.log(dim('Approval history:'))
+							for (const e of entries) {
+								const icon = e.type === 'approval' ? '+' : e.type === 'rejection' ? 'x' : '>'
+								console.log(`  ${dim(e.created_at)} [${icon}] ${e.summary}`)
+							}
+						}
+					}
+				} catch {
+					// Activity endpoint may not exist in older servers
 				}
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
@@ -218,6 +248,86 @@ tasksCmd.addCommand(
 				}
 			},
 		),
+)
+
+tasksCmd.addCommand(
+	new Command('approve')
+		.description('Approve a task waiting on a human_approval step')
+		.argument('<id>', 'Task ID')
+		.action(async (id: string) => {
+			try {
+				const client = createApiClient()
+				const res = await client.api.tasks[':id'].approve.$post({ param: { id } })
+				if (!res.ok) {
+					const body = (await res.json()) as { error?: string }
+					console.error(error(body.error ?? 'Approval failed'))
+					process.exit(1)
+				}
+				const result = (await res.json()) as { task: { id: string; status: string; workflow_step?: string }; actions: string[] }
+				console.log(success(`Task ${id} approved`))
+				console.log(dim(`  Status: ${result.task.status}`))
+				if (result.task.workflow_step) console.log(dim(`  Step: ${result.task.workflow_step}`))
+				console.log(dim(`  Actions: ${result.actions.join(', ')}`))
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+tasksCmd.addCommand(
+	new Command('reject')
+		.description('Reject a task waiting on a human_approval step')
+		.argument('<id>', 'Task ID')
+		.requiredOption('-m, --message <message>', 'Rejection reason')
+		.action(async (id: string, opts: { message: string }) => {
+			try {
+				const client = createApiClient()
+				const res = await client.api.tasks[':id'].reject.$post({
+					param: { id },
+					json: { message: opts.message },
+				})
+				if (!res.ok) {
+					const body = (await res.json()) as { error?: string }
+					console.error(error(body.error ?? 'Rejection failed'))
+					process.exit(1)
+				}
+				console.log(success(`Task ${id} rejected`))
+				console.log(dim(`  Reason: ${opts.message}`))
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+tasksCmd.addCommand(
+	new Command('reply')
+		.description('Reply to a task waiting on a human_approval step and advance workflow')
+		.argument('<id>', 'Task ID')
+		.requiredOption('-m, --message <message>', 'Reply message (becomes instructions for next step)')
+		.action(async (id: string, opts: { message: string }) => {
+			try {
+				const client = createApiClient()
+				const res = await client.api.tasks[':id'].reply.$post({
+					param: { id },
+					json: { message: opts.message },
+				})
+				if (!res.ok) {
+					const body = (await res.json()) as { error?: string }
+					console.error(error(body.error ?? 'Reply failed'))
+					process.exit(1)
+				}
+				const result = (await res.json()) as { task: { id: string; status: string; workflow_step?: string }; runId: string | null; actions: string[] }
+				console.log(success(`Task ${id} replied`))
+				console.log(dim(`  Status: ${result.task.status}`))
+				if (result.runId) console.log(dim(`  Run created: ${result.runId}`))
+				console.log(dim(`  Actions: ${result.actions.join(', ')}`))
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
 )
 
 program.addCommand(tasksCmd)

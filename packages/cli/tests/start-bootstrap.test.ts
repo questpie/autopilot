@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { createCompanyDb, type CompanyDbResult } from '../../orchestrator/src/db'
 import { createAuth, type Auth } from '../../orchestrator/src/auth'
 import { createApp } from '../../orchestrator/src/api/app'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine } from '../../orchestrator/src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService } from '../../orchestrator/src/services'
 
 function post(body: unknown): RequestInit {
 	return {
@@ -106,6 +106,7 @@ describe('start bootstrap: auth + MCP', () => {
 			runService,
 			workerService: new WorkerService(dbResult.db),
 			enrollmentService: new EnrollmentService(dbResult.db),
+			activityService: new ActivityService(dbResult.db),
 			workflowEngine,
 		}
 

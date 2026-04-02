@@ -16,6 +16,15 @@ export type Workflow = z.infer<typeof schemas.WorkflowSchema>
 export type WorkflowStep = z.infer<typeof schemas.WorkflowStepSchema>
 export type ExecutionTarget = z.infer<typeof schemas.ExecutionTargetSchema>
 
+// Environments
+export type Environment = z.infer<typeof schemas.EnvironmentSchema>
+
+// Secret Refs
+export type SecretRef = z.infer<typeof schemas.SecretRefSchema>
+
+// External Actions
+export type ExternalAction = z.infer<typeof schemas.ExternalActionSchema>
+
 // Worker Events
 export type WorkerEventType = z.infer<typeof schemas.WorkerEventTypeSchema>
 export type WorkerEvent = z.infer<typeof schemas.WorkerEventSchema>

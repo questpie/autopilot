@@ -11,5 +11,8 @@ export { WorkspaceManager } from './workspace'
 export type { WorkspaceInfo, WorkspaceManagerConfig } from './workspace'
 export { resolveRuntime } from './runtime-config'
 export type { RuntimeConfig, ResolvedRuntime } from './runtime-config'
+export { resolveSecretRefs, validateSecretRefs } from './secrets'
+export type { SecretResolutionResult } from './secrets'
+export { executeActions } from './actions/webhook'
 // Re-export shared types from spec for convenience
 export type { WorkerEvent, RunCompletion, ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse } from '@questpie/autopilot-spec'

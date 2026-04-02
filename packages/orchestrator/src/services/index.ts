@@ -12,5 +12,8 @@ export type { JoinTokenRow } from './enrollment'
 
 export { InferenceService } from './inference'
 
+export { ActivityService } from './activity'
+export type { ActivityRow } from './activity'
+
 export { WorkflowEngine } from './workflow-engine'
 export type { AuthoredConfig, IntakeResult, AdvanceResult } from './workflow-engine'

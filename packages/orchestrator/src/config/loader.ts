@@ -5,6 +5,7 @@ import {
 	AgentSchema,
 	WorkflowSchema,
 	CompanySchema,
+	EnvironmentSchema,
 	PATHS,
 } from '@questpie/autopilot-spec'
 import type { z } from 'zod'
@@ -12,6 +13,7 @@ import type { z } from 'zod'
 export type Agent = z.output<typeof AgentSchema>
 export type Workflow = z.output<typeof WorkflowSchema>
 export type Company = z.output<typeof CompanySchema>
+export type Environment = z.output<typeof EnvironmentSchema>
 
 /** Load and validate the company config from `<companyRoot>/company.yaml`. */
 export async function loadCompany(companyRoot: string): Promise<Company> {
@@ -30,6 +32,12 @@ export async function loadAgents(companyRoot: string): Promise<Agent[]> {
 export async function loadWorkflows(companyRoot: string): Promise<Workflow[]> {
 	const dir = join(companyRoot, PATHS.WORKFLOWS_DIR)
 	return loadYamlDir(dir, WorkflowSchema) as Promise<Workflow[]>
+}
+
+/** Load all environment definitions from `<companyRoot>/team/environments/*.yaml`. */
+export async function loadEnvironments(companyRoot: string): Promise<Environment[]> {
+	const dir = join(companyRoot, PATHS.ENVIRONMENTS_DIR)
+	return loadYamlDir(dir, EnvironmentSchema) as Promise<Environment[]>
 }
 
 /** Generic helper: read all YAML files in a directory and validate against a schema. */
