@@ -1,70 +1,54 @@
-import { describe, test, expect } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { ZodError } from 'zod'
-import { AgentSchema, AGENT_PROVIDERS } from '../src/schemas'
+import { AgentSchema } from '../src/schemas'
 
 const validAgent = {
 	id: 'peter',
 	name: 'Peter',
 	role: 'developer',
 	description: 'Writes code',
-	fs_scope: { read: ['/projects'], write: ['/projects/*/code'] },
+	fs_scope: { read: ['/projects'], write: ['/projects/app'] },
 }
 
-describe('AgentSchema provider field', () => {
-	test('defaults to tanstack-ai when provider not specified', () => {
+describe('AgentSchema current runtime-independent shape', () => {
+	test('accepts a minimal valid agent', () => {
 		const result = AgentSchema.parse(validAgent)
-		expect(result.provider).toBe('tanstack-ai')
+
+		expect(result.id).toBe('peter')
+		expect(result.name).toBe('Peter')
+		expect(result.role).toBe('developer')
+		expect(result.description).toBe('Writes code')
+		expect(result.fs_scope).toEqual({
+			read: ['/projects'],
+			write: ['/projects/app'],
+		})
+		expect(result.triggers).toEqual([])
 	})
 
-	test('accepts tanstack-ai provider', () => {
-		const result = AgentSchema.parse({ ...validAgent, provider: 'tanstack-ai' })
-		expect(result.provider).toBe('tanstack-ai')
-	})
-
-	test('rejects invalid provider', () => {
-		expect(() =>
-			AgentSchema.parse({ ...validAgent, provider: 'gemini-sdk' }),
-		).toThrow(ZodError)
-	})
-
-	test('AGENT_PROVIDERS constant has tanstack-ai', () => {
-		expect(AGENT_PROVIDERS).toContain('tanstack-ai')
-		expect(AGENT_PROVIDERS).toHaveLength(1)
-	})
-
-	test('defaults model to OpenRouter format', () => {
-		const result = AgentSchema.parse(validAgent)
-		expect(result.model).toBe('anthropic/claude-sonnet-4')
-	})
-
-	test('accepts OpenRouter model format', () => {
+	test('accepts optional model and triggers', () => {
 		const result = AgentSchema.parse({
 			...validAgent,
-			model: 'openai/gpt-4o',
+			model: 'claude-sonnet-4-20250514',
+			triggers: [{ on: 'task_status_changed', status: 'review' }],
 		})
-		expect(result.model).toBe('openai/gpt-4o')
+
+		expect(result.model).toBe('claude-sonnet-4-20250514')
+		expect(result.triggers).toEqual([{ on: 'task_status_changed', status: 'review' }])
 	})
 
-	test('accepts auto-router model', () => {
+	test('rejects invalid ids', () => {
+		expect(() => AgentSchema.parse({ ...validAgent, id: 'Peter Parker' })).toThrow(ZodError)
+		expect(() => AgentSchema.parse({ ...validAgent, id: 'Peter' })).toThrow(ZodError)
+	})
+
+	test('strips legacy provider-style fields', () => {
 		const result = AgentSchema.parse({
 			...validAgent,
-			model: 'openrouter/auto',
+			provider: 'tanstack-ai',
+			web_search: true,
 		})
-		expect(result.model).toBe('openrouter/auto')
-	})
 
-	test('web_search defaults to false', () => {
-		const result = AgentSchema.parse(validAgent)
-		expect(result.web_search).toBe(false)
-	})
-
-	test('web_search accepts true', () => {
-		const result = AgentSchema.parse({ ...validAgent, web_search: true })
-		expect(result.web_search).toBe(true)
-	})
-
-	test('web_search accepts false explicitly', () => {
-		const result = AgentSchema.parse({ ...validAgent, web_search: false })
-		expect(result.web_search).toBe(false)
+		expect((result as Record<string, unknown>).provider).toBeUndefined()
+		expect((result as Record<string, unknown>).web_search).toBeUndefined()
 	})
 })
