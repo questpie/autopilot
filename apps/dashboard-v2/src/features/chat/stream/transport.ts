@@ -5,7 +5,7 @@
  * reader for incremental SSE parsing. All HTTP calls go through the
  * typed `api` client (credentials + SSR cookie forwarding included).
  */
-import { api } from './api'
+import { api } from '@/lib/api'
 
 export interface SseConnection {
 	reader: ReadableStreamDefaultReader<Uint8Array>

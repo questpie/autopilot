@@ -771,7 +771,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 		if (
 			mode === 'chat' &&
 			channelId &&
-			(finalizedSessionResult.result || persistedToolCalls.length > 0)
+			(finalizedSessionResult.result || persistedToolCalls.length > 0 || finalizedSessionResult.error)
 		) {
 			try {
 				await storage.sendMessage({

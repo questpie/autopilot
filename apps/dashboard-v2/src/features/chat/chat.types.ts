@@ -7,3 +7,16 @@ export type Message = InferResponseType<
 >[number]
 
 export type MessageAttachment = NonNullable<Message['attachments']>[number]
+
+export interface ToolCallState {
+	id: string
+	tool: string
+	toolCallId?: string
+	params?: Record<string, unknown>
+	displayLabel?: string
+	displayMeta?: string
+	status: 'running' | 'completed' | 'error'
+	result?: string
+	startedAt: number
+	completedAt?: number
+}

@@ -6,11 +6,11 @@ import {
 	getMessageRunError,
 	getMessageToolCalls,
 	summarizeErrorDetail,
-} from './chat-message-metadata'
+} from './metadata'
 import { DayDivider } from './day-divider'
 import { MessageRow } from './message-row'
-import type { Message } from './chat.types'
-import type { SessionStreamState, StreamErrorCode } from './use-session-stream'
+import type { Message } from '../chat.types'
+import type { SessionStreamState, StreamErrorCode } from '../stream'
 import { useTranslation } from '@/lib/i18n'
 
 interface MessageListProps {
@@ -42,6 +42,19 @@ const ERROR_CODE_I18N_KEY: Record<StreamErrorCode, string> = {
 	provider: 'chat.error_provider',
 	budget: 'chat.error_budget',
 	unknown: 'chat.error_unknown',
+}
+
+function resolveSenderName(
+	message: Message,
+	currentUserId: string,
+	currentUserName: string,
+	sessionAgentId?: string,
+	sessionAgentName?: string,
+): string {
+	if (message.from === currentUserId) return currentUserName
+	if (message.external) return message.from
+	if (message.from === sessionAgentId) return sessionAgentName ?? message.from
+	return message.from
 }
 
 function buildMessageList(messages: Message[]): MessageListItem[] {
@@ -137,18 +150,14 @@ export function MessageList({
 
 	const items = useMemo(() => buildMessageList(messages), [messages])
 
-	const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null
-	const dbHasAgentResponse =
-		streamingState?.status === 'completed' && !!lastMessage && !lastMessage.external
-
+	// Whether to render the live streaming row.
+	// Session-view controls `streamingAgentId` — it becomes undefined once
+	// the DB catches up with the agent response, so we don't need a
+	// separate DB-takeover check here.
 	const hasStreamingMessage =
 		!!streamingAgentId &&
 		!!streamingState &&
-		!dbHasAgentResponse &&
-		(streamingState.status === 'connecting' ||
-			streamingState.status === 'streaming' ||
-			streamingState.status === 'error' ||
-			streamingState.status === 'completed') &&
+		streamingState.status !== 'idle' &&
 		(streamingState.blocks.length > 0 ||
 			streamingState.status === 'connecting' ||
 			streamingState.status === 'error')
@@ -177,14 +186,7 @@ export function MessageList({
 							key={item.key}
 							sender={{
 								id: item.message.from,
-								name:
-									item.message.from === currentUserId
-										? currentUserName
-										: item.message.external
-											? item.message.from
-											: item.message.from === sessionAgentId
-												? (sessionAgentName ?? item.message.from)
-												: item.message.from,
+								name: resolveSenderName(item.message, currentUserId, currentUserName, sessionAgentId, sessionAgentName),
 								type: item.message.external ? 'human' : 'agent',
 							}}
 							content={item.message.content}
@@ -197,7 +199,7 @@ export function MessageList({
 					),
 				)}
 
-				{hasStreamingMessage && streamingState && streamingAgentId ? (
+				{hasStreamingMessage && streamingAgentId && streamingState ? (
 					<>
 						<MessageRow
 							sender={{

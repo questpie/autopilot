@@ -15,7 +15,7 @@ import {
 import { Link } from '@tanstack/react-router'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
-import { formatToolCallParams, getToolCallDisplay } from './chat-message-metadata'
+import { formatToolCallParams, getToolCallDisplay } from './metadata'
 
 interface ToolCallLink {
 	label: string

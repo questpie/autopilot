@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/u
 import { agentsQuery } from '@/features/team/team.queries'
 import { useUpload } from '@/hooks/use-upload'
 import { cn } from '@/lib/utils'
-import { formatAttachmentSize } from './chat-message-metadata'
+import { formatAttachmentSize } from './messages/metadata'
 import type { MessageAttachment } from './chat.types'
 
 interface PendingAttachment {

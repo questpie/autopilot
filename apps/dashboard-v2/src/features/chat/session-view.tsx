@@ -5,11 +5,11 @@ import { queryKeys } from '@/lib/query-keys'
 import { Route as AppRoute } from '@/routes/_app'
 import { useChatSeenStore } from '@/stores/chat-seen.store'
 import { MessageComposer } from './message-composer'
-import { MessageList } from './message-list'
+import { MessageList } from './messages/message-list'
 import { useContinueChatSession } from './chat.mutations'
 import { chatSessionDetailQuery, chatSessionMessagesQuery } from './chat.queries'
 import { SessionHeader } from './session-header'
-import { useSessionStream } from './use-session-stream'
+import { useSessionStream } from './stream'
 
 interface SessionViewProps {
 	sessionId: string

@@ -1,17 +1,6 @@
-import type { Message } from './chat.types'
+import type { Message, ToolCallState } from '../chat.types'
 
-export interface ToolCallState {
-	id: string
-	tool: string
-	toolCallId?: string
-	params?: Record<string, unknown>
-	displayLabel?: string
-	displayMeta?: string
-	status: 'running' | 'completed' | 'error'
-	result?: string
-	startedAt: number
-	completedAt?: number
-}
+export type { ToolCallState } from '../chat.types'
 
 export interface ToolCallDisplay {
 	label: string

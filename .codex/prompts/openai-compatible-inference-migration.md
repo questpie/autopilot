@@ -1,5 +1,11 @@
 Migrate the current AI provider layer to the dashboard v3 inference architecture without changing product behavior.
 
+Important scope rule:
+- this prompt is for the inference migration phase, not for every intermediate chat/runtime fix
+- do not run this as a broad preset-matrix rollout during Phase 2 stabilization
+- if used before Settings/general, keep the work to the minimum seam needed for the currently active runtime path
+- contract-first does not mean matrix-first
+
 Read first:
 - `local_specs/dashboard-v3/00-architecture.md`
 - `local_specs/dashboard-v3/02-ai-chat.md`
@@ -49,6 +55,7 @@ Hard rules:
 - Model selector must work even when `/models` returns sparse metadata.
 - Keep the diff bounded. This is a refactor, not a platform rewrite.
 - If you change the product mental model, update `local_specs/dashboard-v3/MENTAL-MODEL-CHANGES.md`.
+- Do not implement every planned preset eagerly if one working path already satisfies the current phase.
 
 ## Phase A: Backend
 

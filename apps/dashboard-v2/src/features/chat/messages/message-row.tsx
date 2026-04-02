@@ -12,10 +12,9 @@ import { cn } from '@/lib/utils'
 import {
 	formatAttachmentSize,
 	summarizeErrorDetail,
-	type ToolCallState,
-} from './chat-message-metadata'
-import type { MessageAttachment } from './chat.types'
-import type { StreamBlock } from './use-session-stream'
+} from './metadata'
+import type { MessageAttachment, ToolCallState } from '../chat.types'
+import type { StreamBlock } from '../stream'
 import { extractToolLinks, ToolCallCard } from './tool-call-card'
 import { StreamingText } from './streaming-text'
 
