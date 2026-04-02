@@ -36,18 +36,13 @@ const workers = new Hono<AppEnv>()
 		const { runService, workerService, taskService } = c.get('services')
 		const { worker_id, runtime } = c.req.valid('json')
 
-		// Expire stale leases before checking — prevents crashed workers from being stuck forever
+		// Expire stale leases — prevents crashed workers from being stuck forever
 		await workerService.expireStaleAndRecover(async (runId) => {
 			await runService.complete(runId, { status: 'failed', error: 'lease expired' })
 		})
 
-		// Recover worker status if it has no remaining active leases (e.g. stuck as busy)
+		// Concurrency guard: one active run per worker
 		const activeLease = await workerService.getActiveLeaseForWorker(worker_id)
-		if (!activeLease) {
-			await workerService.setOnline(worker_id)
-		}
-
-		// Concurrency guard: if worker already has an active lease, reject
 		if (activeLease) {
 			return c.json({ run: null, lease_id: null }, 200)
 		}

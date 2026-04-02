@@ -136,12 +136,9 @@ export class AutopilotWorker {
       runId: run.id,
       agentId: run.agent_id,
       taskId: run.task_id,
-      context: {
-        task_title: run.task_title,
-        task_description: run.task_description,
-      },
+      taskTitle: run.task_title ?? null,
+      taskDescription: run.task_description ?? null,
       instructions: run.instructions ?? null,
-      model: null,
       orchestratorUrl: this.config.orchestratorUrl,
       apiKey: this.config.apiKey,
     }

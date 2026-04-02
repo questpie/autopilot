@@ -66,9 +66,9 @@ const runs = new Hono<AppEnv>()
 		if (!run) return c.json({ error: 'failed to create run' }, 500)
 
 		eventBus.emit({
-			type: 'run_started',
-			runId: id,
-			agentId: body.agent_id,
+			type: 'task_changed',
+			taskId: body.task_id ?? id,
+			status: 'pending',
 		})
 
 		return c.json(run, 201)

@@ -6,9 +6,9 @@ export interface RunContext {
   runId: string
   agentId: string
   taskId: string | null
-  context: Record<string, unknown>
+  taskTitle: string | null
+  taskDescription: string | null
   instructions: string | null
-  model: string | null
   orchestratorUrl: string
   apiKey: string
 }
