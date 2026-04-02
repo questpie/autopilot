@@ -143,19 +143,32 @@ export function MessageList({
 		}
 	}, [lastUserMessage?.id])
 
-	// Auto-scroll when in following mode and content changes.
-	const contentSignal = `${messages.length}:${streamingState?.blocks.length ?? 0}:${hasStreamingMessage}`
+	// Auto-scroll when in following mode and content height grows.
+	// ResizeObserver fires whenever children resize (new blocks, text growth, tool cards).
 	useLayoutEffect(() => {
 		const el = containerRef.current
-		if (!el || scrollMode !== 'following') return
-		scrollToBottom(el)
-	}, [scrollMode, contentSignal])
+		if (!el) return
 
-	// Initial scroll to bottom on mount.
-	useLayoutEffect(() => {
-		const el = containerRef.current
-		if (el) scrollToBottom(el)
-	}, [])
+		// Initial scroll.
+		scrollToBottom(el)
+
+		const observer = new ResizeObserver(() => {
+			if (scrollMode === 'following') {
+				scrollToBottom(el)
+			}
+		})
+
+		// Observe the scroll container's first child (the content wrapper).
+		// If there are direct children, observe each — ResizeObserver fires
+		// when any observed element's size changes.
+		for (const child of el.children) {
+			observer.observe(child)
+		}
+		// Also observe the container itself for layout shifts.
+		observer.observe(el)
+
+		return () => observer.disconnect()
+	}, [scrollMode])
 
 	const handleScroll = useCallback(() => {
 		const el = containerRef.current
