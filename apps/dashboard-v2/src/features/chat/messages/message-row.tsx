@@ -1,10 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
-	CaretDownIcon,
-	CaretRightIcon,
 	PaperclipIcon,
 	WarningCircleIcon,
-	WrenchIcon,
 } from '@phosphor-icons/react'
 import { GenerativeAvatar } from '@questpie/avatar'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
@@ -13,7 +10,7 @@ import {
 	formatAttachmentSize,
 	summarizeErrorDetail,
 } from './metadata'
-import type { MessageAttachment, ToolCallState } from '../chat.types'
+import type { MessageAttachment } from '../chat.types'
 import type { StreamBlock } from '../stream'
 import { extractToolLinks, ToolCallCard } from './tool-call-card'
 import { StreamingText } from './streaming-text'
@@ -24,26 +21,16 @@ interface MessageRowProps {
 		name: string
 		type: 'human' | 'agent'
 	}
-	content: string
+	blocks: StreamBlock[]
 	timestamp: string
 	isGroupStart: boolean
 	isStreaming?: boolean
-	toolCalls?: ToolCallState[]
-	/** Chronologically-ordered stream blocks (used for live streaming messages) */
-	streamBlocks?: StreamBlock[]
 	attachments?: MessageAttachment[]
 	runError?: string | null
 	className?: string
 }
 
 const RUN_ERROR_SUMMARY = 'The run stopped before the assistant could finish.'
-
-function hasMeaningfulAssistantText(content: string): boolean {
-	const trimmed = content.trim()
-	if (!trimmed) return false
-
-	return trimmed.length >= 48 || (trimmed.length >= 24 && /[\n.!?]/.test(trimmed))
-}
 
 function formatTimestamp(timestamp: string): string {
 	const date = new Date(timestamp)
@@ -63,115 +50,9 @@ function formatTimestamp(timestamp: string): string {
 	})
 }
 
-// ── Tool section (used for historical messages) ─────────────────────
+// ── Chronological blocks renderer ─────────────────────────────────────
 
-function ToolSection({
-	toolCalls,
-}: {
-	toolCalls: ToolCallState[]
-}) {
-	const latestActiveToolCall = [...toolCalls].reverse().find((tc) => tc.status === 'running')
-	const shouldCompactTools = toolCalls.length > 1
-	const hasCollapsedToolHistory = toolCalls.length > 1 || !latestActiveToolCall
-	const [toolSummaryOpen, setToolSummaryOpen] = useState<boolean | null>(null)
-	const [openToolDetails, setOpenToolDetails] = useState<Record<string, boolean>>({})
-	const isToolSummaryOpen =
-		toolSummaryOpen ?? (toolCalls.length > 0 ? !shouldCompactTools : false)
-	const visibleToolCalls = shouldCompactTools
-		? isToolSummaryOpen
-			? toolCalls
-			: latestActiveToolCall
-				? [latestActiveToolCall]
-				: []
-		: toolCalls
-	const collapsedToolCount =
-		shouldCompactTools && !isToolSummaryOpen
-			? Math.max(toolCalls.length - visibleToolCalls.length, 0)
-			: 0
-	const showToolSummaryToggle = shouldCompactTools && hasCollapsedToolHistory
-
-	useEffect(() => {
-		if (toolCalls.length === 0) {
-			setToolSummaryOpen(null)
-			setOpenToolDetails({})
-			return
-		}
-
-		setOpenToolDetails((current) =>
-			Object.fromEntries(
-				Object.entries(current).filter(([toolCallId]) =>
-					toolCalls.some((toolCall) => toolCall.id === toolCallId),
-				),
-			),
-		)
-	}, [toolCalls])
-
-	const toolSummaryLabel = latestActiveToolCall
-		? `Using ${toolCalls.length} ${toolCalls.length === 1 ? 'tool' : 'tools'}`
-		: `Called ${toolCalls.length} ${toolCalls.length === 1 ? 'tool' : 'tools'}`
-
-	if (toolCalls.length === 0) return null
-
-	return (
-		<div className="space-y-1.5">
-			{showToolSummaryToggle ? (
-				<button
-					type="button"
-					onClick={() => setToolSummaryOpen((current) => !(current ?? false))}
-					className="flex w-full items-center gap-2 border-l border-border/60 py-1 pl-2.5 text-left hover:text-foreground"
-				>
-					<WrenchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-					<span className="truncate font-heading text-[11px] text-muted-foreground">
-						{toolSummaryLabel}
-					</span>
-					{!isToolSummaryOpen && collapsedToolCount > 0 ? (
-						<span className="truncate text-[10px] text-muted-foreground">
-							{collapsedToolCount} collapsed
-						</span>
-					) : null}
-					<span className="ml-auto shrink-0 text-muted-foreground">
-						{isToolSummaryOpen ? (
-							<CaretDownIcon className="size-3.5" />
-						) : (
-							<CaretRightIcon className="size-3.5" />
-						)}
-					</span>
-				</button>
-			) : null}
-
-			{visibleToolCalls.length > 0 ? (
-				<div className="space-y-1">
-					{visibleToolCalls.map((toolCall) => (
-						<ToolCallCard
-							key={toolCall.id}
-							tool={toolCall.tool}
-							params={toolCall.params}
-							status={toolCall.status}
-							result={toolCall.result}
-							links={extractToolLinks(toolCall.tool, toolCall.params)}
-							displayLabel={toolCall.displayLabel}
-							displayMeta={toolCall.displayMeta}
-							open={
-								openToolDetails[toolCall.id] ??
-								(toolCall.status === 'running' || toolCall.status === 'error')
-							}
-							onOpenChange={(open) =>
-								setOpenToolDetails((current) => ({
-									...current,
-									[toolCall.id]: open,
-								}))
-							}
-						/>
-					))}
-				</div>
-			) : null}
-		</div>
-	)
-}
-
-// ── Chronological stream blocks renderer ────────────────────────────
-
-function StreamBlocksRenderer({
+function BlocksRenderer({
 	blocks,
 	isStreaming,
 }: {
@@ -249,24 +130,17 @@ function StreamBlocksRenderer({
 
 export function MessageRow({
 	sender,
-	content,
+	blocks,
 	timestamp,
 	isGroupStart,
 	isStreaming = false,
-	toolCalls = [],
-	streamBlocks,
 	attachments = [],
 	runError = null,
 	className,
 }: MessageRowProps): React.JSX.Element {
 	const hasAttachments = attachments.length > 0
-	const hasContentBeforeError = !!content || hasAttachments || toolCalls.length > 0 || (streamBlocks && streamBlocks.length > 0)
-	const hasMeaningfulText = hasMeaningfulAssistantText(content)
-	const renderToolsAfterContent = hasMeaningfulText || hasAttachments
+	const hasContentBeforeError = blocks.length > 0 || hasAttachments
 	const summarizedRunError = summarizeErrorDetail(runError)
-
-	// Stream blocks mode: chronological rendering
-	const useBlocksMode = streamBlocks && streamBlocks.length > 0
 
 	return (
 		<div
@@ -304,7 +178,7 @@ export function MessageRow({
 				) : null}
 
 				{hasAttachments ? (
-					<div className={cn('flex flex-wrap gap-2', toolCalls.length === 0 && !content && 'mt-0', 'mt-1')}>
+					<div className={cn('flex flex-wrap gap-2', 'mt-1')}>
 						{attachments.map((attachment) => (
 							<div
 								key={attachment.id}
@@ -324,41 +198,9 @@ export function MessageRow({
 					</div>
 				) : null}
 
-				{useBlocksMode ? (
-					<StreamBlocksRenderer blocks={streamBlocks} isStreaming={isStreaming} />
-				) : (
-					<>
-						{!renderToolsAfterContent ? (
-							<ToolSection toolCalls={toolCalls} />
-						) : null}
-
-						{isStreaming ? (
-							<StreamingText
-								text={content}
-								isStreaming={isStreaming}
-								className={cn(
-									'text-sm',
-									((!renderToolsAfterContent && toolCalls.length > 0) || hasAttachments) && 'mt-3',
-								)}
-							/>
-						) : content ? (
-							<div
-								className={cn(
-									'text-sm leading-relaxed',
-									((!renderToolsAfterContent && toolCalls.length > 0) || hasAttachments) && 'mt-3',
-								)}
-							>
-								<MarkdownRenderer content={content} mode="inline" />
-							</div>
-						) : null}
-
-						{renderToolsAfterContent ? (
-							<div className={cn((content || hasAttachments) && 'mt-3')}>
-								<ToolSection toolCalls={toolCalls} />
-							</div>
-						) : null}
-					</>
-				)}
+				{blocks.length > 0 ? (
+					<BlocksRenderer blocks={blocks} isStreaming={isStreaming} />
+				) : null}
 
 				{runError ? (
 					<div

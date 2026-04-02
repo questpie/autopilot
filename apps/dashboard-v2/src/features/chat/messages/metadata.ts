@@ -1,4 +1,5 @@
 import type { Message, ToolCallState } from '../chat.types'
+import type { StreamBlock } from '../stream'
 
 export type { ToolCallState } from '../chat.types'
 
@@ -334,4 +335,64 @@ export function formatAttachmentSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// ── Unified block builder ────────────────────────────────────────────
+
+export function buildMessageBlocks(message: Pick<Message, 'content' | 'metadata'>): StreamBlock[] {
+	const rawBlocks = message.metadata?.contentBlocks
+	const toolCalls = getMessageToolCalls(message)
+
+	// New format: reconstruct from persisted contentBlocks + toolCalls
+	if (Array.isArray(rawBlocks) && rawBlocks.length > 0) {
+		const toolCallMap = new Map<string, ToolCallState>()
+		for (const tc of toolCalls) {
+			toolCallMap.set(tc.id, tc)
+		}
+
+		const referencedIds = new Set<string>()
+		const blocks: StreamBlock[] = []
+
+		for (const raw of rawBlocks) {
+			if (!isRecord(raw) || typeof raw.kind !== 'string') continue
+
+			if (raw.kind === 'text' && typeof raw.content === 'string' && raw.content) {
+				blocks.push({ kind: 'text', content: raw.content })
+			} else if (raw.kind === 'thinking' && typeof raw.content === 'string' && raw.content) {
+				blocks.push({ kind: 'thinking', content: raw.content })
+			} else if (raw.kind === 'tool_ref' && typeof raw.toolCallId === 'string') {
+				const tc = toolCallMap.get(raw.toolCallId)
+				if (tc) {
+					referencedIds.add(raw.toolCallId)
+					blocks.push({ kind: 'tool_call', toolCall: tc })
+				}
+			}
+		}
+
+		// Append unreferenced tool calls (defensive)
+		for (const tc of toolCalls) {
+			if (!referencedIds.has(tc.id)) {
+				blocks.push({ kind: 'tool_call', toolCall: tc })
+			}
+		}
+
+		return blocks
+	}
+
+	// Legacy fallback: reconstruct from content + toolCalls
+	const blocks: StreamBlock[] = []
+
+	// Tool calls sorted by startedAt
+	const sortedToolCalls = [...toolCalls].sort((a, b) => a.startedAt - b.startedAt)
+	for (const tc of sortedToolCalls) {
+		blocks.push({ kind: 'tool_call', toolCall: tc })
+	}
+
+	// Text block at the end (agent's final response)
+	const content = message.content?.trim()
+	if (content) {
+		blocks.push({ kind: 'text', content })
+	}
+
+	return blocks
 }

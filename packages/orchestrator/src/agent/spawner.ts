@@ -86,6 +86,11 @@ interface PersistedToolCallState {
 	completedAt?: number
 }
 
+type PersistedContentBlock =
+	| { kind: 'text'; content: string }
+	| { kind: 'thinking'; content: string }
+	| { kind: 'tool_ref'; toolCallId: string }
+
 /**
  * Spawn a single agent session end-to-end.
  *
@@ -646,17 +651,49 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 	let streamedText = ''
 	let sawTextDelta = false
 	let persistedToolCalls: PersistedToolCallState[] = []
+	const persistedBlocks: PersistedContentBlock[] = []
+
+	const appendTextBlock = (delta: string): void => {
+		const last = persistedBlocks[persistedBlocks.length - 1]
+		if (last?.kind === 'text') {
+			last.content += delta
+		} else {
+			persistedBlocks.push({ kind: 'text', content: delta })
+		}
+	}
+
 	const onEvent = (event: AgentEvent) => {
 		if (event.type === 'text_delta') {
 			sawTextDelta = true
 			streamedText += event.content ?? ''
+			appendTextBlock(event.content ?? '')
 		}
 
 		if (event.type === 'text') {
 			streamedText = event.content ?? streamedText
+			// Reconciliation: set full text if no text block yet
+			if (!persistedBlocks.some((b) => b.kind === 'text')) {
+				persistedBlocks.push({ kind: 'text', content: event.content ?? '' })
+			}
+		}
+
+		if (event.type === 'thinking') {
+			const last = persistedBlocks[persistedBlocks.length - 1]
+			if (last?.kind === 'thinking') {
+				last.content = event.content ?? ''
+			} else {
+				persistedBlocks.push({ kind: 'thinking', content: event.content ?? '' })
+			}
 		}
 
 		persistedToolCalls = upsertPersistedToolCall(persistedToolCalls, event)
+
+		if (event.type === 'tool_call') {
+			const tc = persistedToolCalls[persistedToolCalls.length - 1]
+			if (tc) {
+				persistedBlocks.push({ kind: 'tool_ref', toolCallId: tc.id })
+			}
+		}
 
 		streamManager.emit(sessionId, {
 			at: Date.now(),
@@ -722,6 +759,10 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 			(!sawTextDelta || sessionResult.result !== streamedText)
 		) {
 			streamManager.emit(sessionId, { at: Date.now(), type: 'text', content: sessionResult.result })
+			// Also reconcile in the persisted blocks
+			if (!persistedBlocks.some((b) => b.kind === 'text')) {
+				persistedBlocks.push({ kind: 'text', content: sessionResult.result })
+			}
 		}
 	} catch (err) {
 		const error = err instanceof Error ? err.message : String(err)
@@ -789,6 +830,7 @@ export async function spawnAgent(options: SpawnOptions): Promise<SpawnResult> {
 					metadata: {
 						sessionId,
 						toolCalls: persistedToolCalls,
+						contentBlocks: persistedBlocks,
 						error: finalizedSessionResult.error ?? null,
 					},
 				})

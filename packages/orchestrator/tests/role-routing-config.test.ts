@@ -19,7 +19,7 @@ describe('D46: role prompt caching', () => {
 	afterAll(() => { invalidateRoleCache() })
 
 	test('returns empty for missing role', () => {
-		const result = loadRolePrompt(tmpRoot, 'nonexistent', { companyName: 'Test', teamRoster: '' })
+		const result = loadRolePrompt(tmpRoot, 'nonexistent', { companyName: 'Test', teamRoster: '', agentName: 'Test' })
 		expect(result.prompt).toBe('')
 		expect(result.defaults).toEqual({})
 	})
@@ -27,7 +27,7 @@ describe('D46: role prompt caching', () => {
 	test('reads role file and returns prompt with variable substitution', async () => {
 		await writeFile(join(tmpRoot, 'team', 'roles', 'developer.md'),
 			'---\ndescription: A developer\n---\nYou are a developer at {{companyName}}.')
-		const result = loadRolePrompt(tmpRoot, 'developer', { companyName: 'Acme', teamRoster: '' })
+		const result = loadRolePrompt(tmpRoot, 'developer', { companyName: 'Acme', teamRoster: '', agentName: 'Test' })
 		expect(result.prompt).toContain('You are a developer at Acme')
 		expect(result.defaults.description).toBe('A developer')
 	})
@@ -45,23 +45,23 @@ describe('D46: role prompt caching', () => {
 	test('invalidateRoleCache(role) clears specific role', async () => {
 		await writeFile(join(tmpRoot, 'team', 'roles', 'a.md'), '---\n---\nRole A')
 		await writeFile(join(tmpRoot, 'team', 'roles', 'b.md'), '---\n---\nRole B')
-		loadRolePrompt(tmpRoot, 'a', { companyName: '', teamRoster: '' })
-		loadRolePrompt(tmpRoot, 'b', { companyName: '', teamRoster: '' })
+		loadRolePrompt(tmpRoot, 'a', { companyName: '', teamRoster: '', agentName: '' })
+		loadRolePrompt(tmpRoot, 'b', { companyName: '', teamRoster: '', agentName: '' })
 		invalidateRoleCache('a')
-		expect(loadRolePrompt(tmpRoot, 'a', { companyName: '', teamRoster: '' }).prompt).toContain('Role A')
-		expect(loadRolePrompt(tmpRoot, 'b', { companyName: '', teamRoster: '' }).prompt).toContain('Role B')
+		expect(loadRolePrompt(tmpRoot, 'a', { companyName: '', teamRoster: '', agentName: '' }).prompt).toContain('Role A')
+		expect(loadRolePrompt(tmpRoot, 'b', { companyName: '', teamRoster: '', agentName: '' }).prompt).toContain('Role B')
 	})
 
 	test('invalidateRoleCache() clears all', async () => {
 		await writeFile(join(tmpRoot, 'team', 'roles', 'x.md'), '---\n---\nRole X')
-		loadRolePrompt(tmpRoot, 'x', { companyName: '', teamRoster: '' })
+		loadRolePrompt(tmpRoot, 'x', { companyName: '', teamRoster: '', agentName: '' })
 		invalidateRoleCache()
-		expect(loadRolePrompt(tmpRoot, 'x', { companyName: '', teamRoster: '' }).prompt).toContain('Role X')
+		expect(loadRolePrompt(tmpRoot, 'x', { companyName: '', teamRoster: '', agentName: '' }).prompt).toContain('Role X')
 	})
 
 	test('replaces {{teamRoster}} variable', async () => {
 		await writeFile(join(tmpRoot, 'team', 'roles', 'lead.md'), '---\n---\nTeam:\n{{teamRoster}}')
-		const result = loadRolePrompt(tmpRoot, 'lead', { companyName: 'Acme', teamRoster: '- Alice\n- Bob' })
+		const result = loadRolePrompt(tmpRoot, 'lead', { companyName: 'Acme', teamRoster: '- Alice\n- Bob', agentName: 'Lead' })
 		expect(result.prompt).toContain('- Alice')
 		expect(result.prompt).toContain('- Bob')
 	})
@@ -69,7 +69,7 @@ describe('D46: role prompt caching', () => {
 	test('parses frontmatter defaults (tools, description)', async () => {
 		await writeFile(join(tmpRoot, 'team', 'roles', 'ops.md'),
 			'---\ndefault_tools:\n  - bash\n  - read_file\ndescription: Operations agent\n---\nDo ops.')
-		const result = loadRolePrompt(tmpRoot, 'ops', { companyName: '', teamRoster: '' })
+		const result = loadRolePrompt(tmpRoot, 'ops', { companyName: '', teamRoster: '', agentName: '' })
 		expect(result.defaults.tools).toEqual(['bash', 'read_file'])
 		expect(result.defaults.description).toBe('Operations agent')
 	})

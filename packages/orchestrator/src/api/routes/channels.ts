@@ -94,12 +94,17 @@ const channels = new Hono<AppEnv>()
 			const storage = c.get('storage')
 			const actor = c.get('actor')
 
+			// Exclude session-backing channels from normal listing
 			if (actor && (actor.role === 'admin' || actor.role === 'owner')) {
-				const result = await storage.listChannels()
+				const result = await storage.listChannels({ exclude_purpose: 'session' })
 				return c.json(result)
 			}
 
-			const result = await storage.listChannels(actor ? { actor_id: actor.id } : undefined)
+			const result = await storage.listChannels(
+				actor
+					? { actor_id: actor.id, exclude_purpose: 'session' }
+					: { exclude_purpose: 'session' },
+			)
 			return c.json(result)
 		},
 	)

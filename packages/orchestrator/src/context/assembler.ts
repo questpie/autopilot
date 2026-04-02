@@ -114,7 +114,7 @@ export function invalidateRoleCache(role?: string): void {
 export function loadRolePrompt(
 	companyRoot: string,
 	role: string,
-	variables: { companyName: string; teamRoster: string },
+	variables: { companyName: string; teamRoster: string; agentName: string },
 ): { prompt: string; defaults: RoleDefaults } {
 	const rolePath = join(companyRoot, specRolePath(role))
 
@@ -130,6 +130,7 @@ export function loadRolePrompt(
 		const prompt = cached.prompt
 			.replace(/\{\{companyName\}\}/g, variables.companyName)
 			.replace(/\{\{teamRoster\}\}/g, variables.teamRoster)
+				.replace(/\{\{agentName\}\}/g, variables.agentName)
 		return { prompt, defaults: cached.defaults }
 	}
 
@@ -147,6 +148,7 @@ export function loadRolePrompt(
 	const prompt = content
 		.replace(/\{\{companyName\}\}/g, variables.companyName)
 		.replace(/\{\{teamRoster\}\}/g, variables.teamRoster)
+		.replace(/\{\{agentName\}\}/g, variables.agentName)
 
 	return { prompt, defaults }
 }
@@ -163,6 +165,7 @@ function buildIdentityPrompt(
 	const { prompt: rolePrompt } = loadRolePrompt(companyRoot, agent.role, {
 		companyName: company.name,
 		teamRoster,
+		agentName: agent.name,
 	})
 
 	const sections: string[] = []

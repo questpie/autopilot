@@ -734,6 +734,23 @@
 		"mcp_no_servers": "No custom MCP servers",
 		"mcp_no_servers_description": "Add MCP servers to extend agent capabilities"
 	},
+	"channels": {
+		"members": "Members",
+		"invite_people": "Invite people",
+		"invite": "Invite",
+		"invite_sent": "Invite sent",
+		"create_channel": "Create channel",
+		"new_dm": "New message",
+		"search_people": "Search people...",
+		"no_people_found": "No people found",
+		"no_members": "No members",
+		"thread": "Thread",
+		"reply_placeholder": "Reply...",
+		"name_too_short": "Name must be at least 2 characters",
+		"name_too_long": "Name must be 50 characters or less",
+		"name_invalid": "Name can only contain lowercase letters, numbers, and hyphens",
+		"name_taken": "A channel with this name already exists"
+	},
 	"common": {
 		"loading": "Loading...",
 		"error": "Something went wrong",
@@ -768,7 +785,8 @@
 		"none": "None",
 		"new": "New",
 		"show_more": "Show more",
-		"show_less": "Show less"
+		"show_less": "Show less",
+		"show_all": "Show all"
 	},
 	"command_palette": {
 		"placeholder": "Type a command or search...",

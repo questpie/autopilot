@@ -367,7 +367,7 @@ const chatSessions = new Hono<AppEnv>()
 					}
 				}
 			} else {
-				channelId = (await storage.getOrCreateDirectChannel(actor.id, agent.id)).id
+				channelId = (await storage.getOrCreateSessionChannel(actor.id, agent.id)).id
 			}
 
 			const sessionId = `session-${crypto.randomUUID()}`

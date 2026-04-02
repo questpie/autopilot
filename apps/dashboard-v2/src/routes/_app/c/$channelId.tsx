@@ -1,9 +1,9 @@
-import { HashIcon } from '@phosphor-icons/react'
+import { Suspense } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { EmptyState } from '@/components/feedback'
-import { PageTransition } from '@/components/layouts/page-transition'
+import { QUESTPIESpinner } from '@/components/brand'
 import { SplitLayout } from '@/components/layouts/split-layout'
 import { ChannelsSidebar } from '@/features/channels/channels-sidebar'
+import { ChannelView } from '@/features/channels/views/channel-view'
 import { useTranslation } from '@/lib/i18n'
 
 export const Route = createFileRoute('/_app/c/$channelId')({
@@ -12,16 +12,19 @@ export const Route = createFileRoute('/_app/c/$channelId')({
 
 function ChannelPage() {
 	const { t } = useTranslation()
+	const { channelId } = Route.useParams()
 
 	return (
 		<SplitLayout sidebar={<ChannelsSidebar />} sidebarTitle={t('nav.channels')}>
-			<PageTransition className="flex flex-1 items-center justify-center p-6">
-				<EmptyState
-					icon={HashIcon}
-					title={t('empty.channel_title')}
-					description={t('empty.channel_description')}
-				/>
-			</PageTransition>
+			<Suspense
+				fallback={
+					<div className="flex flex-1 items-center justify-center">
+						<QUESTPIESpinner />
+					</div>
+				}
+			>
+				<ChannelView channelId={channelId} />
+			</Suspense>
 		</SplitLayout>
 	)
 }

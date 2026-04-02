@@ -3,8 +3,8 @@ import { ArrowClockwiseIcon, ArrowDownIcon, WarningCircleIcon } from '@phosphor-
 import { StickToBottom, useStickToBottomContext } from 'use-stick-to-bottom'
 import { Button } from '@/components/ui/button'
 import {
+	buildMessageBlocks,
 	getMessageRunError,
-	getMessageToolCalls,
 	summarizeErrorDetail,
 } from './metadata'
 import { DayDivider } from './day-divider'
@@ -189,10 +189,9 @@ export function MessageList({
 								name: resolveSenderName(item.message, currentUserId, currentUserName, sessionAgentId, sessionAgentName),
 								type: item.message.external ? 'human' : 'agent',
 							}}
-							content={item.message.content}
+							blocks={buildMessageBlocks(item.message)}
 							timestamp={item.message.at}
 							isGroupStart={item.isGroupStart}
-							toolCalls={getMessageToolCalls(item.message)}
 							attachments={item.message.attachments ?? []}
 							runError={getMessageRunError(item.message)}
 						/>
@@ -207,11 +206,10 @@ export function MessageList({
 								name: streamingAgentName ?? streamingAgentId,
 								type: 'agent',
 							}}
-							content=""
+							blocks={streamingState.blocks}
 							timestamp={new Date().toISOString()}
 							isGroupStart
 							isStreaming={isStreamingLive}
-							streamBlocks={streamingState.blocks}
 						/>
 						{streamingState.status === 'error' ? (
 							<div className="mx-4 mb-2 flex items-start gap-3 border border-destructive/30 bg-destructive/5 px-4 py-3">

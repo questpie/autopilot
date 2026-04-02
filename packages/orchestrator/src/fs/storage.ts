@@ -61,6 +61,8 @@ export interface ActivityFilter {
 export interface ChannelFilter {
 	type?: string
 	actor_id?: string
+	/** Exclude channels whose metadata.purpose matches this value. */
+	exclude_purpose?: string
 }
 
 export interface StorageBackend {
@@ -100,7 +102,14 @@ export interface StorageBackend {
 	removeChannelMember(channelId: string, actorId: string): Promise<void>
 	getChannelMembers(channelId: string): Promise<ChannelMember[]>
 	isChannelMember(channelId: string, actorId: string): Promise<boolean>
-	getOrCreateDirectChannel(actorA: string, actorB: string): Promise<Channel>
+	getOrCreateDirectChannel(
+		actorA: string,
+		actorB: string,
+		actorAType?: 'human' | 'agent',
+		actorBType?: 'human' | 'agent',
+	): Promise<Channel>
+	/** Get or create a session-backing channel (hidden from normal channel lists). */
+	getOrCreateSessionChannel(humanId: string, agentId: string): Promise<Channel>
 
 	// Reactions
 	addReaction(messageId: string, emoji: string, userId: string): Promise<Reaction>

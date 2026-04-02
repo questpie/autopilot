@@ -48,6 +48,38 @@ export class SqliteBackend implements StorageBackend {
 		// FTS5 virtual tables + triggers are initialized separately since
 		// Drizzle ORM does not support virtual tables.
 		await initFts(this.db)
+
+		// One-time migration: tag legacy session-backing channels with
+		// metadata.purpose = 'session' so they're excluded from normal
+		// channel listings (DMs). Legacy channels are direct channels
+		// referenced by agent_sessions.channel_id.
+		await this.migrateSessionChannelMetadata()
+	}
+
+	private async migrateSessionChannelMetadata(): Promise<void> {
+		try {
+			const legacyRows = await this.db
+				.select({ channel_id: schema.agentSessions.channel_id })
+				.from(schema.agentSessions)
+				.innerJoin(schema.channels, eq(schema.channels.id, schema.agentSessions.channel_id))
+				.where(
+					and(
+						sql`json_extract(${schema.channels.metadata}, '$.purpose') IS NULL`,
+						eq(schema.channels.type, 'direct'),
+					),
+				)
+				.groupBy(schema.agentSessions.channel_id)
+
+			for (const row of legacyRows) {
+				if (!row.channel_id) continue
+				await this.db
+					.update(schema.channels)
+					.set({ metadata: JSON.stringify({ purpose: 'session' }) })
+					.where(eq(schema.channels.id, row.channel_id))
+			}
+		} catch {
+			// Non-fatal — migration may run before schema is fully ready
+		}
 	}
 
 	private getRawDb(): Client {
@@ -465,6 +497,15 @@ export class SqliteBackend implements StorageBackend {
 	async listChannels(filter?: ChannelFilter): Promise<Channel[]> {
 		if (filter?.actor_id) {
 			// Join with channel_members to filter by membership
+			const conditions: SQL[] = [eq(schema.channelMembers.actor_id, filter.actor_id)]
+
+			if (filter.exclude_purpose) {
+				// Exclude channels whose metadata contains {"purpose":"<value>"}
+				conditions.push(
+					sql`json_extract(${schema.channels.metadata}, '$.purpose') IS NULL OR json_extract(${schema.channels.metadata}, '$.purpose') != ${filter.exclude_purpose}`,
+				)
+			}
+
 			const rows = await this.db
 				.select({
 					id: schema.channels.id,
@@ -478,14 +519,19 @@ export class SqliteBackend implements StorageBackend {
 				})
 				.from(schema.channels)
 				.innerJoin(schema.channelMembers, eq(schema.channels.id, schema.channelMembers.channel_id))
-				.where(eq(schema.channelMembers.actor_id, filter.actor_id))
+				.where(and(...conditions))
 				.orderBy(asc(schema.channels.name))
 
 			return rows.map((row) => this.rowToChannel(row))
 		}
 
-		const conditions: ReturnType<typeof eq>[] = []
+		const conditions: SQL[] = []
 		if (filter?.type) conditions.push(eq(schema.channels.type, filter.type))
+		if (filter?.exclude_purpose) {
+			conditions.push(
+				sql`json_extract(${schema.channels.metadata}, '$.purpose') IS NULL OR json_extract(${schema.channels.metadata}, '$.purpose') != ${filter.exclude_purpose}`,
+			)
+		}
 
 		const rows = await this.db
 			.select()
@@ -548,7 +594,12 @@ export class SqliteBackend implements StorageBackend {
 		return (result[0]?.count ?? 0) > 0
 	}
 
-	async getOrCreateDirectChannel(actorA: string, actorB: string): Promise<Channel> {
+	async getOrCreateDirectChannel(
+		actorA: string,
+		actorB: string,
+		actorAType: 'human' | 'agent' = 'human',
+		actorBType: 'human' | 'agent' = 'agent',
+	): Promise<Channel> {
 		const [idA, idB] = [actorA, actorB].sort()
 		const candidateId = `dm-${idA}--${idB}`
 
@@ -566,7 +617,6 @@ export class SqliteBackend implements StorageBackend {
 			metadata: {},
 		}
 
-		// Use INSERT OR IGNORE to handle concurrent creation race condition
 		await this.db.insert(schema.channels).values({
 			id: channel.id,
 			name: channel.name,
@@ -578,8 +628,44 @@ export class SqliteBackend implements StorageBackend {
 			metadata: JSON.stringify(channel.metadata ?? {}),
 		}).onConflictDoNothing()
 
-		await this.addChannelMember(candidateId, actorA, 'agent', 'member')
-		await this.addChannelMember(candidateId, actorB, 'agent', 'member')
+		await this.addChannelMember(candidateId, actorA, actorAType, 'member')
+		await this.addChannelMember(candidateId, actorB, actorBType, 'member')
+
+		return channel
+	}
+
+	async getOrCreateSessionChannel(humanId: string, agentId: string): Promise<Channel> {
+		const [idA, idB] = [humanId, agentId].sort()
+		const candidateId = `session-chat-${idA}--${idB}`
+
+		const existing = await this.readChannel(candidateId)
+		if (existing) return existing
+
+		const now = new Date().toISOString()
+		const metadata = { purpose: 'session' }
+		const channel: Channel = {
+			id: candidateId,
+			name: `${idA} & ${idB}`,
+			type: 'direct',
+			created_by: humanId,
+			created_at: now,
+			updated_at: now,
+			metadata,
+		}
+
+		await this.db.insert(schema.channels).values({
+			id: channel.id,
+			name: channel.name,
+			type: channel.type,
+			description: null,
+			created_by: channel.created_by,
+			created_at: channel.created_at,
+			updated_at: channel.updated_at,
+			metadata: JSON.stringify(metadata),
+		}).onConflictDoNothing()
+
+		await this.addChannelMember(candidateId, humanId, 'human', 'member')
+		await this.addChannelMember(candidateId, agentId, 'agent', 'member')
 
 		return channel
 	}

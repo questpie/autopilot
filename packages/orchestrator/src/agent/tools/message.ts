@@ -22,7 +22,7 @@ export function createMessageTool(storage: StorageBackend, _companyRoot: string)
 			// dm-{agentId} → auto-create DM channel
 			if (isDmChannel) {
 				const targetAgentId = args.channel.slice(3) // strip "dm-"
-				const channel = await storage.getOrCreateDirectChannel(ctx.agentId, targetAgentId)
+				const channel = await storage.getOrCreateDirectChannel(ctx.agentId, targetAgentId, 'agent', 'agent')
 
 				const dmMsgId = `msg-${Date.now().toString(36)}`
 				await storage.sendMessage({
