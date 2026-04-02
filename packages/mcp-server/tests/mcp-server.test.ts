@@ -90,15 +90,15 @@ describe('API client', () => {
 		expect(body).toBe('{"title":"Test"}')
 	})
 
-	test('apiPut sends PUT method', async () => {
-		const { apiPut } = await loadApiClient()
+	test('apiPatch sends PATCH method', async () => {
+		const { apiPatch } = await loadApiClient()
 		let method: string | null = null
 		globalThis.fetch = (async (_: unknown, opts: unknown) => {
 			method = (opts as RequestInit).method ?? null
 			return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
 		}) as typeof fetch
-		await apiPut('/api/tasks/1', {})
-		expect(method).toBe('PUT')
+		await apiPatch('/api/tasks/1', {})
+		expect(method).toBe('PATCH')
 	})
 
 	test('apiDelete sends DELETE method', async () => {
@@ -112,17 +112,36 @@ describe('API client', () => {
 		expect(method).toBe('DELETE')
 	})
 
-	test('apiStream returns text', async () => {
-		const { apiStream } = await loadApiClient()
-		globalThis.fetch = (async () =>
-			new Response('data: {"type":"text"}\n\n', { status: 200 })) as typeof fetch
-		const text = await apiStream('/api/agent-sessions/s1/stream')
-		expect(text).toContain('data:')
-	})
+	test('auth header is included when AUTOPILOT_API_KEY is set', async () => {
+		const child = Bun.spawnSync(
+			[
+				'bun',
+				'-e',
+				`
+import { apiGet } from './src/api-client.ts';
+let capturedHeaders = {};
+globalThis.fetch = async (_, opts) => {
+  capturedHeaders = Object.fromEntries(Object.entries(opts?.headers ?? {}));
+  return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+};
+await apiGet('/api/tasks');
+console.log(JSON.stringify(capturedHeaders));
+`,
+			],
+			{
+				cwd: import.meta.dir + '/..',
+				env: {
+					...process.env,
+					AUTOPILOT_API_URL: 'http://localhost:7778',
+					AUTOPILOT_API_KEY: 'my-secret',
+				},
+				stdout: 'pipe',
+				stderr: 'pipe',
+			},
+		)
 
-	test('apiStream throws on error', async () => {
-		const { apiStream } = await loadApiClient()
-		globalThis.fetch = (async () => new Response('Bad Gateway', { status: 502 })) as typeof fetch
-		await expect(apiStream('/api/x')).rejects.toThrow('API 502')
+		expect(child.exitCode).toBe(0)
+		const headers = JSON.parse(child.stdout.toString().trim())
+		expect(headers.Authorization).toBe('Bearer my-secret')
 	})
 })

@@ -1,3 +1,4 @@
+import { createMcpConfig } from '../mcp-config'
 import type { RuntimeAdapter, RunContext, RuntimeResult, WorkerEvent } from './adapter'
 
 export interface ClaudeCodeConfig {
@@ -7,7 +8,21 @@ export interface ClaudeCodeConfig {
   workDir?: string
   /** Max agentic turns. Defaults to 50. */
   maxTurns?: number
+  /** If true, generate and use MCP config. Requires orchestratorUrl and apiKey in RunContext. */
+  useMcp?: boolean
+  /** Custom path to MCP server binary. */
+  mcpBinaryPath?: string
 }
+
+/** MCP tool names exposed by the autopilot MCP server. */
+const MCP_TOOL_NAMES = [
+  'mcp__autopilot__task_list',
+  'mcp__autopilot__task_get',
+  'mcp__autopilot__task_create',
+  'mcp__autopilot__task_update',
+  'mcp__autopilot__run_list',
+  'mcp__autopilot__run_get',
+].join(',')
 
 /**
  * Claude Code runtime adapter.
@@ -43,53 +58,70 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       String(this.config.maxTurns ?? 50),
     ]
 
+    // Add MCP config if enabled
+    let mcpCleanup: (() => Promise<void>) | null = null
+    if (this.config.useMcp) {
+      const mcp = await createMcpConfig({
+        orchestratorUrl: context.orchestratorUrl,
+        apiKey: context.apiKey,
+        mcpBinaryPath: this.config.mcpBinaryPath,
+      })
+      args.push('--mcp-config', mcp.configPath, '--strict-mcp-config')
+      args.push('--allowedTools', MCP_TOOL_NAMES)
+      mcpCleanup = mcp.cleanup
+    }
+
     this.emit({ type: 'progress', summary: 'Launching Claude Code' })
 
-    const proc = Bun.spawn([binaryPath, ...args], {
-      cwd: this.config.workDir ?? process.cwd(),
-      stdout: 'pipe',
-      stderr: 'pipe',
-      env: {
-        ...process.env,
-      },
-    })
-    this.subprocess = proc
-
-    const stdout = await new Response(proc.stdout).text()
-    const stderr = await new Response(proc.stderr).text()
-
-    const exitCode = await proc.exited
-    this.subprocess = null
-
-    if (exitCode !== 0) {
-      const errorMsg = stderr.trim() || `Claude exited with code ${exitCode}`
-      this.emit({ type: 'error', summary: errorMsg })
-      throw new Error(errorMsg)
-    }
-
-    // Parse JSON output from claude --output-format json
-    let result: {
-      result?: string
-      session_id?: string
-      usage?: { input_tokens?: number; output_tokens?: number }
-    }
     try {
-      result = JSON.parse(stdout)
-    } catch {
-      // If not valid JSON, treat stdout as plain text result
-      result = { result: stdout.trim() }
-    }
+      const proc = Bun.spawn([binaryPath, ...args], {
+        cwd: this.config.workDir ?? process.cwd(),
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: {
+          ...process.env,
+        },
+      })
+      this.subprocess = proc
 
-    this.emit({ type: 'progress', summary: 'Claude Code completed' })
+      const stdout = await new Response(proc.stdout).text()
+      const stderr = await new Response(proc.stderr).text()
 
-    return {
-      summary: result.result ?? stdout.trim(),
-      tokens: result.usage
-        ? {
-            input: result.usage.input_tokens ?? 0,
-            output: result.usage.output_tokens ?? 0,
-          }
-        : undefined,
+      const exitCode = await proc.exited
+      this.subprocess = null
+
+      if (exitCode !== 0) {
+        const errorMsg = stderr.trim() || `Claude exited with code ${exitCode}`
+        this.emit({ type: 'error', summary: errorMsg })
+        throw new Error(errorMsg)
+      }
+
+      // Parse JSON output from claude --output-format json
+      let result: {
+        result?: string
+        session_id?: string
+        usage?: { input_tokens?: number; output_tokens?: number }
+      }
+      try {
+        result = JSON.parse(stdout)
+      } catch {
+        // If not valid JSON, treat stdout as plain text result
+        result = { result: stdout.trim() }
+      }
+
+      this.emit({ type: 'progress', summary: 'Claude Code completed' })
+
+      return {
+        summary: result.result ?? stdout.trim(),
+        tokens: result.usage
+          ? {
+              input: result.usage.input_tokens ?? 0,
+              output: result.usage.output_tokens ?? 0,
+            }
+          : undefined,
+      }
+    } finally {
+      if (mcpCleanup) await mcpCleanup()
     }
   }
 
