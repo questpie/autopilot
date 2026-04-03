@@ -1,10 +1,19 @@
 import { eq, and } from 'drizzle-orm'
-import type { WorkerCapability, ExecutionTarget } from '@questpie/autopilot-spec'
+import { ExecutionTargetSchema } from '@questpie/autopilot-spec'
+import type { WorkerCapability } from '@questpie/autopilot-spec'
 import { runs, runEvents } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
-export type RunRow = typeof runs.$inferSelect
-export type RunEventRow = typeof runEvents.$inferSelect
+function _getRun(db: CompanyDb, id: string) {
+	return db.select().from(runs).where(eq(runs.id, id)).get()
+}
+
+function _getRunEvents(db: CompanyDb, runId: string) {
+	return db.select().from(runEvents).where(eq(runEvents.run_id, runId)).all()
+}
+
+export type RunRow = NonNullable<Awaited<ReturnType<typeof _getRun>>>
+export type RunEventRow = Awaited<ReturnType<typeof _getRunEvents>>[number]
 
 export class RunService {
 	constructor(private db: CompanyDb) {}
@@ -20,7 +29,7 @@ export class RunService {
 		runtime_session_ref?: string
 		preferred_worker_id?: string
 		targeting?: string
-	}): Promise<RunRow | undefined> {
+	}) {
 		const now = new Date().toISOString()
 		await this.db.insert(runs).values({
 			...input,
@@ -30,11 +39,11 @@ export class RunService {
 		return this.get(input.id)
 	}
 
-	async get(id: string): Promise<RunRow | undefined> {
-		return this.db.select().from(runs).where(eq(runs.id, id)).get()
+	async get(id: string) {
+		return _getRun(this.db, id)
 	}
 
-	async list(filter?: { status?: string; worker_id?: string; agent_id?: string; task_id?: string }): Promise<RunRow[]> {
+	async list(filter?: { status?: string; worker_id?: string; agent_id?: string; task_id?: string }) {
 		const conditions = []
 		if (filter?.status) conditions.push(eq(runs.status, filter.status))
 		if (filter?.worker_id) conditions.push(eq(runs.worker_id, filter.worker_id))
@@ -59,7 +68,7 @@ export class RunService {
 		workerId: string,
 		runtime?: string,
 		workerCapabilities?: WorkerCapability[],
-	): Promise<RunRow | undefined> {
+	) {
 		const conditions = [eq(runs.status, 'pending')]
 		if (runtime) conditions.push(eq(runs.runtime, runtime))
 
@@ -100,7 +109,7 @@ export class RunService {
 	}
 
 	/** Transition a claimed run to running. */
-	async start(runId: string): Promise<RunRow | undefined> {
+	async start(runId: string) {
 		await this.db
 			.update(runs)
 			.set({ status: 'running', started_at: new Date().toISOString() })
@@ -111,7 +120,7 @@ export class RunService {
 	private static CANCELLABLE_STATUSES = new Set(['pending', 'claimed', 'running'])
 
 	/** Cancel a pending, claimed, or running run. Returns the updated run or undefined if not cancellable. */
-	async cancel(runId: string, reason?: string): Promise<RunRow | undefined> {
+	async cancel(runId: string, reason?: string) {
 		const run = await this.get(runId)
 		if (!run || !RunService.CANCELLABLE_STATUSES.has(run.status)) return undefined
 		await this.db
@@ -129,7 +138,7 @@ export class RunService {
 	async appendEvent(
 		runId: string,
 		event: { type: string; summary?: string; metadata?: string },
-	): Promise<void> {
+	) {
 		await this.db.insert(runEvents).values({
 			run_id: runId,
 			type: event.type,
@@ -140,8 +149,8 @@ export class RunService {
 	}
 
 	/** Get events for a run, ordered by creation time. */
-	async getEvents(runId: string): Promise<RunEventRow[]> {
-		return this.db.select().from(runEvents).where(eq(runEvents.run_id, runId)).all()
+	async getEvents(runId: string) {
+		return _getRunEvents(this.db, runId)
 	}
 
 	/** Complete a run with final status, optional summary/tokens, and session ref. */
@@ -156,7 +165,7 @@ export class RunService {
 			runtime_session_ref?: string
 			resumable?: boolean
 		},
-	): Promise<RunRow | undefined> {
+	) {
 		await this.db
 			.update(runs)
 			.set({
@@ -184,7 +193,7 @@ export class RunService {
 			message: string
 			initiated_by?: string
 		},
-	): Promise<RunRow | undefined> {
+	) {
 		const original = await this.get(originalRunId)
 		if (!original) return undefined
 
@@ -230,28 +239,38 @@ function isEligible(run: RunRow, workerId: string, workerTags: Set<string>): boo
 
 	if (!run.targeting) return true
 
+	let raw: unknown
 	try {
-		const t = JSON.parse(run.targeting) as ExecutionTarget
-		const allowFallback = t.allow_fallback !== false
+		raw = JSON.parse(run.targeting)
+	} catch (err) {
+		console.warn(`[targeting] run=${run.id} malformed targeting JSON, treating as unconstrained:`, err)
+		return true
+	}
 
-		// Hard pin — required_worker_id is never relaxed by allow_fallback
-		if (t.required_worker_id && t.required_worker_id !== workerId) {
-			logSkip(run.id, workerId, `required_worker_id is ${t.required_worker_id}`)
+	const parsed = ExecutionTargetSchema.safeParse(raw)
+	if (!parsed.success) {
+		console.warn(`[targeting] run=${run.id} invalid targeting schema:`, parsed.error.message)
+		return true
+	}
+
+	const t = parsed.data
+	const allowFallback = t.allow_fallback !== false
+
+	// Hard pin — required_worker_id is never relaxed by allow_fallback
+	if (t.required_worker_id && t.required_worker_id !== workerId) {
+		logSkip(run.id, workerId, `required_worker_id is ${t.required_worker_id}`)
+		return false
+	}
+	if (t.required_runtime && !workerTags.has(t.required_runtime) && !allowFallback) {
+		logSkip(run.id, workerId, `requires runtime "${t.required_runtime}", worker has [${[...workerTags]}]`)
+		return false
+	}
+	if (t.required_worker_tags?.length) {
+		const missing = t.required_worker_tags.filter((tag) => !workerTags.has(tag))
+		if (missing.length > 0 && !allowFallback) {
+			logSkip(run.id, workerId, `missing worker tags: [${missing}]`)
 			return false
 		}
-		if (t.required_runtime && !workerTags.has(t.required_runtime) && !allowFallback) {
-			logSkip(run.id, workerId, `requires runtime "${t.required_runtime}", worker has [${[...workerTags]}]`)
-			return false
-		}
-		if (t.required_worker_tags?.length) {
-			const missing = t.required_worker_tags.filter((tag) => !workerTags.has(tag))
-			if (missing.length > 0 && !allowFallback) {
-				logSkip(run.id, workerId, `missing worker tags: [${missing}]`)
-				return false
-			}
-		}
-	} catch {
-		// Malformed targeting — treat as unconstrained
 	}
 
 	return true

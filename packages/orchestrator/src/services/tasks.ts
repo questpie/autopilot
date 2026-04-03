@@ -2,8 +2,11 @@ import { eq, and } from 'drizzle-orm'
 import { tasks } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
-export type TaskRow = typeof tasks.$inferSelect
-export type TaskInsert = typeof tasks.$inferInsert
+function _getTask(db: CompanyDb, id: string) {
+	return db.select().from(tasks).where(eq(tasks.id, id)).get()
+}
+
+export type TaskRow = NonNullable<Awaited<ReturnType<typeof _getTask>>>
 
 export class TaskService {
 	constructor(private db: CompanyDb) {}
@@ -21,7 +24,7 @@ export class TaskService {
 		context?: string
 		metadata?: string
 		created_by: string
-	}): Promise<TaskRow | undefined> {
+	}) {
 		const now = new Date().toISOString()
 		await this.db.insert(tasks).values({
 			...input,
@@ -35,15 +38,15 @@ export class TaskService {
 		return this.get(input.id)
 	}
 
-	async get(id: string): Promise<TaskRow | undefined> {
-		return this.db.select().from(tasks).where(eq(tasks.id, id)).get()
+	async get(id: string) {
+		return _getTask(this.db, id)
 	}
 
 	async list(filter?: {
 		status?: string
 		assigned_to?: string
 		workflow_id?: string
-	}): Promise<TaskRow[]> {
+	}) {
 		const conditions = []
 		if (filter?.status) conditions.push(eq(tasks.status, filter.status))
 		if (filter?.assigned_to) conditions.push(eq(tasks.assigned_to, filter.assigned_to))
@@ -75,7 +78,7 @@ export class TaskService {
 			context: string
 			metadata: string
 		}>,
-	): Promise<TaskRow | undefined> {
+	) {
 		await this.db
 			.update(tasks)
 			.set({ ...updates, updated_at: new Date().toISOString() })

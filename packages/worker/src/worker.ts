@@ -1,4 +1,6 @@
-import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse, ExternalAction, SecretRef } from '@questpie/autopilot-spec'
+import { ExternalActionSchema, SecretRefSchema } from '@questpie/autopilot-spec'
+import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse } from '@questpie/autopilot-spec'
+import { z } from 'zod'
 import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
 import { executeActions } from './actions/webhook'
 import { WorkspaceManager, type WorkspaceInfo } from './workspace'
@@ -129,8 +131,8 @@ export class AutopilotWorker {
         method: 'POST',
         body: { worker_id: this.workerId },
       })
-    } catch {
-      // Best effort
+    } catch (err) {
+      console.warn('[worker] deregister failed (best effort):', err)
     }
   }
 
@@ -279,7 +281,7 @@ export class AutopilotWorker {
 
     try {
       adapter.onEvent((event) => {
-        this.postEvent(run.id, event).catch(() => {})
+        this.postEvent(run.id, event).catch((err) => console.warn('[worker] failed to post event:', err))
       })
 
       const result = await adapter.start(context)
@@ -311,20 +313,28 @@ export class AutopilotWorker {
     }
   }
 
+  private static TargetingExtrasSchema = z.object({
+    actions: z.array(ExternalActionSchema).default([]),
+    secret_refs: z.array(SecretRefSchema).default([]),
+  }).passthrough()
+
   /** Execute post-run external actions if targeting includes them. */
   private async runPostActions(run: ClaimedRun): Promise<void> {
     if (!run.targeting) return
 
-    const targeting = run.targeting as Record<string, unknown>
-    const actions = targeting.actions as ExternalAction[] | undefined
-    if (!actions || actions.length === 0) return
+    const parsed = AutopilotWorker.TargetingExtrasSchema.safeParse(run.targeting)
+    if (!parsed.success) {
+      console.warn(`[worker] invalid targeting for run=${run.id}:`, parsed.error.message)
+      return
+    }
 
-    const secretRefs = (targeting.secret_refs ?? []) as SecretRef[]
+    const { actions, secret_refs } = parsed.data
+    if (actions.length === 0) return
 
     await executeActions(
       actions,
-      (event) => { this.postEvent(run.id, event).catch(() => {}) },
-      secretRefs,
+      (event) => { this.postEvent(run.id, event).catch((err) => console.warn('[worker] failed to post action event:', err)) },
+      secret_refs,
     )
   }
 

@@ -92,15 +92,15 @@ export async function createIndexDb(companyRoot: string): Promise<IndexDbResult>
 		await client.execute(
 			'CREATE INDEX IF NOT EXISTS search_vec_idx ON search_index (libsql_vector_idx(embedding))',
 		)
-	} catch {
-		/* index exists or libSQL version without vector support */
+	} catch (err) {
+		console.warn('[db] vector index search_vec_idx unavailable (libSQL without vector support?):', (err as Error).message)
 	}
 	try {
 		await client.execute(
 			'CREATE INDEX IF NOT EXISTS chunks_vec_idx ON chunks (libsql_vector_idx(embedding))',
 		)
-	} catch {
-		/* index exists or libSQL version without vector support */
+	} catch (err) {
+		console.warn('[db] vector index chunks_vec_idx unavailable (libSQL without vector support?):', (err as Error).message)
 	}
 
 	return { db, raw: client }
@@ -121,8 +121,8 @@ async function initSearchFts(client: Client): Promise<void> {
 				tokenize='porter unicode61'
 			)
 		`)
-	} catch {
-		/* already exists */
+	} catch (err) {
+		console.warn('[db] search FTS5 init failed:', (err as Error).message)
 	}
 
 	try {
@@ -142,8 +142,8 @@ async function initSearchFts(client: Client): Promise<void> {
 				INSERT INTO search_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
 			END
 		`)
-	} catch {
-		/* triggers already exist */
+	} catch (err) {
+		console.warn('[db] search FTS5 triggers failed:', (err as Error).message)
 	}
 }
 
@@ -160,8 +160,8 @@ async function initChunksFts(client: Client): Promise<void> {
 				tokenize='porter unicode61'
 			)
 		`)
-	} catch {
-		/* already exists */
+	} catch (err) {
+		console.warn('[db] chunks FTS5 init failed:', (err as Error).message)
 	}
 
 	try {
@@ -181,8 +181,8 @@ async function initChunksFts(client: Client): Promise<void> {
 				INSERT INTO chunks_fts(rowid, content) VALUES (new.id, new.content);
 			END
 		`)
-	} catch {
-		/* triggers exist */
+	} catch (err) {
+		console.warn('[db] chunks FTS5 triggers failed:', (err as Error).message)
 	}
 }
 
@@ -198,8 +198,8 @@ async function initMessagesFts(client: Client): Promise<void> {
 				content_rowid=rowid
 			)
 		`)
-	} catch {
-		/* already exists */
+	} catch (err) {
+		console.warn('[db] messages FTS5 init failed:', (err as Error).message)
 	}
 
 	try {
@@ -219,8 +219,8 @@ async function initMessagesFts(client: Client): Promise<void> {
 				INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
 			END
 		`)
-	} catch {
-		/* triggers already exist */
+	} catch (err) {
+		console.warn('[db] messages FTS5 triggers failed:', (err as Error).message)
 	}
 }
 

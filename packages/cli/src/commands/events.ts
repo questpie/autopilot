@@ -54,8 +54,8 @@ const eventsCmd = new Command('events')
 							.map(([k, v]) => `${k}=${v}`)
 							.join(' ')
 						console.log(`${dim(ts)} ${badge(event.type, 'cyan')} ${details}`)
-					} catch {
-						// skip malformed
+					} catch (err) {
+						console.debug('[events] malformed SSE data:', (err as Error).message)
 					}
 				}
 			}

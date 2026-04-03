@@ -2,7 +2,11 @@ import { eq } from 'drizzle-orm'
 import { artifacts } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
-export type ArtifactRow = typeof artifacts.$inferSelect
+function _getArtifact(db: CompanyDb, id: string) {
+	return db.select().from(artifacts).where(eq(artifacts.id, id)).get()
+}
+
+export type ArtifactRow = NonNullable<Awaited<ReturnType<typeof _getArtifact>>>
 
 export class ArtifactService {
 	constructor(private db: CompanyDb) {}
@@ -17,7 +21,7 @@ export class ArtifactService {
 		ref_value: string
 		mime_type?: string
 		metadata?: string
-	}): Promise<ArtifactRow | undefined> {
+	}) {
 		await this.db.insert(artifacts).values({
 			...input,
 			created_at: new Date().toISOString(),
@@ -25,15 +29,15 @@ export class ArtifactService {
 		return this.get(input.id)
 	}
 
-	async get(id: string): Promise<ArtifactRow | undefined> {
-		return this.db.select().from(artifacts).where(eq(artifacts.id, id)).get()
+	async get(id: string) {
+		return _getArtifact(this.db, id)
 	}
 
-	async listForRun(runId: string): Promise<ArtifactRow[]> {
+	async listForRun(runId: string) {
 		return this.db.select().from(artifacts).where(eq(artifacts.run_id, runId)).all()
 	}
 
-	async listForTask(taskId: string): Promise<ArtifactRow[]> {
+	async listForTask(taskId: string) {
 		return this.db.select().from(artifacts).where(eq(artifacts.task_id, taskId)).all()
 	}
 }

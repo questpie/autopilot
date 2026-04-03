@@ -84,7 +84,8 @@ workerCmd.addCommand(
 					let workDir: string
 					try {
 						workDir = await findCompanyRoot()
-					} catch {
+					} catch (err) {
+						console.warn(`[worker] no company root found, using cwd: ${(err as Error).message}`)
 						workDir = process.cwd()
 					}
 
@@ -225,7 +226,7 @@ workerCmd.addCommand(
 									const tags = c.tags?.length ? ` [${c.tags.join(',')}]` : ''
 									return `${c.runtime}${tags}`
 								}).join(', ')
-							} catch { /* ignore */ }
+							} catch (err) { console.debug('[worker] malformed capabilities JSON:', (err as Error).message) }
 							return [
 								dim(w.id),
 								badge(

@@ -1,5 +1,5 @@
 export { TaskService } from './tasks'
-export type { TaskRow, TaskInsert } from './tasks'
+export type { TaskRow } from './tasks'
 
 export { RunService } from './runs'
 export type { RunRow, RunEventRow } from './runs'

@@ -8,13 +8,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { z } from 'zod'
 
-export interface StoredCredential {
-  orchestratorUrl: string
-  workerId: string
-  machineSecret: string
-  enrolledAt: string
-}
+const StoredCredentialSchema = z.object({
+  orchestratorUrl: z.string(),
+  workerId: z.string(),
+  machineSecret: z.string(),
+  enrolledAt: z.string(),
+})
+
+export type StoredCredential = z.infer<typeof StoredCredentialSchema>
 
 const CREDS_DIR = join(homedir(), '.autopilot', 'credentials')
 
@@ -32,10 +35,15 @@ export function loadCredential(orchestratorUrl: string): StoredCredential | null
   const path = credPath(orchestratorUrl)
   if (!existsSync(path)) return null
   try {
-    const data = JSON.parse(readFileSync(path, 'utf-8')) as StoredCredential
-    if (data.orchestratorUrl !== orchestratorUrl) return null
-    return data
-  } catch {
+    const parsed = StoredCredentialSchema.safeParse(JSON.parse(readFileSync(path, 'utf-8')))
+    if (!parsed.success) {
+      console.warn(`[credentials] corrupt credential file at ${path}:`, parsed.error.message)
+      return null
+    }
+    if (parsed.data.orchestratorUrl !== orchestratorUrl) return null
+    return parsed.data
+  } catch (err) {
+    console.warn(`[credentials] failed to read ${path}:`, (err as Error).message)
     return null
   }
 }

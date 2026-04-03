@@ -43,7 +43,8 @@ async function getHumanSession(request: Request, auth: Auth): Promise<HumanSessi
 		const getSessionFn = authApi.getSession
 		if (!getSessionFn) return null
 		return (await getSessionFn({ headers: request.headers })) as HumanSession | null
-	} catch {
+	} catch (err) {
+		console.warn('[auth] session resolution failed:', (err as Error).message)
 		return null
 	}
 }
@@ -88,8 +89,8 @@ async function resolveActor(request: Request, auth: Auth): Promise<Actor | null>
 					}
 				}
 			}
-		} catch {
-			// Not a Better Auth API key — that's fine
+		} catch (err) {
+			console.debug('[auth] bearer token is not a Better Auth API key:', (err as Error).message)
 		}
 	}
 

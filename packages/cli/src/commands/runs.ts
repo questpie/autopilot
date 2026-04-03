@@ -169,8 +169,8 @@ runsCmd.addCommand(
 							console.log(`  ${dim('Worker tags:')} ${t.required_worker_tags.join(', ')}`)
 						}
 						console.log(`  ${dim('Fallback:')} ${t.allow_fallback !== false ? 'yes' : 'no'}`)
-					} catch {
-						// ignore parse errors
+					} catch (err) {
+						console.log(dim(`  (invalid targeting JSON: ${(err as Error).message})`))
 					}
 				}
 

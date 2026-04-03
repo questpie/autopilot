@@ -27,7 +27,8 @@ export function loadCredentials(): Credentials | null {
 	if (!existsSync(CREDS_PATH)) return null
 	try {
 		return JSON.parse(readFileSync(CREDS_PATH, 'utf-8')) as Credentials
-	} catch {
+	} catch (err) {
+		console.warn(`[auth] failed to parse credentials at ${CREDS_PATH}:`, (err as Error).message)
 		return null
 	}
 }

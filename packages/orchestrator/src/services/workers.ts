@@ -2,8 +2,16 @@ import { eq, and } from 'drizzle-orm'
 import { workers, workerLeases } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
-export type WorkerRow = typeof workers.$inferSelect
-export type WorkerLeaseRow = typeof workerLeases.$inferSelect
+function _getWorker(db: CompanyDb, id: string) {
+	return db.select().from(workers).where(eq(workers.id, id)).get()
+}
+
+function _getLease(db: CompanyDb, id: string) {
+	return db.select().from(workerLeases).where(eq(workerLeases.id, id)).get()
+}
+
+export type WorkerRow = NonNullable<Awaited<ReturnType<typeof _getWorker>>>
+export type WorkerLeaseRow = NonNullable<Awaited<ReturnType<typeof _getLease>>>
 
 export class WorkerService {
 	constructor(private db: CompanyDb) {}
@@ -15,7 +23,7 @@ export class WorkerService {
 		device_id?: string
 		name?: string
 		capabilities?: string
-	}): Promise<WorkerRow | undefined> {
+	}) {
 		const now = new Date().toISOString()
 
 		// Upsert: if worker already exists, update heartbeat and set online
@@ -44,11 +52,11 @@ export class WorkerService {
 		return this.get(input.id)
 	}
 
-	async get(id: string): Promise<WorkerRow | undefined> {
-		return this.db.select().from(workers).where(eq(workers.id, id)).get()
+	async get(id: string) {
+		return _getWorker(this.db, id)
 	}
 
-	async list(filter?: { status?: string }): Promise<WorkerRow[]> {
+	async list(filter?: { status?: string }) {
 		if (filter?.status) {
 			return this.db.select().from(workers).where(eq(workers.status, filter.status)).all()
 		}
@@ -99,7 +107,7 @@ export class WorkerService {
 		worker_id: string
 		run_id: string
 		expires_at: string
-	}): Promise<WorkerLeaseRow | undefined> {
+	}) {
 		await this.db.insert(workerLeases).values({
 			...input,
 			status: 'active',
@@ -108,11 +116,11 @@ export class WorkerService {
 		return this.getLease(input.id)
 	}
 
-	async getLease(id: string): Promise<WorkerLeaseRow | undefined> {
-		return this.db.select().from(workerLeases).where(eq(workerLeases.id, id)).get()
+	async getLease(id: string) {
+		return _getLease(this.db, id)
 	}
 
-	async getActiveLeaseForWorker(workerId: string): Promise<WorkerLeaseRow | undefined> {
+	async getActiveLeaseForWorker(workerId: string) {
 		return this.db
 			.select()
 			.from(workerLeases)
@@ -128,7 +136,7 @@ export class WorkerService {
 	 * Expire leases that have passed their expires_at timestamp.
 	 * Returns the expired lease rows (with worker_id and run_id intact).
 	 */
-	async expireLeases(): Promise<WorkerLeaseRow[]> {
+	async expireLeases() {
 		const now = new Date().toISOString()
 		const active = await this.db
 			.select()

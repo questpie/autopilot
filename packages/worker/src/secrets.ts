@@ -52,8 +52,10 @@ function resolveOne(ref: SecretRef): string {
 			}
 			return result.stdout.toString().trim()
 		}
-		default:
-			throw new Error(`Unknown source type: ${(ref as { source: string }).source}`)
+		default: {
+			const _exhaustive: never = ref.source
+			throw new Error(`Unknown source type: ${_exhaustive}`)
+		}
 	}
 }
 

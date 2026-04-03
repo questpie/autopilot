@@ -8,7 +8,7 @@ import {
 	EnvironmentSchema,
 	PATHS,
 } from '@questpie/autopilot-spec'
-import type { z } from 'zod'
+import type { z, ZodTypeDef } from 'zod'
 
 export type Agent = z.output<typeof AgentSchema>
 export type Workflow = z.output<typeof WorkflowSchema>
@@ -23,31 +23,31 @@ export async function loadCompany(companyRoot: string): Promise<Company> {
 }
 
 /** Load all agent definitions from `<companyRoot>/team/agents/*.yaml`. */
-export async function loadAgents(companyRoot: string): Promise<Agent[]> {
+export async function loadAgents(companyRoot: string) {
 	const dir = join(companyRoot, PATHS.AGENTS_DIR)
-	return loadYamlDir(dir, AgentSchema) as Promise<Agent[]>
+	return loadYamlDir(dir, AgentSchema)
 }
 
 /** Load all workflow definitions from `<companyRoot>/team/workflows/*.yaml`. */
-export async function loadWorkflows(companyRoot: string): Promise<Workflow[]> {
+export async function loadWorkflows(companyRoot: string) {
 	const dir = join(companyRoot, PATHS.WORKFLOWS_DIR)
-	return loadYamlDir(dir, WorkflowSchema) as Promise<Workflow[]>
+	return loadYamlDir(dir, WorkflowSchema)
 }
 
 /** Load all environment definitions from `<companyRoot>/team/environments/*.yaml`. */
-export async function loadEnvironments(companyRoot: string): Promise<Environment[]> {
+export async function loadEnvironments(companyRoot: string) {
 	const dir = join(companyRoot, PATHS.ENVIRONMENTS_DIR)
-	return loadYamlDir(dir, EnvironmentSchema) as Promise<Environment[]>
+	return loadYamlDir(dir, EnvironmentSchema)
 }
 
 /** Generic helper: read all YAML files in a directory and validate against a schema. */
-// biome-ignore lint: zod input/output type mismatch requires broader generic
-async function loadYamlDir<T>(dir: string, schema: z.ZodType<T>): Promise<unknown[]> {
+async function loadYamlDir<T>(dir: string, schema: z.ZodType<T, ZodTypeDef, unknown>): Promise<T[]> {
 	let files: string[]
 	try {
 		files = await readdir(dir)
-	} catch {
-		return []
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
+		throw err
 	}
 
 	const results: T[] = []

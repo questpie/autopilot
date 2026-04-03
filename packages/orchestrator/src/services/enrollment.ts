@@ -16,7 +16,11 @@ import { eq } from 'drizzle-orm'
 import { joinTokens, workers } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
-export type JoinTokenRow = typeof joinTokens.$inferSelect
+function _getToken(db: CompanyDb, id: string) {
+  return db.select().from(joinTokens).where(eq(joinTokens.id, id)).get()
+}
+
+export type JoinTokenRow = NonNullable<Awaited<ReturnType<typeof _getToken>>>
 
 /** SHA-256 hash a string. Returns hex. */
 function hashSecret(secret: string): string {
@@ -63,12 +67,12 @@ export class EnrollmentService {
   }
 
   /** Get a token by ID. */
-  async getToken(id: string): Promise<JoinTokenRow | undefined> {
-    return this.db.select().from(joinTokens).where(eq(joinTokens.id, id)).get()
+  async getToken(id: string) {
+    return _getToken(this.db, id)
   }
 
   /** List all tokens (for admin visibility). */
-  async listTokens(): Promise<JoinTokenRow[]> {
+  async listTokens() {
     return this.db.select().from(joinTokens).all()
   }
 

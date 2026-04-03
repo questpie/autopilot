@@ -141,8 +141,8 @@ tasksCmd.addCommand(
 							}
 						}
 					}
-				} catch {
-					// Activity endpoint may not exist in older servers
+				} catch (err) {
+					console.debug('[tasks] activity fetch failed:', (err as Error).message)
 				}
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
