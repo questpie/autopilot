@@ -111,7 +111,7 @@ describe('start bootstrap: auth + MCP', () => {
 		}
 
 		// Use the REAL createApp — local dev mode for these tests
-		app = createApp({ companyRoot, db: dbResult.db, auth, services, allowLocalDevBypass: true })
+		app = createApp({ companyRoot, db: dbResult.db, auth, services, authoredConfig: { company: {} as any, agents: new Map(), workflows: new Map(), environments: new Map() }, allowLocalDevBypass: true })
 	})
 
 	afterAll(async () => {

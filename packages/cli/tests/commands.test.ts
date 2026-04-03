@@ -28,8 +28,12 @@ describe('command registration', () => {
 		expect(commandNames).toContain('auth')
 	})
 
-	it('has exactly 6 top-level commands', () => {
-		expect(program.commands.length).toBe(6)
+	it('registers workflows command', () => {
+		expect(commandNames).toContain('workflows')
+	})
+
+	it('has exactly 8 top-level commands', () => {
+		expect(program.commands.length).toBe(8)
 	})
 
 	it('server has start subcommand', () => {
@@ -56,12 +60,13 @@ describe('command registration', () => {
 		expect(subNames).toContain('update')
 	})
 
-	it('has runs subcommands: show, continue', () => {
+	it('has runs subcommands: show, continue, cancel', () => {
 		const runsCmd = program.commands.find((c) => c.name() === 'runs')
 		expect(runsCmd).toBeDefined()
 		const subNames = runsCmd!.commands.map((c) => c.name())
 		expect(subNames).toContain('show')
 		expect(subNames).toContain('continue')
+		expect(subNames).toContain('cancel')
 	})
 
 	it('has auth subcommands: login, setup, status, logout', () => {

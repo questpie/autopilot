@@ -16,7 +16,7 @@ import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, AuthoredConfig } from '../services'
 import type { Actor } from '../auth/types'
 import { authMiddleware } from './middleware/auth'
 import { workerAuthMiddleware } from './middleware/worker-auth'
@@ -34,6 +34,7 @@ export interface Services {
 	workerService: WorkerService
 	enrollmentService: EnrollmentService
 	activityService: ActivityService
+	artifactService: ArtifactService
 	workflowEngine: WorkflowEngine
 }
 
@@ -45,6 +46,7 @@ export interface AppEnv {
 		db: CompanyDb
 		auth: Auth
 		services: Services
+		authoredConfig: AuthoredConfig
 	}
 }
 
@@ -54,6 +56,7 @@ export interface AppConfig {
 	db: CompanyDb
 	auth: Auth
 	services: Services
+	authoredConfig: AuthoredConfig
 	/**
 	 * Allow X-Local-Dev bypass for worker auth.
 	 * Only set to true by `autopilot start` (local convenience mode).
@@ -102,6 +105,7 @@ export function createApp(config: AppConfig) {
 		c.set('db', config.db)
 		c.set('auth', config.auth)
 		c.set('services', config.services)
+		c.set('authoredConfig', config.authoredConfig)
 		c.set('actor', null)
 		c.set('workerId', null)
 		await next()
@@ -115,14 +119,36 @@ export function createApp(config: AppConfig) {
 	// ── Public routes ────────────────────────────────────────────────────
 	app.get('/api/health', (c) => c.json({ ok: true, ts: new Date().toISOString() }))
 
+	// ── Auth helper (local dev bypass gated behind server-side flag) ─────
+	const userAuth = authMiddleware({ allowLocalDevBypass: config.allowLocalDevBypass ?? false })
+
+	// ── Config inspection (user auth required) ──────────────────────────
+	app.use('/api/config/*', userAuth)
+	app.get('/api/config/workflows', (c) => {
+		const cfg = c.get('authoredConfig')
+		return c.json([...cfg.workflows.values()], 200)
+	})
+	app.get('/api/config/agents', (c) => {
+		const cfg = c.get('authoredConfig')
+		return c.json([...cfg.agents.values()], 200)
+	})
+	app.get('/api/config/environments', (c) => {
+		const cfg = c.get('authoredConfig')
+		return c.json([...cfg.environments.values()], 200)
+	})
+
 	// ── Enrollment: enroll is public, tokens requires user auth ──────────
 	app.use('/api/enrollment/tokens', authMiddleware())
 	// /api/enrollment/enroll is public (worker uses join token, not session)
 
 	// ── User auth for human-facing routes ────────────────────────────────
-	app.use('/api/tasks/*', authMiddleware())
-	app.use('/api/tasks', authMiddleware())
-	app.use('/api/events', authMiddleware())
+	app.use('/api/tasks/*', userAuth)
+	app.use('/api/tasks', userAuth)
+	app.use('/api/events', userAuth)
+
+	// ── User auth for run inspection and operator actions ────────────────
+	app.use('/api/runs/*/artifacts', userAuth)
+	app.use('/api/runs/*/cancel', userAuth)
 
 	// ── Worker auth for machine routes ───────────────────────────────────
 	const workerAuth = workerAuthMiddleware({ allowLocalDevBypass: config.allowLocalDevBypass ?? false })

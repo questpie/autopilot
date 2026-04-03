@@ -19,7 +19,7 @@ import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
 import { loadCompany, loadAgents, loadWorkflows, loadEnvironments } from './config/loader'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService } from './services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService } from './services'
 import type { AuthoredConfig } from './services'
 
 export interface StartServerOptions {
@@ -77,6 +77,7 @@ export async function startServer(options?: StartServerOptions) {
 	const workerService = new WorkerService(companyDb)
 	const enrollmentService = new EnrollmentService(companyDb)
 	const activityService = new ActivityService(companyDb)
+	const artifactService = new ArtifactService(companyDb)
 
 	const workflowEngine = new WorkflowEngine(authoredConfig, taskService, runService, activityService)
 
@@ -92,6 +93,7 @@ export async function startServer(options?: StartServerOptions) {
 		workerService,
 		enrollmentService,
 		activityService,
+		artifactService,
 		workflowEngine,
 	}
 
@@ -101,6 +103,7 @@ export async function startServer(options?: StartServerOptions) {
 		db: companyDb,
 		auth,
 		services,
+		authoredConfig,
 		corsOrigin: env.CORS_ORIGIN,
 		allowLocalDevBypass: options?.allowLocalDevBypass,
 	})

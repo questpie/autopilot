@@ -1,0 +1,12 @@
+name: "QuestPie Autopilot"
+slug: questpie-autopilot
+description: "Dogfood instance — developing Autopilot with Autopilot"
+timezone: Europe/Bratislava
+language: en
+owner:
+  name: Andrej
+  email: andrej@questpie.com
+settings:
+  default_task_assignee: dev
+  default_workflow: dogfood
+  default_runtime: claude-code

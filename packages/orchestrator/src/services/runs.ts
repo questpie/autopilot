@@ -34,11 +34,12 @@ export class RunService {
 		return this.db.select().from(runs).where(eq(runs.id, id)).get()
 	}
 
-	async list(filter?: { status?: string; worker_id?: string; agent_id?: string }): Promise<RunRow[]> {
+	async list(filter?: { status?: string; worker_id?: string; agent_id?: string; task_id?: string }): Promise<RunRow[]> {
 		const conditions = []
 		if (filter?.status) conditions.push(eq(runs.status, filter.status))
 		if (filter?.worker_id) conditions.push(eq(runs.worker_id, filter.worker_id))
 		if (filter?.agent_id) conditions.push(eq(runs.agent_id, filter.agent_id))
+		if (filter?.task_id) conditions.push(eq(runs.task_id, filter.task_id))
 
 		if (conditions.length === 0) {
 			return this.db.select().from(runs).all()
@@ -103,6 +104,23 @@ export class RunService {
 		await this.db
 			.update(runs)
 			.set({ status: 'running', started_at: new Date().toISOString() })
+			.where(eq(runs.id, runId))
+		return this.get(runId)
+	}
+
+	private static CANCELLABLE_STATUSES = new Set(['pending', 'claimed', 'running'])
+
+	/** Cancel a pending, claimed, or running run. Returns the updated run or undefined if not cancellable. */
+	async cancel(runId: string, reason?: string): Promise<RunRow | undefined> {
+		const run = await this.get(runId)
+		if (!run || !RunService.CANCELLABLE_STATUSES.has(run.status)) return undefined
+		await this.db
+			.update(runs)
+			.set({
+				status: 'failed',
+				error: reason ?? 'cancelled by operator',
+				ended_at: new Date().toISOString(),
+			})
 			.where(eq(runs.id, runId))
 		return this.get(runId)
 	}

@@ -15,5 +15,8 @@ export { InferenceService } from './inference'
 export { ActivityService } from './activity'
 export type { ActivityRow } from './activity'
 
+export { ArtifactService } from './artifacts'
+export type { ArtifactRow } from './artifacts'
+
 export { WorkflowEngine } from './workflow-engine'
 export type { AuthoredConfig, IntakeResult, AdvanceResult } from './workflow-engine'

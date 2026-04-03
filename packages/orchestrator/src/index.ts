@@ -1,3 +1,6 @@
 export { startServer } from './server'
 export type { StartServerOptions } from './server'
 export type { AppType, AppConfig, AppEnv, Services } from './api/app'
+export { loadCompany, loadAgents, loadWorkflows, loadEnvironments } from './config/loader'
+export { WorkflowEngine } from './services/workflow-engine'
+export type { AuthoredConfig } from './services/workflow-engine'

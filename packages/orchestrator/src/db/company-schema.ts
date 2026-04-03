@@ -221,6 +221,29 @@ export const workerLeases = sqliteTable(
 	],
 )
 
+// ─── Artifacts ────────────────────────────────────────────────────────────
+
+export const artifacts = sqliteTable(
+	'artifacts',
+	{
+		id: text('id').primaryKey(),
+		run_id: text('run_id').notNull(),
+		task_id: text('task_id'),
+		kind: text('kind').notNull(), // changed_file | diff_summary | test_report | doc | external_receipt | preview_url | other
+		title: text('title').notNull(),
+		ref_kind: text('ref_kind').notNull(), // file | url | inline
+		ref_value: text('ref_value').notNull(),
+		mime_type: text('mime_type'),
+		metadata: text('metadata').default('{}'),
+		created_at: text('created_at').notNull(),
+	},
+	(table) => [
+		index('idx_artifacts_run').on(table.run_id),
+		index('idx_artifacts_task').on(table.task_id),
+		index('idx_artifacts_kind').on(table.kind),
+	],
+)
+
 // ─── Activity ──────────────────────────────────────────────────────────────
 
 export const activity = sqliteTable(

@@ -11,7 +11,7 @@ import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
 
 const runs = new Hono<AppEnv>()
-	// GET /runs — list runs (optional status/agent filter)
+	// GET /runs — list runs (optional status/agent/task filter)
 	.get(
 		'/',
 		zValidator(
@@ -19,6 +19,7 @@ const runs = new Hono<AppEnv>()
 			z.object({
 				status: z.string().optional(),
 				agent_id: z.string().optional(),
+				task_id: z.string().optional(),
 			}),
 		),
 		async (c) => {
@@ -51,6 +52,17 @@ const runs = new Hono<AppEnv>()
 			if (!run) return c.json({ error: 'run not found' }, 404)
 			const events = await runService.getEvents(id)
 			return c.json(events, 200)
+		},
+	)
+	// GET /runs/:id/artifacts — get run artifacts
+	.get(
+		'/:id/artifacts',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { artifactService } = c.get('services')
+			const { id } = c.req.valid('param')
+			const arts = await artifactService.listForRun(id)
+			return c.json(arts, 200)
 		},
 	)
 	// POST /runs — create a new pending run
@@ -122,7 +134,7 @@ const runs = new Hono<AppEnv>()
 		zValidator('param', z.object({ id: z.string() })),
 		zValidator('json', RunCompletionSchema),
 		async (c) => {
-			const { runService, workerService, workflowEngine } = c.get('services')
+			const { runService, workerService, workflowEngine, artifactService } = c.get('services')
 			const { id } = c.req.valid('param')
 			const body = c.req.valid('json')
 
@@ -145,6 +157,23 @@ const runs = new Hono<AppEnv>()
 				resumable: body.resumable,
 			})
 
+			// Register artifacts reported by the worker
+			if (body.artifacts?.length) {
+				for (const art of body.artifacts) {
+					await artifactService.create({
+						id: `art-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+						run_id: id,
+						task_id: run.task_id ?? undefined,
+						kind: art.kind,
+						title: art.title,
+						ref_kind: art.ref_kind,
+						ref_value: art.ref_value,
+						mime_type: art.mime_type,
+						metadata: art.metadata ? JSON.stringify(art.metadata) : undefined,
+					})
+				}
+			}
+
 			// Release worker lease + set worker back to online
 			if (run.worker_id) {
 				const lease = await workerService.getActiveLeaseForWorker(run.worker_id)
@@ -164,6 +193,38 @@ const runs = new Hono<AppEnv>()
 			if (body.status === 'completed' && run.task_id) {
 				await workflowEngine.advance(run.task_id)
 			}
+
+			return c.json(result, 200)
+		},
+	)
+	// POST /runs/:id/cancel — cancel a pending/claimed/running run
+	.post(
+		'/:id/cancel',
+		zValidator('param', z.object({ id: z.string() })),
+		zValidator('json', z.object({ reason: z.string().optional() }).optional()),
+		async (c) => {
+			const { runService, workerService } = c.get('services')
+			const { id } = c.req.valid('param')
+			const body = c.req.valid('json')
+
+			const run = await runService.get(id)
+			if (!run) return c.json({ error: 'run not found' }, 404)
+
+			const result = await runService.cancel(id, body?.reason)
+			if (!result) {
+				return c.json({ error: `run ${id} is already ${run.status} — cannot cancel` }, 400)
+			}
+
+			// Release worker lease if claimed/running
+			if (run.worker_id) {
+				const lease = await workerService.getActiveLeaseForWorker(run.worker_id)
+				if (lease) {
+					await workerService.completeLease(lease.id, 'failed')
+				}
+				await workerService.setOnline(run.worker_id)
+			}
+
+			eventBus.emit({ type: 'run_completed', runId: id, status: 'failed' })
 
 			return c.json(result, 200)
 		},

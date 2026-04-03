@@ -50,6 +50,7 @@ program.addCommand(
 				if (worker) {
 					console.log(`${dot('green')} ${success('Local worker started (claude-code + MCP).')}`)
 				}
+				console.log(`${dot('yellow')} ${warning('Local dev auth bypass ACTIVE (localhost only).')}`)
 				console.log(dim('Press Ctrl+C to stop'))
 				console.log('')
 

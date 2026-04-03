@@ -79,4 +79,45 @@ export function registerTools(server: McpServer): void {
 		const data = await apiGet(`/api/runs/${encodeURIComponent(args.id)}`)
 		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
 	})
+
+	// ─── Approval ──────────────────────────────────────────────────────
+
+	server.tool('task_approve', 'Approve a task waiting on a human_approval workflow step', {
+		id: z.string().describe('Task ID'),
+	}, async (args) => {
+		const data = await apiPost(`/api/tasks/${encodeURIComponent(args.id)}/approve`, {})
+		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+	})
+
+	server.tool('task_reject', 'Reject a task waiting on a human_approval workflow step', {
+		id: z.string().describe('Task ID'),
+		message: z.string().describe('Rejection reason'),
+	}, async (args) => {
+		const data = await apiPost(`/api/tasks/${encodeURIComponent(args.id)}/reject`, { message: args.message })
+		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+	})
+
+	server.tool('task_reply', 'Reply to a task waiting on a human_approval step and advance the workflow. The reply message becomes instructions for the next agent step.', {
+		id: z.string().describe('Task ID'),
+		message: z.string().describe('Reply message (becomes instructions for next run)'),
+	}, async (args) => {
+		const data = await apiPost(`/api/tasks/${encodeURIComponent(args.id)}/reply`, { message: args.message })
+		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+	})
+
+	server.tool('task_activity', 'Get approval/rejection/reply history for a task', {
+		id: z.string().describe('Task ID'),
+	}, async (args) => {
+		const data = await apiGet(`/api/tasks/${encodeURIComponent(args.id)}/activity`)
+		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+	})
+
+	// ─── Artifacts ─────────────────────────────────────────────────────
+
+	server.tool('run_artifacts', 'List artifacts produced by a run. Artifacts are references (file paths, URLs, or short inline text) — not large blobs.', {
+		run_id: z.string().describe('Run ID'),
+	}, async (args) => {
+		const data = await apiGet(`/api/runs/${encodeURIComponent(args.run_id)}/artifacts`)
+		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+	})
 }

@@ -17,11 +17,13 @@ export interface RunContext {
   workDir: string | null
 }
 
+import type { RunArtifact } from '@questpie/autopilot-spec'
+
 /** Result returned by a runtime adapter after completing. */
 export interface RuntimeResult {
   summary?: string
   tokens?: { input: number; output: number }
-  artifacts?: Array<{ path: string; action: string }>
+  artifacts?: RunArtifact[]
   /** Worker-local session ID for future resume. */
   sessionId?: string
 }

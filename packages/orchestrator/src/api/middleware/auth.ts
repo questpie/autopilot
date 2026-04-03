@@ -96,16 +96,65 @@ async function resolveActor(request: Request, auth: Auth): Promise<Actor | null>
 	return null
 }
 
+export interface AuthMiddlewareOptions {
+	/** Allow X-Local-Dev: true header to bypass auth. Only for `autopilot start` local convenience. */
+	allowLocalDevBypass?: boolean
+}
+
+/** The synthetic actor created for local dev bypass. Clearly non-human, clearly synthetic. */
+const LOCAL_DEV_ACTOR: Actor = {
+	id: 'local-dev-bypass',
+	type: 'human',
+	name: 'Local Dev (bypass)',
+	role: 'owner',
+	source: 'cli',
+}
+
+/**
+ * Check if a request originates from localhost/loopback.
+ * Uses X-Forwarded-For, then falls back to connection info heuristics.
+ * Conservative: if we can't determine origin, reject.
+ */
+function isLocalhostRequest(req: Request): boolean {
+	const forwarded = req.headers.get('x-forwarded-for')
+	if (forwarded) {
+		const first = forwarded.split(',')[0]!.trim()
+		return first === '127.0.0.1' || first === '::1' || first === 'localhost'
+	}
+	// Bun.serve sets the URL to the actual request URL — check host
+	try {
+		const url = new URL(req.url)
+		const host = url.hostname
+		return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+	} catch {
+		return false
+	}
+}
+
 /**
  * Factory that returns a Hono middleware performing:
- * 1. Actor resolution (session / bearer token)
- * 2. Returns 401 if no actor resolved
+ * 1. Local dev bypass (if ALL conditions are met: server flag + header + localhost)
+ * 2. Actor resolution (session / bearer token)
+ * 3. Returns 401 if no actor resolved
  *
- * Public routes (/api/auth/*, /api/health, /api/settings/deployment-mode)
- * are mounted before this middleware in app.ts.
+ * The local dev bypass requires all three:
+ * - Server started with allowLocalDevBypass=true (only `autopilot start` sets this)
+ * - Request includes X-Local-Dev: true header
+ * - Request originates from localhost/loopback
+ *
+ * Header alone is never enough. Server flag alone is never enough.
  */
-export function authMiddleware() {
+export function authMiddleware(opts?: AuthMiddlewareOptions) {
 	return createMiddleware<AppEnv>(async (c, next) => {
+		if (
+			opts?.allowLocalDevBypass &&
+			c.req.header('x-local-dev') === 'true' &&
+			isLocalhostRequest(c.req.raw)
+		) {
+			c.set('actor', LOCAL_DEV_ACTOR)
+			return next()
+		}
+
 		const actor = await resolveActor(c.req.raw, c.get('auth'))
 		c.set('actor', actor)
 

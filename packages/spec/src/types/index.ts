@@ -22,6 +22,10 @@ export type Environment = z.infer<typeof schemas.EnvironmentSchema>
 // Secret Refs
 export type SecretRef = z.infer<typeof schemas.SecretRefSchema>
 
+// Artifacts
+export type Artifact = z.infer<typeof schemas.ArtifactSchema>
+export type RunArtifact = z.infer<typeof schemas.RunArtifactSchema>
+
 // External Actions
 export type ExternalAction = z.infer<typeof schemas.ExternalActionSchema>
 

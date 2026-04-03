@@ -3,6 +3,7 @@ export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema } from './wor
 export { EnvironmentSchema } from './environment'
 export { SecretRefSchema } from './secret-ref'
 export { ExternalActionSchema } from './external-action'
+export { ArtifactSchema, ArtifactKindSchema, ArtifactRefKindSchema, RunArtifactSchema } from './artifact'
 export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema } from './company'
 export { WorkerEventTypeSchema, WorkerEventSchema, RunCompletionSchema } from './worker-event'
 export { ScheduleSchema, SchedulesFileSchema } from './schedule'

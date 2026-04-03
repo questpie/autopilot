@@ -3,8 +3,10 @@
  *
  * Resolution:
  * 1. X-Worker-Secret header → validate against machine_secret_hash in workers table
- * 2. X-Local-Dev: true header → allowed ONLY when allowLocalDevBypass is explicitly true
- *    (set only by `autopilot start` local convenience mode)
+ * 2. X-Local-Dev: true header → allowed ONLY when ALL conditions are met:
+ *    - Server started with allowLocalDevBypass=true (only `autopilot start`)
+ *    - Request originates from localhost/loopback
+ *    Header alone is never enough.
  * 3. No credential → 401
  *
  * Sets c.var.workerId when authenticated (machine auth).
@@ -17,6 +19,21 @@ import type { AppEnv } from '../app'
 export interface WorkerAuthOptions {
   /** Only true when server is started in local dev convenience mode. */
   allowLocalDevBypass: boolean
+}
+
+function isLocalhostRequest(req: Request): boolean {
+  const forwarded = req.headers.get('x-forwarded-for')
+  if (forwarded) {
+    const first = forwarded.split(',')[0]!.trim()
+    return first === '127.0.0.1' || first === '::1' || first === 'localhost'
+  }
+  try {
+    const url = new URL(req.url)
+    const host = url.hostname
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+  } catch {
+    return false
+  }
 }
 
 export function workerAuthMiddleware(opts: WorkerAuthOptions) {
@@ -34,13 +51,14 @@ export function workerAuthMiddleware(opts: WorkerAuthOptions) {
       return next()
     }
 
-    // 2. Local dev bypass — gated behind explicit server-side flag
-    if (opts.allowLocalDevBypass) {
-      const localDev = c.req.header('x-local-dev')
-      if (localDev === 'true') {
-        c.set('workerId', null)
-        return next()
-      }
+    // 2. Local dev bypass — requires server flag + header + localhost
+    if (
+      opts.allowLocalDevBypass &&
+      c.req.header('x-local-dev') === 'true' &&
+      isLocalhostRequest(c.req.raw)
+    ) {
+      c.set('workerId', null)
+      return next()
     }
 
     return c.json({ error: 'Worker authentication required (X-Worker-Secret header)' }, 401)

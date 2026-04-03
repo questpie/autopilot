@@ -32,6 +32,7 @@ export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: Mai
 	const mailService = mail ?? createMailService()
 
 	const auth = betterAuth({
+		baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:7778',
 		database: drizzleAdapter(db, {
 			provider: 'sqlite',
 			schema: authSchema,

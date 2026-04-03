@@ -11,6 +11,10 @@ export function getBaseUrl(port?: number): string {
 
 export function createApiClient(baseUrl?: string) {
 	const headers = getAuthHeaders()
+	// If no auth credentials are configured, use local dev bypass
+	if (Object.keys(headers).length === 0) {
+		headers['X-Local-Dev'] = 'true'
+	}
 	return hc<AppType>(baseUrl ?? getBaseUrl(), {
 		headers,
 	})

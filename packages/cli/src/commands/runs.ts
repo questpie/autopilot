@@ -7,13 +7,15 @@ const runsCmd = new Command('runs')
 	.description('List and inspect runs')
 	.option('-s, --status <status>', 'Filter by run status (pending, claimed, running, completed, failed)')
 	.option('-a, --agent <agent>', 'Filter by agent ID')
-	.action(async (opts: { status?: string; agent?: string }) => {
+	.option('-t, --task <task>', 'Filter by task ID')
+	.action(async (opts: { status?: string; agent?: string; task?: string }) => {
 		try {
 			const client = createApiClient()
 
 			const query: Record<string, string> = {}
 			if (opts.status) query.status = opts.status
 			if (opts.agent) query.agent_id = opts.agent
+			if (opts.task) query.task_id = opts.task
 
 			const res = await client.api.runs.$get({ query })
 			if (!res.ok) {
@@ -27,6 +29,7 @@ const runsCmd = new Command('runs')
 				agent_id: string
 				runtime: string
 				task_id?: string | null
+				worker_id?: string | null
 				resumable?: boolean | null
 				resumed_from_run_id?: string | null
 				created_at: string
@@ -38,26 +41,40 @@ const runsCmd = new Command('runs')
 				return
 			}
 
+			// Fetch task titles for display
+			const taskTitles = new Map<string, string>()
+			const taskIds = [...new Set(runs.map((r) => r.task_id).filter(Boolean) as string[])]
+			for (const tid of taskIds) {
+				try {
+					const tRes = await client.api.tasks[':id'].$get({ param: { id: tid } })
+					if (tRes.ok) {
+						const t = (await tRes.json()) as { title: string }
+						taskTitles.set(tid, t.title)
+					}
+				} catch { /* skip */ }
+			}
+
+			function statusColor(s: string): string {
+				if (s === 'completed') return 'green'
+				if (s === 'failed') return 'red'
+				if (s === 'running') return 'cyan'
+				return 'yellow'
+			}
+
 			console.log(
 				table(
-					runs.map((r) => [
-						dim(r.id),
-						badge(
-							r.status,
-							r.status === 'completed'
-								? 'green'
-								: r.status === 'failed'
-									? 'red'
-									: r.status === 'running'
-										? 'cyan'
-										: 'yellow',
-						),
-						r.agent_id,
-						r.runtime,
-						r.task_id ? dim(`task:${r.task_id}`) : '',
-						r.resumable ? badge('resumable', 'green') : '',
-						r.resumed_from_run_id ? dim(`<- ${r.resumed_from_run_id}`) : '',
-					]),
+					runs.map((r) => {
+						const taskLabel = r.task_id
+							? dim(taskTitles.get(r.task_id) ?? r.task_id)
+							: ''
+						return [
+							dim(r.id),
+							badge(r.status, statusColor(r.status)),
+							r.agent_id,
+							taskLabel,
+							r.worker_id ? dim(`w:${r.worker_id}`) : '',
+						]
+					}),
 				),
 			)
 			console.log('')
@@ -186,6 +203,24 @@ runsCmd.addCommand(
 						}
 					}
 				}
+
+				// Fetch and display artifacts
+				const artsRes = await client.api.runs[':id'].artifacts.$get({ param: { id } })
+				if (artsRes.ok) {
+					const arts = (await artsRes.json()) as Array<{
+						kind: string
+						title: string
+						ref_kind: string
+						ref_value: string
+					}>
+					if (arts.length > 0) {
+						console.log('')
+						console.log(dim('Artifacts:'))
+						for (const art of arts) {
+							console.log(`  ${badge(art.kind, 'cyan')} ${art.title}  ${dim(`${art.ref_kind}:${art.ref_value}`)}`)
+						}
+					}
+				}
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				process.exit(1)
@@ -231,6 +266,37 @@ runsCmd.addCommand(
 					console.log(dim(`  Routed to worker: ${continuation.preferred_worker_id}`))
 				}
 				console.log(dim(`  The run will be picked up by the worker on next poll.`))
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+runsCmd.addCommand(
+	new Command('cancel')
+		.description('Cancel a pending, claimed, or running run')
+		.argument('<id>', 'Run ID to cancel')
+		.option('-r, --reason <reason>', 'Cancellation reason')
+		.action(async (id: string, opts: { reason?: string }) => {
+			try {
+				const client = createApiClient()
+
+				const res = await client.api.runs[':id'].cancel.$post({
+					param: { id },
+					json: { reason: opts.reason },
+				})
+
+				if (!res.ok) {
+					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
+						error: string
+					}
+					console.error(error(`Cannot cancel run: ${body.error}`))
+					process.exit(1)
+				}
+
+				const run = (await res.json()) as { id: string; status: string }
+				console.log(success(`Run ${run.id} cancelled (status: ${run.status})`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				process.exit(1)

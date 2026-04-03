@@ -42,6 +42,7 @@ function buildTestApp(companyRoot: string, db: CompanyDb, services: Services) {
 		c.set('db', db)
 		c.set('auth', {} as never) // unused in these routes
 		c.set('services', services)
+		c.set('authoredConfig', { company: {} as any, agents: new Map(), workflows: new Map(), environments: new Map() })
 		c.set('actor', FAKE_ACTOR)
 		c.set('workerId', null)
 		await next()

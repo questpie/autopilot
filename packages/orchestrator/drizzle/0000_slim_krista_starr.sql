@@ -56,6 +56,22 @@ CREATE TABLE `apikey` (
 CREATE INDEX `apikey_config_id_idx` ON `apikey` (`config_id`);--> statement-breakpoint
 CREATE INDEX `apikey_reference_id_idx` ON `apikey` (`reference_id`);--> statement-breakpoint
 CREATE INDEX `apikey_key_idx` ON `apikey` (`key`);--> statement-breakpoint
+CREATE TABLE `artifacts` (
+	`id` text PRIMARY KEY NOT NULL,
+	`run_id` text NOT NULL,
+	`task_id` text,
+	`kind` text NOT NULL,
+	`title` text NOT NULL,
+	`ref_kind` text NOT NULL,
+	`ref_value` text NOT NULL,
+	`mime_type` text,
+	`metadata` text DEFAULT '{}',
+	`created_at` text NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `idx_artifacts_run` ON `artifacts` (`run_id`);--> statement-breakpoint
+CREATE INDEX `idx_artifacts_task` ON `artifacts` (`task_id`);--> statement-breakpoint
+CREATE INDEX `idx_artifacts_kind` ON `artifacts` (`kind`);--> statement-breakpoint
 CREATE TABLE `channel_members` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`channel_id` text NOT NULL,

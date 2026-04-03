@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { RunArtifactSchema } from './artifact'
 
 /** Compact event types that workers POST to orchestrator. */
 export const WorkerEventTypeSchema = z.enum([
@@ -31,14 +32,7 @@ export const RunCompletionSchema = z.object({
 			output: z.number().int().default(0),
 		})
 		.optional(),
-	artifacts: z
-		.array(
-			z.object({
-				path: z.string(),
-				action: z.string(),
-			}),
-		)
-		.optional(),
+	artifacts: z.array(RunArtifactSchema).optional(),
 	error: z.string().optional(),
 	/** Worker-local runtime session ID (e.g. Claude session_id). Enables same-worker resume. */
 	runtime_session_ref: z.string().optional(),

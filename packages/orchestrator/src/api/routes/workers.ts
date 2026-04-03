@@ -29,6 +29,12 @@ function getAuthoritativeWorkerId(
 }
 
 const workers = new Hono<AppEnv>()
+	// GET /workers — list all workers
+	.get('/', async (c) => {
+		const { workerService } = c.get('services')
+		const result = await workerService.list()
+		return c.json(result, 200)
+	})
 	// POST /workers/register — register a worker
 	.post('/register', zValidator('json', WorkerRegisterRequestSchema), async (c) => {
 		const { workerService } = c.get('services')

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type Client, createClient } from '@libsql/client'
@@ -45,7 +46,8 @@ export async function createCompanyDb(companyRoot: string): Promise<CompanyDbRes
 	const db = drizzle(client, { schema: companySchema })
 
 	// Run drizzle migrations (regular tables)
-	await migrate(db, { migrationsFolder: join(__dirname, '..', '..', 'drizzle') })
+	const migrationsDir = join(import.meta.dir, '..', '..', 'drizzle')
+	await migrate(db, { migrationsFolder: migrationsDir })
 
 	// FTS5 for messages full-text search
 	await initMessagesFts(client)
@@ -73,8 +75,11 @@ export async function createIndexDb(companyRoot: string): Promise<IndexDbResult>
 
 	const db = drizzle(client, { schema: indexSchema })
 
-	// Run drizzle migrations for index tables
-	await migrate(db, { migrationsFolder: join(__dirname, '..', '..', 'drizzle-index') })
+	// Run drizzle migrations for index tables (if folder exists)
+	const indexMigrationsDir = join(import.meta.dir, '..', '..', 'drizzle-index')
+	if (existsSync(indexMigrationsDir)) {
+		await migrate(db, { migrationsFolder: indexMigrationsDir })
+	}
 
 	// FTS5 virtual tables for search_index
 	await initSearchFts(client)

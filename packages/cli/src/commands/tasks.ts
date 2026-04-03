@@ -61,7 +61,8 @@ const tasksCmd = new Command('tasks')
 			)
 			console.log('')
 			console.log(separator())
-			console.log(dim(`${tasks.length} task(s)`))
+			const blockedCount = tasks.filter((t) => t.status === 'blocked').length
+			console.log(dim(`${tasks.length} task(s)`) + (blockedCount > 0 ? `  ${badge(`${blockedCount} awaiting approval`, 'red')}` : ''))
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))
 			process.exit(1)

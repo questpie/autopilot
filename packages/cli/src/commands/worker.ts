@@ -185,4 +185,69 @@ tokenCmd.addCommand(
 
 workerCmd.addCommand(tokenCmd)
 
+workerCmd.addCommand(
+	new Command('list')
+		.description('List registered workers')
+		.action(async () => {
+			try {
+				const { createApiClient } = await import('../utils/client')
+				const { section, dim, badge, table, separator } = await import('../utils/format')
+				const client = createApiClient()
+
+				const res = await client.api.workers.$get()
+				if (!res.ok) {
+					const { error: errUtil } = await import('../utils/format')
+					console.error(errUtil('Failed to fetch workers'))
+					process.exit(1)
+				}
+
+				const workers = (await res.json()) as Array<{
+					id: string
+					status: string
+					name?: string | null
+					capabilities?: string | null
+					last_heartbeat?: string | null
+				}>
+
+				console.log(section('Workers'))
+				if (workers.length === 0) {
+					console.log(dim('  No workers registered'))
+					return
+				}
+
+				console.log(
+					table(
+						workers.map((w) => {
+							let caps = ''
+							try {
+								const parsed = JSON.parse(w.capabilities ?? '[]') as Array<{ runtime: string; tags?: string[] }>
+								caps = parsed.map((c) => {
+									const tags = c.tags?.length ? ` [${c.tags.join(',')}]` : ''
+									return `${c.runtime}${tags}`
+								}).join(', ')
+							} catch { /* ignore */ }
+							return [
+								dim(w.id),
+								badge(
+									w.status,
+									w.status === 'online' ? 'green' : w.status === 'busy' ? 'cyan' : 'red',
+								),
+								w.name ?? '',
+								caps ? dim(caps) : '',
+								w.last_heartbeat ? dim(w.last_heartbeat) : '',
+							]
+						}),
+					),
+				)
+				console.log('')
+				console.log(separator())
+				console.log(dim(`${workers.length} worker(s)`))
+			} catch (err) {
+				const { error: errUtil } = await import('../utils/format')
+				console.error(errUtil(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
 program.addCommand(workerCmd)
