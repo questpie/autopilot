@@ -113,12 +113,14 @@ export async function startServer(options?: StartServerOptions) {
 	}
 
 	// ── 7. Start notification bridge ─────────────────────────────────────
+	const orchestratorUrl = env.ORCHESTRATOR_URL ?? `http://localhost:${port}`
 	const notificationBridge = new NotificationBridge(
 		eventBus,
 		authoredConfig,
 		runService,
 		taskService,
-		{ companyRoot, orchestratorUrl: `http://localhost:${port}` },
+		artifactService,
+		{ companyRoot, orchestratorUrl },
 	)
 	if (authoredConfig.providers.size > 0) {
 		notificationBridge.start()

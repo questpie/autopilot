@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import { SecretRefSchema } from './secret-ref'
 
+/** JSON-safe value — anything serializable to JSON. */
+const JsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
+	z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(JsonValueSchema), z.record(JsonValueSchema)]),
+)
+
 /** Provider kind — determines what operations a provider supports. */
 export const ProviderKindSchema = z.enum([
 	'notification_channel',
@@ -35,14 +40,17 @@ export const ProviderSchema = z.object({
 	name: z.string(),
 	/** Provider kind. */
 	kind: ProviderKindSchema,
-	/** Path to the Bun handler script, relative to .autopilot/ directory. */
-	handler: z.string().min(1),
+	/** Path to the Bun handler script, must be under handlers/ (relative to .autopilot/). */
+	handler: z.string().min(1).refine(
+		(p) => p.startsWith('handlers/') && !p.includes('..'),
+		{ message: 'Handler path must start with "handlers/" and must not contain ".."' },
+	),
 	/** Operations this provider supports. */
 	capabilities: z.array(ProviderCapabilitySchema).min(1),
 	/** Event filters — which orchestrator events trigger this provider. */
 	events: z.array(ProviderEventFilterSchema).default([]),
-	/** Static config passed to the handler (non-secret). */
-	config: z.record(z.string()).default({}),
+	/** Static config passed to the handler (non-secret, JSON-safe). */
+	config: z.record(JsonValueSchema).default({}),
 	/** Secret references resolved on the orchestrator host for this provider. */
 	secret_refs: z.array(SecretRefSchema).default([]),
 	/** Optional description. */
@@ -59,8 +67,8 @@ export const HandlerEnvelopeSchema = z.object({
 	provider_id: z.string(),
 	/** Provider kind. */
 	provider_kind: ProviderKindSchema,
-	/** Static config from provider YAML. */
-	config: z.record(z.string()),
+	/** Static config from provider YAML (JSON-safe). */
+	config: z.record(JsonValueSchema),
 	/** Resolved secret values (name -> value). */
 	secrets: z.record(z.string()),
 	/** Operation-specific payload. */
@@ -93,11 +101,15 @@ export const NotificationPayloadSchema = z.object({
 	summary: z.string(),
 	/** Task ID if applicable. */
 	task_id: z.string().optional(),
+	/** Direct link to the task API endpoint. */
+	task_url: z.string().optional(),
 	/** Run ID if applicable. */
 	run_id: z.string().optional(),
+	/** Direct link to the run API endpoint. */
+	run_url: z.string().optional(),
 	/** Agent that ran. */
 	agent_id: z.string().optional(),
-	/** Preview URL if available. */
+	/** Preview URL if available (durable orchestrator-backed). */
 	preview_url: z.string().optional(),
 	/** Orchestrator base URL for building links. */
 	orchestrator_url: z.string().optional(),

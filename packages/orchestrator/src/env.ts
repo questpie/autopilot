@@ -24,6 +24,8 @@ function resolveEnv(runtimeEnv: NodeJS.ProcessEnv) {
 			TURSO_SYNC_URL: z.string().optional(),
 			TURSO_AUTH_TOKEN: z.string().optional(),
 			AI_GATEWAY_API_KEY: z.string().optional(),
+			/** Public base URL for the orchestrator (used in notifications, preview links). */
+			ORCHESTRATOR_URL: z.string().url().optional(),
 		},
 		runtimeEnv,
 		emptyStringAsUndefined: true,

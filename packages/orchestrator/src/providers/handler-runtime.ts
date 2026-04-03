@@ -7,7 +7,7 @@
  * - Handler exits 0 on success, non-zero on crash
  * - Timeout: 30s default
  */
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { existsSync } from 'node:fs'
 import { HandlerResultSchema } from '@questpie/autopilot-spec'
 import type { HandlerEnvelope, HandlerResult, Provider, SecretRef } from '@questpie/autopilot-spec'
@@ -73,7 +73,16 @@ export async function executeHandler(
 	envelope: HandlerEnvelope,
 	config: HandlerRuntimeConfig,
 ): Promise<HandlerResult> {
-	const handlerPath = join(config.companyRoot, '.autopilot', provider.handler)
+	const handlersDir = resolve(config.companyRoot, '.autopilot', 'handlers')
+	const handlerPath = resolve(config.companyRoot, '.autopilot', provider.handler)
+
+	// Defense-in-depth: ensure handler resolves inside .autopilot/handlers/
+	if (!handlerPath.startsWith(handlersDir)) {
+		return {
+			ok: false,
+			error: `Handler path escapes handlers directory: ${provider.handler}`,
+		}
+	}
 
 	if (!existsSync(handlerPath)) {
 		return {

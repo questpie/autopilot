@@ -69,6 +69,28 @@ describe('Provider Schema', () => {
 		expect(result.success).toBe(false)
 	})
 
+	test('rejects handler path outside handlers/', () => {
+		const result = ProviderSchema.safeParse({
+			id: 'escape',
+			name: 'Escape',
+			kind: 'notification_channel',
+			handler: '../../../etc/passwd',
+			capabilities: [{ op: 'notify.send' }],
+		})
+		expect(result.success).toBe(false)
+	})
+
+	test('rejects handler path not starting with handlers/', () => {
+		const result = ProviderSchema.safeParse({
+			id: 'wrong-dir',
+			name: 'Wrong Dir',
+			kind: 'notification_channel',
+			handler: 'scripts/run.ts',
+			capabilities: [{ op: 'notify.send' }],
+		})
+		expect(result.success).toBe(false)
+	})
+
 	test('rejects invalid id format', () => {
 		const result = ProviderSchema.safeParse({
 			id: 'Invalid ID!',
@@ -78,6 +100,28 @@ describe('Provider Schema', () => {
 			capabilities: [{ op: 'notify.send' }],
 		})
 		expect(result.success).toBe(false)
+	})
+
+	test('accepts JSON-safe config values (arrays, booleans, nested)', () => {
+		const result = ProviderSchema.safeParse({
+			id: 'rich-config',
+			name: 'Rich Config',
+			kind: 'notification_channel',
+			handler: 'handlers/test.ts',
+			capabilities: [{ op: 'notify.send' }],
+			config: {
+				channels: ['#ops', '#alerts'],
+				verbose: true,
+				retries: 3,
+				nested: { key: 'value' },
+			},
+		})
+		expect(result.success).toBe(true)
+		if (result.success) {
+			expect(result.data.config.channels).toEqual(['#ops', '#alerts'])
+			expect(result.data.config.verbose).toBe(true)
+			expect(result.data.config.retries).toBe(3)
+		}
 	})
 
 	test('defaults optional fields', () => {
@@ -263,6 +307,16 @@ console.log(JSON.stringify({ ok: true, metadata: { received_op: envelope.op, pay
 		expect(result.error).toContain('exited with code')
 	})
 
+	test('blocks path traversal at runtime', async () => {
+		const result = await executeHandler(
+			makeProvider('handlers/../../etc/passwd'),
+			makeEnvelope(),
+			{ companyRoot: testRoot },
+		)
+		expect(result.ok).toBe(false)
+		expect(result.error).toContain('escapes handlers directory')
+	})
+
 	test('invokeProvider resolves secrets and builds envelope', async () => {
 		process.env.__TEST_INVOKE_SECRET = 'resolved-value'
 		const provider = {
@@ -397,12 +451,17 @@ console.log(JSON.stringify({ ok: true }))`,
 		}),
 	}
 
+	const mockArtifactService = {
+		listForRun: async () => [],
+	}
+
 	test('dispatches notification on matching run_completed event', async () => {
 		const bridge = new NotificationBridge(
 			eventBus,
 			makeConfig() as any,
 			mockRunService as any,
 			mockTaskService as any,
+			mockArtifactService as any,
 			{ companyRoot: testRoot },
 		)
 		bridge.start()
@@ -452,6 +511,7 @@ console.log(JSON.stringify({ ok: true }))`,
 			config as any,
 			mockRunService as any,
 			mockTaskService as any,
+			mockArtifactService as any,
 			{ companyRoot: testRoot },
 		)
 		bridge.start()
@@ -473,6 +533,7 @@ console.log(JSON.stringify({ ok: true }))`,
 			makeConfig() as any,
 			mockRunService as any,
 			mockTaskService as any,
+			mockArtifactService as any,
 			{ companyRoot: testRoot },
 		)
 		bridge.start()

@@ -13,6 +13,7 @@ import type { Provider, NotificationPayload } from '@questpie/autopilot-spec'
 import type { AuthoredConfig } from '../services/workflow-engine'
 import type { RunService } from '../services/runs'
 import type { TaskService } from '../services/tasks'
+import type { ArtifactService } from '../services/artifacts'
 import { invokeProvider, type HandlerRuntimeConfig } from './handler-runtime'
 
 export interface NotificationBridgeConfig {
@@ -29,6 +30,7 @@ export class NotificationBridge {
 		private authoredConfig: AuthoredConfig,
 		private runService: RunService,
 		private taskService: TaskService,
+		private artifactService: ArtifactService,
 		private config: NotificationBridgeConfig,
 	) {}
 
@@ -118,44 +120,54 @@ export class NotificationBridge {
 	 * Returns null for non-actionable events.
 	 */
 	private async buildPayload(event: AutopilotEvent): Promise<NotificationPayload | null> {
-		const base = {
-			orchestrator_url: this.config.orchestratorUrl,
-		}
+		const baseUrl = this.config.orchestratorUrl
 
 		switch (event.type) {
 			case 'run_completed': {
 				const run = await this.runService.get(event.runId)
 				const failed = event.status === 'failed'
 
+				// Look up preview_url artifact for this run
+				const previewUrl = await this.findPreviewUrl(event.runId)
+
 				return {
-					...base,
+					orchestrator_url: baseUrl,
 					event_type: 'run_completed',
 					severity: failed ? 'error' : 'info',
 					title: failed ? `Run failed: ${event.runId}` : `Run completed: ${event.runId}`,
 					summary: run?.summary ?? `Run ${event.runId} ${event.status}`,
 					run_id: event.runId,
+					run_url: baseUrl ? `${baseUrl}/api/runs/${event.runId}` : undefined,
 					task_id: run?.task_id ?? undefined,
+					task_url: baseUrl && run?.task_id ? `${baseUrl}/api/tasks/${run.task_id}` : undefined,
 					agent_id: run?.agent_id ?? undefined,
+					preview_url: previewUrl ?? undefined,
 				}
 			}
 
 			case 'task_changed': {
-				// Only notify on blocked/approval-needed status
 				if (event.status !== 'blocked' && event.status !== 'needs_approval') return null
 
 				const task = await this.taskService.get(event.taskId)
 				return {
-					...base,
+					orchestrator_url: baseUrl,
 					event_type: 'task_blocked',
 					severity: 'warning',
 					title: `Task needs attention: ${task?.title ?? event.taskId}`,
 					summary: task?.title ?? `Task ${event.taskId} is ${event.status}`,
 					task_id: event.taskId,
+					task_url: baseUrl ? `${baseUrl}/api/tasks/${event.taskId}` : undefined,
 				}
 			}
 
 			default:
 				return null
 		}
+	}
+
+	private async findPreviewUrl(runId: string): Promise<string | null> {
+		const artifacts = await this.artifactService.listForRun(runId)
+		const preview = artifacts.find((a) => a.kind === 'preview_url')
+		return preview?.ref_value ?? null
 	}
 }

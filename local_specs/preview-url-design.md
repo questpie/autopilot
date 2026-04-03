@@ -111,8 +111,13 @@ Implementation:
 2. If found, return `ref_value` with `Content-Type` from `mime_type`
 3. If not found, return 404
 
-No auth required — preview URLs are meant to be shareable (same as any artifact URL).
-Can add auth later if needed.
+Current implementation uses the same user-auth model as tasks and artifact inspection.
+
+That means:
+
+- local dev can still use the local bypass path where explicitly allowed
+- VPS/self-hosted use stays behind normal orchestrator auth
+- true public/shareable publishing is a later concern, not part of this pass
 
 ## Artifact model
 
@@ -155,6 +160,12 @@ Same artifact shape. Same endpoint. Different origin.
 The orchestrator needs to know its own public URL to generate the preview_url.
 This can come from env var (e.g., `ORCHESTRATOR_URL`) or from the request's
 `Host` header at creation time.
+
+Important:
+
+- durable preview survives worker shutdown
+- preview does not imply public publishing
+- if public/share links are wanted later, that should be added as a separate access/publishing concern
 
 ## What changes where
 
