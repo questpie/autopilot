@@ -36,7 +36,7 @@ export class InferenceService {
 		const { text } = await generateText({
 			model: this.provider(opts?.model ?? this.textModel),
 			prompt,
-			maxTokens: opts?.maxTokens ?? 1024,
+			maxTokens: opts?.maxTokens ?? 2048,
 		})
 		return text
 	}
@@ -49,7 +49,7 @@ export class InferenceService {
 		const { text } = await generateText({
 			model: this.provider(opts?.model ?? this.textModel),
 			messages,
-			maxTokens: opts?.maxTokens ?? 1024,
+			maxTokens: opts?.maxTokens ?? 2048,
 		})
 		return text
 	}
