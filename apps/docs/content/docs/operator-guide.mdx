@@ -1,0 +1,157 @@
+---
+title: Operator Guide
+description: How to operate Autopilot day-to-day — CLI, inbox, approvals, previews, and the async loop.
+---
+
+Operating Autopilot means managing the flow of tasks through workflows. You submit intent, monitor progress, review outputs, and act on blocked steps. The system notifies you when attention is needed.
+
+## The operator loop
+
+The core operating cycle:
+
+1. **Submit** — create tasks via CLI, intake provider, or conversation
+2. **Monitor** — watch progress via inbox or notifications
+3. **Review** — inspect previews, artifacts, run summaries
+4. **Act** — approve, reject, or reply to continue the workflow
+5. **Repeat** — the workflow advances and may produce more review steps
+
+## CLI reference
+
+### Tasks
+
+```bash
+# Create a task (--title and --type are required)
+autopilot tasks create --title "..." --type feature
+
+# List tasks (with optional filters)
+autopilot tasks
+autopilot tasks --status blocked
+autopilot tasks --assigned dev
+
+# Show task details
+autopilot tasks show <task-id>
+
+# Approve a blocked task
+autopilot tasks approve <task-id>
+
+# Reject with reason
+autopilot tasks reject <task-id> --message "..."
+
+# Reply with context (advances workflow with your feedback)
+autopilot tasks reply <task-id> --message "..."
+```
+
+### Inbox
+
+The inbox shows actionable items — tasks that need your attention.
+
+```bash
+# Check inbox
+autopilot inbox
+
+# Watch inbox in real-time
+autopilot inbox --watch
+```
+
+### Runs
+
+```bash
+# List runs (with optional filters)
+autopilot runs
+autopilot runs --task <task-id>
+autopilot runs --status failed
+
+# Show run details (includes events and artifacts)
+autopilot runs show <run-id>
+
+# Continue a completed run with new instructions
+autopilot runs continue <run-id> --message "..."
+
+# Cancel a running or pending run
+autopilot runs cancel <run-id>
+```
+
+## Previews
+
+When a run produces previewable files, the orchestrator stores them durably and serves them via HTTP.
+
+Preview URLs look like:
+
+```
+http://<orchestrator-url>/api/previews/<run-id>/index.html
+```
+
+Previews survive worker shutdown. You can open them from another device as long as the orchestrator is running.
+
+## Notifications
+
+With a notification provider configured, Autopilot sends alerts for:
+
+- Task completion
+- Approval needed
+- Run failure
+- Task blocked
+
+See [Providers and Handlers](/docs/providers-and-handlers) for setup.
+
+## Workflows
+
+Workflows are authored YAML files under `.autopilot/workflows/`. They define:
+
+- **Steps** — what work happens at each stage
+- **Routing** — which step follows based on outputs
+- **Approvals** — which steps require human sign-off
+- **Outputs** — structured data passed between steps
+
+A minimal workflow:
+
+```yaml
+id: default
+name: Default Workflow
+steps:
+  - id: plan
+    type: agent
+    agent_id: dev
+    instructions: "Plan the implementation for this task"
+
+  - id: implement
+    type: agent
+    agent_id: dev
+    instructions: "Implement according to the plan"
+
+  - id: review
+    type: human_approval
+    on_approve: done
+    on_reply: implement
+
+  - id: done
+    type: done
+```
+
+The workflow engine handles progression automatically. When a step completes, the engine evaluates outputs and routes to the next step.
+
+## Deployment patterns
+
+### Local development
+
+```bash
+autopilot start  # boots orchestrator + worker
+```
+
+Good for development and testing. Everything runs on your machine.
+
+### VPS orchestrator + local worker
+
+```bash
+# On VPS
+autopilot server start
+
+# On your machine
+ORCHESTRATOR_URL=https://your-vps.example.com autopilot worker start
+```
+
+The orchestrator runs on a durable host. Workers connect from wherever access exists. Preview URLs are reachable from any device.
+
+### Multiple workers
+
+Multiple workers can connect to the same orchestrator. Each worker claims runs independently. Use this when different workers have access to different repos or environments.

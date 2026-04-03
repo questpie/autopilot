@@ -1,0 +1,115 @@
+---
+title: Quickstart
+description: Get Autopilot running locally in a few minutes.
+---
+
+This guide gets you from zero to a working local Autopilot instance — orchestrator, worker, and your first task.
+
+## Prerequisites
+
+- [Bun](https://bun.sh/) installed
+- A git repository to work in
+- An API key for your AI provider (e.g., Anthropic for Claude Code)
+
+## Install
+
+```bash
+bun add -g @questpie/autopilot
+```
+
+## Initialize your project
+
+In your repo root:
+
+```bash
+autopilot init
+```
+
+This creates the `.autopilot/` directory with default config:
+
+```
+.autopilot/
+├── company.yaml
+├── project.yaml
+├── agents/
+│   └── default.yaml
+└── workflows/
+    └── default.yaml
+```
+
+## Configure
+
+Edit `.autopilot/company.yaml` to set your company name and any global settings.
+
+Edit `.autopilot/project.yaml` to configure the project.
+
+Set your AI provider credentials as environment variables:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+## Start locally
+
+For local development, boot both orchestrator and worker:
+
+```bash
+autopilot start
+```
+
+This is equivalent to running `autopilot server start` and `autopilot worker start` separately.
+
+## Create your first task
+
+```bash
+autopilot tasks create --title "Add a health check endpoint" --type feature --description "Add a GET /health endpoint that returns 200 OK with uptime info"
+```
+
+The task enters the default workflow. The worker claims the resulting run and begins execution.
+
+## Watch progress
+
+```bash
+autopilot inbox --watch
+```
+
+This shows real-time updates as the task progresses through workflow steps.
+
+## Review and act
+
+When a task needs review or reaches an approval step:
+
+```bash
+# See what needs attention
+autopilot inbox
+
+# Approve a task
+autopilot tasks approve <task-id>
+
+# Reject with reason
+autopilot tasks reject <task-id> --message "Needs error handling"
+
+# Reply with additional context
+autopilot tasks reply <task-id> --message "Use the existing middleware pattern"
+```
+
+## Inspect results
+
+```bash
+# View task details
+autopilot tasks show <task-id>
+
+# List runs for a task
+autopilot runs --task <task-id>
+
+# Show run details and artifacts
+autopilot runs show <run-id>
+```
+
+If the run produced previews, the orchestrator serves them at the URL shown in the run's artifacts section.
+
+## Next steps
+
+- **[Architecture](/docs/architecture)** — understand orchestrator, worker, and truth boundaries
+- **[Operator Guide](/docs/operator-guide)** — full CLI workflows and async operation
+- **[Providers and Handlers](/docs/providers-and-handlers)** — add notifications, intake, conversations
