@@ -158,6 +158,8 @@ const runs = new Hono<AppEnv>()
 			})
 
 			// Register artifacts reported by the worker
+			let hasPreviewFiles = false
+			let previewEntry: string | null = null
 			if (body.artifacts?.length) {
 				for (const art of body.artifacts) {
 					await artifactService.create({
@@ -171,7 +173,31 @@ const runs = new Hono<AppEnv>()
 						mime_type: art.mime_type,
 						metadata: art.metadata ? JSON.stringify(art.metadata) : undefined,
 					})
+					if (art.kind === 'preview_file') {
+						hasPreviewFiles = true
+						if (!previewEntry && art.title.endsWith('index.html')) {
+							previewEntry = art.title
+						}
+					}
 				}
+			}
+
+			// Auto-create preview_url artifact if preview files were stored
+			if (hasPreviewFiles) {
+				const entry = previewEntry ?? 'index.html'
+				const origin = new URL(c.req.url).origin
+				const previewUrl = `${origin}/api/previews/${id}/${entry}`
+				await artifactService.create({
+					id: `art-preview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+					run_id: id,
+					task_id: run.task_id ?? undefined,
+					kind: 'preview_url',
+					title: 'Preview',
+					ref_kind: 'url',
+					ref_value: previewUrl,
+					mime_type: 'text/html',
+					metadata: JSON.stringify({ entry, run_id: id }),
+				})
 			}
 
 			// Release worker lease + set worker back to online

@@ -25,6 +25,7 @@ import { tasks } from './routes/tasks'
 import { runs } from './routes/runs'
 import { workers } from './routes/workers'
 import { enrollment } from './routes/enrollment'
+import { previews } from './routes/previews'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -150,6 +151,9 @@ export function createApp(config: AppConfig) {
 	app.use('/api/runs/*/artifacts', userAuth)
 	app.use('/api/runs/*/cancel', userAuth)
 
+	// ── Preview routes (user auth — same as tasks/artifacts) ─────────────
+	app.use('/api/previews/*', userAuth)
+
 	// ── Worker auth for machine routes ───────────────────────────────────
 	const workerAuth = workerAuthMiddleware({ allowLocalDevBypass: config.allowLocalDevBypass ?? false })
 	app.use('/api/workers/*', workerAuth)
@@ -164,6 +168,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/runs', runs)
 		.route('/api/tasks', tasks)
 		.route('/api/events', events)
+		.route('/api/previews', previews)
 
 	return typedApp
 }

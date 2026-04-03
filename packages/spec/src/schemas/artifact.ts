@@ -23,6 +23,7 @@ export const ArtifactKindSchema = z.enum([
 	'test_report',
 	'doc',
 	'external_receipt',
+	'preview_file',
 	'preview_url',
 	'implementation_prompt',
 	'validation_report',

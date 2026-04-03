@@ -1,6 +1,7 @@
-import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse } from '@questpie/autopilot-spec'
+import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse, RunArtifact } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
 import { executeActions } from './actions/webhook'
+import { collectPreviewFiles } from './preview'
 import { WorkspaceManager, type WorkspaceInfo } from './workspace'
 import { resolveRuntime, type RuntimeConfig, type ResolvedRuntime } from './runtime-config'
 import { loadCredential, saveCredential, type StoredCredential } from './credentials'
@@ -321,6 +322,15 @@ export class AutopilotWorker {
       const result = await adapter.start(context)
       const resumable = !!result?.sessionId
 
+      // Collect preview files from worktree before cleanup
+      let allArtifacts: RunArtifact[] = result?.artifacts ?? []
+      if (ws && this.config.repoRoot) {
+        const previewFiles = await collectPreviewFiles(ws.path, this.config.repoRoot)
+        if (previewFiles.length > 0) {
+          allArtifacts = [...allArtifacts, ...previewFiles]
+        }
+      }
+
       // Execute post-run external actions from targeting (before completing)
       await this.runPostActions(run)
 
@@ -328,7 +338,7 @@ export class AutopilotWorker {
         status: 'completed',
         summary: result?.summary,
         tokens: result?.tokens,
-        artifacts: result?.artifacts,
+        artifacts: allArtifacts.length > 0 ? allArtifacts : undefined,
         runtime_session_ref: result?.sessionId,
         resumable,
         outputs: result?.outputs,
