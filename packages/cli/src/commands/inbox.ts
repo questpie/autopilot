@@ -119,7 +119,8 @@ async function renderInbox(): Promise<void> {
 		} catch { /* skip */ }
 	}
 
-	const totalItems = blockedTasks.length + failedRuns.length + recentCompleted.length
+	const completedWithPreviews = recentCompleted.filter((r) => previewMap.has(r.id))
+	const totalItems = blockedTasks.length + failedRuns.length + completedWithPreviews.length
 
 	if (totalItems === 0) {
 		console.log(section('Inbox'))
@@ -174,7 +175,6 @@ async function renderInbox(): Promise<void> {
 	}
 
 	// ── Completed with previews ──────────────────────────────
-	const completedWithPreviews = recentCompleted.filter((r) => previewMap.has(r.id))
 	if (completedWithPreviews.length > 0) {
 		console.log(success(`  ${completedWithPreviews.length} completed run(s) with previews`))
 		console.log('')
