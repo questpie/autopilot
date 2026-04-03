@@ -17,6 +17,7 @@ Autopilot supports conversation bindings — connecting an external chat thread 
 Bindings connect an external conversation identity to a task via the API:
 
 ```bash
+# Local development (X-Local-Dev bypass — only works with `autopilot start`)
 curl -X POST http://localhost:7778/api/conversations/bindings \
   -H "Content-Type: application/json" \
   -H "X-Local-Dev: true" \
@@ -27,6 +28,12 @@ curl -X POST http://localhost:7778/api/conversations/bindings \
     "mode": "task_thread",
     "task_id": "task-xxx"
   }'
+
+# Production — use session auth or API key instead
+curl -X POST https://your-orchestrator.example.com/api/conversations/bindings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{ ... }'
 ```
 
 The binding stores:
