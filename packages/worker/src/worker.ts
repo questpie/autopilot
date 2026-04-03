@@ -6,6 +6,7 @@ import { executeActions } from './actions/webhook'
 import { WorkspaceManager, type WorkspaceInfo } from './workspace'
 import { resolveRuntime, type RuntimeConfig, type ResolvedRuntime } from './runtime-config'
 import { loadCredential, saveCredential, type StoredCredential } from './credentials'
+import { startWorkerApi, type WorkerApiConfig, type WorkerApiServer } from './api'
 
 export interface WorkerCapability {
   runtime: 'claude-code' | 'codex' | 'opencode' | 'direct-api'
@@ -34,6 +35,8 @@ export interface WorkerConfig {
   localDev?: boolean
   /** Explicit worker-level tags (e.g. 'staging', 'prod'). Merged with per-runtime tags. */
   tags?: string[]
+  /** Worker app API config. If set, starts the worker-plane HTTP server. */
+  workerApi?: WorkerApiConfig | boolean
 }
 
 export class AutopilotWorker {
@@ -48,6 +51,7 @@ export class AutopilotWorker {
   private workspace: WorkspaceManager | null = null
   private resolvedRuntimes: ResolvedRuntime[] = []
   private isLocalDev: boolean
+  private apiServer: WorkerApiServer | null = null
 
   constructor(private config: WorkerConfig) {
     this.isLocalDev = config.localDev ?? false
@@ -119,12 +123,37 @@ export class AutopilotWorker {
       () => this.poll(),
       this.config.pollInterval ?? 5_000,
     )
+
+    // ── Start worker app API if configured ──────────────────────────
+    if (this.config.workerApi) {
+      const apiConfig = typeof this.config.workerApi === 'boolean' ? {} : this.config.workerApi
+      const workerTags = this.config.tags ?? []
+      this.apiServer = startWorkerApi(
+        {
+          workerId: this.workerId,
+          deviceId: this.config.deviceId,
+          name: this.config.name,
+          repoRoot: this.config.repoRoot ?? null,
+          tags: workerTags,
+          isLocalDev: this.isLocalDev,
+          getActiveRunId: () => this.activeRunId,
+          getResolvedRuntimes: () => this.resolvedRuntimes,
+          getWorkspace: () => this.workspace,
+        },
+        apiConfig,
+      )
+    }
   }
 
   async stop(): Promise<void> {
     this.running = false
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     if (this.pollTimer) clearInterval(this.pollTimer)
+
+    if (this.apiServer) {
+      this.apiServer.stop()
+      this.apiServer = null
+    }
 
     try {
       await this.api('/api/workers/deregister', {
@@ -134,6 +163,11 @@ export class AutopilotWorker {
     } catch (err) {
       console.warn('[worker] deregister failed (best effort):', err)
     }
+  }
+
+  /** Get the worker app API server info (token, port) if running. */
+  getApiServer(): WorkerApiServer | null {
+    return this.apiServer
   }
 
   // ─── Identity resolution ──────────────────────────────────────────

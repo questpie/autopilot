@@ -14,5 +14,7 @@ export type { RuntimeConfig, ResolvedRuntime } from './runtime-config'
 export { resolveSecretRefs, validateSecretRefs } from './secrets'
 export type { SecretResolutionResult } from './secrets'
 export { executeActions } from './actions/webhook'
+export { createWorkerApi, startWorkerApi } from './api'
+export type { WorkerApiConfig, WorkerApiDeps, WorkerApiServer } from './api'
 // Re-export shared types from spec for convenience
 export type { WorkerEvent, RunCompletion, ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse } from '@questpie/autopilot-spec'
