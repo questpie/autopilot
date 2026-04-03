@@ -87,6 +87,37 @@ export const HandlerResultSchema = z.object({
 	error: z.string().optional(),
 })
 
+// ─── Intake Contract ─────────────────────────────────────────────────────────
+
+/** Normalized task fields returned by an intake handler. */
+export const IntakeTaskInputSchema = z.object({
+	title: z.string().min(1),
+	description: z.string().optional(),
+	type: z.string().min(1),
+	priority: z.string().optional(),
+	assigned_to: z.string().optional(),
+	workflow_id: z.string().optional(),
+	metadata: z.record(z.unknown()).optional(),
+})
+
+/**
+ * Result from an intent.ingest handler invocation.
+ *
+ * Handlers return either:
+ * - action "task.create" with normalized task fields → orchestrator creates a real task
+ * - action "noop" → payload was not actionable, nothing happens
+ */
+export const IntakeResultSchema = z.discriminatedUnion('action', [
+	z.object({
+		action: z.literal('task.create'),
+		input: IntakeTaskInputSchema,
+	}),
+	z.object({
+		action: z.literal('noop'),
+		reason: z.string().optional(),
+	}),
+])
+
 // ─── Notification Payload ────────────────────────────────────────────────────
 
 /** Normalized notification payload for notify.send operations. */

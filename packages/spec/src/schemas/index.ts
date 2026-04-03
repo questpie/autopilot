@@ -21,6 +21,8 @@ export {
 	ProviderEventFilterSchema,
 	HandlerEnvelopeSchema,
 	HandlerResultSchema,
+	IntakeTaskInputSchema,
+	IntakeResultSchema,
 	NotificationPayloadSchema,
 } from './provider'
 export {
