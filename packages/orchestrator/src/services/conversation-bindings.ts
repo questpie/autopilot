@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm'
+import { eq, and, isNull } from 'drizzle-orm'
 import { conversationBindings } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
@@ -20,6 +20,15 @@ export class ConversationBindingService {
 		task_id?: string
 		metadata?: string
 	}): Promise<ConversationBindingRow | undefined> {
+		// Enforce uniqueness at service level (SQLite unique index doesn't prevent NULL duplicates)
+		const existing = await this.findByExternal(input.provider_id, input.external_conversation_id, input.external_thread_id)
+		if (existing) {
+			throw new Error(
+				`Binding already exists for provider=${input.provider_id} conversation=${input.external_conversation_id}` +
+				(input.external_thread_id ? ` thread=${input.external_thread_id}` : ''),
+			)
+		}
+
 		const now = new Date().toISOString()
 		await this.db.insert(conversationBindings).values({
 			...input,
@@ -53,6 +62,8 @@ export class ConversationBindingService {
 				.get()
 		}
 
+		// For conversation-level bindings (no thread), explicitly match NULL
+		// to avoid SQLite's NULL != NULL uniqueness quirk
 		return this.db
 			.select()
 			.from(conversationBindings)
@@ -60,6 +71,7 @@ export class ConversationBindingService {
 				and(
 					eq(conversationBindings.provider_id, providerId),
 					eq(conversationBindings.external_conversation_id, externalConversationId),
+					isNull(conversationBindings.external_thread_id),
 				),
 			)
 			.get()

@@ -490,6 +490,120 @@ console.log(JSON.stringify({
 		delete process.env.__TEST_CONV_SECRET_conv6
 	})
 
+	test('rejects provider without auth_secret configured', async () => {
+		const noAuthProvider: Provider = {
+			id: 'no-auth',
+			name: 'No Auth',
+			kind: 'conversation_channel',
+			handler: 'handlers/noop.ts',
+			capabilities: [{ op: 'conversation.ingest' }],
+			events: [],
+			config: {},
+			secret_refs: [], // No auth_secret
+			description: '',
+		}
+		const providers = new Map([['no-auth', noAuthProvider]])
+		const services = makeServices()
+		const app = buildApp(providers, services)
+
+		const res = await app.request(
+			'/api/conversations/no-auth',
+			post({ text: 'hello' }, { 'x-provider-secret': 'anything' }),
+		)
+		expect(res.status).toBe(403)
+		const body = await res.json() as any
+		expect(body.error).toContain('auth_secret')
+	})
+
+	test('binding creation rejects non-conversation_channel provider', async () => {
+		const notifProvider: Provider = {
+			id: 'notif-prov',
+			name: 'Notif',
+			kind: 'notification_channel',
+			handler: 'handlers/noop.ts',
+			capabilities: [{ op: 'notify.send' }],
+			events: [],
+			config: {},
+			secret_refs: [],
+			description: '',
+		}
+		const providers = new Map([['notif-prov', notifProvider]])
+		const services = makeServices()
+		const app = buildApp(providers, services)
+
+		const res = await app.request(
+			'/api/conversations/bindings',
+			post({
+				provider_id: 'notif-prov',
+				external_conversation_id: 'conv-1',
+				mode: 'task_thread',
+				task_id: 'task-nonexistent',
+			}),
+		)
+		expect(res.status).toBe(400)
+		const body = await res.json() as any
+		expect(body.error).toContain('not a conversation_channel')
+	})
+
+	test('binding creation rejects nonexistent task_id', async () => {
+		process.env.__TEST_CONV_SECRET_conv7 = 'secret-7'
+		const providers = new Map([['conv7', makeProvider('conv7', 'handlers/noop.ts')]])
+		const services = makeServices()
+		const app = buildApp(providers, services)
+
+		const res = await app.request(
+			'/api/conversations/bindings',
+			post({
+				provider_id: 'conv7',
+				external_conversation_id: 'conv-1',
+				mode: 'task_thread',
+				task_id: 'task-does-not-exist',
+			}),
+		)
+		expect(res.status).toBe(404)
+		const body = await res.json() as any
+		expect(body.error).toContain('Task not found')
+		delete process.env.__TEST_CONV_SECRET_conv7
+	})
+
+	test('duplicate binding creation returns 409', async () => {
+		process.env.__TEST_CONV_SECRET_conv8 = 'secret-8'
+		const providers = new Map([['conv8', makeProvider('conv8', 'handlers/noop.ts')]])
+		const taskService = new TaskService(dbResult.db)
+		const bindingService = new ConversationBindingService(dbResult.db)
+
+		// Create a task first
+		await taskService.create({ id: 'task-dup-test', title: 'Dup test', type: 'feature', created_by: 'test' })
+
+		// Create first binding
+		await bindingService.create({
+			id: 'bind-dup-1',
+			provider_id: 'conv8',
+			external_conversation_id: 'conv-dup',
+			mode: 'task_thread',
+			task_id: 'task-dup-test',
+		})
+
+		// Try to create duplicate via API
+		const services: Services = {
+			...makeServices(),
+			conversationBindingService: bindingService,
+			taskService,
+		}
+		const app = buildApp(providers, services)
+		const res = await app.request(
+			'/api/conversations/bindings',
+			post({
+				provider_id: 'conv8',
+				external_conversation_id: 'conv-dup',
+				mode: 'task_thread',
+				task_id: 'task-dup-test',
+			}),
+		)
+		expect(res.status).toBe(409)
+		delete process.env.__TEST_CONV_SECRET_conv8
+	})
+
 	function makeServices(): Services {
 		return {
 			taskService: new TaskService(dbResult.db),

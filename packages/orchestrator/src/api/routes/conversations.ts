@@ -35,13 +35,17 @@ const conversations = new Hono<AppEnv>()
 			}),
 		),
 		async (c) => {
-			const { conversationBindingService } = c.get('services')
+			const { conversationBindingService, taskService } = c.get('services')
 			const authoredConfig = c.get('authoredConfig')
 			const body = c.req.valid('json')
 
-			// Validate provider exists
-			if (!authoredConfig.providers.has(body.provider_id)) {
+			// Validate provider exists and is a conversation_channel
+			const provider = authoredConfig.providers.get(body.provider_id)
+			if (!provider) {
 				return c.json({ error: `Provider not found: ${body.provider_id}` }, 404)
+			}
+			if (provider.kind !== 'conversation_channel') {
+				return c.json({ error: `Provider ${body.provider_id} is not a conversation_channel` }, 400)
 			}
 
 			// task_thread mode requires task_id
@@ -49,16 +53,32 @@ const conversations = new Hono<AppEnv>()
 				return c.json({ error: 'task_thread bindings require task_id' }, 400)
 			}
 
+			// Validate task_id exists if provided
+			if (body.task_id) {
+				const task = await taskService.get(body.task_id)
+				if (!task) {
+					return c.json({ error: `Task not found: ${body.task_id}` }, 404)
+				}
+			}
+
 			const id = `bind-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-			const binding = await conversationBindingService.create({
-				id,
-				provider_id: body.provider_id,
-				external_conversation_id: body.external_conversation_id,
-				external_thread_id: body.external_thread_id,
-				mode: body.mode,
-				task_id: body.task_id,
-				metadata: body.metadata ? JSON.stringify(body.metadata) : undefined,
-			})
+			let binding
+			try {
+				binding = await conversationBindingService.create({
+					id,
+					provider_id: body.provider_id,
+					external_conversation_id: body.external_conversation_id,
+					external_thread_id: body.external_thread_id,
+					mode: body.mode,
+					task_id: body.task_id,
+					metadata: body.metadata ? JSON.stringify(body.metadata) : undefined,
+				})
+			} catch (err) {
+				if (err instanceof Error && err.message.includes('already exists')) {
+					return c.json({ error: err.message }, 409)
+				}
+				throw err
+			}
 
 			if (!binding) {
 				return c.json({ error: 'Failed to create binding' }, 500)
@@ -92,18 +112,20 @@ const conversations = new Hono<AppEnv>()
 				return c.json({ error: `Provider ${providerId} does not support conversation.ingest` }, 400)
 			}
 
-			// Provider-secret auth: check X-Provider-Secret header against provider's auth_secret ref
-			const providerSecret = c.req.header('x-provider-secret')
+			// Provider-secret auth: require auth_secret ref on conversation_channel providers
 			const authSecretRef = provider.secret_refs.find((r) => r.name === 'auth_secret')
-			if (authSecretRef) {
-				if (!providerSecret) {
-					return c.json({ error: 'X-Provider-Secret header required' }, 401)
-				}
-				const resolved = await resolveSecrets([authSecretRef])
-				const expected = resolved.get('auth_secret')
-				if (!expected || providerSecret !== expected) {
-					return c.json({ error: 'Invalid provider secret' }, 401)
-				}
+			if (!authSecretRef) {
+				return c.json({ error: `Provider ${providerId} has no auth_secret configured — inbound callbacks require authentication` }, 403)
+			}
+
+			const providerSecret = c.req.header('x-provider-secret')
+			if (!providerSecret) {
+				return c.json({ error: 'X-Provider-Secret header required' }, 401)
+			}
+			const resolved = await resolveSecrets([authSecretRef])
+			const expected = resolved.get('auth_secret')
+			if (!expected || providerSecret !== expected) {
+				return c.json({ error: 'Invalid provider secret' }, 401)
 			}
 
 			// Read the raw inbound payload
