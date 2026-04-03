@@ -217,6 +217,7 @@ console.log(JSON.stringify({
 			enrollmentService: {} as any,
 			activityService: new ActivityService(dbResult.db),
 			artifactService: new ArtifactService(dbResult.db),
+			conversationBindingService: {} as any,
 			workflowEngine,
 		}
 

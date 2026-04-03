@@ -66,4 +66,5 @@ export type HandlerEnvelope = z.infer<typeof schemas.HandlerEnvelopeSchema>
 export type HandlerResult = z.infer<typeof schemas.HandlerResultSchema>
 export type IntakeTaskInput = z.infer<typeof schemas.IntakeTaskInputSchema>
 export type IntakeResult = z.infer<typeof schemas.IntakeResultSchema>
+export type ConversationResult = z.infer<typeof schemas.ConversationResultSchema>
 export type NotificationPayload = z.infer<typeof schemas.NotificationPayloadSchema>

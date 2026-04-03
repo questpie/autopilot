@@ -118,6 +118,38 @@ export const IntakeResultSchema = z.discriminatedUnion('action', [
 	}),
 ])
 
+// ─── Conversation Contract ───────────────────────────────────────────────────
+
+/**
+ * Result from a conversation.ingest handler invocation.
+ *
+ * Handlers return a normalized action that the orchestrator dispatches
+ * through existing task primitives using the conversation binding.
+ */
+export const ConversationResultSchema = z.discriminatedUnion('action', [
+	z.object({
+		action: z.literal('task.reply'),
+		conversation_id: z.string(),
+		thread_id: z.string().optional(),
+		message: z.string().min(1),
+	}),
+	z.object({
+		action: z.literal('task.approve'),
+		conversation_id: z.string(),
+		thread_id: z.string().optional(),
+	}),
+	z.object({
+		action: z.literal('task.reject'),
+		conversation_id: z.string(),
+		thread_id: z.string().optional(),
+		message: z.string().optional(),
+	}),
+	z.object({
+		action: z.literal('noop'),
+		reason: z.string().optional(),
+	}),
+])
+
 // ─── Notification Payload ────────────────────────────────────────────────────
 
 /** Normalized notification payload for notify.send operations. */

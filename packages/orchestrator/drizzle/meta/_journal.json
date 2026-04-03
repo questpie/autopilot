@@ -8,6 +8,13 @@
       "when": 1775210440260,
       "tag": "0000_slim_krista_starr",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1775242896334,
+      "tag": "0001_early_grandmaster",
+      "breakpoints": true
     }
   ]
 }

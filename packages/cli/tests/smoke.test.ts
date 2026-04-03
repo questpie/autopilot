@@ -18,7 +18,7 @@ import { events } from '../../orchestrator/src/api/routes/events'
 import { createCompanyDb, type CompanyDb, type CompanyDbResult } from '../../orchestrator/src/db'
 import { createAuth, type Auth } from '../../orchestrator/src/auth'
 import type { Actor } from '../../orchestrator/src/auth/types'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService } from '../../orchestrator/src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService } from '../../orchestrator/src/services'
 
 const FAKE_ACTOR: Actor = {
 	id: 'test-cli-user',
@@ -149,7 +149,9 @@ describe('CLI smoke: full lifecycle via API', () => {
 			taskService,
 			runService,
 		)
-		services = { taskService, runService, workerService, enrollmentService, activityService, workflowEngine }
+		const artifactService = new ArtifactService(dbResult.db)
+	const conversationBindingService = new ConversationBindingService(dbResult.db)
+	services = { taskService, runService, workerService, enrollmentService, activityService, artifactService, conversationBindingService, workflowEngine }
 
 		app = buildTestApp({ companyRoot, db: dbResult.db, auth, services })
 	})

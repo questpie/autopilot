@@ -23,6 +23,7 @@ export {
 	HandlerResultSchema,
 	IntakeTaskInputSchema,
 	IntakeResultSchema,
+	ConversationResultSchema,
 	NotificationPayloadSchema,
 } from './provider'
 export {

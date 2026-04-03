@@ -18,5 +18,8 @@ export type { ActivityRow } from './activity'
 export { ArtifactService } from './artifacts'
 export type { ArtifactRow } from './artifacts'
 
+export { ConversationBindingService } from './conversation-bindings'
+export type { ConversationBindingRow } from './conversation-bindings'
+
 export { WorkflowEngine } from './workflow-engine'
 export type { AuthoredConfig, IntakeResult, AdvanceResult } from './workflow-engine'

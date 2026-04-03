@@ -244,6 +244,28 @@ export const artifacts = sqliteTable(
 	],
 )
 
+// ─── Conversation Bindings ─────────────────────────────────────────────────
+
+export const conversationBindings = sqliteTable(
+	'conversation_bindings',
+	{
+		id: text('id').primaryKey(),
+		provider_id: text('provider_id').notNull(),
+		external_conversation_id: text('external_conversation_id').notNull(),
+		external_thread_id: text('external_thread_id'),
+		mode: text('mode').notNull(), // task_thread | intent_intake
+		task_id: text('task_id'),
+		metadata: text('metadata').default('{}'),
+		created_at: text('created_at').notNull(),
+		updated_at: text('updated_at').notNull(),
+	},
+	(table) => [
+		uniqueIndex('uq_binding_provider_conv').on(table.provider_id, table.external_conversation_id, table.external_thread_id),
+		index('idx_bindings_task').on(table.task_id),
+		index('idx_bindings_provider').on(table.provider_id),
+	],
+)
+
 // ─── Activity ──────────────────────────────────────────────────────────────
 
 export const activity = sqliteTable(

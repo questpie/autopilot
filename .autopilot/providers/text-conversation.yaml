@@ -1,0 +1,16 @@
+id: text-conversation
+name: Text Conversation (Example)
+kind: conversation_channel
+handler: handlers/text-conversation.ts
+description: >
+  Generic text conversation provider.
+  Accepts { conversation_id, thread_id?, text } and dispatches
+  /approve, /reject, or reply commands to bound tasks.
+capabilities:
+  - op: conversation.ingest
+config: {}
+secret_refs:
+  - name: auth_secret
+    source: env
+    key: AUTOPILOT_CONVERSATION_SECRET
+    description: Shared secret for authenticating inbound conversation webhooks

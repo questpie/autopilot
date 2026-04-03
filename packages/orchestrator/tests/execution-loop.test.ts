@@ -16,7 +16,7 @@ import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { migrate } from 'drizzle-orm/libsql/migrator'
 import { companySchema, type CompanyDb } from '../src/db'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService } from '../src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService } from '../src/services'
 import type { AppEnv, Services } from '../src/api/app'
 import type { Actor } from '../src/auth/types'
 import { runs } from '../src/api/routes/runs'
@@ -167,6 +167,8 @@ describe('execution loop', () => {
 			workerService: new WorkerService(db),
 			enrollmentService: new EnrollmentService(db),
 			activityService: new ActivityService(db),
+			artifactService: new ArtifactService(db),
+			conversationBindingService: new ConversationBindingService(db),
 			workflowEngine,
 		}
 

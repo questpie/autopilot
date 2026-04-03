@@ -28,6 +28,7 @@ import {
 	WorkflowEngine,
 	ActivityService,
 	ArtifactService,
+	ConversationBindingService,
 } from '../../orchestrator/src/services'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -126,6 +127,7 @@ describe('Inbox Data', () => {
 			enrollmentService,
 			activityService,
 			artifactService,
+			conversationBindingService: new ConversationBindingService(dbResult.db),
 			workflowEngine,
 		}
 

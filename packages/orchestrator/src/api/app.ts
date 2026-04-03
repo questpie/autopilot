@@ -16,7 +16,7 @@ import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, AuthoredConfig } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, AuthoredConfig } from '../services'
 import type { Actor } from '../auth/types'
 import { authMiddleware } from './middleware/auth'
 import { workerAuthMiddleware } from './middleware/worker-auth'
@@ -27,6 +27,7 @@ import { workers } from './routes/workers'
 import { enrollment } from './routes/enrollment'
 import { previews } from './routes/previews'
 import { intake } from './routes/intake'
+import { conversations } from './routes/conversations'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ export interface Services {
 	enrollmentService: EnrollmentService
 	activityService: ActivityService
 	artifactService: ArtifactService
+	conversationBindingService: ConversationBindingService
 	workflowEngine: WorkflowEngine
 }
 
@@ -82,7 +84,7 @@ export function createApp(config: AppConfig) {
 		cors({
 			origin: corsOrigin,
 			allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-			allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Worker-Secret', 'X-Local-Dev'],
+			allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Worker-Secret', 'X-Provider-Secret', 'X-Local-Dev'],
 			credentials: true,
 		}),
 	)
@@ -162,6 +164,10 @@ export function createApp(config: AppConfig) {
 	// ── Intake routes (user auth for V1) ─────────────────────────────────
 	app.use('/api/intake/*', userAuth)
 
+	// ── Conversation routes ──────────────────────────────────────────────
+	// Binding management requires user auth; inbound /:providerId is self-authenticated via provider secret
+	app.use('/api/conversations/bindings', userAuth)
+
 	// ── Worker auth for machine routes ───────────────────────────────────
 	const workerAuth = workerAuthMiddleware({ allowLocalDevBypass: config.allowLocalDevBypass ?? false })
 	app.use('/api/workers/*', workerAuth)
@@ -178,6 +184,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/events', events)
 		.route('/api/previews', previews)
 		.route('/api/intake', intake)
+		.route('/api/conversations', conversations)
 
 	return typedApp
 }
