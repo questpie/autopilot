@@ -176,4 +176,10 @@ export const NotificationPayloadSchema = z.object({
 	preview_url: z.string().optional(),
 	/** Orchestrator base URL for building links. */
 	orchestrator_url: z.string().optional(),
+	/** Bound conversation ID (for conversation_channel outbound delivery). */
+	conversation_id: z.string().optional(),
+	/** Bound thread ID (for conversation_channel outbound delivery). */
+	thread_id: z.string().optional(),
+	/** Binding mode (task_thread | intent_intake). */
+	binding_mode: z.string().optional(),
 })

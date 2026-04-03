@@ -1,18 +1,49 @@
 /**
  * Generic text conversation handler.
  *
- * Normalizes inbound text into task actions based on command prefixes:
- *   /approve           → task.approve
- *   /reject [reason]   → task.reject
- *   anything else      → task.reply
+ * Supports two operations:
  *
- * Expected payload:
- *   { conversation_id: string, thread_id?: string, text: string }
+ * conversation.ingest (inbound):
+ *   Payload: { conversation_id, thread_id?, text }
+ *   /approve → task.approve, /reject [reason] → task.reject, text → task.reply
+ *
+ * notify.send (outbound):
+ *   Payload: NotificationPayload with conversation_id, thread_id
+ *   Logs the outbound message (real providers would POST to Telegram/Slack/etc)
  */
 
 const input = await Bun.stdin.text()
 const envelope = JSON.parse(input)
+const op = envelope.op as string
 
+if (op === 'notify.send') {
+	// Outbound: format notification for the bound conversation
+	const p = envelope.payload
+	const convId = p.conversation_id as string | undefined
+	if (!convId) {
+		console.log(JSON.stringify({ ok: true, metadata: { skipped: true, reason: 'no conversation_id' } }))
+		process.exit(0)
+	}
+
+	// In a real provider, this would POST to Telegram/Slack/Discord API.
+	// For the example, we record what was delivered.
+	console.log(JSON.stringify({
+		ok: true,
+		metadata: {
+			delivered: true,
+			conversation_id: convId,
+			thread_id: p.thread_id,
+			title: p.title,
+			summary: p.summary,
+			preview_url: p.preview_url,
+			task_url: p.task_url,
+			run_url: p.run_url,
+		},
+	}))
+	process.exit(0)
+}
+
+// conversation.ingest (inbound)
 const conversationId = envelope.payload.conversation_id as string | undefined
 const threadId = envelope.payload.thread_id as string | undefined
 const text = (envelope.payload.text as string ?? '').trim()

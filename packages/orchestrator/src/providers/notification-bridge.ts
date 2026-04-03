@@ -14,6 +14,7 @@ import type { AuthoredConfig } from '../services/workflow-engine'
 import type { RunService } from '../services/runs'
 import type { TaskService } from '../services/tasks'
 import type { ArtifactService } from '../services/artifacts'
+import type { ConversationBindingService, ConversationBindingRow } from '../services/conversation-bindings'
 import { invokeProvider, type HandlerRuntimeConfig } from './handler-runtime'
 
 export interface NotificationBridgeConfig {
@@ -31,6 +32,7 @@ export class NotificationBridge {
 		private runService: RunService,
 		private taskService: TaskService,
 		private artifactService: ArtifactService,
+		private conversationBindingService: ConversationBindingService,
 		private config: NotificationBridgeConfig,
 	) {}
 
@@ -52,40 +54,82 @@ export class NotificationBridge {
 	}
 
 	private async handleEvent(event: AutopilotEvent): Promise<void> {
-		const providers = this.getMatchingProviders(event)
-		if (providers.length === 0) return
-
 		const payload = await this.buildPayload(event)
 		if (!payload) return
 
 		const runtimeConfig: HandlerRuntimeConfig = { companyRoot: this.config.companyRoot }
 
-		for (const provider of providers) {
-			const hasNotifySend = provider.capabilities.some((c) => c.op === 'notify.send')
-			if (!hasNotifySend) continue
+		// 1. Generic notification_channel delivery (existing behavior)
+		const notifProviders = this.getMatchingProviders(event, 'notification_channel')
+		for (const provider of notifProviders) {
+			await this.sendToProvider(provider, payload, runtimeConfig)
+		}
 
-			try {
-				const result = await invokeProvider(provider, 'notify.send', payload, runtimeConfig)
-				if (!result.ok) {
-					console.warn(`[notification-bridge] provider ${provider.id} failed: ${result.error}`)
-				}
-			} catch (err) {
-				console.error(
-					`[notification-bridge] provider ${provider.id} error:`,
-					err instanceof Error ? err.message : String(err),
-				)
+		// 2. Bound conversation_channel delivery (new: task-scoped outbound)
+		if (payload.task_id) {
+			await this.deliverToBoundConversations(payload, event, runtimeConfig)
+		}
+	}
+
+	private async sendToProvider(
+		provider: Provider,
+		payload: NotificationPayload,
+		runtimeConfig: HandlerRuntimeConfig,
+	): Promise<void> {
+		const hasNotifySend = provider.capabilities.some((c) => c.op === 'notify.send')
+		if (!hasNotifySend) return
+
+		try {
+			const result = await invokeProvider(provider, 'notify.send', payload, runtimeConfig)
+			if (!result.ok) {
+				console.warn(`[notification-bridge] provider ${provider.id} failed: ${result.error}`)
 			}
+		} catch (err) {
+			console.error(
+				`[notification-bridge] provider ${provider.id} error:`,
+				err instanceof Error ? err.message : String(err),
+			)
 		}
 	}
 
 	/**
-	 * Find notification_channel providers whose event filters match this event.
+	 * For task-scoped events, look up conversation bindings and deliver
+	 * to bound conversation_channel providers with conversation context.
 	 */
-	private getMatchingProviders(event: AutopilotEvent): Provider[] {
+	private async deliverToBoundConversations(
+		payload: NotificationPayload,
+		event: AutopilotEvent,
+		runtimeConfig: HandlerRuntimeConfig,
+	): Promise<void> {
+		const bindings = await this.conversationBindingService.listForTask(payload.task_id!)
+
+		for (const binding of bindings) {
+			const provider = this.authoredConfig.providers.get(binding.provider_id)
+			if (!provider) continue
+			if (provider.kind !== 'conversation_channel') continue
+			if (!provider.capabilities.some((c) => c.op === 'notify.send')) continue
+			if (!this.matchesEventFilters(provider, event)) continue
+
+			// Enrich payload with conversation routing context
+			const boundPayload: NotificationPayload = {
+				...payload,
+				conversation_id: binding.external_conversation_id,
+				thread_id: binding.external_thread_id ?? undefined,
+				binding_mode: binding.mode,
+			}
+
+			await this.sendToProvider(provider, boundPayload, runtimeConfig)
+		}
+	}
+
+	/**
+	 * Find providers of a given kind whose event filters match this event.
+	 */
+	private getMatchingProviders(event: AutopilotEvent, kind: string): Provider[] {
 		const result: Provider[] = []
 
 		for (const provider of this.authoredConfig.providers.values()) {
-			if (provider.kind !== 'notification_channel') continue
+			if (provider.kind !== kind) continue
 			if (!this.matchesEventFilters(provider, event)) continue
 			result.push(provider)
 		}

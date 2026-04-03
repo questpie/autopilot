@@ -122,6 +122,7 @@ export async function startServer(options?: StartServerOptions) {
 		runService,
 		taskService,
 		artifactService,
+		conversationBindingService,
 		{ companyRoot, orchestratorUrl },
 	)
 	if (authoredConfig.providers.size > 0) {

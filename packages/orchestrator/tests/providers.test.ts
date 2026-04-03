@@ -455,6 +455,10 @@ console.log(JSON.stringify({ ok: true }))`,
 		listForRun: async () => [],
 	}
 
+	const mockBindingService = {
+		listForTask: async () => [],
+	}
+
 	test('dispatches notification on matching run_completed event', async () => {
 		const bridge = new NotificationBridge(
 			eventBus,
@@ -462,6 +466,7 @@ console.log(JSON.stringify({ ok: true }))`,
 			mockRunService as any,
 			mockTaskService as any,
 			mockArtifactService as any,
+			mockBindingService as any,
 			{ companyRoot: testRoot },
 		)
 		bridge.start()
@@ -512,6 +517,7 @@ console.log(JSON.stringify({ ok: true }))`,
 			mockRunService as any,
 			mockTaskService as any,
 			mockArtifactService as any,
+			mockBindingService as any,
 			{ companyRoot: testRoot },
 		)
 		bridge.start()
@@ -534,6 +540,7 @@ console.log(JSON.stringify({ ok: true }))`,
 			mockRunService as any,
 			mockTaskService as any,
 			mockArtifactService as any,
+			mockBindingService as any,
 			{ companyRoot: testRoot },
 		)
 		bridge.start()
