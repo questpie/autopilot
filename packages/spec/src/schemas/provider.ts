@@ -180,6 +180,6 @@ export const NotificationPayloadSchema = z.object({
 	conversation_id: z.string().optional(),
 	/** Bound thread ID (for conversation_channel outbound delivery). */
 	thread_id: z.string().optional(),
-	/** Binding mode (task_thread | intent_intake). */
-	binding_mode: z.string().optional(),
+	/** Binding mode. */
+	binding_mode: z.enum(['task_thread', 'intent_intake']).optional(),
 })

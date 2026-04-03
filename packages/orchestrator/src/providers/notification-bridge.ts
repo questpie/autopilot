@@ -104,6 +104,9 @@ export class NotificationBridge {
 		const bindings = await this.conversationBindingService.listForTask(payload.task_id!)
 
 		for (const binding of bindings) {
+			// Only task_thread bindings receive task-scoped outbound updates
+			if (binding.mode !== 'task_thread') continue
+
 			const provider = this.authoredConfig.providers.get(binding.provider_id)
 			if (!provider) continue
 			if (provider.kind !== 'conversation_channel') continue
