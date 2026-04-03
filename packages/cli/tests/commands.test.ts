@@ -32,8 +32,12 @@ describe('command registration', () => {
 		expect(commandNames).toContain('workflows')
 	})
 
-	it('has exactly 9 top-level commands', () => {
-		expect(program.commands.length).toBe(9)
+	it('has exactly 10 top-level commands', () => {
+		expect(program.commands.length).toBe(10)
+	})
+
+	it('registers inbox command', () => {
+		expect(commandNames).toContain('inbox')
 	})
 
 	it('server has start subcommand', () => {
