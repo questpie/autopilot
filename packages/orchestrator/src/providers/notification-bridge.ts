@@ -1,9 +1,9 @@
 /**
- * Notification bridge — connects orchestrator events to notification_channel providers.
+ * Notification bridge — connects orchestrator events to outbound providers.
  *
- * Subscribes to the event bus, matches actionable events against provider
- * event filters, builds a normalized NotificationPayload, and invokes
- * the provider handler via the handler runtime.
+ * Handles two delivery paths:
+ * 1. Generic notification_channel delivery (event-filter matched)
+ * 2. Bound conversation_channel delivery (task-scoped via conversation bindings)
  *
  * No retry system yet. Failures are logged, not queued.
  */
@@ -14,7 +14,7 @@ import type { AuthoredConfig } from '../services/workflow-engine'
 import type { RunService } from '../services/runs'
 import type { TaskService } from '../services/tasks'
 import type { ArtifactService } from '../services/artifacts'
-import type { ConversationBindingService, ConversationBindingRow } from '../services/conversation-bindings'
+import type { ConversationBindingService } from '../services/conversation-bindings'
 import { invokeProvider, type HandlerRuntimeConfig } from './handler-runtime'
 
 export interface NotificationBridgeConfig {

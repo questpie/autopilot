@@ -36,8 +36,6 @@ interface Run {
 
 interface Artifact {
 	kind: string
-	title: string
-	ref_kind: string
 	ref_value: string
 }
 
