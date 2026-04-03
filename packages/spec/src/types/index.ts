@@ -14,6 +14,7 @@ export type AgentTrigger = z.infer<typeof schemas.AgentTriggerSchema>
 // Workflows
 export type Workflow = z.infer<typeof schemas.WorkflowSchema>
 export type WorkflowStep = z.infer<typeof schemas.WorkflowStepSchema>
+export type StepTransition = z.infer<typeof schemas.StepTransitionSchema>
 export type ExecutionTarget = z.infer<typeof schemas.ExecutionTargetSchema>
 
 // Environments

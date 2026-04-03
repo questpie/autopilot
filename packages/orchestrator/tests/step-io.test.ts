@@ -155,7 +155,7 @@ describe('Step I/O', () => {
 				{ id: 'gen', type: 'agent', agent_id: 'dev', instructions: 'Generate prompt', actions: [] },
 				{ id: 'impl', type: 'agent', agent_id: 'dev', instructions: 'Implement', actions: [] },
 				{ id: 'validate', type: 'agent', agent_id: 'dev', instructions: 'Validate', actions: [],
-					transitions: { approved: 'done', revise: 'impl' },
+					transitions: [{ when: { outcome: 'approved' }, goto: 'done' }, { when: { outcome: 'revise' }, goto: 'impl' }],
 					output: { outcome: { description: 'result', values: { approved: 'ok', revise: 'fix' } } },
 				},
 				{ id: 'done', type: 'done', actions: [] },
@@ -177,7 +177,7 @@ describe('Step I/O', () => {
 
 		// Validate says revise — source is the validate run
 		await claimAndComplete('w3', a2!.runId!, 'Tests fail: fix line 42')
-		const a3 = await engine.advance(taskId, 'revise', a2!.runId!)
+		const a3 = await engine.advance(taskId, { outcome: 'revise' }, a2!.runId!)
 
 		// The re-impl run should have the VALIDATE summary (direct source),
 		// NOT the gen or first impl summary
@@ -236,7 +236,7 @@ describe('Step I/O', () => {
 				{ id: 'impl', type: 'agent', agent_id: 'dev', instructions: 'Implement',
 					input: { artifacts: ['implementation_prompt'] }, actions: [] },
 				{ id: 'validate', type: 'agent', agent_id: 'dev', instructions: 'Validate', actions: [],
-					transitions: { revise: 'impl', approved: 'done' } },
+					transitions: [{ when: { outcome: 'revise' }, goto: 'impl' }, { when: { outcome: 'approved' }, goto: 'done' }] },
 				{ id: 'done', type: 'done', actions: [] },
 			],
 		}
@@ -268,7 +268,7 @@ describe('Step I/O', () => {
 
 		// Validate says revise → back to impl
 		await claimAndComplete('w3', a2!.runId!, 'Fix the tests')
-		const a3 = await engine.advance(taskId, 'revise', a2!.runId!)
+		const a3 = await engine.advance(taskId, { outcome: 'revise' }, a2!.runId!)
 
 		// The re-impl run should still have the prompt artifact (from gen step)
 		// even though the last completed run was the validator
@@ -286,7 +286,7 @@ describe('Step I/O', () => {
 				{
 					id: 'step1', type: 'agent', agent_id: 'dev', actions: [],
 					output: { outcome: { description: 'result', values: { approved: 'ok', revise: 'fix' } } },
-					transitions: { approved: 'step2', reject: 'step2' }, // 'reject' not in outcome, 'revise' not in transitions
+					transitions: [{ when: { outcome: 'approved' }, goto: 'step2' }, { when: { outcome: 'reject' }, goto: 'step2' }], // 'reject' not in declared outcome values
 				},
 				{ id: 'step2', type: 'done', actions: [] },
 			],
@@ -295,8 +295,7 @@ describe('Step I/O', () => {
 		const engine = new WorkflowEngine(config, taskService, runService, activityService)
 
 		const issues = engine.validate()
-		expect(issues.some((i) => i.includes('"revise" but no matching transition'))).toBe(true)
-		expect(issues.some((i) => i.includes('"reject" has no matching output.outcome'))).toBe(true)
+		expect(issues.some((i) => i.includes('when.outcome="reject" is not a declared value'))).toBe(true)
 	})
 
 	// ── Output suffix in instructions ───────────────────────────────
@@ -311,7 +310,7 @@ describe('Step I/O', () => {
 						outcome: { description: 'result', values: { approved: 'ok', revise: 'fix needed' } },
 						summary: { description: 'Brief result' },
 					},
-					transitions: { approved: 'done', revise: 'validate' },
+					transitions: [{ when: { outcome: 'approved' }, goto: 'done' }, { when: { outcome: 'revise' }, goto: 'validate' }],
 				},
 				{ id: 'done', type: 'done', actions: [] },
 			],

@@ -331,7 +331,7 @@ export class AutopilotWorker {
         artifacts: result?.artifacts,
         runtime_session_ref: result?.sessionId,
         resumable,
-        outcome: result?.outcome,
+        outputs: result?.outputs,
       })
 
       if (ws && this.workspace) {

@@ -34,9 +34,10 @@ export interface RuntimeResult {
   artifacts?: RunArtifact[]
   /** Worker-local session ID for future resume. */
   sessionId?: string
-  /** Workflow outcome — drives transitions in the workflow engine.
-   *  E.g. 'approved', 'revise'. Extracted from agent output convention. */
-  outcome?: string
+  /** Structured output fields extracted from the agent's result block.
+   *  Used by the workflow engine for generic transition matching.
+   *  E.g. { outcome: 'approved', priority: 'high' }. */
+  outputs?: Record<string, string>
 }
 
 /**

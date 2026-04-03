@@ -1,5 +1,5 @@
 import { createMcpConfig } from '../mcp-config'
-import { parseStructuredOutput, getOutcome, getSummary } from '../structured-output'
+import { parseStructuredOutput, getSummary } from '../structured-output'
 import type { RunArtifact } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext, RuntimeResult, WorkerEvent } from './adapter'
 
@@ -147,6 +147,11 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
         ref_value: a.content,
       }))
 
+      // Extract all structured output tags for generic transition matching
+      const outputs = structured && Object.keys(structured.tags).length > 0
+        ? structured.tags
+        : undefined
+
       return {
         summary: (structured ? getSummary(structured) : null) ?? structured?.prose ?? rawText,
         tokens: result.usage
@@ -157,7 +162,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
           : undefined,
         artifacts: artifacts.length > 0 ? artifacts : undefined,
         sessionId: persistence === 'local' ? result.session_id : undefined,
-        outcome: structured ? getOutcome(structured) ?? undefined : undefined,
+        outputs,
       }
     } finally {
       if (mcpCleanup) await mcpCleanup()
@@ -195,5 +200,3 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
     this.eventHandler?.(event)
   }
 }
-
-

@@ -1,5 +1,5 @@
 export { AgentSchema, FsScopeSchema, AgentTriggerSchema } from './agent'
-export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema, StepOutputSchema, StepInputSchema } from './workflow'
+export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema, StepOutputSchema, StepInputSchema, StepTransitionSchema } from './workflow'
 export { EnvironmentSchema } from './environment'
 export { SecretRefSchema } from './secret-ref'
 export { ExternalActionSchema } from './external-action'

@@ -94,7 +94,7 @@ describe('Workflow Control Flow', () => {
 	test('agent outcome routes via transitions map', async () => {
 		const wf: Workflow = {
 			id: 'branching', name: 'Branching', description: '', steps: [
-				{ id: 'validate', type: 'agent', agent_id: 'dev', transitions: { approved: 'deploy', revise: 'fix' }, actions: [] },
+				{ id: 'validate', type: 'agent', agent_id: 'dev', transitions: [{ when: { outcome: 'approved' }, goto: 'deploy' }, { when: { outcome: 'revise' }, goto: 'fix' }], actions: [] },
 				{ id: 'fix', type: 'agent', agent_id: 'dev', next: 'validate', actions: [] },
 				{ id: 'deploy', type: 'done', actions: [] },
 			],
@@ -109,7 +109,7 @@ describe('Workflow Control Flow', () => {
 
 		// Complete with 'revise' outcome → should go to 'fix'
 		await claimAndComplete('w1', intake!.runId!)
-		const adv1 = await engine.advance(taskId, 'revise')
+		const adv1 = await engine.advance(taskId, { outcome: 'revise' })
 		expect(adv1!.task.workflow_step).toBe('fix')
 		expect(adv1!.actions).toContain('outcome:revise')
 
@@ -120,7 +120,7 @@ describe('Workflow Control Flow', () => {
 
 		// Now validate with 'approved' outcome → done
 		await claimAndComplete('w3', adv2!.runId!)
-		const adv3 = await engine.advance(taskId, 'approved')
+		const adv3 = await engine.advance(taskId, { outcome: 'approved' })
 		expect(adv3!.task.workflow_step).toBe('deploy')
 		expect(adv3!.task.status).toBe('done')
 	})
@@ -128,7 +128,7 @@ describe('Workflow Control Flow', () => {
 	test('missing outcome uses default next step', async () => {
 		const wf: Workflow = {
 			id: 'default-next', name: 'Default', description: '', steps: [
-				{ id: 'step1', type: 'agent', agent_id: 'dev', transitions: { special: 'step3' }, actions: [] },
+				{ id: 'step1', type: 'agent', agent_id: 'dev', transitions: [{ when: { outcome: 'special' }, goto: 'step3' }], actions: [] },
 				{ id: 'step2', type: 'done', actions: [] },
 				{ id: 'step3', type: 'done', actions: [] },
 			],
@@ -251,7 +251,7 @@ describe('Workflow Control Flow', () => {
 	test('validation catches unknown transition targets', () => {
 		const wf: Workflow = {
 			id: 'bad-refs', name: 'Bad Refs', description: '', steps: [
-				{ id: 'step1', type: 'agent', agent_id: 'dev', transitions: { bad: 'nonexistent' }, actions: [] },
+				{ id: 'step1', type: 'agent', agent_id: 'dev', transitions: [{ when: { outcome: 'bad' }, goto: 'nonexistent' }], actions: [] },
 				{ id: 'step2', type: 'human_approval', on_approve: 'nowhere', on_reply: 'ghost', on_reject: 'phantom', actions: [] },
 				{ id: 'step3', type: 'done', actions: [] },
 			],
@@ -261,7 +261,7 @@ describe('Workflow Control Flow', () => {
 
 		const issues = engine.validate()
 		expect(issues.length).toBe(4)
-		expect(issues.some((i) => i.includes('"bad" → "nonexistent"'))).toBe(true)
+		expect(issues.some((i) => i.includes('transition {"outcome":"bad"} → "nonexistent" target does not exist'))).toBe(true)
 		expect(issues.some((i) => i.includes('on_approve="nowhere"'))).toBe(true)
 		expect(issues.some((i) => i.includes('on_reply="ghost"'))).toBe(true)
 		expect(issues.some((i) => i.includes('on_reject="phantom"'))).toBe(true)

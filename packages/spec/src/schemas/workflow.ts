@@ -41,9 +41,8 @@ const StepOutputArtifactSchema = z.object({
  * Engine auto-generates structured-output suffix from this.
  *
  * Everything is a tag inside <AUTOPILOT_RESULT>.
- * - `outcome` is special: engine matches its value against `transitions` for routing
  * - `artifacts` is special: engine registers them through the artifact system
- * - Everything else is a generic tag with the same shape
+ * - All other tags are generic named fields matched by transition rules
  *
  * Any tag can have `values` (constrained enum) or just `description` (freeform).
  */
@@ -59,6 +58,19 @@ export const StepOutputSchema = z
 export const StepInputSchema = z.object({
 	/** Artifact kinds to look up from the task's artifact history and include as input context. */
 	artifacts: z.array(z.string()).optional(),
+})
+
+// ─── Step Transitions ────────────────────────────────────────────────────
+
+/**
+ * A single transition rule. Evaluated in order — first match wins.
+ * All fields in `when` must match the run's structured output for the transition to fire.
+ */
+export const StepTransitionSchema = z.object({
+	/** Field-value pairs to match against structured output. All must match. */
+	when: z.record(z.string()),
+	/** Target step ID to jump to. */
+	goto: z.string(),
 })
 
 // ─── Workflow Step ────────────────────────────────────────────────────────
@@ -77,7 +89,8 @@ export const WorkflowStepSchema = z.object({
 	next: z.string().optional(),
 
 	// ─── Control flow ─────────────────────────────────────────────────
-	transitions: z.record(z.string()).optional(),
+	/** Ordered transition rules. First match wins. Falls back to `next` → array order. */
+	transitions: z.array(StepTransitionSchema).optional(),
 	on_approve: z.string().optional(),
 	on_reply: z.string().optional(),
 	on_reject: z.string().optional(),

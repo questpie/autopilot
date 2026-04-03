@@ -28,8 +28,10 @@ steps:
       summary:
         description: "Brief validation result"
     transitions:
-      approved: generate-impl-prompt
-      revise: plan
+      - when: { outcome: approved }
+        goto: generate-impl-prompt
+      - when: { outcome: revise }
+        goto: plan
 
   - id: generate-impl-prompt
     type: agent
@@ -74,8 +76,10 @@ steps:
       feedback:
         description: "Specific issues to fix if revising"
     transitions:
-      approved: review
-      revise: implement
+      - when: { outcome: approved }
+        goto: review
+      - when: { outcome: revise }
+        goto: implement
 
   - id: review
     type: human_approval

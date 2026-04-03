@@ -71,7 +71,7 @@ describe('Dogfood E2E', () => {
 	}
 
 	// Helper: advance through a sequence of agent steps, returning the last advance result
-	async function runAgentSteps(taskId: string, steps: Array<{ outcome?: string }>) {
+	async function runAgentSteps(taskId: string, steps: Array<{ outputs?: Record<string, string> }>) {
 		let last: Awaited<ReturnType<typeof engine.advance>> = null
 		for (let i = 0; i < steps.length; i++) {
 			const step = steps[i]!
@@ -81,7 +81,7 @@ describe('Dogfood E2E', () => {
 			if (pendingRun) {
 				await claimAndComplete(`w-${Date.now()}-${i}`, pendingRun.id)
 			}
-			last = await engine.advance(taskId, step.outcome)
+			last = await engine.advance(taskId, step.outputs)
 		}
 		return last
 	}
@@ -117,7 +117,7 @@ describe('Dogfood E2E', () => {
 
 		// 3. Validator approves → generate-impl-prompt
 		await claimAndComplete('w2', adv1!.runId!)
-		const adv2 = await engine.advance(taskId, 'approved')
+		const adv2 = await engine.advance(taskId, { outcome: 'approved' })
 		expect(adv2!.task.workflow_step).toBe('generate-impl-prompt')
 		expect(adv2!.runId).not.toBeNull()
 
@@ -133,7 +133,7 @@ describe('Dogfood E2E', () => {
 
 		// 6. Validator approves → review (human)
 		await claimAndComplete('w5', adv4!.runId!)
-		const adv5 = await engine.advance(taskId, 'approved')
+		const adv5 = await engine.advance(taskId, { outcome: 'approved' })
 		expect(adv5!.task.workflow_step).toBe('review')
 		expect(adv5!.task.status).toBe('blocked')
 
@@ -158,7 +158,7 @@ describe('Dogfood E2E', () => {
 		await claimAndComplete('w2', adv1!.runId!)
 
 		// Revise → back to plan
-		const adv2 = await engine.advance(taskId, 'revise')
+		const adv2 = await engine.advance(taskId, { outcome: 'revise' })
 		expect(adv2!.task.workflow_step).toBe('plan')
 		await claimAndComplete('w3', adv2!.runId!)
 
@@ -167,7 +167,7 @@ describe('Dogfood E2E', () => {
 		await claimAndComplete('w4', adv3!.runId!)
 
 		// Approved → generate-impl-prompt
-		const adv4 = await engine.advance(taskId, 'approved')
+		const adv4 = await engine.advance(taskId, { outcome: 'approved' })
 		expect(adv4!.task.workflow_step).toBe('generate-impl-prompt')
 	})
 
@@ -182,7 +182,7 @@ describe('Dogfood E2E', () => {
 		await claimAndComplete('w1', intake!.runId!)
 		const a1 = await engine.advance(taskId)
 		await claimAndComplete('w2', a1!.runId!)
-		const a2 = await engine.advance(taskId, 'approved') // → gen-prompt
+		const a2 = await engine.advance(taskId, { outcome: 'approved' }) // → gen-prompt
 		await claimAndComplete('w3', a2!.runId!)
 		const a3 = await engine.advance(taskId) // → implement
 		await claimAndComplete('w4', a3!.runId!)
@@ -193,7 +193,7 @@ describe('Dogfood E2E', () => {
 		await claimAndComplete('w5', a4!.runId!)
 
 		// Revise → back to implement
-		const a5 = await engine.advance(taskId, 'revise')
+		const a5 = await engine.advance(taskId, { outcome: 'revise' })
 		expect(a5!.task.workflow_step).toBe('implement')
 		expect(a5!.runId).not.toBeNull()
 	})
@@ -209,13 +209,13 @@ describe('Dogfood E2E', () => {
 		await claimAndComplete('w1', intake!.runId!)
 		const a1 = await engine.advance(taskId)
 		await claimAndComplete('w2', a1!.runId!)
-		const a2 = await engine.advance(taskId, 'approved')
+		const a2 = await engine.advance(taskId, { outcome: 'approved' })
 		await claimAndComplete('w3', a2!.runId!)
 		const a3 = await engine.advance(taskId)
 		await claimAndComplete('w4', a3!.runId!)
 		const a4 = await engine.advance(taskId)
 		await claimAndComplete('w5', a4!.runId!)
-		const a5 = await engine.advance(taskId, 'approved')
+		const a5 = await engine.advance(taskId, { outcome: 'approved' })
 		expect(a5!.task.workflow_step).toBe('review')
 
 		// Human reply → back to implement
@@ -238,7 +238,7 @@ describe('Dogfood E2E', () => {
 		await claimAndComplete('w1', intake!.runId!)
 		const a1 = await engine.advance(taskId)
 		await claimAndComplete('w2', a1!.runId!)
-		const a2 = await engine.advance(taskId, 'approved')
+		const a2 = await engine.advance(taskId, { outcome: 'approved' })
 
 		expect(a2!.task.workflow_step).toBe('generate-impl-prompt')
 		expect(a2!.runId).not.toBeNull()

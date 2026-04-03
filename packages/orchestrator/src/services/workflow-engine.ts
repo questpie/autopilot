@@ -1,4 +1,4 @@
-import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition } from '@questpie/autopilot-spec'
 import type { TaskService, TaskRow } from './tasks'
 import type { RunService } from './runs'
 import type { ActivityService } from './activity'
@@ -91,9 +91,10 @@ export class WorkflowEngine {
 					issues.push(`workflow "${wfId}" step "${step.id}" has next="${step.next}" which does not exist`)
 				}
 				if (step.transitions) {
-					for (const [outcome, targetId] of Object.entries(step.transitions)) {
-						if (!stepIds.has(targetId)) {
-							issues.push(`workflow "${wfId}" step "${step.id}" transition "${outcome}" → "${targetId}" target does not exist`)
+					for (const transition of step.transitions) {
+						if (!stepIds.has(transition.goto)) {
+							const whenStr = JSON.stringify(transition.when)
+							issues.push(`workflow "${wfId}" step "${step.id}" transition ${whenStr} → "${transition.goto}" target does not exist`)
 						}
 					}
 				}
@@ -107,20 +108,17 @@ export class WorkflowEngine {
 					issues.push(`workflow "${wfId}" step "${step.id}" on_reject="${step.on_reject}" target does not exist`)
 				}
 
-				// Output/transition consistency: outcome tag values should match transition keys
+				// Output/transition consistency: validate when-field values against declared output
 				if (step.output && step.transitions) {
-					const outcomeTag = step.output.outcome as { description: string; values?: Record<string, string> } | undefined
-					if (outcomeTag?.values) {
-						const outcomeKeys = new Set(Object.keys(outcomeTag.values))
-						const transitionKeys = new Set(Object.keys(step.transitions))
-						for (const key of outcomeKeys) {
-							if (!transitionKeys.has(key)) {
-								issues.push(`workflow "${wfId}" step "${step.id}" output.outcome declares "${key}" but no matching transition`)
-							}
-						}
-						for (const key of transitionKeys) {
-							if (!outcomeKeys.has(key)) {
-								issues.push(`workflow "${wfId}" step "${step.id}" transition "${key}" has no matching output.outcome value`)
+					const { artifacts, ...outputTags } = step.output
+					for (const transition of step.transitions) {
+						for (const [field, value] of Object.entries(transition.when)) {
+							const tag = outputTags[field] as { description: string; values?: Record<string, string> } | undefined
+							if (tag?.values && !tag.values[value]) {
+								const validValues = Object.keys(tag.values).join(', ')
+								issues.push(
+									`workflow "${wfId}" step "${step.id}" transition when.${field}="${value}" is not a declared value (valid: ${validValues})`,
+								)
 							}
 						}
 					}
@@ -178,23 +176,28 @@ export class WorkflowEngine {
 
 	/**
 	 * Advance after a run completes.
+	 * @param outputs — structured output fields from the completed run (for transition matching)
 	 * @param sourceRunId — the run that just completed (direct source for context forwarding)
 	 */
-	async advance(taskId: string, outcome?: string, sourceRunId?: string): Promise<AdvanceResult | null> {
+	async advance(taskId: string, outputs?: Record<string, string>, sourceRunId?: string): Promise<AdvanceResult | null> {
 		const task = await this.taskService.get(taskId)
 		if (!task || !task.workflow_id || !task.workflow_step) return null
 
 		const workflow = this.config.workflows.get(task.workflow_id)
 		if (!workflow) return null
 
-		const nextStep = this.resolveNextStep(workflow, task.workflow_step, outcome)
+		const nextStep = this.resolveNextStep(workflow, task.workflow_step, outputs)
 		if (!nextStep) {
 			await this.taskService.update(taskId, { status: 'done', workflow_step: '__done__' })
 			return { task: (await this.taskService.get(taskId))!, runId: null, actions: ['done'] }
 		}
 
 		const actions: string[] = ['advanced']
-		if (outcome) actions.push(`outcome:${outcome}`)
+		if (outputs) {
+			for (const [k, v] of Object.entries(outputs)) {
+				actions.push(`${k}:${v}`)
+			}
+		}
 
 		const stepUpdates: Record<string, string> = { workflow_step: nextStep.id }
 		if (nextStep.type === 'agent' && nextStep.agent_id) {
@@ -286,12 +289,12 @@ export class WorkflowEngine {
 	private async advanceToTarget(
 		taskId: string,
 		targetStepId?: string,
-		outcome?: string,
+		outputs?: Record<string, string>,
 		ctx?: StepContext,
 	): Promise<AdvanceResult | null> {
 		if (!targetStepId) {
 			// Default advance — no source run context for human actions
-			return this.advanceWithContext(taskId, outcome, ctx ?? {})
+			return this.advanceWithContext(taskId, outputs, ctx ?? {})
 		}
 
 		const task = await this.taskService.get(taskId)
@@ -303,11 +306,15 @@ export class WorkflowEngine {
 		const targetStep = workflow.steps.find((s) => s.id === targetStepId)
 		if (!targetStep) {
 			console.warn(`[workflow-engine] target step "${targetStepId}" not found in workflow "${task.workflow_id}"`)
-			return this.advanceWithContext(taskId, outcome, ctx ?? {})
+			return this.advanceWithContext(taskId, outputs, ctx ?? {})
 		}
 
 		const actions: string[] = ['advanced', `routed:${targetStepId}`]
-		if (outcome) actions.push(`outcome:${outcome}`)
+		if (outputs) {
+			for (const [k, v] of Object.entries(outputs)) {
+				actions.push(`${k}:${v}`)
+			}
+		}
 
 		const stepUpdates: Record<string, string> = { workflow_step: targetStep.id }
 		if (targetStep.type === 'agent' && targetStep.agent_id) {
@@ -326,21 +333,25 @@ export class WorkflowEngine {
 	}
 
 	/** Like advance() but with pre-built StepContext. */
-	private async advanceWithContext(taskId: string, outcome?: string, ctx?: StepContext): Promise<AdvanceResult | null> {
+	private async advanceWithContext(taskId: string, outputs?: Record<string, string>, ctx?: StepContext): Promise<AdvanceResult | null> {
 		const task = await this.taskService.get(taskId)
 		if (!task || !task.workflow_id || !task.workflow_step) return null
 
 		const workflow = this.config.workflows.get(task.workflow_id)
 		if (!workflow) return null
 
-		const nextStep = this.resolveNextStep(workflow, task.workflow_step, outcome)
+		const nextStep = this.resolveNextStep(workflow, task.workflow_step, outputs)
 		if (!nextStep) {
 			await this.taskService.update(taskId, { status: 'done', workflow_step: '__done__' })
 			return { task: (await this.taskService.get(taskId))!, runId: null, actions: ['done'] }
 		}
 
 		const actions: string[] = ['advanced']
-		if (outcome) actions.push(`outcome:${outcome}`)
+		if (outputs) {
+			for (const [k, v] of Object.entries(outputs)) {
+				actions.push(`${k}:${v}`)
+			}
+		}
 
 		const stepUpdates: Record<string, string> = { workflow_step: nextStep.id }
 		if (nextStep.type === 'agent' && nextStep.agent_id) {
@@ -520,13 +531,21 @@ export class WorkflowEngine {
 
 	// ─── Step Resolution ────────────────────────────────────────────────
 
-	private resolveNextStep(workflow: Workflow, currentStepId: string, outcome?: string): WorkflowStep | null {
+	/**
+	 * Resolve the next step by evaluating transitions against structured outputs.
+	 * Order: transitions (first match) → explicit next → array order.
+	 */
+	private resolveNextStep(workflow: Workflow, currentStepId: string, outputs?: Record<string, string>): WorkflowStep | null {
 		const currentStep = workflow.steps.find((s) => s.id === currentStepId)
 		if (!currentStep) return null
 
-		if (outcome && currentStep.transitions) {
-			const targetId = currentStep.transitions[outcome]
-			if (targetId) return workflow.steps.find((s) => s.id === targetId) ?? null
+		// Evaluate transition rules in order — first match wins
+		if (outputs && currentStep.transitions?.length) {
+			for (const transition of currentStep.transitions) {
+				if (matchTransition(transition, outputs)) {
+					return workflow.steps.find((s) => s.id === transition.goto) ?? null
+				}
+			}
 		}
 
 		if (currentStep.next) {
@@ -539,14 +558,29 @@ export class WorkflowEngine {
 	}
 }
 
+// ─── Transition Matching ──────────────────────────────────────────────────
+
+/**
+ * Check if a transition rule matches the given outputs.
+ * All fields in `when` must match (AND semantics). Values are case-insensitive.
+ */
+function matchTransition(transition: StepTransition, outputs: Record<string, string>): boolean {
+	for (const [field, expectedValue] of Object.entries(transition.when)) {
+		const actual = outputs[field]
+		if (actual === undefined) return false
+		if (actual.toLowerCase() !== expectedValue.toLowerCase()) return false
+	}
+	return true
+}
+
 // ─── Output Suffix Generator ──────────────────────────────────────────────
 
 /**
  * Generate a structured-output instruction suffix from a step's output declaration.
  * Returns null if the step has no output declaration.
  *
- * All tags are generic — `outcome` and `artifact` are special only because
- * the engine interprets them (routing + registration). The parser extracts all tags equally.
+ * All tags are generic. `artifact` tags are registered through the artifact system.
+ * Transition rules match against any tag's value for routing.
  */
 export function generateOutputSuffix(step: WorkflowStep): string | null {
 	if (!step.output) return null

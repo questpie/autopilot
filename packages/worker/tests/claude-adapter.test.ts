@@ -236,7 +236,7 @@ exit 0
     }
 
     const result = await adapter.start(context)
-    expect(result!.outcome).toBe('approved')
+    expect(result!.outputs).toEqual({ outcome: 'approved', summary: 'Plan validated.' })
     expect(result!.summary).toBe('Plan validated.')
   })
 
@@ -297,7 +297,7 @@ exit 0
     }
 
     const result = await adapter.start(context)
-    expect(result!.outcome).toBeUndefined()
+    expect(result!.outputs).toBeUndefined()
     expect(result!.artifacts).toBeUndefined()
   })
 })
