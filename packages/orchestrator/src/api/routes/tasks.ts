@@ -55,20 +55,15 @@ const tasks = new Hono<AppEnv>()
 			}),
 		),
 		async (c) => {
-			const { taskService, workflowEngine } = c.get('services')
+			const { workflowEngine } = c.get('services')
 			const actor = c.get('actor')
 			const body = c.req.valid('json')
-			const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-			const task = await taskService.create({
-				id,
+			const result = await workflowEngine.materializeTask({
 				...body,
 				created_by: body.created_by ?? actor?.id ?? 'system',
 			})
-			if (!task) return c.json({ error: 'failed to create task' }, 500)
-
-			const intakeResult = await workflowEngine.intake(id)
-			const final = intakeResult?.task ?? task
-			return c.json(final, 201)
+			if (!result) return c.json({ error: 'failed to create task' }, 500)
+			return c.json(result.task, 201)
 		},
 	)
 	// PATCH /tasks/:id — update task

@@ -176,6 +176,29 @@ export class WorkflowEngine {
 	}
 
 	/**
+	 * Shared task materialization: create task + run workflow intake.
+	 * Used by both POST /api/tasks and POST /api/intake/:providerId.
+	 */
+	async materializeTask(input: {
+		title: string
+		type: string
+		description?: string
+		priority?: string
+		assigned_to?: string
+		workflow_id?: string
+		context?: string
+		metadata?: string
+		created_by: string
+	}): Promise<{ task: TaskRow; runId: string | null } | null> {
+		const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+		const task = await this.taskService.create({ id, ...input })
+		if (!task) return null
+
+		const result = await this.intake(id)
+		return { task: result?.task ?? task, runId: result?.runId ?? null }
+	}
+
+	/**
 	 * Advance after a run completes.
 	 * @param outputs — structured output fields from the completed run (for transition matching)
 	 * @param sourceRunId — the run that just completed (direct source for context forwarding)

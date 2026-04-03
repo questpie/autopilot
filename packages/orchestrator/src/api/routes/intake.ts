@@ -15,14 +15,13 @@ import { z } from 'zod'
 import { IntakeResultSchema } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
 import { invokeProvider } from '../../providers/handler-runtime'
-import { eventBus } from '../../events/event-bus'
 
 const intake = new Hono<AppEnv>()
 	.post(
 		'/:providerId',
 		zValidator('param', z.object({ providerId: z.string() })),
 		async (c) => {
-			const { taskService, workflowEngine } = c.get('services')
+			const { workflowEngine } = c.get('services')
 			const authoredConfig = c.get('authoredConfig')
 			const companyRoot = c.get('companyRoot')
 			const { providerId } = c.req.valid('param')
@@ -76,11 +75,9 @@ const intake = new Hono<AppEnv>()
 				return c.json({ action: 'noop', reason: result.reason }, 200)
 			}
 
-			// Materialize task.create through the standard path
+			// Materialize through the shared task creation path
 			const taskInput = result.input
-			const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-			const task = await taskService.create({
-				id,
+			const materialized = await workflowEngine.materializeTask({
 				title: taskInput.title,
 				type: taskInput.type,
 				description: taskInput.description,
@@ -91,21 +88,11 @@ const intake = new Hono<AppEnv>()
 				created_by: `provider:${providerId}`,
 			})
 
-			if (!task) {
+			if (!materialized) {
 				return c.json({ error: 'Failed to create task' }, 500)
 			}
 
-			// Run workflow intake (same as POST /tasks)
-			const intakeResult = await workflowEngine.intake(id)
-			const final = intakeResult?.task ?? task
-
-			eventBus.emit({
-				type: 'task_changed',
-				taskId: id,
-				status: final.status,
-			})
-
-			return c.json({ action: 'task.created', task: final }, 201)
+			return c.json({ action: 'task.created', task: materialized.task }, 201)
 		},
 	)
 
