@@ -60,7 +60,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
     const persistence = this.config.sessionPersistence ?? 'local'
     const isResume = !!context.runtimeSessionRef
 
-    const args: string[] = ['--bare']
+    const args: string[] = []
 
     // Resume vs fresh run
     if (isResume) {
