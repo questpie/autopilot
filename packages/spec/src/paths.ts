@@ -12,6 +12,8 @@ export const PATHS = {
 	AGENTS_DIR: '.autopilot/agents',
 	WORKFLOWS_DIR: '.autopilot/workflows',
 	ENVIRONMENTS_DIR: '.autopilot/environments',
+	PROVIDERS_DIR: '.autopilot/providers',
+	HANDLERS_DIR: '.autopilot/handlers',
 	SKILLS_DIR: '.autopilot/skills',
 	CONTEXT_DIR: '.autopilot/context',
 

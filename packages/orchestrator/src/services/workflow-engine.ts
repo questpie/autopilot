@@ -1,4 +1,4 @@
-import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider } from '@questpie/autopilot-spec'
 import type { TaskService, TaskRow } from './tasks'
 import type { RunService } from './runs'
 import type { ActivityService } from './activity'
@@ -12,6 +12,7 @@ export interface AuthoredConfig {
 	agents: Map<string, Agent>
 	workflows: Map<string, Workflow>
 	environments: Map<string, Environment>
+	providers: Map<string, Provider>
 	defaults: { runtime: string; workflow?: string; task_assignee?: string }
 }
 

@@ -57,7 +57,7 @@ function buildBootstrapApp(config: {
 		c.set('db', config.db)
 		c.set('auth', config.auth)
 		c.set('services', config.services)
-		c.set('authoredConfig', { company: {} as any, agents: new Map(), workflows: new Map(), environments: new Map() })
+		c.set('authoredConfig', { company: {} as any, agents: new Map(), workflows: new Map(), environments: new Map(), providers: new Map() })
 		c.set('actor', FAKE_ACTOR)
 		c.set('workerId', null)
 		await next()
@@ -160,6 +160,7 @@ describe('bootstrap', () => {
 				agents: new Map(),
 				workflows: new Map(),
 				environments: new Map(),
+				providers: new Map(),
 				defaults: { runtime: 'claude-code' },
 			},
 			taskService,

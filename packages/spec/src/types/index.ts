@@ -56,3 +56,12 @@ export type QuietHours = z.infer<typeof schemas.QuietHoursSchema>
 export type CompanyScope = z.infer<typeof schemas.CompanyScopeSchema>
 export type ProjectScope = z.infer<typeof schemas.ProjectScopeSchema>
 export type ScopeDefaults = z.infer<typeof schemas.ScopeDefaultsSchema>
+
+// Providers
+export type Provider = z.infer<typeof schemas.ProviderSchema>
+export type ProviderKind = z.infer<typeof schemas.ProviderKindSchema>
+export type ProviderCapability = z.infer<typeof schemas.ProviderCapabilitySchema>
+export type ProviderEventFilter = z.infer<typeof schemas.ProviderEventFilterSchema>
+export type HandlerEnvelope = z.infer<typeof schemas.HandlerEnvelopeSchema>
+export type HandlerResult = z.infer<typeof schemas.HandlerResultSchema>
+export type NotificationPayload = z.infer<typeof schemas.NotificationPayloadSchema>

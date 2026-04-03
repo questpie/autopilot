@@ -99,6 +99,7 @@ function makeConfig(
 		agents: new Map(TEST_AGENTS.map((a) => [a.id, a])),
 		workflows,
 		environments: new Map(),
+		providers: new Map(),
 		defaults: { runtime: 'claude-code', workflow: 'default', task_assignee: 'ceo' },
 	}
 }

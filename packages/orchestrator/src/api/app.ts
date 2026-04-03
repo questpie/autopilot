@@ -137,6 +137,10 @@ export function createApp(config: AppConfig) {
 		const cfg = c.get('authoredConfig')
 		return c.json([...cfg.environments.values()], 200)
 	})
+	app.get('/api/config/providers', (c) => {
+		const cfg = c.get('authoredConfig')
+		return c.json([...cfg.providers.values()], 200)
+	})
 
 	// ── Enrollment: enroll is public, tokens requires user auth ──────────
 	app.use('/api/enrollment/tokens', authMiddleware())

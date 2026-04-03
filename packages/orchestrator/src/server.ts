@@ -21,6 +21,8 @@ import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
 import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService } from './services'
 import type { AuthoredConfig } from './services'
+import { NotificationBridge } from './providers'
+import { eventBus } from './events/event-bus'
 
 export interface StartServerOptions {
 	/** Absolute path to start scope discovery from. Defaults to first CLI arg or cwd. */
@@ -74,10 +76,11 @@ export async function startServer(options?: StartServerOptions) {
 		agents: resolved.agents,
 		workflows: resolved.workflows,
 		environments: resolved.environments,
+		providers: resolved.providers,
 		defaults: resolved.defaults,
 	}
 	console.log(
-		`[server] config loaded: ${resolved.agents.size} agents, ${resolved.workflows.size} workflows, ${resolved.environments.size} environments, ${resolved.skills.size} skills, ${resolved.context.size} context files`,
+		`[server] config loaded: ${resolved.agents.size} agents, ${resolved.workflows.size} workflows, ${resolved.environments.size} environments, ${resolved.providers.size} providers, ${resolved.skills.size} skills, ${resolved.context.size} context files`,
 	)
 
 	// ── 5. Create auth ───────────────────────────────────────────────────
@@ -109,7 +112,19 @@ export async function startServer(options?: StartServerOptions) {
 		workflowEngine,
 	}
 
-	// ── 7. Create Hono app ───────────────────────────────────────────────
+	// ── 7. Start notification bridge ─────────────────────────────────────
+	const notificationBridge = new NotificationBridge(
+		eventBus,
+		authoredConfig,
+		runService,
+		taskService,
+		{ companyRoot, orchestratorUrl: `http://localhost:${port}` },
+	)
+	if (authoredConfig.providers.size > 0) {
+		notificationBridge.start()
+	}
+
+	// ── 8. Create Hono app ───────────────────────────────────────────────
 	const app = createApp({
 		companyRoot,
 		db: companyDb,
@@ -120,7 +135,7 @@ export async function startServer(options?: StartServerOptions) {
 		allowLocalDevBypass: options?.allowLocalDevBypass,
 	})
 
-	// ── 8. Start HTTP server ─────────────────────────────────────────────
+	// ── 9. Start HTTP server ─────────────────────────────────────────────
 	const server = Bun.serve({
 		fetch: app.fetch,
 		port,
@@ -129,5 +144,5 @@ export async function startServer(options?: StartServerOptions) {
 
 	console.log(`[server] listening on http://localhost:${server.port}`)
 
-	return { server, app, services, companyRoot, auth, db: companyDb }
+	return { server, app, services, companyRoot, auth, db: companyDb, notificationBridge }
 }

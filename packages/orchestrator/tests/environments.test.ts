@@ -85,6 +85,7 @@ function makeConfig(overrides?: { defaultWorkflow?: string; environments?: Map<s
 			['simple', WORKFLOW_NO_ENV],
 		]),
 		environments: overrides?.environments ?? new Map([['staging', STAGING_ENV]]),
+		providers: new Map(),
 		defaults: { runtime: 'claude-code', workflow: overrides?.defaultWorkflow ?? 'deploy-flow', task_assignee: 'dev' },
 	}
 }

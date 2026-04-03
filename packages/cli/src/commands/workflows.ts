@@ -129,7 +129,7 @@ workflowsCmd.addCommand(
 					task_assignee: company.defaults.task_assignee,
 				}
 				const engine = new orch.WorkflowEngine(
-					{ company, agents, workflows, environments, defaults },
+					{ company, agents, workflows, environments, providers: new Map(), defaults },
 					null as never,
 					null as never,
 				)

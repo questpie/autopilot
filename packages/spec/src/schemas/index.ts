@@ -15,6 +15,15 @@ export {
 	QuietHoursSchema,
 } from './human'
 export {
+	ProviderSchema,
+	ProviderKindSchema,
+	ProviderCapabilitySchema,
+	ProviderEventFilterSchema,
+	HandlerEnvelopeSchema,
+	HandlerResultSchema,
+	NotificationPayloadSchema,
+} from './provider'
+export {
 	WorkerRegisterRequestSchema,
 	WorkerCapabilitySchema,
 	WorkerRegisterResponseSchema,

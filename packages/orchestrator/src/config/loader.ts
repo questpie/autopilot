@@ -13,6 +13,7 @@ import {
 	WorkflowSchema,
 	CompanyScopeSchema,
 	EnvironmentSchema,
+	ProviderSchema,
 	PATHS,
 } from '@questpie/autopilot-spec'
 import type { z, ZodTypeDef } from 'zod'
@@ -21,6 +22,7 @@ export type Agent = z.output<typeof AgentSchema>
 export type Workflow = z.output<typeof WorkflowSchema>
 export type CompanyScope = z.output<typeof CompanyScopeSchema>
 export type Environment = z.output<typeof EnvironmentSchema>
+export type Provider = z.output<typeof ProviderSchema>
 
 /** Load and validate `.autopilot/company.yaml`. */
 export async function loadCompany(companyRoot: string) {
@@ -45,6 +47,12 @@ export async function loadWorkflows(companyRoot: string) {
 export async function loadEnvironments(companyRoot: string) {
 	const dir = join(companyRoot, PATHS.ENVIRONMENTS_DIR)
 	return loadYamlDir(dir, EnvironmentSchema)
+}
+
+/** Load all provider definitions from `.autopilot/providers/*.yaml`. */
+export async function loadProviders(companyRoot: string) {
+	const dir = join(companyRoot, PATHS.PROVIDERS_DIR)
+	return loadYamlDir(dir, ProviderSchema)
 }
 
 /** Generic helper: read all YAML files in a directory and validate against a schema. */

@@ -58,6 +58,7 @@ function makeConfig(overrides?: Partial<AuthoredConfig>): AuthoredConfig {
 		agents: overrides?.agents ?? new Map(TEST_AGENTS.map((a) => [a.id, a])),
 		workflows: overrides?.workflows ?? new Map([[TEST_WORKFLOW.id, TEST_WORKFLOW]]),
 		environments: overrides?.environments ?? new Map(),
+		providers: overrides?.providers ?? new Map(),
 		defaults: overrides?.defaults ?? { runtime: 'claude-code', workflow: 'default', task_assignee: 'ceo' },
 	}
 }

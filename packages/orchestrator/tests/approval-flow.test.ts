@@ -50,6 +50,7 @@ function makeConfig(): AuthoredConfig {
 		agents: new Map(AGENTS.map((a) => [a.id, a])),
 		workflows: new Map([[WORKFLOW.id, WORKFLOW]]),
 		environments: new Map(),
+		providers: new Map(),
 		defaults: { runtime: 'claude-code', workflow: 'review-flow', task_assignee: 'ceo' },
 	}
 }

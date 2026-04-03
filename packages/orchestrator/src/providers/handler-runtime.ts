@@ -1,0 +1,160 @@
+/**
+ * Handler runtime — executes provider Bun handler scripts.
+ *
+ * Contract:
+ * - Handler receives a JSON envelope on stdin
+ * - Handler writes a JSON result to stdout
+ * - Handler exits 0 on success, non-zero on crash
+ * - Timeout: 30s default
+ */
+import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import { HandlerResultSchema } from '@questpie/autopilot-spec'
+import type { HandlerEnvelope, HandlerResult, Provider, SecretRef } from '@questpie/autopilot-spec'
+
+export interface HandlerRuntimeConfig {
+	/** Company root — handler paths are resolved relative to .autopilot/ */
+	companyRoot: string
+	/** Timeout in ms (default 30_000). */
+	timeout?: number
+}
+
+/**
+ * Resolve secret refs on the orchestrator host.
+ * Same model as worker-side resolution: env, file, exec.
+ */
+export async function resolveSecrets(refs: SecretRef[]): Promise<Map<string, string>> {
+	const resolved = new Map<string, string>()
+
+	for (const ref of refs) {
+		switch (ref.source) {
+			case 'env': {
+				const val = process.env[ref.key]
+				if (val !== undefined) resolved.set(ref.name, val)
+				break
+			}
+			case 'file': {
+				try {
+					const content = await Bun.file(ref.key).text()
+					resolved.set(ref.name, content.trim())
+				} catch {
+					// skip unresolvable
+				}
+				break
+			}
+			case 'exec': {
+				try {
+					const proc = Bun.spawn(['sh', '-c', ref.key], {
+						stdout: 'pipe',
+						stderr: 'pipe',
+					})
+					const exitCode = await proc.exited
+					if (exitCode === 0) {
+						const out = await new Response(proc.stdout).text()
+						resolved.set(ref.name, out.trim())
+					}
+				} catch {
+					// skip unresolvable
+				}
+				break
+			}
+		}
+	}
+
+	return resolved
+}
+
+/**
+ * Execute a provider handler with a typed envelope.
+ * Returns a typed HandlerResult or an error result on failure.
+ */
+export async function executeHandler(
+	provider: Provider,
+	envelope: HandlerEnvelope,
+	config: HandlerRuntimeConfig,
+): Promise<HandlerResult> {
+	const handlerPath = join(config.companyRoot, '.autopilot', provider.handler)
+
+	if (!existsSync(handlerPath)) {
+		return {
+			ok: false,
+			error: `Handler not found: ${handlerPath}`,
+		}
+	}
+
+	const timeout = config.timeout ?? 30_000
+	const input = JSON.stringify(envelope)
+
+	try {
+		const proc = Bun.spawn(['bun', 'run', handlerPath], {
+			stdin: 'pipe',
+			stdout: 'pipe',
+			stderr: 'pipe',
+			cwd: config.companyRoot,
+		})
+
+		// Write envelope to stdin
+		proc.stdin.write(input)
+		proc.stdin.flush()
+		proc.stdin.end()
+
+		// Race between completion and timeout
+		const exitCode = await Promise.race([
+			proc.exited,
+			new Promise<never>((_, reject) =>
+				setTimeout(() => {
+					proc.kill()
+					reject(new Error(`Handler timed out after ${timeout}ms`))
+				}, timeout),
+			),
+		])
+
+		if (exitCode !== 0) {
+			const stderr = await new Response(proc.stderr).text()
+			return {
+				ok: false,
+				error: `Handler exited with code ${exitCode}: ${stderr.slice(0, 500)}`,
+			}
+		}
+
+		const stdout = await new Response(proc.stdout).text()
+		const parsed = HandlerResultSchema.safeParse(JSON.parse(stdout))
+
+		if (!parsed.success) {
+			return {
+				ok: false,
+				error: `Invalid handler output: ${parsed.error.message.slice(0, 300)}`,
+			}
+		}
+
+		return parsed.data
+	} catch (err) {
+		return {
+			ok: false,
+			error: err instanceof Error ? err.message : String(err),
+		}
+	}
+}
+
+/**
+ * Build a full envelope and execute a handler for a provider.
+ */
+export async function invokeProvider(
+	provider: Provider,
+	op: string,
+	payload: Record<string, unknown>,
+	config: HandlerRuntimeConfig,
+): Promise<HandlerResult> {
+	const secrets = await resolveSecrets(provider.secret_refs)
+
+	const envelope: HandlerEnvelope = {
+		op,
+		provider_id: provider.id,
+		provider_kind: provider.kind,
+		config: provider.config,
+		secrets: Object.fromEntries(secrets),
+		payload,
+	}
+
+	return executeHandler(provider, envelope, config)
+}

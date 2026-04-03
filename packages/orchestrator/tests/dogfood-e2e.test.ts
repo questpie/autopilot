@@ -51,7 +51,7 @@ describe('Dogfood E2E', () => {
 			workflow: company.defaults.workflow,
 			task_assignee: company.defaults.task_assignee,
 		}
-		config = { company, agents, workflows, environments, defaults }
+		config = { company, agents, workflows, environments, providers: new Map(), defaults }
 
 		dbResult = await createCompanyDb(companyRoot)
 		taskService = new TaskService(dbResult.db)

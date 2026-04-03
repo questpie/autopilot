@@ -1,7 +1,7 @@
 export { startServer } from './server'
 export type { StartServerOptions } from './server'
 export type { AppType, AppConfig, AppEnv, Services } from './api/app'
-export { loadCompany, loadAgents, loadWorkflows, loadEnvironments } from './config/loader'
+export { loadCompany, loadAgents, loadWorkflows, loadEnvironments, loadProviders } from './config/loader'
 export { discoverScopes, resolveConfig, discoverAndResolve } from './config/scope-resolver'
 export type { ScopeChain, ResolvedConfig } from './config/scope-resolver'
 export { WorkflowEngine } from './services/workflow-engine'

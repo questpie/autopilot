@@ -86,6 +86,7 @@ function makeConfig(): AuthoredConfig {
 			['simple', SIMPLE_WORKFLOW],
 		]),
 		environments: new Map([['staging', STAGING_ENV]]),
+		providers: new Map(),
 		defaults: { runtime: 'claude-code', workflow: 'simple', task_assignee: 'dev' },
 	}
 }
