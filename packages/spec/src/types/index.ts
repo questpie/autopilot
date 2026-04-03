@@ -50,3 +50,8 @@ export type Schedule = z.infer<typeof schemas.ScheduleSchema>
 export type Human = z.infer<typeof schemas.HumanSchema>
 export type NotificationRouting = z.infer<typeof schemas.NotificationRoutingSchema>
 export type QuietHours = z.infer<typeof schemas.QuietHoursSchema>
+
+// Scope
+export type CompanyScope = z.infer<typeof schemas.CompanyScopeSchema>
+export type ProjectScope = z.infer<typeof schemas.ProjectScopeSchema>
+export type ScopeDefaults = z.infer<typeof schemas.ScopeDefaultsSchema>

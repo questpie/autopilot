@@ -203,4 +203,101 @@ exit 0
     // The start should reject or return due to killed process
     await expect(startPromise).rejects.toThrow()
   })
+
+  test('extracts structured outcome from AUTOPILOT_RESULT block', async () => {
+    const outcomeBinaryPath = join(tmpDir, 'claude-structured')
+    // Escape inner JSON properly for bash
+    const jsonResult = JSON.stringify({
+      result: 'Plan looks good.\\n\\n<AUTOPILOT_RESULT>\\n<outcome>approved</outcome>\\n<summary>Plan validated.</summary>\\n</AUTOPILOT_RESULT>',
+      session_id: 's-out',
+      usage: { input_tokens: 100, output_tokens: 30 },
+    })
+    const script = `#!/bin/bash\necho '${jsonResult}'\nexit 0\n`
+    await writeFile(outcomeBinaryPath, script)
+    await chmod(outcomeBinaryPath, 0o755)
+
+    const adapter = new ClaudeCodeAdapter({
+      binaryPath: outcomeBinaryPath,
+      workDir: tmpDir,
+    })
+    adapter.onEvent(() => {})
+
+    const context: RunContext = {
+      runId: 'run-struct-1',
+      agentId: 'dev',
+      taskId: null,
+      taskTitle: null,
+      taskDescription: null,
+      instructions: 'Validate the plan',
+      orchestratorUrl: 'http://localhost:7778',
+      apiKey: 'test-key',
+      runtimeSessionRef: null,
+      workDir: null,
+    }
+
+    const result = await adapter.start(context)
+    expect(result!.outcome).toBe('approved')
+    expect(result!.summary).toBe('Plan validated.')
+  })
+
+  test('extracts artifact from structured output', async () => {
+    const artifactBinaryPath = join(tmpDir, 'claude-artifact')
+    const jsonResult = JSON.stringify({
+      result: 'Generated prompt.\\n\\n<AUTOPILOT_RESULT>\\n<summary>Prompt ready.</summary>\\n<artifact kind="implementation_prompt" title="Impl Prompt">Step 1: modify foo.ts</artifact>\\n</AUTOPILOT_RESULT>',
+    })
+    const script = `#!/bin/bash\necho '${jsonResult}'\nexit 0\n`
+    await writeFile(artifactBinaryPath, script)
+    await chmod(artifactBinaryPath, 0o755)
+
+    const adapter = new ClaudeCodeAdapter({
+      binaryPath: artifactBinaryPath,
+      workDir: tmpDir,
+    })
+    adapter.onEvent(() => {})
+
+    const context: RunContext = {
+      runId: 'run-struct-2',
+      agentId: 'dev',
+      taskId: null,
+      taskTitle: null,
+      taskDescription: null,
+      instructions: 'Generate prompt',
+      orchestratorUrl: 'http://localhost:7778',
+      apiKey: 'test-key',
+      runtimeSessionRef: null,
+      workDir: null,
+    }
+
+    const result = await adapter.start(context)
+    expect(result!.artifacts).toBeDefined()
+    expect(result!.artifacts!.length).toBe(1)
+    expect(result!.artifacts![0]!.kind).toBe('implementation_prompt')
+    expect(result!.artifacts![0]!.title).toBe('Impl Prompt')
+    expect(result!.artifacts![0]!.ref_value).toContain('Step 1')
+  })
+
+  test('no outcome when no structured block present', async () => {
+    const adapter = new ClaudeCodeAdapter({
+      binaryPath: fakeBinaryPath,
+      workDir: tmpDir,
+    })
+    adapter.onEvent(() => {})
+
+    const context: RunContext = {
+      runId: 'run-struct-3',
+      agentId: 'dev',
+      taskId: null,
+      taskTitle: null,
+      taskDescription: null,
+      instructions: 'Just do the work',
+      orchestratorUrl: 'http://localhost:7778',
+      apiKey: 'test-key',
+      runtimeSessionRef: null,
+      workDir: null,
+    }
+
+    const result = await adapter.start(context)
+    expect(result!.outcome).toBeUndefined()
+    expect(result!.artifacts).toBeUndefined()
+  })
 })

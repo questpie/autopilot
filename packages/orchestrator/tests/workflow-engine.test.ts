@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os'
 import { createCompanyDb, type CompanyDbResult } from '../src/db'
 import { TaskService, RunService, WorkflowEngine } from '../src/services'
 import type { AuthoredConfig } from '../src/services'
-import type { Agent, Workflow, Company } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, CompanyScope } from '@questpie/autopilot-spec'
 
 // ─── Test Fixtures ──────────────────────────────────────────────────────────
 
@@ -42,30 +42,14 @@ const TEST_WORKFLOW: Workflow = {
 	],
 }
 
-const TEST_COMPANY: Company = {
+const TEST_COMPANY: CompanyScope = {
 	name: 'Test Co',
 	slug: 'test-co',
 	description: '',
 	timezone: 'UTC',
 	language: 'en',
 	owner: { name: 'Test', email: 'test@test.com' },
-	settings: {
-		auto_assign: true,
-		require_approval: ['merge', 'deploy'],
-		max_concurrent_agents: 4,
-		budget: { daily_token_limit: 5_000_000, alert_at: 80 },
-		auth: {},
-		inference: {
-			gateway_base_url: 'https://ai-gateway.vercel.sh/v1',
-			text_model: 'google/gemini-2.5-flash',
-			embedding_model: 'google/gemini-embedding-2',
-			embedding_dimensions: 768,
-		},
-		default_task_assignee: 'ceo',
-		default_workflow: 'default',
-		default_runtime: 'claude-code',
-	},
-	setup_completed: false,
+	defaults: { runtime: 'claude-code', workflow: 'default', task_assignee: 'ceo' },
 }
 
 function makeConfig(overrides?: Partial<AuthoredConfig>): AuthoredConfig {
@@ -73,6 +57,8 @@ function makeConfig(overrides?: Partial<AuthoredConfig>): AuthoredConfig {
 		company: overrides?.company ?? TEST_COMPANY,
 		agents: overrides?.agents ?? new Map(TEST_AGENTS.map((a) => [a.id, a])),
 		workflows: overrides?.workflows ?? new Map([[TEST_WORKFLOW.id, TEST_WORKFLOW]]),
+		environments: overrides?.environments ?? new Map(),
+		defaults: overrides?.defaults ?? { runtime: 'claude-code', workflow: 'default', task_assignee: 'ceo' },
 	}
 }
 
@@ -117,10 +103,10 @@ describe('WorkflowEngine', () => {
 	let runService: RunService
 
 	beforeAll(async () => {
-		await mkdir(companyRoot, { recursive: true })
+		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
 		await writeFile(
-			join(companyRoot, 'company.yaml'),
-			'name: test\nowner:\n  name: Test\n  email: test@test.com\n',
+			join(companyRoot, '.autopilot', 'company.yaml'),
+			'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n',
 		)
 		dbResult = await createCompanyDb(companyRoot)
 		for (const sql of DDL) {
@@ -138,13 +124,7 @@ describe('WorkflowEngine', () => {
 	test('validate() detects missing agent references', () => {
 		const engine = new WorkflowEngine(
 			makeConfig({
-				company: {
-					...TEST_COMPANY,
-					settings: {
-						...TEST_COMPANY.settings,
-						default_task_assignee: 'nonexistent',
-					},
-				},
+				defaults: { runtime: 'claude-code', workflow: 'default', task_assignee: 'nonexistent' },
 			}),
 			taskService,
 			runService,
@@ -314,10 +294,7 @@ describe('WorkflowEngine', () => {
 		}
 		const config = makeConfig({
 			workflows: new Map([['done-only', doneOnlyWorkflow]]),
-			company: {
-				...TEST_COMPANY,
-				settings: { ...TEST_COMPANY.settings, default_workflow: 'done-only' },
-			},
+			defaults: { runtime: 'claude-code', workflow: 'done-only', task_assignee: 'ceo' },
 		})
 		const engine = new WorkflowEngine(config, taskService, runService)
 
@@ -354,14 +331,7 @@ describe('WorkflowEngine', () => {
 
 	test('no config = no side effects', async () => {
 		const emptyConfig = makeConfig({
-			company: {
-				...TEST_COMPANY,
-				settings: {
-					...TEST_COMPANY.settings,
-					default_task_assignee: undefined,
-					default_workflow: undefined,
-				},
-			},
+			defaults: { runtime: 'claude-code', workflow: undefined, task_assignee: undefined },
 			workflows: new Map(),
 		})
 		const engine = new WorkflowEngine(emptyConfig, taskService, runService)
@@ -474,10 +444,7 @@ describe('WorkflowEngine', () => {
 		}
 		const config = makeConfig({
 			workflows: new Map([['short', shortWorkflow]]),
-			company: {
-				...TEST_COMPANY,
-				settings: { ...TEST_COMPANY.settings, default_workflow: 'short' },
-			},
+			defaults: { runtime: 'claude-code', workflow: 'short', task_assignee: 'ceo' },
 		})
 		const engine = new WorkflowEngine(config, taskService, runService)
 		const taskId = `task-short-${Date.now()}`

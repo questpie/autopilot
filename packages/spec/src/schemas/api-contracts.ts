@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { ExecutionTargetSchema } from './workflow'
+import { ExternalActionSchema } from './external-action'
+import { SecretRefSchema } from './secret-ref'
 
 // ─── Shared ────────────────────────────────────────────────────────────────
 
@@ -39,22 +41,46 @@ export const WorkerClaimRequestSchema = z.object({
 	runtime: z.string().optional(),
 })
 
-/** What the worker gets back when it successfully claims a run. */
+/**
+ * Portable execution context the worker receives when claiming a run.
+ *
+ * This is the resolved contract — the worker should not need to walk
+ * a project filesystem or resolve config to execute a run.
+ *
+ * Orchestrator enriches the raw run row with:
+ * - task context (title, description)
+ * - agent identity (name, role) from authored config
+ * - separated actions/secret_refs (split from the targeting blob)
+ */
 export const ClaimedRunSchema = z.object({
 	id: z.string(),
 	agent_id: z.string(),
 	task_id: z.string().nullable(),
 	runtime: z.string(),
 	status: z.string(),
-	// Execution context the worker needs
+
+	// ─── Task context ──────────────────────────────────────────────
 	task_title: z.string().nullable().optional(),
 	task_description: z.string().nullable().optional(),
+
+	// ─── Agent identity (resolved from authored config) ────────────
+	agent_name: z.string().nullable().optional(),
+	agent_role: z.string().nullable().optional(),
+
+	// ─── Execution ─────────────────────────────────────────────────
+	/** Fully baked instructions — includes context forwarding, step instructions, output suffix. */
 	instructions: z.string().nullable().optional(),
-	// Session continuation context
+
+	// ─── Session continuation ──────────────────────────────────────
 	runtime_session_ref: z.string().nullable().optional(),
 	resumed_from_run_id: z.string().nullable().optional(),
-	// Execution targeting
+
+	// ─── Execution targeting (constraints only) ────────────────────
 	targeting: z.record(z.unknown()).nullable().optional(),
+
+	// ─── Post-run hooks (separated from targeting) ─────────────────
+	actions: z.array(ExternalActionSchema).default([]),
+	secret_refs: z.array(SecretRefSchema).default([]),
 })
 
 export const WorkerClaimResponseSchema = z.object({

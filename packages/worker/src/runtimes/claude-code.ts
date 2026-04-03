@@ -1,4 +1,6 @@
 import { createMcpConfig } from '../mcp-config'
+import { parseStructuredOutput, getOutcome, getSummary } from '../structured-output'
+import type { RunArtifact } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext, RuntimeResult, WorkerEvent } from './adapter'
 
 export interface ClaudeCodeConfig {
@@ -134,15 +136,28 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
 
       this.emit({ type: 'progress', summary: 'Claude Code completed' })
 
+      const rawText = result.result ?? stdout.trim()
+      const structured = parseStructuredOutput(rawText)
+
+      // Build artifacts from structured block
+      const artifacts: RunArtifact[] = (structured?.artifacts ?? []).map((a) => ({
+        kind: a.kind as RunArtifact['kind'],
+        title: a.title,
+        ref_kind: 'inline' as const,
+        ref_value: a.content,
+      }))
+
       return {
-        summary: result.result ?? stdout.trim(),
+        summary: (structured ? getSummary(structured) : null) ?? structured?.prose ?? rawText,
         tokens: result.usage
           ? {
               input: result.usage.input_tokens ?? 0,
               output: result.usage.output_tokens ?? 0,
             }
           : undefined,
+        artifacts: artifacts.length > 0 ? artifacts : undefined,
         sessionId: persistence === 'local' ? result.session_id : undefined,
+        outcome: structured ? getOutcome(structured) ?? undefined : undefined,
       }
     } finally {
       if (mcpCleanup) await mcpCleanup()
@@ -180,3 +195,5 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
     this.eventHandler?.(event)
   }
 }
+
+

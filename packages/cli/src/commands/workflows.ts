@@ -123,8 +123,13 @@ workflowsCmd.addCommand(
 
 				console.log(dim(`Loaded: ${agents.size} agents, ${workflows.size} workflows, ${environments.size} environments`))
 
+				const defaults = {
+					runtime: company.defaults.runtime ?? 'claude-code',
+					workflow: company.defaults.workflow,
+					task_assignee: company.defaults.task_assignee,
+				}
 				const engine = new orch.WorkflowEngine(
-					{ company, agents, workflows, environments },
+					{ company, agents, workflows, environments, defaults },
 					null as never,
 					null as never,
 				)

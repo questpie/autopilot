@@ -1,0 +1,6 @@
+name: questpie-autopilot
+description: "The autopilot monorepo — developing Autopilot with Autopilot"
+defaults:
+  workflow: dogfood
+  task_assignee: dev
+  runtime: claude-code

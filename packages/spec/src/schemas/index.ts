@@ -1,10 +1,11 @@
 export { AgentSchema, FsScopeSchema, AgentTriggerSchema } from './agent'
-export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema } from './workflow'
+export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema, StepOutputSchema, StepInputSchema } from './workflow'
 export { EnvironmentSchema } from './environment'
 export { SecretRefSchema } from './secret-ref'
 export { ExternalActionSchema } from './external-action'
 export { ArtifactSchema, ArtifactKindSchema, ArtifactRefKindSchema, RunArtifactSchema } from './artifact'
 export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema } from './company'
+export { CompanyScopeSchema, ProjectScopeSchema, ScopeDefaultsSchema } from './scope'
 export { WorkerEventTypeSchema, WorkerEventSchema, RunCompletionSchema } from './worker-event'
 export { ScheduleSchema, SchedulesFileSchema } from './schedule'
 export {

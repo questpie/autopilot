@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os'
 import { createCompanyDb, type CompanyDbResult } from '../src/db'
 import { TaskService, RunService, WorkflowEngine, ActivityService } from '../src/services'
 import type { AuthoredConfig } from '../src/services'
-import type { Agent, Workflow, Company } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, CompanyScope } from '@questpie/autopilot-spec'
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -38,16 +38,10 @@ const WORKFLOW: Workflow = {
 	],
 }
 
-const COMPANY: Company = {
+const COMPANY: CompanyScope = {
 	name: 'Test', slug: 'test', description: '', timezone: 'UTC', language: 'en',
 	owner: { name: 'Test', email: 'test@test.com' },
-	settings: {
-		auto_assign: true, require_approval: [], max_concurrent_agents: 4,
-		budget: { daily_token_limit: 0, alert_at: 0 }, auth: {},
-		inference: { gateway_base_url: '', text_model: '', embedding_model: '', embedding_dimensions: 768 },
-		default_task_assignee: 'ceo', default_workflow: 'review-flow', default_runtime: 'claude-code',
-	},
-	setup_completed: false,
+	defaults: { runtime: 'claude-code', workflow: 'review-flow', task_assignee: 'ceo' },
 }
 
 function makeConfig(): AuthoredConfig {
@@ -55,6 +49,8 @@ function makeConfig(): AuthoredConfig {
 		company: COMPANY,
 		agents: new Map(AGENTS.map((a) => [a.id, a])),
 		workflows: new Map([[WORKFLOW.id, WORKFLOW]]),
+		environments: new Map(),
+		defaults: { runtime: 'claude-code', workflow: 'review-flow', task_assignee: 'ceo' },
 	}
 }
 
@@ -103,8 +99,8 @@ describe('Approval Flow', () => {
 	let engine: WorkflowEngine
 
 	beforeAll(async () => {
-		await mkdir(companyRoot, { recursive: true })
-		await writeFile(join(companyRoot, 'company.yaml'), 'name: test\nowner:\n  name: Test\n  email: test@test.com\n')
+		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
+		await writeFile(join(companyRoot, '.autopilot', 'company.yaml'), 'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n')
 		dbResult = await createCompanyDb(companyRoot)
 		for (const sql of DDL) await dbResult.raw.execute(sql)
 		taskService = new TaskService(dbResult.db)
@@ -262,7 +258,8 @@ describe('Approval Flow', () => {
 		// The run must already have the combined instructions — no second write needed.
 		// A worker claiming this run immediately will see the human reply.
 		const run = await runService.get(result!.runId!)
-		expect(run!.instructions).toBe('Deploy it\n\nHuman reply: Focus on edge cases')
+		expect(run!.instructions).toContain('Deploy it')
+		expect(run!.instructions).toContain('Focus on edge cases')
 	})
 
 	test('reply with no step instructions uses reply as sole instructions', async () => {
@@ -281,7 +278,8 @@ describe('Approval Flow', () => {
 		const config: AuthoredConfig = {
 			...makeConfig(),
 			workflows: new Map([['no-instr', noInstrWorkflow]]),
-			company: { ...COMPANY, settings: { ...COMPANY.settings, default_workflow: 'no-instr' } },
+			company: COMPANY,
+			defaults: { runtime: 'claude-code', workflow: 'no-instr', task_assignee: 'ceo' },
 		}
 		const eng = new WorkflowEngine(config, taskService, runService, activityService)
 
@@ -293,7 +291,7 @@ describe('Approval Flow', () => {
 
 		const result = await eng.reply(taskId, 'Just deploy it', 'andrej')
 		const run = await runService.get(result!.runId!)
-		expect(run!.instructions).toBe('Just deploy it')
+		expect(run!.instructions).toContain('Just deploy it')
 	})
 
 	test('full flow: develop → reply → deploy with instructions → done', async () => {

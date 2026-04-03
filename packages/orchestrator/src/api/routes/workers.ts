@@ -5,7 +5,11 @@ import {
 	WorkerHeartbeatRequestSchema,
 	WorkerClaimRequestSchema,
 	WorkerDeregisterRequestSchema,
+	ExternalActionSchema,
+	SecretRefSchema,
 } from '@questpie/autopilot-spec'
+import type { ExternalAction, SecretRef } from '@questpie/autopilot-spec'
+import { z } from 'zod'
 import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
 
@@ -124,6 +128,15 @@ const workers = new Hono<AppEnv>()
 			}
 		}
 
+		// Resolve agent identity from authored config
+		const config = c.get('authoredConfig')
+		const agent = config.agents.get(run.agent_id)
+		const agentName = agent?.name ?? null
+		const agentRole = agent?.role ?? null
+
+		// Split targeting blob into constraints vs post-run hooks
+		const { constraints, actions, secretRefs } = splitTargeting(run.targeting)
+
 		return c.json(
 			{
 				run: {
@@ -134,10 +147,14 @@ const workers = new Hono<AppEnv>()
 					status: run.status,
 					task_title: taskTitle,
 					task_description: taskDescription,
+					agent_name: agentName,
+					agent_role: agentRole,
 					instructions: run.instructions ?? null,
 					runtime_session_ref: run.runtime_session_ref ?? null,
 					resumed_from_run_id: run.resumed_from_run_id ?? null,
-					targeting: run.targeting ? JSON.parse(run.targeting) : null,
+					targeting: constraints,
+					actions,
+					secret_refs: secretRefs,
 				},
 				lease_id: leaseId,
 			},
@@ -163,3 +180,43 @@ const workers = new Hono<AppEnv>()
 	})
 
 export { workers }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+const TargetingBlobSchema = z.object({
+	actions: z.array(ExternalActionSchema).default([]),
+	secret_refs: z.array(SecretRefSchema).default([]),
+}).passthrough()
+
+/**
+ * Split the JSON-serialized targeting blob into execution constraints
+ * (what the claiming logic uses) and post-run hooks (what the worker executes after).
+ */
+function splitTargeting(raw: string | null | undefined): {
+	constraints: Record<string, unknown> | null
+	actions: ExternalAction[]
+	secretRefs: SecretRef[]
+} {
+	if (!raw) return { constraints: null, actions: [], secretRefs: [] }
+
+	let parsed: unknown
+	try {
+		parsed = JSON.parse(raw)
+	} catch {
+		return { constraints: null, actions: [], secretRefs: [] }
+	}
+
+	const result = TargetingBlobSchema.safeParse(parsed)
+	if (!result.success) {
+		return { constraints: parsed as Record<string, unknown>, actions: [], secretRefs: [] }
+	}
+
+	const { actions, secret_refs, ...rest } = result.data
+	const hasConstraints = Object.keys(rest).some((k) => rest[k] !== undefined)
+
+	return {
+		constraints: hasConstraints ? rest : null,
+		actions,
+		secretRefs: secret_refs,
+	}
+}

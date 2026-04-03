@@ -38,4 +38,7 @@ export const RunCompletionSchema = z.object({
 	runtime_session_ref: z.string().optional(),
 	/** Whether this run can be continued on the same worker. */
 	resumable: z.boolean().optional(),
+	/** Workflow outcome — drives transitions in the workflow engine.
+	 *  E.g. 'approved', 'revise', 'rejected'. If omitted, default next step is used. */
+	outcome: z.string().optional(),
 })

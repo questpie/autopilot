@@ -59,8 +59,8 @@ describe('Artifacts', () => {
 	let taskService: TaskService
 
 	beforeAll(async () => {
-		await mkdir(companyRoot, { recursive: true })
-		await writeFile(join(companyRoot, 'company.yaml'), 'name: test\nowner:\n  name: Test\n  email: test@test.com\n')
+		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
+		await writeFile(join(companyRoot, '.autopilot', 'company.yaml'), 'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n')
 		dbResult = await createCompanyDb(companyRoot)
 		for (const sql of DDL) await dbResult.raw.execute(sql)
 		artifactService = new ArtifactService(dbResult.db)

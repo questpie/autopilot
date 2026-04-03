@@ -83,17 +83,13 @@ describe('WorkflowSchema', () => {
 		})
 
 		expect(result.description).toBe('')
-		expect(result.steps[0]).toEqual({
-			id: 'implement',
-			type: 'agent',
-			agent_id: 'developer',
-		})
-		expect(result.steps[1]).toEqual({
-			id: 'review',
-			type: 'human_approval',
-			approvers: ['owner'],
-		})
-		expect(result.steps[2]).toEqual({ id: 'done', type: 'done' })
+		expect(result.steps[0]!.id).toBe('implement')
+		expect(result.steps[0]!.type).toBe('agent')
+		expect(result.steps[0]!.agent_id).toBe('developer')
+		expect(result.steps[1]!.id).toBe('review')
+		expect(result.steps[1]!.type).toBe('human_approval')
+		expect(result.steps[2]!.id).toBe('done')
+		expect(result.steps[2]!.type).toBe('done')
 	})
 
 	test('rejects invalid step type', () => {
@@ -155,11 +151,10 @@ describe('API contract schemas', () => {
 			capabilities: [{ runtime: 'claude-code', models: ['claude-sonnet-4'], maxConcurrent: 1 }],
 		})
 
-		expect(result.capabilities[0]).toEqual({
-			runtime: 'claude-code',
-			models: ['claude-sonnet-4'],
-			maxConcurrent: 1,
-		})
+		expect(result.capabilities[0]!.runtime).toBe('claude-code')
+		expect(result.capabilities[0]!.models).toEqual(['claude-sonnet-4'])
+		expect(result.capabilities[0]!.maxConcurrent).toBe(1)
+		expect(result.capabilities[0]!.tags).toEqual([])
 	})
 
 	test('worker claim and enrollment contracts parse current fields', () => {

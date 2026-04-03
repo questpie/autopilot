@@ -1,0 +1,87 @@
+id: dogfood
+name: "Dogfood Development"
+description: >
+  Plan → validate plan → generate implementation prompt →
+  implement → validate implementation → human review → done.
+steps:
+  - id: plan
+    type: agent
+    agent_id: dev
+    instructions: >
+      Research and create an implementation plan for the task.
+      Analyze the codebase — read relevant files, understand the architecture.
+      Identify affected files, dependencies, and risks.
+      Produce a clear step-by-step plan. Do NOT implement yet.
+
+  - id: validate-plan
+    type: agent
+    agent_id: dev
+    instructions: >
+      Validate the implementation plan from the previous step.
+      Check completeness, feasibility, and scope.
+    output:
+      outcome:
+        description: "Whether the plan is ready for implementation"
+        values:
+          approved: "Plan is complete and ready"
+          revise: "Plan needs changes — explain what must change"
+      summary:
+        description: "Brief validation result"
+    transitions:
+      approved: generate-impl-prompt
+      revise: plan
+
+  - id: generate-impl-prompt
+    type: agent
+    agent_id: dev
+    instructions: >
+      Based on the approved plan, generate a detailed implementation prompt.
+      Include exact file paths, change descriptions, test expectations,
+      constraints from the existing codebase, and scope boundaries.
+    output:
+      summary:
+        description: "Brief status"
+      artifacts:
+        - kind: implementation_prompt
+          title: "Implementation Prompt"
+          description: "Full implementation instructions for the next agent"
+
+  - id: implement
+    type: agent
+    agent_id: dev
+    instructions: >
+      Implement the task following the implementation prompt.
+      Write clean, tested code. Run tests before completing.
+      Follow existing codebase patterns. Stay within scope.
+    input:
+      artifacts:
+        - implementation_prompt
+
+  - id: validate-impl
+    type: agent
+    agent_id: dev
+    instructions: >
+      Validate the implementation from the previous step.
+      Run tests, check conventions, verify scope compliance.
+    output:
+      outcome:
+        description: "Whether the implementation is correct"
+        values:
+          approved: "Implementation is correct and tests pass"
+          revise: "Implementation needs fixes — explain what"
+      summary:
+        description: "Brief validation result"
+      feedback:
+        description: "Specific issues to fix if revising"
+    transitions:
+      approved: review
+      revise: implement
+
+  - id: review
+    type: human_approval
+    on_approve: done
+    on_reply: implement
+    on_reject: done
+
+  - id: done
+    type: done

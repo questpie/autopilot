@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os'
 import { createCompanyDb, type CompanyDbResult } from '../src/db'
 import { TaskService, RunService, WorkflowEngine } from '../src/services'
 import type { AuthoredConfig } from '../src/services'
-import type { Agent, Workflow, Company, Environment } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, CompanyScope, Environment } from '@questpie/autopilot-spec'
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -70,30 +70,22 @@ const WORKFLOW_NO_ENV: Workflow = {
 	],
 }
 
-const COMPANY: Company = {
+const COMPANY: CompanyScope = {
 	name: 'Test', slug: 'test', description: '', timezone: 'UTC', language: 'en',
 	owner: { name: 'Test', email: 'test@test.com' },
-	settings: {
-		auto_assign: true, require_approval: [], max_concurrent_agents: 4,
-		budget: { daily_token_limit: 0, alert_at: 0 }, auth: {},
-		inference: { gateway_base_url: '', text_model: '', embedding_model: '', embedding_dimensions: 768 },
-		default_task_assignee: 'dev', default_workflow: 'deploy-flow', default_runtime: 'claude-code',
-	},
-	setup_completed: false,
+	defaults: { runtime: 'claude-code', workflow: 'deploy-flow', task_assignee: 'dev' },
 }
 
 function makeConfig(overrides?: { defaultWorkflow?: string; environments?: Map<string, Environment> }): AuthoredConfig {
 	return {
-		company: {
-			...COMPANY,
-			settings: { ...COMPANY.settings, default_workflow: overrides?.defaultWorkflow ?? 'deploy-flow' },
-		},
+		company: COMPANY,
 		agents: new Map(AGENTS.map((a) => [a.id, a])),
 		workflows: new Map([
 			['deploy-flow', WORKFLOW_WITH_ENV],
 			['simple', WORKFLOW_NO_ENV],
 		]),
 		environments: overrides?.environments ?? new Map([['staging', STAGING_ENV]]),
+		defaults: { runtime: 'claude-code', workflow: overrides?.defaultWorkflow ?? 'deploy-flow', task_assignee: 'dev' },
 	}
 }
 
@@ -134,8 +126,8 @@ describe('Environments & External Actions', () => {
 	let runService: RunService
 
 	beforeAll(async () => {
-		await mkdir(companyRoot, { recursive: true })
-		await writeFile(join(companyRoot, 'company.yaml'), 'name: test\nowner:\n  name: Test\n  email: test@test.com\n')
+		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
+		await writeFile(join(companyRoot, '.autopilot', 'company.yaml'), 'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n')
 		dbResult = await createCompanyDb(companyRoot)
 		for (const sql of DDL) await dbResult.raw.execute(sql)
 		taskService = new TaskService(dbResult.db)

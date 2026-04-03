@@ -1,6 +1,4 @@
-import { ExternalActionSchema, SecretRefSchema } from '@questpie/autopilot-spec'
 import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse } from '@questpie/autopilot-spec'
-import { z } from 'zod'
 import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
 import { executeActions } from './actions/webhook'
 import { WorkspaceManager, type WorkspaceInfo } from './workspace'
@@ -292,6 +290,8 @@ export class AutopilotWorker {
     const context: RunContext = {
       runId: run.id,
       agentId: run.agent_id,
+      agentName: run.agent_name ?? null,
+      agentRole: run.agent_role ?? null,
       taskId: run.task_id,
       taskTitle: run.task_title ?? null,
       taskDescription: run.task_description ?? null,
@@ -331,6 +331,7 @@ export class AutopilotWorker {
         artifacts: result?.artifacts,
         runtime_session_ref: result?.sessionId,
         resumable,
+        outcome: result?.outcome,
       })
 
       if (ws && this.workspace) {
@@ -347,28 +348,16 @@ export class AutopilotWorker {
     }
   }
 
-  private static TargetingExtrasSchema = z.object({
-    actions: z.array(ExternalActionSchema).default([]),
-    secret_refs: z.array(SecretRefSchema).default([]),
-  }).passthrough()
-
-  /** Execute post-run external actions if targeting includes them. */
+  /** Execute post-run external actions from the claim response. */
   private async runPostActions(run: ClaimedRun): Promise<void> {
-    if (!run.targeting) return
-
-    const parsed = AutopilotWorker.TargetingExtrasSchema.safeParse(run.targeting)
-    if (!parsed.success) {
-      console.warn(`[worker] invalid targeting for run=${run.id}:`, parsed.error.message)
-      return
-    }
-
-    const { actions, secret_refs } = parsed.data
+    const actions = run.actions ?? []
     if (actions.length === 0) return
 
+    const secretRefs = run.secret_refs ?? []
     await executeActions(
       actions,
       (event) => { this.postEvent(run.id, event).catch((err) => console.warn('[worker] failed to post action event:', err)) },
-      secret_refs,
+      secretRefs,
     )
   }
 

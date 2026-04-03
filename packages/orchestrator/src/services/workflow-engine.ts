@@ -1,42 +1,43 @@
-import type { Agent, Workflow, WorkflowStep, Company, ExecutionTarget, Environment, SecretRef, ExternalAction } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction } from '@questpie/autopilot-spec'
 import type { TaskService, TaskRow } from './tasks'
 import type { RunService } from './runs'
 import type { ActivityService } from './activity'
+import type { ArtifactService } from './artifacts'
 import { eventBus } from '../events/event-bus'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface AuthoredConfig {
-	company: Company
+	company: CompanyScope
 	agents: Map<string, Agent>
 	workflows: Map<string, Workflow>
 	environments: Map<string, Environment>
+	defaults: { runtime: string; workflow?: string; task_assignee?: string }
 }
 
 export interface IntakeResult {
 	task: TaskRow
-	/** Run created if first step is an agent step. */
 	runId: string | null
-	/** What happened: assigned, workflow_attached, run_created, approved_needed, done */
 	actions: string[]
 }
 
 export interface AdvanceResult {
 	task: TaskRow
-	/** New run created if next step is an agent step. */
 	runId: string | null
-	/** What happened */
 	actions: string[]
 }
 
-/**
- * Targeting JSON stored on a run. Extends ExecutionTarget with worker-side payloads
- * (secret refs for resolution, actions for post-run execution).
- * The claim logic only reads the ExecutionTarget fields; extras are pass-through for the worker.
- */
 interface ResolvedTargeting extends ExecutionTarget {
 	secret_refs?: SecretRef[]
 	actions?: ExternalAction[]
+}
+
+/** Context carried from the source step that caused advancement. */
+interface StepContext {
+	/** Summary from the run that just completed (the direct source). */
+	sourceRunSummary?: string
+	/** Human reply text. */
+	humanReply?: string
 }
 
 // ─── Engine ─────────────────────────────────────────────────────────────────
@@ -51,50 +52,78 @@ export class WorkflowEngine {
 		private taskService: TaskService,
 		private runService: RunService,
 		private activityService?: ActivityService,
+		private artifactService?: ArtifactService,
 	) {
-		this.defaultAssignee = config.company.settings.default_task_assignee
-		this.defaultWorkflow = config.company.settings.default_workflow
-		this.defaultRuntime = config.company.settings.default_runtime
+		this.defaultAssignee = config.defaults.task_assignee
+		this.defaultWorkflow = config.defaults.workflow
+		this.defaultRuntime = config.defaults.runtime
 	}
 
-	/**
-	 * Validate that authored config references are consistent.
-	 * Call at startup — logs warnings for missing references.
-	 * Returns list of issues found.
-	 */
+	// ─── Validation ─────────────────────────────────────────────────────
+
 	validate(): string[] {
 		const issues: string[] = []
 
 		if (this.defaultAssignee && !this.config.agents.has(this.defaultAssignee)) {
-			issues.push(
-				`default_task_assignee "${this.defaultAssignee}" not found in loaded agents`,
-			)
+			issues.push(`default_task_assignee "${this.defaultAssignee}" not found in loaded agents`)
 		}
 
 		if (this.defaultWorkflow && !this.config.workflows.has(this.defaultWorkflow)) {
-			issues.push(
-				`default_workflow "${this.defaultWorkflow}" not found in loaded workflows`,
-			)
+			issues.push(`default_workflow "${this.defaultWorkflow}" not found in loaded workflows`)
 		}
 
-		// Validate agent references in workflow steps
 		for (const [wfId, wf] of this.config.workflows) {
+			const stepIds = new Set(wf.steps.map((s) => s.id))
+
 			for (const step of wf.steps) {
+				// Agent reference
 				if (step.type === 'agent' && step.agent_id && !this.config.agents.has(step.agent_id)) {
-					issues.push(
-						`workflow "${wfId}" step "${step.id}" references unknown agent "${step.agent_id}"`,
-					)
+					issues.push(`workflow "${wfId}" step "${step.id}" references unknown agent "${step.agent_id}"`)
 				}
-			}
-		}
 
-		// Validate environment references in workflow steps
-		for (const [wfId, wf] of this.config.workflows) {
-			for (const step of wf.steps) {
+				// Environment reference
 				if (step.targeting?.environment && !this.config.environments.has(step.targeting.environment)) {
-					issues.push(
-						`workflow "${wfId}" step "${step.id}" references unknown environment "${step.targeting.environment}"`,
-					)
+					issues.push(`workflow "${wfId}" step "${step.id}" references unknown environment "${step.targeting.environment}"`)
+				}
+
+				// Control flow targets
+				if (step.next && !stepIds.has(step.next)) {
+					issues.push(`workflow "${wfId}" step "${step.id}" has next="${step.next}" which does not exist`)
+				}
+				if (step.transitions) {
+					for (const [outcome, targetId] of Object.entries(step.transitions)) {
+						if (!stepIds.has(targetId)) {
+							issues.push(`workflow "${wfId}" step "${step.id}" transition "${outcome}" → "${targetId}" target does not exist`)
+						}
+					}
+				}
+				if (step.on_approve && !stepIds.has(step.on_approve)) {
+					issues.push(`workflow "${wfId}" step "${step.id}" on_approve="${step.on_approve}" target does not exist`)
+				}
+				if (step.on_reply && !stepIds.has(step.on_reply)) {
+					issues.push(`workflow "${wfId}" step "${step.id}" on_reply="${step.on_reply}" target does not exist`)
+				}
+				if (step.on_reject && !stepIds.has(step.on_reject)) {
+					issues.push(`workflow "${wfId}" step "${step.id}" on_reject="${step.on_reject}" target does not exist`)
+				}
+
+				// Output/transition consistency: outcome tag values should match transition keys
+				if (step.output && step.transitions) {
+					const outcomeTag = step.output.outcome as { description: string; values?: Record<string, string> } | undefined
+					if (outcomeTag?.values) {
+						const outcomeKeys = new Set(Object.keys(outcomeTag.values))
+						const transitionKeys = new Set(Object.keys(step.transitions))
+						for (const key of outcomeKeys) {
+							if (!transitionKeys.has(key)) {
+								issues.push(`workflow "${wfId}" step "${step.id}" output.outcome declares "${key}" but no matching transition`)
+							}
+						}
+						for (const key of transitionKeys) {
+							if (!outcomeKeys.has(key)) {
+								issues.push(`workflow "${wfId}" step "${step.id}" transition "${key}" has no matching output.outcome value`)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -102,14 +131,8 @@ export class WorkflowEngine {
 		return issues
 	}
 
-	/**
-	 * Process a newly created task through workflow-driven intake.
-	 *
-	 * 1. Resolve assigned_to from config if not set
-	 * 2. Attach workflow if not set
-	 * 3. Set initial workflow_step
-	 * 4. Process the first step
-	 */
+	// ─── Public API ─────────────────────────────────────────────────────
+
 	async intake(taskId: string): Promise<IntakeResult | null> {
 		const task = await this.taskService.get(taskId)
 		if (!task) return null
@@ -117,30 +140,22 @@ export class WorkflowEngine {
 		const actions: string[] = []
 		const updates: Record<string, string> = {}
 
-		// 1. Resolve default assignee
 		if (!task.assigned_to && this.defaultAssignee) {
 			if (!this.config.agents.has(this.defaultAssignee)) {
-				console.warn(
-					`[workflow-engine] default_task_assignee "${this.defaultAssignee}" not found — skipping assignment`,
-				)
+				console.warn(`[workflow-engine] default_task_assignee "${this.defaultAssignee}" not found — skipping assignment`)
 			} else {
 				updates.assigned_to = this.defaultAssignee
 				actions.push('assigned')
 			}
 		}
 
-		// 2. Resolve default workflow
 		const workflowId = task.workflow_id ?? this.defaultWorkflow
 		if (workflowId && !task.workflow_id) {
 			const workflow = this.config.workflows.get(workflowId)
 			if (!workflow) {
-				console.warn(
-					`[workflow-engine] default_workflow "${workflowId}" not found — skipping workflow attachment`,
-				)
+				console.warn(`[workflow-engine] default_workflow "${workflowId}" not found — skipping workflow attachment`)
 			} else if (workflow.steps.length === 0) {
-				console.warn(
-					`[workflow-engine] workflow "${workflowId}" has no steps — skipping`,
-				)
+				console.warn(`[workflow-engine] workflow "${workflowId}" has no steps — skipping`)
 			} else {
 				updates.workflow_id = workflowId
 				updates.workflow_step = workflow.steps[0]!.id
@@ -148,16 +163,13 @@ export class WorkflowEngine {
 			}
 		}
 
-		// Apply updates if any
 		if (Object.keys(updates).length > 0) {
 			await this.taskService.update(taskId, updates)
 		}
 
-		// Process first workflow step (re-fetch once to pick up updates)
 		const updated = (await this.taskService.get(taskId))!
-		const runId = await this.processCurrentStep(updated, actions)
+		const runId = await this.processCurrentStep(updated, actions, {})
 
-		// Re-fetch only if processCurrentStep may have changed the task
 		const final = runId !== null || actions.includes('done') || actions.includes('approval_needed')
 			? (await this.taskService.get(taskId))!
 			: updated
@@ -165,30 +177,25 @@ export class WorkflowEngine {
 	}
 
 	/**
-	 * Advance a task to the next workflow step after a run completes.
-	 * Called when a run tied to a task completes successfully.
-	 *
-	 * @param humanReply — if set, appended to the next agent step's instructions at creation time.
-	 *   Used by reply() to bake human feedback into the run before it becomes claimable.
+	 * Advance after a run completes.
+	 * @param sourceRunId — the run that just completed (direct source for context forwarding)
 	 */
-	async advance(taskId: string, humanReply?: string): Promise<AdvanceResult | null> {
+	async advance(taskId: string, outcome?: string, sourceRunId?: string): Promise<AdvanceResult | null> {
 		const task = await this.taskService.get(taskId)
-		if (!task) return null
-		if (!task.workflow_id || !task.workflow_step) return null
+		if (!task || !task.workflow_id || !task.workflow_step) return null
 
 		const workflow = this.config.workflows.get(task.workflow_id)
 		if (!workflow) return null
 
-		const nextStep = this.getNextStep(workflow, task.workflow_step)
+		const nextStep = this.resolveNextStep(workflow, task.workflow_step, outcome)
 		if (!nextStep) {
-			// No more steps — workflow complete, mark task done
 			await this.taskService.update(taskId, { status: 'done', workflow_step: '__done__' })
 			return { task: (await this.taskService.get(taskId))!, runId: null, actions: ['done'] }
 		}
 
 		const actions: string[] = ['advanced']
+		if (outcome) actions.push(`outcome:${outcome}`)
 
-		// Update workflow step (and ownership if agent step) in one write
 		const stepUpdates: Record<string, string> = { workflow_step: nextStep.id }
 		if (nextStep.type === 'agent' && nextStep.agent_id) {
 			stepUpdates.assigned_to = nextStep.agent_id
@@ -196,8 +203,11 @@ export class WorkflowEngine {
 		}
 		await this.taskService.update(taskId, stepUpdates)
 
+		// Build context from the source run
+		const ctx = await this.buildStepContext(sourceRunId)
+
 		const updated = (await this.taskService.get(taskId))!
-		const runId = await this.processCurrentStep(updated, actions, humanReply)
+		const runId = await this.processCurrentStep(updated, actions, ctx)
 
 		const final = runId !== null || actions.includes('done') || actions.includes('approval_needed')
 			? (await this.taskService.get(taskId))!
@@ -205,9 +215,6 @@ export class WorkflowEngine {
 		return { task: final, runId, actions }
 	}
 
-	/**
-	 * Approve a task's current human_approval step and advance to the next step.
-	 */
 	async approve(taskId: string, actor?: string): Promise<AdvanceResult | null> {
 		const guard = await this.guardApprovalStep(taskId)
 		if (!guard) return null
@@ -219,17 +226,11 @@ export class WorkflowEngine {
 			details: JSON.stringify({ task_id: taskId, step_id: guard.step.id, action: 'approved' }),
 		})
 
-		// Move task back to active (was blocked)
 		await this.taskService.update(taskId, { status: 'active' })
-
-		// Advance to next step
-		return this.advance(taskId)
+		const targetStepId = guard.step.on_approve
+		return this.advanceToTarget(taskId, targetStepId)
 	}
 
-	/**
-	 * Reject a task's current human_approval step.
-	 * Marks the task as done with a rejection reason — does not advance the workflow.
-	 */
 	async reject(taskId: string, reason: string, actor?: string): Promise<AdvanceResult | null> {
 		const guard = await this.guardApprovalStep(taskId)
 		if (!guard) return null
@@ -241,21 +242,16 @@ export class WorkflowEngine {
 			details: JSON.stringify({ task_id: taskId, step_id: guard.step.id, action: 'rejected', reason }),
 		})
 
-		await this.taskService.update(taskId, { status: 'done' })
-
-		eventBus.emit({ type: 'task_changed', taskId, status: 'done' })
-
-		return {
-			task: (await this.taskService.get(taskId))!,
-			runId: null,
-			actions: ['rejected'],
+		if (guard.step.on_reject) {
+			await this.taskService.update(taskId, { status: 'active' })
+			return this.advanceToTarget(taskId, guard.step.on_reject)
 		}
+
+		await this.taskService.update(taskId, { status: 'done' })
+		eventBus.emit({ type: 'task_changed', taskId, status: 'done' })
+		return { task: (await this.taskService.get(taskId))!, runId: null, actions: ['rejected'] }
 	}
 
-	/**
-	 * Reply to a task's current human_approval step with a message.
-	 * Advances the workflow — the message is baked into the next run's instructions at creation time.
-	 */
 	async reply(taskId: string, message: string, actor?: string): Promise<AdvanceResult | null> {
 		const guard = await this.guardApprovalStep(taskId)
 		if (!guard) return null
@@ -267,18 +263,16 @@ export class WorkflowEngine {
 			details: JSON.stringify({ task_id: taskId, step_id: guard.step.id, action: 'replied', message }),
 		})
 
-		// Move task back to active
 		await this.taskService.update(taskId, { status: 'active' })
-
-		// Advance with the human reply baked into the next run's instructions
-		return this.advance(taskId, message)
+		const targetStepId = guard.step.on_reply
+		return this.advanceToTarget(taskId, targetStepId, undefined, { humanReply: message })
 	}
 
-	/** Validate that a task is on a human_approval step. Returns step info or null. */
+	// ─── Private ────────────────────────────────────────────────────────
+
 	private async guardApprovalStep(taskId: string): Promise<{ task: TaskRow; step: WorkflowStep } | null> {
 		const task = await this.taskService.get(taskId)
-		if (!task) return null
-		if (!task.workflow_id || !task.workflow_step) return null
+		if (!task || !task.workflow_id || !task.workflow_step) return null
 
 		const workflow = this.config.workflows.get(task.workflow_id)
 		if (!workflow) return null
@@ -289,17 +283,86 @@ export class WorkflowEngine {
 		return { task, step }
 	}
 
-	// ─── Internal ────────────────────────────────────────────────────────────
+	private async advanceToTarget(
+		taskId: string,
+		targetStepId?: string,
+		outcome?: string,
+		ctx?: StepContext,
+	): Promise<AdvanceResult | null> {
+		if (!targetStepId) {
+			// Default advance — no source run context for human actions
+			return this.advanceWithContext(taskId, outcome, ctx ?? {})
+		}
+
+		const task = await this.taskService.get(taskId)
+		if (!task || !task.workflow_id) return null
+
+		const workflow = this.config.workflows.get(task.workflow_id)
+		if (!workflow) return null
+
+		const targetStep = workflow.steps.find((s) => s.id === targetStepId)
+		if (!targetStep) {
+			console.warn(`[workflow-engine] target step "${targetStepId}" not found in workflow "${task.workflow_id}"`)
+			return this.advanceWithContext(taskId, outcome, ctx ?? {})
+		}
+
+		const actions: string[] = ['advanced', `routed:${targetStepId}`]
+		if (outcome) actions.push(`outcome:${outcome}`)
+
+		const stepUpdates: Record<string, string> = { workflow_step: targetStep.id }
+		if (targetStep.type === 'agent' && targetStep.agent_id) {
+			stepUpdates.assigned_to = targetStep.agent_id
+			actions.push('reassigned')
+		}
+		await this.taskService.update(taskId, stepUpdates)
+
+		const updated = (await this.taskService.get(taskId))!
+		const runId = await this.processCurrentStep(updated, actions, ctx ?? {})
+
+		const final = runId !== null || actions.includes('done') || actions.includes('approval_needed')
+			? (await this.taskService.get(taskId))!
+			: updated
+		return { task: final, runId, actions }
+	}
+
+	/** Like advance() but with pre-built StepContext. */
+	private async advanceWithContext(taskId: string, outcome?: string, ctx?: StepContext): Promise<AdvanceResult | null> {
+		const task = await this.taskService.get(taskId)
+		if (!task || !task.workflow_id || !task.workflow_step) return null
+
+		const workflow = this.config.workflows.get(task.workflow_id)
+		if (!workflow) return null
+
+		const nextStep = this.resolveNextStep(workflow, task.workflow_step, outcome)
+		if (!nextStep) {
+			await this.taskService.update(taskId, { status: 'done', workflow_step: '__done__' })
+			return { task: (await this.taskService.get(taskId))!, runId: null, actions: ['done'] }
+		}
+
+		const actions: string[] = ['advanced']
+		if (outcome) actions.push(`outcome:${outcome}`)
+
+		const stepUpdates: Record<string, string> = { workflow_step: nextStep.id }
+		if (nextStep.type === 'agent' && nextStep.agent_id) {
+			stepUpdates.assigned_to = nextStep.agent_id
+			actions.push('reassigned')
+		}
+		await this.taskService.update(taskId, stepUpdates)
+
+		const updated = (await this.taskService.get(taskId))!
+		const runId = await this.processCurrentStep(updated, actions, ctx ?? {})
+
+		const final = runId !== null || actions.includes('done') || actions.includes('approval_needed')
+			? (await this.taskService.get(taskId))!
+			: updated
+		return { task: final, runId, actions }
+	}
 
 	/**
 	 * Process the current workflow step for a task.
-	 * - agent → create run, set task active
-	 * - human_approval → set task blocked
-	 * - done → set task done
-	 *
-	 * @param humanReply — if set, appended to agent step instructions before run creation.
+	 * Builds full instructions: context forwarding + YAML instructions + output suffix.
 	 */
-	private async processCurrentStep(task: TaskRow, actions: string[], humanReply?: string): Promise<string | null> {
+	private async processCurrentStep(task: TaskRow, actions: string[], ctx: StepContext): Promise<string | null> {
 		if (!task.workflow_id || !task.workflow_step) return null
 
 		const workflow = this.config.workflows.get(task.workflow_id)
@@ -316,22 +379,14 @@ export class WorkflowEngine {
 					return null
 				}
 
-				// Update task to active
 				await this.taskService.update(task.id, { status: 'active' })
 
-				// Resolve execution targeting from step hints + defaults
 				const targeting = this.resolveTargeting(step)
 				const runtime = step.targeting?.required_runtime ?? this.defaultRuntime
 
-				// Build final instructions — bake human reply in before creation (no post-create race)
-				let instructions = step.instructions
-				if (humanReply) {
-					instructions = instructions
-						? `${instructions}\n\nHuman reply: ${humanReply}`
-						: humanReply
-				}
+				// Build instructions: [context] + [step instructions] + [human reply] + [output suffix]
+				const instructions = await this.buildInstructions(task, step, ctx)
 
-				// Create a pending run with final instructions already set
 				const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 				await this.runService.create({
 					id: runId,
@@ -344,38 +399,21 @@ export class WorkflowEngine {
 				})
 				actions.push('run_created')
 
-				eventBus.emit({
-					type: 'task_changed',
-					taskId: task.id,
-					status: 'active',
-				})
-
+				eventBus.emit({ type: 'task_changed', taskId: task.id, status: 'active' })
 				return runId
 			}
 
 			case 'human_approval': {
 				await this.taskService.update(task.id, { status: 'blocked' })
 				actions.push('approval_needed')
-
-				eventBus.emit({
-					type: 'task_changed',
-					taskId: task.id,
-					status: 'blocked',
-				})
-
+				eventBus.emit({ type: 'task_changed', taskId: task.id, status: 'blocked' })
 				return null
 			}
 
 			case 'done': {
 				await this.taskService.update(task.id, { status: 'done' })
 				actions.push('done')
-
-				eventBus.emit({
-					type: 'task_changed',
-					taskId: task.id,
-					status: 'done',
-				})
-
+				eventBus.emit({ type: 'task_changed', taskId: task.id, status: 'done' })
 				return null
 			}
 
@@ -384,11 +422,65 @@ export class WorkflowEngine {
 		}
 	}
 
+	// ─── Instruction Builder ────────────────────────────────────────────
+
 	/**
-	 * Resolve execution targeting from a workflow step's hints.
-	 * Merges environment tags/secrets and step-level actions into the targeting JSON.
-	 * Returns JSON string or undefined if no meaningful constraints.
+	 * Build full instructions for a run:
+	 * 1. Source run summary (from the step that directly caused advancement)
+	 * 2. Explicit artifact inputs (from step.input.artifacts)
+	 * 3. Step YAML instructions
+	 * 4. Human reply (if present)
+	 * 5. Output suffix (auto-generated from step.output)
 	 */
+	private async buildInstructions(task: TaskRow, step: WorkflowStep, ctx: StepContext): Promise<string> {
+		const parts: string[] = []
+
+		// 1. Source run context — the run that directly caused this advancement
+		if (ctx.sourceRunSummary) {
+			parts.push(`## Previous Step Output\n\n${ctx.sourceRunSummary}`)
+		}
+
+		// 2. Explicit artifact inputs — look up by kind from task's artifact history
+		if (step.input?.artifacts?.length && this.artifactService && task.id) {
+			const taskArtifacts = await this.artifactService.listForTask(task.id)
+			for (const wantedKind of step.input.artifacts) {
+				// Find most recent artifact of this kind (last in array)
+				const found = [...taskArtifacts].reverse().find((a) => a.kind === wantedKind)
+				if (found) {
+					parts.push(`## Input: ${found.title}\n\n${found.ref_value}`)
+				}
+			}
+		}
+
+		// 3. Step YAML instructions
+		if (step.instructions) {
+			parts.push(step.instructions)
+		}
+
+		// 4. Human reply
+		if (ctx.humanReply) {
+			parts.push(`## Human Feedback\n\n${ctx.humanReply}`)
+		}
+
+		// 5. Output suffix — auto-generated from step.output declaration
+		const suffix = generateOutputSuffix(step)
+		if (suffix) {
+			parts.push(suffix)
+		}
+
+		return parts.join('\n\n')
+	}
+
+	/** Build StepContext from a source run that just completed. */
+	private async buildStepContext(sourceRunId?: string): Promise<StepContext> {
+		if (!sourceRunId) return {}
+		const run = await this.runService.get(sourceRunId)
+		if (!run || !run.summary) return {}
+		return { sourceRunSummary: run.summary }
+	}
+
+	// ─── Targeting ──────────────────────────────────────────────────────
+
 	private resolveTargeting(step: WorkflowStep): string | undefined {
 		const hasStepTargeting = !!step.targeting
 		const hasActions = (step.actions?.length ?? 0) > 0
@@ -403,7 +495,6 @@ export class WorkflowEngine {
 			allow_fallback: step.targeting?.allow_fallback ?? true,
 		}
 
-		// Resolve environment → merge its required_tags and attach secret_refs
 		if (step.targeting?.environment) {
 			const env = this.config.environments.get(step.targeting.environment)
 			if (env) {
@@ -418,38 +509,85 @@ export class WorkflowEngine {
 			}
 		}
 
-		// Attach step-level actions for worker execution
 		if (hasActions) {
 			target.actions = step.actions!
 		}
 
-		const hasConstraints =
-			target.required_worker_id ||
-			target.required_runtime ||
-			tags.length > 0 ||
-			target.actions ||
-			target.secret_refs
-
+		const hasConstraints = target.required_worker_id || target.required_runtime || tags.length > 0 || target.actions || target.secret_refs
 		if (!hasConstraints) return undefined
 		return JSON.stringify(target)
 	}
 
-	/**
-	 * Get the next step in a workflow after the given step ID.
-	 * Uses explicit `next` field if present, otherwise array order.
-	 */
-	private getNextStep(workflow: Workflow, currentStepId: string): WorkflowStep | null {
+	// ─── Step Resolution ────────────────────────────────────────────────
+
+	private resolveNextStep(workflow: Workflow, currentStepId: string, outcome?: string): WorkflowStep | null {
 		const currentStep = workflow.steps.find((s) => s.id === currentStepId)
 		if (!currentStep) return null
 
-		// Explicit next pointer
+		if (outcome && currentStep.transitions) {
+			const targetId = currentStep.transitions[outcome]
+			if (targetId) return workflow.steps.find((s) => s.id === targetId) ?? null
+		}
+
 		if (currentStep.next) {
 			return workflow.steps.find((s) => s.id === currentStep.next) ?? null
 		}
 
-		// Array order
 		const idx = workflow.steps.findIndex((s) => s.id === currentStepId)
 		if (idx === -1 || idx >= workflow.steps.length - 1) return null
 		return workflow.steps[idx + 1]!
 	}
+}
+
+// ─── Output Suffix Generator ──────────────────────────────────────────────
+
+/**
+ * Generate a structured-output instruction suffix from a step's output declaration.
+ * Returns null if the step has no output declaration.
+ *
+ * All tags are generic — `outcome` and `artifact` are special only because
+ * the engine interprets them (routing + registration). The parser extracts all tags equally.
+ */
+export function generateOutputSuffix(step: WorkflowStep): string | null {
+	if (!step.output) return null
+
+	const { artifacts, ...tags } = step.output
+	const tagEntries = Object.entries(tags).filter(
+		([_, v]) => v && typeof v === 'object' && 'description' in v,
+	) as Array<[string, { description: string; values?: Record<string, string> }]>
+
+	if (tagEntries.length === 0 && (!artifacts || artifacts.length === 0)) return null
+
+	const lines: string[] = ['## Required Output Format', '', 'When you are done, provide your result in this exact format:', '', '<AUTOPILOT_RESULT>']
+
+	// All tags — same treatment. Tags with values get VALUE_PLACEHOLDER, others get description.
+	for (const [name, def] of tagEntries) {
+		if (def.values) {
+			lines.push(`  <${name}>${name.toUpperCase()}_VALUE</${name}>`)
+		} else {
+			lines.push(`  <${name}>${def.description}</${name}>`)
+		}
+	}
+	if (artifacts?.length) {
+		for (const art of artifacts) {
+			lines.push(`  <artifact kind="${art.kind}" title="${art.title}">`)
+			lines.push(`    ${art.description}`)
+			lines.push('  </artifact>')
+		}
+	}
+
+	lines.push('</AUTOPILOT_RESULT>')
+
+	// Append value descriptions for any tag that has constrained values
+	for (const [name, def] of tagEntries) {
+		if (def.values) {
+			lines.push('')
+			lines.push(`Where ${name} must be one of:`)
+			for (const [value, desc] of Object.entries(def.values)) {
+				lines.push(`- ${value} — ${desc}`)
+			}
+		}
+	}
+
+	return lines.join('\n')
 }

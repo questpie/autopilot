@@ -1,10 +1,20 @@
-import type { WorkerEvent } from '@questpie/autopilot-spec'
+import type { WorkerEvent, RunArtifact } from '@questpie/autopilot-spec'
 export type { WorkerEvent } from '@questpie/autopilot-spec'
 
-/** Context passed to a runtime adapter when starting a run. */
+/**
+ * Context passed to a runtime adapter when starting a run.
+ *
+ * Fields come from two sources:
+ * - Orchestrator (via ClaimedRun): run/task/agent identity, instructions, session refs
+ * - Worker-local: orchestratorUrl, apiKey, workDir
+ *
+ * The runtime adapter should not need to resolve config or walk filesystems.
+ */
 export interface RunContext {
   runId: string
   agentId: string
+  agentName: string | null
+  agentRole: string | null
   taskId: string | null
   taskTitle: string | null
   taskDescription: string | null
@@ -17,8 +27,6 @@ export interface RunContext {
   workDir: string | null
 }
 
-import type { RunArtifact } from '@questpie/autopilot-spec'
-
 /** Result returned by a runtime adapter after completing. */
 export interface RuntimeResult {
   summary?: string
@@ -26,6 +34,9 @@ export interface RuntimeResult {
   artifacts?: RunArtifact[]
   /** Worker-local session ID for future resume. */
   sessionId?: string
+  /** Workflow outcome — drives transitions in the workflow engine.
+   *  E.g. 'approved', 'revise'. Extracted from agent output convention. */
+  outcome?: string
 }
 
 /**

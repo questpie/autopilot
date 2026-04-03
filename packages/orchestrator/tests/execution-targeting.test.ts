@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os'
 import { createCompanyDb, type CompanyDbResult } from '../src/db'
 import { TaskService, RunService, WorkerService, WorkflowEngine } from '../src/services'
 import type { AuthoredConfig } from '../src/services'
-import type { Agent, Workflow, Company } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, CompanyScope } from '@questpie/autopilot-spec'
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -76,30 +76,14 @@ const DEFAULT_WORKFLOW: Workflow = {
 	],
 }
 
-const TEST_COMPANY: Company = {
+const TEST_COMPANY: CompanyScope = {
 	name: 'Test Co',
 	slug: 'test-co',
 	description: '',
 	timezone: 'UTC',
 	language: 'en',
 	owner: { name: 'Test', email: 'test@test.com' },
-	settings: {
-		auto_assign: true,
-		require_approval: ['merge', 'deploy'],
-		max_concurrent_agents: 4,
-		budget: { daily_token_limit: 5_000_000, alert_at: 80 },
-		auth: {},
-		inference: {
-			gateway_base_url: 'https://ai-gateway.vercel.sh/v1',
-			text_model: 'google/gemini-2.5-flash',
-			embedding_model: 'google/gemini-embedding-2',
-			embedding_dimensions: 768,
-		},
-		default_task_assignee: 'ceo',
-		default_workflow: 'default',
-		default_runtime: 'claude-code',
-	},
-	setup_completed: false,
+	defaults: { runtime: 'claude-code', workflow: 'default', task_assignee: 'ceo' },
 }
 
 function makeConfig(
@@ -114,6 +98,8 @@ function makeConfig(
 		company: TEST_COMPANY,
 		agents: new Map(TEST_AGENTS.map((a) => [a.id, a])),
 		workflows,
+		environments: new Map(),
+		defaults: { runtime: 'claude-code', workflow: 'default', task_assignee: 'ceo' },
 	}
 }
 
@@ -171,10 +157,10 @@ describe('Execution Targeting', () => {
 	let workerService: WorkerService
 
 	beforeAll(async () => {
-		await mkdir(companyRoot, { recursive: true })
+		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
 		await writeFile(
-			join(companyRoot, 'company.yaml'),
-			'name: test\nowner:\n  name: Test\n  email: test@test.com\n',
+			join(companyRoot, '.autopilot', 'company.yaml'),
+			'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n',
 		)
 		dbResult = await createCompanyDb(companyRoot)
 		for (const sql of DDL) {
@@ -334,10 +320,7 @@ describe('Execution Targeting', () => {
 
 	test('WorkflowEngine attaches targeting from step hints', async () => {
 		const config = makeConfig()
-		config.company = {
-			...TEST_COMPANY,
-			settings: { ...TEST_COMPANY.settings, default_workflow: 'targeted' },
-		}
+		config.defaults = { ...config.defaults, workflow: 'targeted' }
 		const engine = new WorkflowEngine(config, taskService, runService)
 
 		const taskId = `task-targeted-${Date.now()}`

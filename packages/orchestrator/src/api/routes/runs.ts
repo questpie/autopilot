@@ -190,8 +190,9 @@ const runs = new Hono<AppEnv>()
 			})
 
 			// Workflow progression: if run completed successfully and has a task, advance workflow
+			// Pass the completing run's ID as the source for context forwarding
 			if (body.status === 'completed' && run.task_id) {
-				await workflowEngine.advance(run.task_id)
+				await workflowEngine.advance(run.task_id, body.outcome, id)
 			}
 
 			return c.json(result, 200)

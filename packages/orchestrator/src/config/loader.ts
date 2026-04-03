@@ -1,10 +1,17 @@
+/**
+ * Config loader — reads authored config from `.autopilot/` directories.
+ *
+ * These functions load from a single root directory. For hierarchical
+ * company + project resolution, use the scope resolver instead.
+ */
+
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import {
 	AgentSchema,
 	WorkflowSchema,
-	CompanySchema,
+	CompanyScopeSchema,
 	EnvironmentSchema,
 	PATHS,
 } from '@questpie/autopilot-spec'
@@ -12,29 +19,29 @@ import type { z, ZodTypeDef } from 'zod'
 
 export type Agent = z.output<typeof AgentSchema>
 export type Workflow = z.output<typeof WorkflowSchema>
-export type Company = z.output<typeof CompanySchema>
+export type CompanyScope = z.output<typeof CompanyScopeSchema>
 export type Environment = z.output<typeof EnvironmentSchema>
 
-/** Load and validate the company config from `<companyRoot>/company.yaml`. */
-export async function loadCompany(companyRoot: string): Promise<Company> {
+/** Load and validate `.autopilot/company.yaml`. */
+export async function loadCompany(companyRoot: string) {
 	const path = join(companyRoot, PATHS.COMPANY_CONFIG)
 	const raw = await readFile(path, 'utf-8')
-	return CompanySchema.parse(parseYaml(raw))
+	return CompanyScopeSchema.parse(parseYaml(raw))
 }
 
-/** Load all agent definitions from `<companyRoot>/team/agents/*.yaml`. */
+/** Load all agent definitions from `.autopilot/agents/*.yaml`. */
 export async function loadAgents(companyRoot: string) {
 	const dir = join(companyRoot, PATHS.AGENTS_DIR)
 	return loadYamlDir(dir, AgentSchema)
 }
 
-/** Load all workflow definitions from `<companyRoot>/team/workflows/*.yaml`. */
+/** Load all workflow definitions from `.autopilot/workflows/*.yaml`. */
 export async function loadWorkflows(companyRoot: string) {
 	const dir = join(companyRoot, PATHS.WORKFLOWS_DIR)
 	return loadYamlDir(dir, WorkflowSchema)
 }
 
-/** Load all environment definitions from `<companyRoot>/team/environments/*.yaml`. */
+/** Load all environment definitions from `.autopilot/environments/*.yaml`. */
 export async function loadEnvironments(companyRoot: string) {
 	const dir = join(companyRoot, PATHS.ENVIRONMENTS_DIR)
 	return loadYamlDir(dir, EnvironmentSchema)

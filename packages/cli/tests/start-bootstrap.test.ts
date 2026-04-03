@@ -38,9 +38,9 @@ describe('start bootstrap: auth + MCP', () => {
 	let app: ReturnType<typeof createApp>
 
 	beforeAll(async () => {
-		await mkdir(companyRoot, { recursive: true })
+		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
 		await writeFile(
-			join(companyRoot, 'company.yaml'),
+			join(companyRoot, '.autopilot', 'company.yaml'),
 			'name: start-test\nowner:\n  name: Test\n  email: test@test.com\n',
 		)
 
@@ -94,9 +94,11 @@ describe('start bootstrap: auth + MCP', () => {
 		const runService = new RunService(dbResult.db)
 		const workflowEngine = new WorkflowEngine(
 			{
-				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, settings: { auto_assign: true, require_approval: [], max_concurrent_agents: 1, budget: { daily_token_limit: 0, alert_at: 0 }, auth: {}, inference: { gateway_base_url: '', text_model: '', embedding_model: '', embedding_dimensions: 768 }, default_runtime: 'claude-code' }, setup_completed: false },
+				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, defaults: {} },
 				agents: new Map(),
 				workflows: new Map(),
+				environments: new Map(),
+				defaults: { runtime: 'claude-code' },
 			},
 			taskService,
 			runService,

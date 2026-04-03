@@ -15,6 +15,54 @@ export const ExecutionTargetSchema = z.object({
 	environment: z.string().optional(),
 })
 
+// ─── Step Output Declaration ──────────────────────────────────────────────
+
+/**
+ * A tag declaration — describes a named field the agent should produce.
+ * All tags have the same shape. `outcome` and `artifacts` are just special names
+ * that the engine interprets (routing + registration).
+ */
+const StepOutputTagSchema = z.object({
+	/** What this tag represents (shown to AI as placeholder/description). */
+	description: z.string(),
+	/** Optional enumerated values. If set, the AI must pick one. */
+	values: z.record(z.string()).optional(),
+})
+
+/** Artifact declaration — engine registers these through the artifact system. */
+const StepOutputArtifactSchema = z.object({
+	kind: z.string(),
+	title: z.string(),
+	description: z.string(),
+})
+
+/**
+ * Declarative output contract for a workflow step.
+ * Engine auto-generates structured-output suffix from this.
+ *
+ * Everything is a tag inside <AUTOPILOT_RESULT>.
+ * - `outcome` is special: engine matches its value against `transitions` for routing
+ * - `artifacts` is special: engine registers them through the artifact system
+ * - Everything else is a generic tag with the same shape
+ *
+ * Any tag can have `values` (constrained enum) or just `description` (freeform).
+ */
+export const StepOutputSchema = z
+	.object({
+		artifacts: z.array(StepOutputArtifactSchema).optional(),
+	})
+	.catchall(StepOutputTagSchema)
+
+// ─── Step Input Declaration ───────────────────────────────────────────────
+
+/** Declarative input for a workflow step — what context should be forwarded from prior steps. */
+export const StepInputSchema = z.object({
+	/** Artifact kinds to look up from the task's artifact history and include as input context. */
+	artifacts: z.array(z.string()).optional(),
+})
+
+// ─── Workflow Step ────────────────────────────────────────────────────────
+
 export const WorkflowStepSchema = z.object({
 	id: z.string(),
 	name: z.string().optional(),
@@ -23,10 +71,23 @@ export const WorkflowStepSchema = z.object({
 	agent_id: z.string().optional(),
 	/** Instructions passed to the agent run. */
 	instructions: z.string().optional(),
-	/** Who can approve. Only meaningful for 'human_approval' steps. Not enforced yet — any authenticated user can approve. */
+	/** Who can approve. Only meaningful for 'human_approval' steps. */
 	approvers: z.array(z.string()).optional(),
-	/** Explicit next step ID. Falls back to array order if omitted. */
+	/** Default next step ID. Falls back to array order if omitted. */
 	next: z.string().optional(),
+
+	// ─── Control flow ─────────────────────────────────────────────────
+	transitions: z.record(z.string()).optional(),
+	on_approve: z.string().optional(),
+	on_reply: z.string().optional(),
+	on_reject: z.string().optional(),
+
+	// ─── Step I/O declarations ────────────────────────────────────────
+	/** Declarative output contract. Engine auto-generates structured-output suffix. */
+	output: StepOutputSchema.optional(),
+	/** Declarative input. Engine forwards specified artifacts as context. */
+	input: StepInputSchema.optional(),
+
 	/** Execution targeting hints for the run created by this step. */
 	targeting: ExecutionTargetSchema.optional(),
 	/** External actions to execute after the step's run completes. */

@@ -1,10 +1,10 @@
 /**
  * Server bootstrap for the QUESTPIE Autopilot orchestrator.
  *
- * 1. Load dotenv from company root
- * 2. Determine companyRoot (CLI arg or cwd)
+ * 1. Resolve scopes (.autopilot/company.yaml + .autopilot/project.yaml)
+ * 2. Load dotenv from company root
  * 3. Create company.db + index.db
- * 4. Load YAML config (agents, workflows, company)
+ * 4. Build resolved config (company + project merge)
  * 5. Create services
  * 6. Create auth
  * 7. Create Hono app
@@ -18,12 +18,12 @@ import type { Services } from './api/app'
 import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
-import { loadCompany, loadAgents, loadWorkflows, loadEnvironments } from './config/loader'
+import { discoverScopes, resolveConfig } from './config/scope-resolver'
 import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService } from './services'
 import type { AuthoredConfig } from './services'
 
 export interface StartServerOptions {
-	/** Absolute path to the company root directory. Defaults to first CLI arg or cwd. */
+	/** Absolute path to start scope discovery from. Defaults to first CLI arg or cwd. */
 	companyRoot?: string
 	/** HTTP port. Defaults to 7778. */
 	port?: number
@@ -32,9 +32,25 @@ export interface StartServerOptions {
 }
 
 export async function startServer(options?: StartServerOptions) {
-	// ── 1. Resolve company root ──────────────────────────────────────────
-	const companyRoot = resolve(options?.companyRoot ?? process.argv[2] ?? process.cwd())
+	const startDir = resolve(options?.companyRoot ?? process.argv[2] ?? process.cwd())
 	const port = options?.port ?? 7778
+
+	// ── 1. Discover scopes (.autopilot/company.yaml + .autopilot/project.yaml) ──
+	const chain = await discoverScopes(startDir)
+
+	if (!chain.companyRoot) {
+		throw new Error(
+			`No .autopilot/company.yaml found walking up from ${startDir}.\n` +
+			'Create one with: autopilot init',
+		)
+	}
+
+	const companyRoot = chain.companyRoot
+
+	console.log(`[server] company root: ${companyRoot}`)
+	if (chain.projectRoot && chain.projectRoot !== companyRoot) {
+		console.log(`[server] project root: ${chain.projectRoot}`)
+	}
 
 	// ── 2. Load .env from company root ───────────────────────────────────
 	const envPath = join(companyRoot, '.env')
@@ -43,29 +59,25 @@ export async function startServer(options?: StartServerOptions) {
 	}
 
 	const env = getEnv()
-
-	console.log(`[server] company root: ${companyRoot}`)
 	console.log(`[server] NODE_ENV: ${env.NODE_ENV}`)
 
 	// ── 3. Create databases ──────────────────────────────────────────────
 	const { db: companyDb } = await createCompanyDb(companyRoot)
 	const { db: _indexDb } = await createIndexDb(companyRoot)
-
 	console.log('[server] databases initialized')
 
-	// ── 4. Load authored config ──────────────────────────────────────────
-	const company = await loadCompany(companyRoot)
-	const agentList = await loadAgents(companyRoot)
-	const workflowList = await loadWorkflows(companyRoot)
-	const environmentList = await loadEnvironments(companyRoot)
+	// ── 4. Build resolved config (company + project merge) ───────────────
+	const resolved = await resolveConfig(chain)
 
-	const agents = new Map(agentList.map((a) => [a.id, a]))
-	const workflows = new Map(workflowList.map((w) => [w.id, w]))
-	const environments = new Map(environmentList.map((e) => [e.id, e]))
-
-	const authoredConfig: AuthoredConfig = { company, agents, workflows, environments }
+	const authoredConfig: AuthoredConfig = {
+		company: resolved.company,
+		agents: resolved.agents,
+		workflows: resolved.workflows,
+		environments: resolved.environments,
+		defaults: resolved.defaults,
+	}
 	console.log(
-		`[server] config loaded: ${agents.size} agents, ${workflows.size} workflows, ${environments.size} environments`,
+		`[server] config loaded: ${resolved.agents.size} agents, ${resolved.workflows.size} workflows, ${resolved.environments.size} environments, ${resolved.skills.size} skills, ${resolved.context.size} context files`,
 	)
 
 	// ── 5. Create auth ───────────────────────────────────────────────────
@@ -79,7 +91,7 @@ export async function startServer(options?: StartServerOptions) {
 	const activityService = new ActivityService(companyDb)
 	const artifactService = new ArtifactService(companyDb)
 
-	const workflowEngine = new WorkflowEngine(authoredConfig, taskService, runService, activityService)
+	const workflowEngine = new WorkflowEngine(authoredConfig, taskService, runService, activityService, artifactService)
 
 	// Validate config references
 	const configIssues = workflowEngine.validate()

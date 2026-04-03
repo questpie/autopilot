@@ -75,9 +75,9 @@ describe('Worker enrollment', () => {
 	let app: ReturnType<typeof buildTestApp>
 
 	beforeAll(async () => {
-		await mkdir(companyRoot, { recursive: true })
+		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
 		await writeFile(
-			join(companyRoot, 'company.yaml'),
+			join(companyRoot, '.autopilot', 'company.yaml'),
 			'name: enroll-test\nowner:\n  name: Test\n  email: t@t.com\n',
 		)
 
@@ -134,9 +134,11 @@ describe('Worker enrollment', () => {
 		const activityService = new ActivityService(dbResult.db)
 		const workflowEngine = new WorkflowEngine(
 			{
-				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, settings: { auto_assign: true, require_approval: [], max_concurrent_agents: 1, budget: { daily_token_limit: 0, alert_at: 0 }, auth: {}, inference: { gateway_base_url: '', text_model: '', embedding_model: '', embedding_dimensions: 768 }, default_runtime: 'claude-code' }, setup_completed: false },
+				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, defaults: {} },
 				agents: new Map(),
 				workflows: new Map(),
+				environments: new Map(),
+				defaults: { runtime: 'claude-code' },
 			},
 			taskService,
 			runService,
@@ -401,9 +403,9 @@ describe('Local dev bypass scope', () => {
 	let noDevApp: ReturnType<typeof buildTestApp>
 
 	beforeAll(async () => {
-		await mkdir(companyRoot2, { recursive: true })
+		await mkdir(join(companyRoot2, '.autopilot'), { recursive: true })
 		await writeFile(
-			join(companyRoot2, 'company.yaml'),
+			join(companyRoot2, '.autopilot', 'company.yaml'),
 			'name: nodev-test\nowner:\n  name: Test\n  email: t@t.com\n',
 		)
 		dbResult2 = await createCompanyDb(companyRoot2)
@@ -434,9 +436,11 @@ describe('Local dev bypass scope', () => {
 		const runService2 = new RunService(dbResult2.db)
 		const workflowEngine2 = new WorkflowEngine(
 			{
-				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, settings: { auto_assign: true, require_approval: [], max_concurrent_agents: 1, budget: { daily_token_limit: 0, alert_at: 0 }, auth: {}, inference: { gateway_base_url: '', text_model: '', embedding_model: '', embedding_dimensions: 768 }, default_runtime: 'claude-code' }, setup_completed: false },
+				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, defaults: {} },
 				agents: new Map(),
 				workflows: new Map(),
+				environments: new Map(),
+				defaults: { runtime: 'claude-code' },
 			},
 			taskService2,
 			runService2,
