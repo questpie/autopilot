@@ -282,11 +282,12 @@ function LandingPage() {
 									Workflow-driven AI operator
 								</div>
 								<h1 className="text-foreground mb-6 font-mono text-4xl leading-[1.1] font-extrabold tracking-[-0.03em] text-balance md:text-5xl">
-									Run AI work where your code, tools, and access already live
+									Run AI work where your tools, access, and context already live
 								</h1>
 								<p className="text-muted-foreground mb-8 max-w-xl text-lg leading-[1.6] md:text-xl">
-									Autopilot runs work on the machine that has the repo, sends back a reviewable
-									preview, and waits for a human to decide what ships.
+									Autopilot runs work on the right machine, sends back a reviewable result,
+									and waits for a human to decide what happens next. Code, research, content,
+									ops — same loop.
 								</p>
 								<div className="mb-8 flex flex-wrap items-center gap-4">
 									<a
@@ -366,7 +367,7 @@ function LandingPage() {
 							<SectionHeader
 								num="02"
 								title="Who this is for"
-								subtitle="Teams whose AI work touches real repos, real machines, and real approval gates."
+								subtitle="Any team whose work needs real machine access, reviewable outputs, and human approval — from engineering to marketing to ops."
 							/>
 							<BrutalistGrid className="md:grid-cols-2">
 								<FeatureCell
