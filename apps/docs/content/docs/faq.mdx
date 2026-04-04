@@ -1,0 +1,60 @@
+---
+title: FAQ
+description: Common questions about Autopilot.
+---
+
+## What AI models does Autopilot support?
+
+The current runtime adapter uses Claude Code (Anthropic). The system is designed for multiple runtime adapters, but Claude Code is the only real, tested adapter today.
+
+## Is there a dashboard / web app?
+
+Not yet. The current operating surfaces are the CLI, notifications, and conversation bindings. A Worker App (web interface) is planned but is not the center of the current product. The system is fully operable without it.
+
+## Is Autopilot self-hostable?
+
+Yes. Autopilot is designed to be self-hosted. The orchestrator runs on your infrastructure. Workers run on machines you control. Secrets never leave your environment.
+
+## How is this different from using Claude Code / Cursor / Copilot directly?
+
+Those are single-session tools. Autopilot adds:
+
+- **Workflow progression** — multi-step execution with explicit routing
+- **Durable state** — tasks, runs, and artifacts persist across sessions
+- **Human approval loops** — gate risky steps before they execute
+- **Multiple workers** — route work to the machine with the right access
+- **Previews** — orchestrator-backed outputs you can review from any device
+- **Notifications** — get alerted when attention is needed
+- **External actions** — act on real systems through provider/handler extensions
+
+## What is a workflow?
+
+A YAML file under `.autopilot/workflows/` that defines how a task progresses. It specifies steps, their order, approval gates, and how outputs route between steps. The workflow engine handles progression automatically.
+
+## What is a worker?
+
+A long-running process on a machine that claims and executes runs. It has direct access to the repo, toolchain, and local credentials. Workers are where AI actually executes — on a real machine, not in a hosted sandbox.
+
+## What is the orchestrator?
+
+The control plane. It stores all operational state (tasks, runs, workers, events, artifacts), manages workflow progression, serves durable previews, and routes notifications. It does not execute AI sessions.
+
+## Can multiple workers connect to one orchestrator?
+
+Yes. Each worker independently claims available runs. This is useful when different workers have access to different repos, environments, or credentials.
+
+## Where do secrets live?
+
+On the worker machine. Never centralized. The orchestrator stores operational state and authored config, but credentials, API keys, and runtime secrets stay on the machine that needs them.
+
+## Is this open source?
+
+Yes. Autopilot is open source and self-hostable.
+
+## What's the `.autopilot/` directory?
+
+The repo-native config directory. It contains authored YAML for agents, workflows, environments, providers, and handlers. It is the single source of truth for policy. Reviewable, versioned, branchable — same as your code.
+
+## What happens if a worker goes down?
+
+The orchestrator still has all state. Previews and artifacts are stored by the orchestrator, not the worker. When a worker comes back (or a different worker picks up), runs can be reclaimed. Raw session transcripts on the worker are lost, but operational state is durable.

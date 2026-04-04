@@ -1,0 +1,13 @@
+{
+	"title": "Documentation",
+	"pages": [
+		"index",
+		"what-is-autopilot",
+		"architecture",
+		"quickstart",
+		"operator-guide",
+		"providers-and-handlers",
+		"conversation-assisted-operation",
+		"faq"
+	]
+}

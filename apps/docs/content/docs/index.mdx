@@ -1,0 +1,22 @@
+---
+title: Documentation
+description: Autopilot is a workflow-driven AI operator for real engineering work.
+---
+
+Autopilot keeps authored policy in git, operational state in the orchestrator, and secrets/runtime state on the worker.
+
+## Where to start
+
+- **[What is Autopilot](/docs/what-is-autopilot)** — the mental model
+- **[Architecture](/docs/architecture)** — orchestrator, worker, truth boundaries
+- **[Quickstart](/docs/quickstart)** — get running locally
+- **[Operator Guide](/docs/operator-guide)** — CLI workflows, inbox, approvals
+- **[Providers and Handlers](/docs/providers-and-handlers)** — extend with notifications, intake, conversations
+- **[Conversation-Assisted Operation](/docs/conversation-assisted-operation)** — chat bindings for task actions
+- **[FAQ](/docs/faq)** — common questions
+
+## Core idea
+
+Tasks are intent. Workflows decide what happens. Workers execute where access exists.
+
+The system is designed around a small set of stable primitives — tasks, workflows, runs, workers — with multiple clients (CLI, notifications, chat surfaces) operating over those primitives. There is no single app that owns the product. The orchestrator owns operational truth. Workers own runtime execution. Git owns authored policy.
