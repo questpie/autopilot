@@ -27,5 +27,7 @@ export type { TaskRelationRow } from './task-relations'
 export { TaskGraphService } from './task-graph'
 export type { SpawnChildrenInput, SpawnChildrenResult, SpawnedChild, ChildCandidate, ChildRollup } from './task-graph'
 
+export { ParentJoinBridge } from './parent-join-bridge'
+
 export { WorkflowEngine } from './workflow-engine'
 export type { AuthoredConfig, IntakeResult, AdvanceResult } from './workflow-engine'

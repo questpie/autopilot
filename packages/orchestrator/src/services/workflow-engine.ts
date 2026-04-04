@@ -4,6 +4,7 @@ import type { TaskService, TaskRow } from './tasks'
 import type { RunService } from './runs'
 import type { ActivityService } from './activity'
 import type { ArtifactService } from './artifacts'
+import type { ChildRollup } from './task-graph'
 import { eventBus } from '../events/event-bus'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -49,6 +50,9 @@ export class WorkflowEngine {
 	private defaultWorkflow: string | undefined
 	private defaultRuntime: string
 
+	/** Injected rollup function — avoids circular dependency with TaskGraphService. */
+	private childRollupFn?: (taskId: string, relationType?: string) => Promise<ChildRollup>
+
 	constructor(
 		private config: AuthoredConfig,
 		private taskService: TaskService,
@@ -59,6 +63,11 @@ export class WorkflowEngine {
 		this.defaultAssignee = config.defaults.task_assignee
 		this.defaultWorkflow = config.defaults.workflow
 		this.defaultRuntime = config.defaults.runtime
+	}
+
+	/** Wire the child rollup function after construction to avoid circular init. */
+	setChildRollupFn(fn: (taskId: string, relationType?: string) => Promise<ChildRollup>): void {
+		this.childRollupFn = fn
 	}
 
 	// ─── Validation ─────────────────────────────────────────────────────
@@ -108,6 +117,12 @@ export class WorkflowEngine {
 				}
 				if (step.on_reject && !stepIds.has(step.on_reject)) {
 					issues.push(`workflow "${wfId}" step "${step.id}" on_reject="${step.on_reject}" target does not exist`)
+				}
+				if (step.on_met && !stepIds.has(step.on_met)) {
+					issues.push(`workflow "${wfId}" step "${step.id}" on_met="${step.on_met}" target does not exist`)
+				}
+				if (step.on_failed && !stepIds.has(step.on_failed)) {
+					issues.push(`workflow "${wfId}" step "${step.id}" on_failed="${step.on_failed}" target does not exist`)
 				}
 
 				// Output/transition consistency: validate when-field values against declared output
@@ -468,6 +483,30 @@ export class WorkflowEngine {
 				return null
 			}
 
+			case 'wait_for_children': {
+				const met = await this.evaluateJoin(task.id, step)
+				if (met === 'met') {
+					actions.push('join_met')
+					const target = step.on_met
+					if (target) return this.routeToStep(task, target, actions)
+					// No explicit target — fall through to next step
+					return this.routeToNextStep(task, workflow, actions)
+				}
+				if (met === 'failed') {
+					actions.push('join_child_failed')
+					if (step.on_failed) return this.routeToStep(task, step.on_failed, actions)
+					// No on_failed route — mark parent as failed
+					await this.taskService.update(task.id, { status: 'failed' })
+					eventBus.emit({ type: 'task_changed', taskId: task.id, status: 'failed' })
+					return null
+				}
+				// Pending — block the parent
+				await this.taskService.update(task.id, { status: 'blocked' })
+				actions.push('waiting_for_children')
+				eventBus.emit({ type: 'task_changed', taskId: task.id, status: 'blocked' })
+				return null
+			}
+
 			case 'done': {
 				await this.taskService.update(task.id, { status: 'done' })
 				actions.push('done')
@@ -574,6 +613,101 @@ export class WorkflowEngine {
 		const hasConstraints = target.required_worker_id || target.required_runtime || tags.length > 0 || target.actions || target.secret_refs
 		if (!hasConstraints) return undefined
 		return JSON.stringify(target)
+	}
+
+	// ─── Join Evaluation ────────────────────────────────────────────────
+
+	/**
+	 * Evaluate the join condition for a wait_for_children step.
+	 * Returns 'met' if policy satisfied, 'failed' if child failure detected, 'pending' otherwise.
+	 */
+	private async evaluateJoin(taskId: string, step: WorkflowStep): Promise<'met' | 'failed' | 'pending'> {
+		if (!this.childRollupFn) {
+			console.warn('[workflow-engine] wait_for_children requires childRollupFn — treating as pending')
+			return 'pending'
+		}
+
+		const rollup = await this.childRollupFn(taskId, step.join_relation_type)
+		if (rollup.total === 0) return 'pending'
+
+		const policy = step.join_policy ?? 'all_done'
+
+		if (policy === 'all_done') {
+			if (rollup.failed > 0) return 'failed'
+			if (rollup.done === rollup.total) return 'met'
+			return 'pending'
+		}
+
+		if (policy === 'any_failed') {
+			if (rollup.failed > 0) return 'met'
+			return 'pending'
+		}
+
+		return 'pending'
+	}
+
+	/** Route a task to a specific step by ID. Used by wait_for_children on_met/on_failed. */
+	private async routeToStep(task: TaskRow, targetStepId: string, actions: string[]): Promise<string | null> {
+		if (!task.workflow_id) return null
+		const workflow = this.config.workflows.get(task.workflow_id)
+		if (!workflow) return null
+
+		const targetStep = workflow.steps.find((s) => s.id === targetStepId)
+		if (!targetStep) return null
+
+		const stepUpdates: Record<string, string> = { workflow_step: targetStep.id }
+		if (targetStep.type === 'agent' && targetStep.agent_id) {
+			stepUpdates.assigned_to = targetStep.agent_id
+		}
+		await this.taskService.update(task.id, stepUpdates)
+
+		const updated = (await this.taskService.get(task.id))!
+		return this.processCurrentStep(updated, actions, {})
+	}
+
+	/** Route a task to the next step in array order. Fallback for on_met without explicit target. */
+	private async routeToNextStep(task: TaskRow, workflow: Workflow, actions: string[]): Promise<string | null> {
+		const nextStep = this.resolveNextStep(workflow, task.workflow_step!, undefined)
+		if (!nextStep) {
+			await this.taskService.update(task.id, { status: 'done', workflow_step: '__done__' })
+			actions.push('done')
+			eventBus.emit({ type: 'task_changed', taskId: task.id, status: 'done' })
+			return null
+		}
+
+		const stepUpdates: Record<string, string> = { workflow_step: nextStep.id }
+		if (nextStep.type === 'agent' && nextStep.agent_id) {
+			stepUpdates.assigned_to = nextStep.agent_id
+		}
+		await this.taskService.update(task.id, stepUpdates)
+
+		const updated = (await this.taskService.get(task.id))!
+		return this.processCurrentStep(updated, actions, {})
+	}
+
+	/**
+	 * Public re-evaluation of a waiting parent. Called by ParentJoinBridge when a child changes.
+	 * Only acts if the task is currently on a wait_for_children step and blocked.
+	 */
+	async reevaluateJoin(taskId: string): Promise<AdvanceResult | null> {
+		const task = await this.taskService.get(taskId)
+		if (!task || !task.workflow_id || !task.workflow_step) return null
+		if (task.status !== 'blocked') return null
+
+		const workflow = this.config.workflows.get(task.workflow_id)
+		if (!workflow) return null
+
+		const step = workflow.steps.find((s) => s.id === task.workflow_step)
+		if (!step || step.type !== 'wait_for_children') return null
+
+		const met = await this.evaluateJoin(taskId, step)
+		if (met === 'pending') return null
+
+		const actions: string[] = []
+		const runId = await this.processCurrentStep(task, actions, {})
+
+		const final = (await this.taskService.get(taskId))!
+		return { task: final, runId, actions }
 	}
 
 	// ─── Step Resolution ────────────────────────────────────────────────

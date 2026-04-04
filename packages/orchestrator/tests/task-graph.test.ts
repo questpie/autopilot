@@ -19,7 +19,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createCompanyDb, type CompanyDbResult } from '../src/db'
-import { TaskService, RunService, WorkerService, WorkflowEngine, TaskRelationService, TaskGraphService, ActivityService } from '../src/services'
+import { TaskService, RunService, WorkerService, WorkflowEngine, TaskRelationService, TaskGraphService, ActivityService, ParentJoinBridge } from '../src/services'
 import type { AuthoredConfig } from '../src/services'
 import type { Agent, Workflow, CompanyScope } from '@questpie/autopilot-spec'
 
@@ -746,5 +746,358 @@ describe('Normal task creation still works', () => {
 		const result = await localEngine.approve(task!.id, 'test-user')
 		expect(result).not.toBeNull()
 		expect(result!.task.status).toBe('done')
+	})
+})
+
+// ─── Parent Wait / Join V1 ─────────────────────────────────────────────────
+
+describe('Parent Wait / Join V1', () => {
+	const EPIC_WORKFLOW: Workflow = {
+		id: 'epic',
+		name: 'Epic Workflow',
+		description: 'Plan → wait for children → aggregate → done',
+		steps: [
+			{ id: 'plan', type: 'agent', agent_id: 'ceo', instructions: 'Plan and spawn children' },
+			{ id: 'wait', type: 'wait_for_children', on_met: 'aggregate', on_failed: 'handle_failure' },
+			{ id: 'aggregate', type: 'agent', agent_id: 'ceo', instructions: 'Aggregate results' },
+			{ id: 'handle_failure', type: 'agent', agent_id: 'ceo', instructions: 'Handle child failures' },
+			{ id: 'finish', type: 'done' },
+		],
+	}
+
+	let env: Awaited<ReturnType<typeof createTestEnv>>
+	let taskService: TaskService
+	let runService: RunService
+	let relationService: TaskRelationService
+	let engine: WorkflowEngine
+	let graphService: TaskGraphService
+
+	beforeAll(async () => {
+		env = await createTestEnv('join-test')
+		taskService = env.taskService
+		runService = env.runService
+		relationService = env.relationService
+		const config = makeConfig({
+			workflows: new Map([
+				['default', TEST_WORKFLOW],
+				['epic', EPIC_WORKFLOW],
+			]),
+		})
+		engine = new WorkflowEngine(config, taskService, runService, env.activityService)
+		graphService = new TaskGraphService(taskService, relationService, engine)
+		engine.setChildRollupFn((taskId, relationType) => graphService.childRollup(taskId, relationType))
+	})
+
+	afterAll(async () => {
+		env.dbResult.raw.close()
+		await rm(env.companyRoot, { recursive: true, force: true })
+	})
+
+	test('parent blocks on wait_for_children when children are pending', async () => {
+		// Create parent on wait step
+		const parent = await taskService.create({
+			id: `parent-wait-${Date.now()}`,
+			title: 'Epic parent',
+			type: 'epic',
+			workflow_id: 'epic',
+			workflow_step: 'wait',
+			status: 'active',
+			created_by: 'test',
+		})
+
+		// Spawn children that are still active
+		await graphService.spawnChildren({
+			parent_task_id: parent!.id,
+			children: [
+				{ title: 'Child 1', type: 'feature', dedupe_key: 'c1' },
+				{ title: 'Child 2', type: 'feature', dedupe_key: 'c2' },
+			],
+			created_by: 'test',
+		})
+
+		// Process the wait step — should block because children are active
+		const result = await engine.intake(parent!.id)
+
+		const updated = await taskService.get(parent!.id)
+		expect(updated!.status).toBe('blocked')
+		expect(updated!.workflow_step).toBe('wait')
+	})
+
+	test('parent immediately advances if all children already done', async () => {
+		const parent = await taskService.create({
+			id: `parent-done-${Date.now()}`,
+			title: 'Epic with done children',
+			type: 'epic',
+			workflow_id: 'epic',
+			workflow_step: 'wait',
+			status: 'active',
+			created_by: 'test',
+		})
+
+		const spawned = await graphService.spawnChildren({
+			parent_task_id: parent!.id,
+			children: [
+				{ title: 'Done child 1', type: 'feature', dedupe_key: 'done1' },
+				{ title: 'Done child 2', type: 'feature', dedupe_key: 'done2' },
+			],
+			created_by: 'test',
+		})
+
+		// Mark all children as done
+		for (const child of spawned.children) {
+			await taskService.update(child.task.id, { status: 'done' })
+		}
+
+		// Process wait step — should advance to 'aggregate' immediately
+		await engine.intake(parent!.id)
+
+		const updated = await taskService.get(parent!.id)
+		expect(updated!.workflow_step).toBe('aggregate')
+		expect(updated!.status).toBe('active')
+	})
+
+	test('child completion triggers parent wake-up via reevaluateJoin', async () => {
+		const parent = await taskService.create({
+			id: `parent-wake-${Date.now()}`,
+			title: 'Epic waiting for wake-up',
+			type: 'epic',
+			workflow_id: 'epic',
+			workflow_step: 'wait',
+			status: 'active',
+			created_by: 'test',
+		})
+
+		const spawned = await graphService.spawnChildren({
+			parent_task_id: parent!.id,
+			children: [
+				{ title: 'Wake child 1', type: 'feature', dedupe_key: 'w1' },
+				{ title: 'Wake child 2', type: 'feature', dedupe_key: 'w2' },
+			],
+			created_by: 'test',
+		})
+
+		// Process wait step — should block
+		await engine.intake(parent!.id)
+		let parentState = await taskService.get(parent!.id)
+		expect(parentState!.status).toBe('blocked')
+
+		// Mark first child done — parent should still be blocked (not all done)
+		await taskService.update(spawned.children[0]!.task.id, { status: 'done' })
+		const partialResult = await engine.reevaluateJoin(parent!.id)
+		expect(partialResult).toBeNull() // still pending
+
+		// Mark second child done — parent should wake up
+		await taskService.update(spawned.children[1]!.task.id, { status: 'done' })
+		const fullResult = await engine.reevaluateJoin(parent!.id)
+		expect(fullResult).not.toBeNull()
+
+		parentState = await taskService.get(parent!.id)
+		expect(parentState!.workflow_step).toBe('aggregate')
+		expect(parentState!.status).toBe('active')
+	})
+
+	test('child failure routes parent to on_failed step', async () => {
+		const parent = await taskService.create({
+			id: `parent-fail-join-${Date.now()}`,
+			title: 'Epic with failing child',
+			type: 'epic',
+			workflow_id: 'epic',
+			workflow_step: 'wait',
+			status: 'active',
+			created_by: 'test',
+		})
+
+		const spawned = await graphService.spawnChildren({
+			parent_task_id: parent!.id,
+			children: [
+				{ title: 'OK child', type: 'feature', dedupe_key: 'ok' },
+				{ title: 'Failing child', type: 'feature', dedupe_key: 'fail' },
+			],
+			created_by: 'test',
+		})
+
+		// Block parent
+		await engine.intake(parent!.id)
+		expect((await taskService.get(parent!.id))!.status).toBe('blocked')
+
+		// Child fails
+		await taskService.update(spawned.children[1]!.task.id, { status: 'failed' })
+		const result = await engine.reevaluateJoin(parent!.id)
+		expect(result).not.toBeNull()
+
+		const parentState = await taskService.get(parent!.id)
+		expect(parentState!.workflow_step).toBe('handle_failure')
+		expect(parentState!.status).toBe('active')
+	})
+
+	test('child failure with no on_failed marks parent as failed', async () => {
+		const noFailHandlerWorkflow: Workflow = {
+			id: 'epic-no-fail',
+			name: 'Epic without fail handler',
+			description: 'Wait without on_failed',
+			steps: [
+				{ id: 'wait', type: 'wait_for_children', on_met: 'finish' },
+				{ id: 'finish', type: 'done' },
+			],
+		}
+
+		const config = makeConfig({
+			workflows: new Map([
+				['default', TEST_WORKFLOW],
+				['epic-no-fail', noFailHandlerWorkflow],
+			]),
+		})
+		const localEngine = new WorkflowEngine(config, taskService, runService)
+		localEngine.setChildRollupFn((taskId, rt) => graphService.childRollup(taskId, rt))
+
+		const parent = await taskService.create({
+			id: `parent-no-handler-${Date.now()}`,
+			title: 'Epic without fail handler',
+			type: 'epic',
+			workflow_id: 'epic-no-fail',
+			workflow_step: 'wait',
+			status: 'active',
+			created_by: 'test',
+		})
+
+		await graphService.spawnChildren({
+			parent_task_id: parent!.id,
+			children: [{ title: 'Doomed child', type: 'feature', dedupe_key: 'doomed' }],
+			created_by: 'test',
+		})
+
+		// Block parent
+		await localEngine.intake(parent!.id)
+
+		// Fail child
+		const children = await graphService.listChildren(parent!.id)
+		await taskService.update(children[0]!.id, { status: 'failed' })
+
+		await localEngine.reevaluateJoin(parent!.id)
+		const parentState = await taskService.get(parent!.id)
+		expect(parentState!.status).toBe('failed')
+	})
+
+	test('reevaluateJoin ignores non-waiting parents', async () => {
+		const parent = await taskService.create({
+			id: `parent-active-${Date.now()}`,
+			title: 'Active parent (not waiting)',
+			type: 'epic',
+			status: 'active',
+			workflow_id: 'epic',
+			workflow_step: 'plan',
+			created_by: 'test',
+		})
+
+		const result = await engine.reevaluateJoin(parent!.id)
+		expect(result).toBeNull()
+	})
+
+	test('wait_for_children with zero children stays blocked', async () => {
+		const parent = await taskService.create({
+			id: `parent-no-kids-${Date.now()}`,
+			title: 'Epic with no children',
+			type: 'epic',
+			workflow_id: 'epic',
+			workflow_step: 'wait',
+			status: 'active',
+			created_by: 'test',
+		})
+
+		await engine.intake(parent!.id)
+		const updated = await taskService.get(parent!.id)
+		expect(updated!.status).toBe('blocked')
+		expect(updated!.workflow_step).toBe('wait')
+	})
+
+	test('ParentJoinBridge wakes parent on child task_changed event', async () => {
+		const { eventBus: localBus } = await import('../src/events/event-bus')
+		const bridge = new ParentJoinBridge(localBus, relationService, engine)
+		bridge.start()
+
+		const parent = await taskService.create({
+			id: `parent-bridge-${Date.now()}`,
+			title: 'Epic for bridge test',
+			type: 'epic',
+			workflow_id: 'epic',
+			workflow_step: 'wait',
+			status: 'active',
+			created_by: 'test',
+		})
+
+		const spawned = await graphService.spawnChildren({
+			parent_task_id: parent!.id,
+			children: [{ title: 'Bridge child', type: 'feature', dedupe_key: 'bridge-c1' }],
+			created_by: 'test',
+		})
+
+		// Block parent
+		await engine.intake(parent!.id)
+		expect((await taskService.get(parent!.id))!.status).toBe('blocked')
+
+		// Mark child done — emit event to trigger bridge
+		await taskService.update(spawned.children[0]!.task.id, { status: 'done' })
+		localBus.emit({ type: 'task_changed', taskId: spawned.children[0]!.task.id, status: 'done' })
+
+		// Give the async bridge handler time to process
+		await new Promise((r) => setTimeout(r, 50))
+
+		const parentState = await taskService.get(parent!.id)
+		expect(parentState!.workflow_step).toBe('aggregate')
+		expect(parentState!.status).toBe('active')
+
+		bridge.stop()
+	})
+
+	test('any_failed policy routes to on_met when child fails', async () => {
+		const anyFailedWorkflow: Workflow = {
+			id: 'any-failed-wf',
+			name: 'Any-failed policy',
+			description: 'Detect any child failure',
+			steps: [
+				{ id: 'wait', type: 'wait_for_children', join_policy: 'any_failed', on_met: 'alert', on_failed: 'alert' },
+				{ id: 'alert', type: 'agent', agent_id: 'ceo', instructions: 'Alert on failure' },
+				{ id: 'finish', type: 'done' },
+			],
+		}
+
+		const config = makeConfig({
+			workflows: new Map([
+				['default', TEST_WORKFLOW],
+				['any-failed-wf', anyFailedWorkflow],
+			]),
+		})
+		const localEngine = new WorkflowEngine(config, taskService, runService)
+		localEngine.setChildRollupFn((taskId, rt) => graphService.childRollup(taskId, rt))
+
+		const parent = await taskService.create({
+			id: `parent-anyfail-${Date.now()}`,
+			title: 'Watching for any failure',
+			type: 'epic',
+			workflow_id: 'any-failed-wf',
+			workflow_step: 'wait',
+			status: 'active',
+			created_by: 'test',
+		})
+
+		const spawned = await graphService.spawnChildren({
+			parent_task_id: parent!.id,
+			children: [
+				{ title: 'Might fail', type: 'feature', dedupe_key: 'mf1' },
+				{ title: 'Might fail 2', type: 'feature', dedupe_key: 'mf2' },
+			],
+			created_by: 'test',
+		})
+
+		await localEngine.intake(parent!.id)
+		expect((await taskService.get(parent!.id))!.status).toBe('blocked')
+
+		// One child fails — any_failed is met
+		await taskService.update(spawned.children[0]!.task.id, { status: 'failed' })
+		await localEngine.reevaluateJoin(parent!.id)
+
+		const parentState = await taskService.get(parent!.id)
+		expect(parentState!.workflow_step).toBe('alert')
+		expect(parentState!.status).toBe('active')
 	})
 })

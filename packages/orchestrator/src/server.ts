@@ -19,7 +19,7 @@ import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService } from './services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge } from './services'
 import type { AuthoredConfig } from './services'
 import { NotificationBridge } from './providers'
 import { eventBus } from './events/event-bus'
@@ -99,6 +99,9 @@ export async function startServer(options?: StartServerOptions) {
 	const workflowEngine = new WorkflowEngine(authoredConfig, taskService, runService, activityService, artifactService)
 	const taskGraphService = new TaskGraphService(taskService, taskRelationService, workflowEngine)
 
+	// Wire child rollup into workflow engine (breaks circular init dependency)
+	workflowEngine.setChildRollupFn((taskId, relationType) => taskGraphService.childRollup(taskId, relationType))
+
 	// Validate config references
 	const configIssues = workflowEngine.validate()
 	for (const issue of configIssues) {
@@ -132,6 +135,10 @@ export async function startServer(options?: StartServerOptions) {
 	if (authoredConfig.providers.size > 0) {
 		notificationBridge.start()
 	}
+
+	// ── 7b. Start parent join bridge ────────────────────────────────────
+	const parentJoinBridge = new ParentJoinBridge(eventBus, taskRelationService, workflowEngine)
+	parentJoinBridge.start()
 
 	// ── 8. Create Hono app ───────────────────────────────────────────────
 	const app = createApp({

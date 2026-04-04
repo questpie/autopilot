@@ -78,7 +78,7 @@ export const StepTransitionSchema = z.object({
 export const WorkflowStepSchema = z.object({
 	id: z.string(),
 	name: z.string().optional(),
-	type: z.enum(['agent', 'human_approval', 'done']),
+	type: z.enum(['agent', 'human_approval', 'wait_for_children', 'done']),
 	/** The agent that executes this step. Required for 'agent' steps. */
 	agent_id: z.string().optional(),
 	/** Instructions passed to the agent run. */
@@ -94,6 +94,16 @@ export const WorkflowStepSchema = z.object({
 	on_approve: z.string().optional(),
 	on_reply: z.string().optional(),
 	on_reject: z.string().optional(),
+
+	// ─── Wait-for-children join policy ────────────────────────────────
+	/** Relation type to evaluate. Defaults to 'decomposes_to'. Only for wait_for_children. */
+	join_relation_type: z.string().default('decomposes_to'),
+	/** Join condition. Only for wait_for_children. */
+	join_policy: z.enum(['all_done', 'any_failed']).default('all_done'),
+	/** Step to route to when join condition is met. Only for wait_for_children. */
+	on_met: z.string().optional(),
+	/** Step to route to when a child fails (before all_done). Only for wait_for_children. */
+	on_failed: z.string().optional(),
 
 	// ─── Step I/O declarations ────────────────────────────────────────
 	/** Declarative output contract. Engine auto-generates structured-output suffix. */
