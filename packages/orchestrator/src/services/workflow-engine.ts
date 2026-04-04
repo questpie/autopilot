@@ -124,6 +124,9 @@ export class WorkflowEngine {
 				if (step.on_failed && !stepIds.has(step.on_failed)) {
 					issues.push(`workflow "${wfId}" step "${step.id}" on_failed="${step.on_failed}" target does not exist`)
 				}
+				if (step.type === 'wait_for_children' && step.join_policy === 'any_failed' && step.on_failed) {
+					issues.push(`workflow "${wfId}" step "${step.id}" on_failed is ignored when join_policy is any_failed — use on_met instead`)
+				}
 
 				// Output/transition consistency: validate when-field values against declared output
 				if (step.output && step.transitions) {

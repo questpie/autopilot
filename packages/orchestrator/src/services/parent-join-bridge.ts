@@ -38,11 +38,15 @@ export class ParentJoinBridge {
 	}
 
 	private async handleChildChange(childTaskId: string): Promise<void> {
-		// Find all parents that have a decomposes_to relation to this child
-		const parentRelations = await this.taskRelationService.listByTarget(childTaskId, 'decomposes_to')
+		// Find all parents across any relation type — reevaluateJoin reads the
+		// step's join_relation_type to evaluate the correct rollup.
+		const parentRelations = await this.taskRelationService.listByTarget(childTaskId)
 		if (parentRelations.length === 0) return
 
+		const seen = new Set<string>()
 		for (const rel of parentRelations) {
+			if (seen.has(rel.source_task_id)) continue
+			seen.add(rel.source_task_id)
 			await this.workflowEngine.reevaluateJoin(rel.source_task_id)
 		}
 	}
