@@ -271,17 +271,18 @@ function printNextSteps(config: BootstrapConfig): void {
 
 		if (config.surface === 'claude-code') {
 			console.log('')
-			console.log(`  ${dot('yellow')} ${dim('Claude Code + MCP setup:')}`)
-			console.log(`     Add to your project's .mcp.json:`)
-			console.log(`     ${dim('{ "mcpServers": { "autopilot": { "command": "bunx", "args": ["@questpie/autopilot-mcp"] } } }')}`)
-			console.log(`     ${dim('If running from a local checkout, use the workspace bin: autopilot-mcp')}`)
+			console.log(`  ${dot('yellow')} ${dim('Claude Code + MCP setup (local/dev — package not yet published):')}`)
+			console.log(`     From a workspace checkout, add to your project's .mcp.json:`)
+			console.log(`     ${dim('{ "mcpServers": { "autopilot": { "command": "bun", "args": ["run", "packages/mcp-server/src/index.ts"] } } }')}`)
+			console.log(`     ${dim('Or if the workspace bin is linked: autopilot-mcp')}`)
 		}
 
 		console.log('')
 		console.log(`  ${dot('cyan')} ${dim('4.')} Create your first task: ${success('autopilot tasks create -t "My first task" --type feature')}`)
 		console.log(`  ${dot('cyan')} ${dim('5.')} Check inbox and approve: ${success('autopilot inbox')}`)
 	} else {
-		console.log(`  ${dot('cyan')} ${dim('1.')} Run ${success('autopilot auth setup --url <orchestrator-url>')} to authenticate`)
+		console.log(`  ${dot('cyan')} ${dim('1.')} Log in: ${success('autopilot auth login --url <orchestrator-url>')}`)
+		console.log(`     ${dim('(First-time owner? Use: autopilot auth setup --url <orchestrator-url>)')}`)
 		console.log(`  ${dot('cyan')} ${dim('2.')} Obtain a join token from the orchestrator admin:`)
 		console.log(`     ${dim('autopilot worker token create -d "my machine"')}`)
 		console.log(`  ${dot('cyan')} ${dim('3.')} Start a worker with the token:`)

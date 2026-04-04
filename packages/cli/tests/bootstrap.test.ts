@@ -177,14 +177,16 @@ describe('autopilot bootstrap', () => {
 		expect(output).toContain('--type feature')
 	})
 
-	it('claude-code surface mentions MCP setup with real package name', async () => {
+	it('claude-code surface mentions MCP setup as local/dev path', async () => {
 		const output = await runBootstrap(tempDir, ['--surface', 'claude-code'])
 
 		expect(output).toContain('MCP')
-		expect(output).toContain('@questpie/autopilot-mcp')
 		expect(output).toContain('.mcp.json')
-		// Must NOT contain the old fake package name
+		expect(output).toContain('not yet published')
+		expect(output).toContain('packages/mcp-server/src/index.ts')
+		// Must NOT contain fake public package names
 		expect(output).not.toContain('autopilot-mcp-server')
+		expect(output).not.toContain('bunx @questpie/autopilot-mcp')
 	})
 
 	it('cli surface does not mention MCP', async () => {
@@ -193,10 +195,14 @@ describe('autopilot bootstrap', () => {
 		expect(output).not.toContain('MCP')
 	})
 
-	it('join-existing mode prints token-based enrollment flow', async () => {
+	it('join-existing mode prints login + token-based enrollment flow', async () => {
 		const output = await runBootstrap(tempDir, ['--mode', 'join-existing'])
 
-		expect(output).toContain('autopilot auth setup')
+		// Auth: login is default, setup mentioned as first-time alternative
+		expect(output).toContain('autopilot auth login')
+		expect(output).toContain('auth setup')
+		expect(output).toContain('First-time owner')
+		// Worker enrollment
 		expect(output).toContain('worker token create')
 		expect(output).toContain('--token')
 		expect(output).toContain('autopilot worker start')
