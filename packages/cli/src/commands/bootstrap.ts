@@ -265,30 +265,28 @@ function printNextSteps(config: BootstrapConfig): void {
 	console.log('')
 
 	if (config.mode === 'local-first') {
+		console.log(`  ${dot('cyan')} ${dim('1.')} Run ${success('autopilot sync')} to generate CLAUDE.md, AGENTS.md, and sync skills`)
+		console.log(`  ${dot('cyan')} ${dim('2.')} Run ${success('autopilot start')} to boot orchestrator + local worker`)
+		console.log(`  ${dot('cyan')} ${dim('3.')} Run ${success('autopilot auth setup')} to create your operator account`)
+
 		if (config.surface === 'claude-code') {
-			console.log(`  ${dot('cyan')} ${dim('1.')} Run ${success('autopilot sync')} to generate CLAUDE.md, AGENTS.md, and sync skills`)
-			console.log(`  ${dot('cyan')} ${dim('2.')} Run ${success('autopilot start')} to boot orchestrator + local worker`)
-			console.log(`  ${dot('cyan')} ${dim('3.')} Run ${success('autopilot auth setup')} to create your operator account`)
 			console.log('')
 			console.log(`  ${dot('yellow')} ${dim('Claude Code + MCP setup:')}`)
-			console.log(`     Add the Autopilot MCP server to your Claude Code config:`)
-			console.log(`     ${dim('npx @questpie/autopilot-mcp-server')}`)
-			console.log(`     Or add to .mcp.json:`)
-			console.log(`     ${dim('{ "mcpServers": { "autopilot": { "command": "npx", "args": ["@questpie/autopilot-mcp-server"] } } }')}`)
-			console.log('')
-			console.log(`  ${dot('cyan')} ${dim('4.')} Create your first task: ${success('autopilot tasks create "My first task"')}`)
-			console.log(`  ${dot('cyan')} ${dim('5.')} Check inbox and approve: ${success('autopilot inbox')}`)
-		} else {
-			console.log(`  ${dot('cyan')} ${dim('1.')} Run ${success('autopilot sync')} to generate compatibility files`)
-			console.log(`  ${dot('cyan')} ${dim('2.')} Run ${success('autopilot start')} to boot orchestrator + local worker`)
-			console.log(`  ${dot('cyan')} ${dim('3.')} Run ${success('autopilot auth setup')} to create your operator account`)
-			console.log(`  ${dot('cyan')} ${dim('4.')} Create your first task: ${success('autopilot tasks create "My first task"')}`)
-			console.log(`  ${dot('cyan')} ${dim('5.')} Check inbox and approve: ${success('autopilot inbox')}`)
+			console.log(`     Add to your project's .mcp.json:`)
+			console.log(`     ${dim('{ "mcpServers": { "autopilot": { "command": "bunx", "args": ["@questpie/autopilot-mcp"] } } }')}`)
+			console.log(`     ${dim('If running from a local checkout, use the workspace bin: autopilot-mcp')}`)
 		}
+
+		console.log('')
+		console.log(`  ${dot('cyan')} ${dim('4.')} Create your first task: ${success('autopilot tasks create -t "My first task" --type feature')}`)
+		console.log(`  ${dot('cyan')} ${dim('5.')} Check inbox and approve: ${success('autopilot inbox')}`)
 	} else {
 		console.log(`  ${dot('cyan')} ${dim('1.')} Run ${success('autopilot auth setup --url <orchestrator-url>')} to authenticate`)
-		console.log(`  ${dot('cyan')} ${dim('2.')} Run ${success('autopilot sync')} to generate local compatibility files`)
-		console.log(`  ${dot('cyan')} ${dim('3.')} To run a worker here: ${success('autopilot worker start --url <orchestrator-url>')}`)
+		console.log(`  ${dot('cyan')} ${dim('2.')} Obtain a join token from the orchestrator admin:`)
+		console.log(`     ${dim('autopilot worker token create -d "my machine"')}`)
+		console.log(`  ${dot('cyan')} ${dim('3.')} Start a worker with the token:`)
+		console.log(`     ${success('autopilot worker start --url <orchestrator-url> --token <secret>')}`)
+		console.log(`  ${dot('cyan')} ${dim('4.')} Run ${success('autopilot sync')} to generate local compatibility files`)
 	}
 
 	console.log('')

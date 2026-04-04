@@ -699,6 +699,93 @@ describe('Zero-materialization lockfile handling', () => {
 	})
 })
 
+// ─── Version-Pinned Pack Refs (V1.2) ─────────────────────────────────────
+
+describe('Version-pinned pack refs', () => {
+	let tempDir: string
+	let registryDir: string
+	let testRegistry: Registry
+
+	beforeEach(async () => {
+		tempDir = await makeTempDir()
+		registryDir = await makeTempDir('autopilot-registry-')
+		await setupCompanyRoot(tempDir)
+
+		// Create a registry with a tagged version
+		createGitRegistry(registryDir, [
+			{
+				id: 'versioned-pack',
+				name: 'Versioned Pack',
+				category: 'workflow',
+				version: '1.0.0',
+				files: [{ src: 'workflows/v1.yaml', dest: 'workflows/versioned.yaml', content: 'id: v1' }],
+			},
+		])
+
+		// Tag the initial commit as v1.0.0
+		execSync('git tag v1.0.0', { cwd: registryDir, stdio: 'pipe' })
+
+		// Add a second commit with updated pack content
+		writeFileSync(
+			join(registryDir, 'packs', 'versioned-pack', 'pack.yaml'),
+			stringifyYaml({
+				id: 'versioned-pack',
+				name: 'Versioned Pack',
+				category: 'workflow',
+				version: '2.0.0',
+				files: [{ src: 'workflows/v1.yaml', dest: 'workflows/versioned.yaml' }],
+			}),
+		)
+		writeFileSync(join(registryDir, 'packs', 'versioned-pack', 'workflows', 'v1.yaml'), 'id: v2-latest')
+		execSync('git add -A', { cwd: registryDir, stdio: 'pipe' })
+		execSync('git commit -m "v2"', { cwd: registryDir, stdio: 'pipe' })
+
+		testRegistry = { id: 'test', type: 'git', url: registryDir, default: true, priority: 0 }
+	})
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true })
+		await rm(registryDir, { recursive: true, force: true })
+	})
+
+	it('resolves pack at pinned tag version', () => {
+		const result = resolvePackFromGit('versioned-pack', 'v1.0.0', testRegistry, tempDir)
+
+		expect(result).not.toBeNull()
+		expect(result!.resolvedRef).toBe('v1.0.0')
+		expect(result!.manifest.version).toBe('1.0.0')
+	})
+
+	it('latest resolves to head, not tag', () => {
+		const result = resolvePackFromGit('versioned-pack', 'latest', testRegistry, tempDir)
+
+		expect(result).not.toBeNull()
+		expect(result!.manifest.version).toBe('2.0.0')
+	})
+
+	it('materializes version-pinned pack and records ref in lockfile', () => {
+		const { resolved } = resolveAllPacks(
+			[{ ref: 'test/versioned-pack', version: 'v1.0.0' }],
+			[testRegistry],
+			tempDir,
+		)
+
+		const result = materializePacks(resolved, tempDir)
+
+		expect(result.installed).toContain('test/versioned-pack')
+
+		// Verify file content is from v1 tag, not latest
+		const content = readFileSync(join(tempDir, '.autopilot', 'workflows', 'versioned.yaml'), 'utf-8')
+		expect(content).toBe('id: v1')
+
+		// Verify lockfile records the pinned ref
+		const lockPath = join(tempDir, '.autopilot', 'packs.lock.yaml')
+		const lockfile = PackLockfileSchema.parse(parseYaml(readFileSync(lockPath, 'utf-8')))
+		const entry = lockfile.packs['test/versioned-pack']
+		expect(entry.resolved_ref).toBe('v1.0.0')
+	})
+})
+
 // ─── Existing Sync Behavior ──────────────────────────────────────────────
 
 describe('Existing sync behavior preserved', () => {

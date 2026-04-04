@@ -166,19 +166,25 @@ describe('autopilot bootstrap', () => {
 		expect(readFileSync(join(tempDir, '.autopilot', 'context', 'readme.md'), 'utf-8')).toBe('custom content')
 	})
 
-	it('output mentions real commands', async () => {
+	it('output mentions real commands with correct syntax', async () => {
 		const output = await runBootstrap(tempDir)
 
 		expect(output).toContain('autopilot sync')
 		expect(output).toContain('autopilot start')
 		expect(output).toContain('autopilot auth setup')
+		// Task create must use real -t and --type flags
+		expect(output).toContain('tasks create -t')
+		expect(output).toContain('--type feature')
 	})
 
-	it('claude-code surface mentions MCP setup', async () => {
+	it('claude-code surface mentions MCP setup with real package name', async () => {
 		const output = await runBootstrap(tempDir, ['--surface', 'claude-code'])
 
 		expect(output).toContain('MCP')
-		expect(output).toContain('autopilot-mcp-server')
+		expect(output).toContain('@questpie/autopilot-mcp')
+		expect(output).toContain('.mcp.json')
+		// Must NOT contain the old fake package name
+		expect(output).not.toContain('autopilot-mcp-server')
 	})
 
 	it('cli surface does not mention MCP', async () => {
@@ -187,11 +193,13 @@ describe('autopilot bootstrap', () => {
 		expect(output).not.toContain('MCP')
 	})
 
-	it('join-existing mode prints auth instructions', async () => {
+	it('join-existing mode prints token-based enrollment flow', async () => {
 		const output = await runBootstrap(tempDir, ['--mode', 'join-existing'])
 
 		expect(output).toContain('autopilot auth setup')
-		expect(output).toContain('orchestrator')
+		expect(output).toContain('worker token create')
+		expect(output).toContain('--token')
+		expect(output).toContain('autopilot worker start')
 		// Should still create .autopilot/ directory
 		expect(existsSync(join(tempDir, PATHS.AUTOPILOT_DIR))).toBe(true)
 	})
