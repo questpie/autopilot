@@ -657,15 +657,7 @@ export class WorkflowEngine {
 
 		const targetStep = workflow.steps.find((s) => s.id === targetStepId)
 		if (!targetStep) return null
-
-		const stepUpdates: Record<string, string> = { workflow_step: targetStep.id }
-		if (targetStep.type === 'agent' && targetStep.agent_id) {
-			stepUpdates.assigned_to = targetStep.agent_id
-		}
-		await this.taskService.update(task.id, stepUpdates)
-
-		const updated = (await this.taskService.get(task.id))!
-		return this.processCurrentStep(updated, actions, {})
+		return this.applyStepAndProcess(task, targetStep, actions)
 	}
 
 	/** Route a task to the next step in array order. Fallback for on_met without explicit target. */
@@ -677,10 +669,14 @@ export class WorkflowEngine {
 			eventBus.emit({ type: 'task_changed', taskId: task.id, status: 'done' })
 			return null
 		}
+		return this.applyStepAndProcess(task, nextStep, actions)
+	}
 
-		const stepUpdates: Record<string, string> = { workflow_step: nextStep.id }
-		if (nextStep.type === 'agent' && nextStep.agent_id) {
-			stepUpdates.assigned_to = nextStep.agent_id
+	/** Update task to target step and process it. Shared by routeToStep/routeToNextStep. */
+	private async applyStepAndProcess(task: TaskRow, targetStep: WorkflowStep, actions: string[]): Promise<string | null> {
+		const stepUpdates: Record<string, string> = { workflow_step: targetStep.id }
+		if (targetStep.type === 'agent' && targetStep.agent_id) {
+			stepUpdates.assigned_to = targetStep.agent_id
 		}
 		await this.taskService.update(task.id, stepUpdates)
 

@@ -2,8 +2,8 @@
  * ParentJoinBridge — event-driven parent wake-up for wait_for_children steps.
  *
  * Subscribes to task_changed events. When a child task changes status,
- * looks up parent tasks via decomposes_to relations and re-evaluates
- * any parent currently blocked on a wait_for_children step.
+ * looks up parent tasks via relations and re-evaluates any parent
+ * currently blocked on a wait_for_children step.
  */
 import type { EventBus } from '../events/event-bus'
 import type { TaskRelationService } from './task-relations'
