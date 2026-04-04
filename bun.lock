@@ -163,7 +163,9 @@
       },
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.12.1",
+        "@questpie/autopilot-orchestrator": "workspace:*",
         "@t3-oss/env-core": "^0.13.8",
+        "hono": "^4.7.10",
         "zod": "^3.25.0",
       },
       "devDependencies": {
