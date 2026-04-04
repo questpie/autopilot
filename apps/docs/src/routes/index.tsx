@@ -448,9 +448,9 @@ function LandingPage() {
 									'Implement a feature end-to-end: spec, plan, code, review, deploy.',
 									'Respond to an incident: triage, investigate, hotfix, deploy, verify.',
 									'Monitor competitors: scrape changelogs, analyze changes, produce a brief.',
-									'Draft a blog post, get human approval, publish via CMS webhook.',
-									'Generate an executive report from task activity and deliver via Slack.',
-									'Maintain internal knowledge: scan for changes, update docs, human review.',
+									'Draft and publish a blog post with human review and CMS webhook.',
+									'Draft and publish social posts with human review via provider handlers.',
+									'Generate a weekly executive report and deliver via Slack.',
 								].map((text) => (
 									<div key={text} className="bg-background flex items-start gap-3 p-5">
 										<CheckCircle className="text-primary mt-0.5 h-4 w-4 shrink-0" />
