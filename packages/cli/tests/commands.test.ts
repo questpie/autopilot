@@ -59,13 +59,16 @@ describe('command registration', () => {
 		expect(subNames).toContain('token')
 	})
 
-	it('has tasks subcommands: show, create, update', () => {
+	it('has tasks subcommands: show, create, update, children, parents, rollup', () => {
 		const tasksCmd = program.commands.find((c) => c.name() === 'tasks')
 		expect(tasksCmd).toBeDefined()
 		const subNames = tasksCmd!.commands.map((c) => c.name())
 		expect(subNames).toContain('show')
 		expect(subNames).toContain('create')
 		expect(subNames).toContain('update')
+		expect(subNames).toContain('children')
+		expect(subNames).toContain('parents')
+		expect(subNames).toContain('rollup')
 	})
 
 	it('has runs subcommands: show, continue, cancel', () => {

@@ -1,7 +1,27 @@
 import { Command } from 'commander'
 import { program } from '../program'
-import { section, badge, dim, table, success, error, separator } from '../utils/format'
+import { section, badge, dim, table, success, error, separator, dot } from '../utils/format'
 import { createApiClient } from '../utils/client'
+
+// ─── Shared Types ─────────────────────────────────────────────────────────
+
+interface TaskSummary {
+	id: string
+	status: string
+	title: string
+	assigned_to?: string | null
+	type: string
+	workflow_step?: string | null
+}
+
+interface ChildRollup {
+	total: number
+	active: number
+	blocked: number
+	done: number
+	failed: number
+	backlog: number
+}
 
 const tasksCmd = new Command('tasks')
 	.description('List and manage tasks')
@@ -21,13 +41,7 @@ const tasksCmd = new Command('tasks')
 				process.exit(1)
 			}
 
-			const tasks = (await res.json()) as Array<{
-				id: string
-				status: string
-				title: string
-				assigned_to?: string | null
-				type: string
-			}>
+			const tasks = (await res.json()) as TaskSummary[]
 
 			console.log(section('Tasks'))
 			if (tasks.length === 0) {
@@ -44,19 +58,17 @@ const tasksCmd = new Command('tasks')
 
 			console.log(
 				table(
-					tasks.map((t) => [
-						dim(t.id),
-						badge(
-							t.status,
-							t.status === 'done'
-								? 'green'
-								: t.status === 'blocked'
-									? 'red'
-									: 'cyan',
-						),
-						t.title,
-						t.assigned_to ? dim(`-> ${t.assigned_to}`) : '',
-					]),
+					tasks.map((t) => {
+						const waitHint = t.status === 'blocked' && t.workflow_step?.includes('wait')
+							? dim(' [children]')
+							: ''
+						return [
+							dim(t.id),
+							badge(t.status, statusColor(t.status)) + waitHint,
+							t.title,
+							t.assigned_to ? dim(`-> ${t.assigned_to}`) : '',
+						]
+					}),
 				),
 			)
 			console.log('')
@@ -114,9 +126,16 @@ tasksCmd.addCommand(
 				if (task.updated_at) console.log(`  ${dim('Updated at:')}  ${task.updated_at}`)
 
 				if (task.status === 'blocked') {
-					console.log('')
-					console.log(`  ${badge('WAITING FOR APPROVAL', 'red')}`)
-					console.log(dim('  Use: autopilot tasks approve|reject|reply ' + task.id))
+					const isJoinStep = task.workflow_step && await isWaitingForChildren(client, task)
+					if (isJoinStep) {
+						console.log('')
+						console.log(`  ${badge('WAITING FOR CHILDREN', 'yellow')}`)
+						await printRollupSummary(client, task.id)
+					} else {
+						console.log('')
+						console.log(`  ${badge('WAITING FOR APPROVAL', 'red')}`)
+						console.log(dim('  Use: autopilot tasks approve|reject|reply ' + task.id))
+					}
 				}
 
 				if (task.description) {
@@ -330,5 +349,194 @@ tasksCmd.addCommand(
 			}
 		}),
 )
+
+// ─── Child / Parent / Rollup Subcommands ──────────────────────────────────
+
+tasksCmd.addCommand(
+	new Command('children')
+		.description('List child tasks of a parent task')
+		.argument('<id>', 'Parent task ID')
+		.option('--relation <type>', 'Filter by relation type')
+		.action(async (id: string, opts: { relation?: string }) => {
+			try {
+				const client = createApiClient()
+				const query: Record<string, string> = {}
+				if (opts.relation) query.relation_type = opts.relation
+
+				const res = await client.api.tasks[':id'].children.$get({ param: { id }, query })
+				if (!res.ok) {
+					console.error(error(`Failed to fetch children for task ${id}`))
+					process.exit(1)
+				}
+
+				const children = (await res.json()) as TaskSummary[]
+
+				console.log(section(`Children of ${id}`))
+				if (children.length === 0) {
+					console.log(dim('  No child tasks'))
+					return
+				}
+
+				console.log(
+					table(
+						children.map((t) => [
+							dim(t.id),
+							badge(t.status, statusColor(t.status)),
+							t.title,
+							t.assigned_to ? dim(`-> ${t.assigned_to}`) : '',
+						]),
+					),
+				)
+				console.log('')
+				printRollupLine(countStatuses(children))
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+tasksCmd.addCommand(
+	new Command('parents')
+		.description('List parent tasks of a child task')
+		.argument('<id>', 'Child task ID')
+		.option('--relation <type>', 'Filter by relation type')
+		.action(async (id: string, opts: { relation?: string }) => {
+			try {
+				const client = createApiClient()
+				const query: Record<string, string> = {}
+				if (opts.relation) query.relation_type = opts.relation
+
+				const res = await client.api.tasks[':id'].parents.$get({ param: { id }, query })
+				if (!res.ok) {
+					console.error(error(`Failed to fetch parents for task ${id}`))
+					process.exit(1)
+				}
+
+				const parents = (await res.json()) as TaskSummary[]
+
+				console.log(section(`Parents of ${id}`))
+				if (parents.length === 0) {
+					console.log(dim('  No parent tasks'))
+					return
+				}
+
+				console.log(
+					table(
+						parents.map((t) => [
+							dim(t.id),
+							badge(t.status, statusColor(t.status)),
+							t.title,
+						]),
+					),
+				)
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+tasksCmd.addCommand(
+	new Command('rollup')
+		.description('Show child status rollup for a parent task')
+		.argument('<id>', 'Parent task ID')
+		.option('--relation <type>', 'Filter by relation type')
+		.action(async (id: string, opts: { relation?: string }) => {
+			try {
+				const client = createApiClient()
+				const query: Record<string, string> = {}
+				if (opts.relation) query.relation_type = opts.relation
+
+				const res = await client.api.tasks[':id'].rollup.$get({ param: { id }, query })
+				if (!res.ok) {
+					console.error(error(`Failed to fetch rollup for task ${id}`))
+					process.exit(1)
+				}
+
+				const rollup = (await res.json()) as ChildRollup
+
+				console.log(section(`Rollup for ${id}`))
+				if (rollup.total === 0) {
+					console.log(dim('  No child tasks'))
+					return
+				}
+
+				console.log(`  ${dim('Total:')}     ${rollup.total}`)
+				if (rollup.done > 0) console.log(`  ${dot('green')} Done:      ${rollup.done}`)
+				if (rollup.active > 0) console.log(`  ${dot('cyan')} Active:    ${rollup.active}`)
+				if (rollup.blocked > 0) console.log(`  ${dot('yellow')} Blocked:   ${rollup.blocked}`)
+				if (rollup.failed > 0) console.log(`  ${dot('red')} Failed:    ${rollup.failed}`)
+				if (rollup.backlog > 0) console.log(`  ${dim('○')} Backlog:   ${rollup.backlog}`)
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+function statusColor(status: string): string {
+	if (status === 'done') return 'green'
+	if (status === 'failed') return 'red'
+	if (status === 'blocked') return 'yellow'
+	return 'cyan'
+}
+
+function countStatuses(tasks: TaskSummary[]): ChildRollup {
+	const r: ChildRollup = { total: tasks.length, active: 0, blocked: 0, done: 0, failed: 0, backlog: 0 }
+	for (const t of tasks) {
+		if (t.status === 'done') r.done++
+		else if (t.status === 'failed') r.failed++
+		else if (t.status === 'blocked') r.blocked++
+		else if (t.status === 'backlog' || t.status === 'pending') r.backlog++
+		else r.active++
+	}
+	return r
+}
+
+function printRollupLine(r: ChildRollup): void {
+	const parts: string[] = []
+	if (r.done > 0) parts.push(`${r.done} done`)
+	if (r.active > 0) parts.push(`${r.active} active`)
+	if (r.blocked > 0) parts.push(`${r.blocked} blocked`)
+	if (r.failed > 0) parts.push(`${r.failed} failed`)
+	if (r.backlog > 0) parts.push(`${r.backlog} backlog`)
+	console.log(dim(`  ${r.total} children: ${parts.join(', ')}`))
+}
+
+async function isWaitingForChildren(client: ReturnType<typeof createApiClient>, task: { workflow_step?: string | null }): Promise<boolean> {
+	// A task is waiting for children if its workflow_step name suggests it
+	// The definitive check is via the rollup endpoint — if it has children, it's a parent
+	// We use a heuristic: blocked + has children = waiting for children
+	// (The workflow engine sets status=blocked for wait_for_children steps)
+	return task.workflow_step?.includes('wait') === true
+}
+
+async function printRollupSummary(client: ReturnType<typeof createApiClient>, taskId: string): Promise<void> {
+	try {
+		const res = await client.api.tasks[':id'].rollup.$get({ param: { id: taskId }, query: {} })
+		if (!res.ok) return
+
+		const rollup = (await res.json()) as ChildRollup
+		if (rollup.total === 0) {
+			console.log(dim('  No child tasks found'))
+			return
+		}
+
+		const parts: string[] = []
+		if (rollup.done > 0) parts.push(`${rollup.done} done`)
+		if (rollup.active > 0) parts.push(`${rollup.active} active`)
+		if (rollup.failed > 0) parts.push(`${rollup.failed} failed`)
+		if (rollup.blocked > 0) parts.push(`${rollup.blocked} blocked`)
+		if (rollup.backlog > 0) parts.push(`${rollup.backlog} backlog`)
+
+		console.log(dim(`  Children: ${rollup.total} (${parts.join(', ')})`))
+		console.log(dim(`  Use: autopilot tasks children ${taskId}`))
+	} catch {
+		// Rollup fetch failed — not critical
+	}
+}
 
 program.addCommand(tasksCmd)
