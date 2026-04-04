@@ -271,10 +271,9 @@ function printNextSteps(config: BootstrapConfig): void {
 
 		if (config.surface === 'claude-code') {
 			console.log('')
-			console.log(`  ${dot('yellow')} ${dim('Claude Code + MCP setup (local/dev — package not yet published):')}`)
-			console.log(`     From a workspace checkout, add to your project's .mcp.json:`)
-			console.log(`     ${dim('{ "mcpServers": { "autopilot": { "command": "bun", "args": ["run", "packages/mcp-server/src/index.ts"] } } }')}`)
-			console.log(`     ${dim('Or if the workspace bin is linked: autopilot-mcp')}`)
+			console.log(`  ${dot('yellow')} ${dim('Claude Code + MCP setup:')}`)
+			console.log(`     Add to your project's .mcp.json:`)
+			console.log(`     ${dim('{ "mcpServers": { "autopilot": { "command": "bunx", "args": ["@questpie/autopilot-mcp"] } } }')}`)
 		}
 
 		console.log('')

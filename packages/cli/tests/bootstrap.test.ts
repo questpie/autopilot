@@ -177,16 +177,14 @@ describe('autopilot bootstrap', () => {
 		expect(output).toContain('--type feature')
 	})
 
-	it('claude-code surface mentions MCP setup as local/dev path', async () => {
+	it('claude-code surface mentions MCP setup with real package', async () => {
 		const output = await runBootstrap(tempDir, ['--surface', 'claude-code'])
 
 		expect(output).toContain('MCP')
 		expect(output).toContain('.mcp.json')
-		expect(output).toContain('not yet published')
-		expect(output).toContain('packages/mcp-server/src/index.ts')
-		// Must NOT contain fake public package names
+		expect(output).toContain('@questpie/autopilot-mcp')
+		// Must NOT contain the old fake package name
 		expect(output).not.toContain('autopilot-mcp-server')
-		expect(output).not.toContain('bunx @questpie/autopilot-mcp')
 	})
 
 	it('cli surface does not mention MCP', async () => {

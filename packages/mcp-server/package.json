@@ -1,13 +1,32 @@
 {
 	"name": "@questpie/autopilot-mcp",
 	"version": "1.0.0",
-	"private": true,
 	"type": "module",
 	"description": "MCP server for QUESTPIE Autopilot — expose tasks, agents, search, sessions to Claude Desktop/Code",
 	"main": "src/index.ts",
 	"bin": {
 		"autopilot-mcp": "./src/index.ts"
 	},
+	"files": [
+		"src/"
+	],
+	"keywords": [
+		"mcp",
+		"model-context-protocol",
+		"claude",
+		"autopilot",
+		"questpie",
+		"ai",
+		"agents"
+	],
+	"homepage": "https://autopilot.questpie.com",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/questpie/autopilot",
+		"directory": "packages/mcp-server"
+	},
+	"license": "MIT",
+	"author": "QUESTPIE s.r.o.",
 	"scripts": {
 		"start": "bun run src/index.ts",
 		"dev": "bun run --watch src/index.ts",
