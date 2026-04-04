@@ -6,6 +6,18 @@ export { ExternalActionSchema } from './external-action'
 export { ArtifactSchema, ArtifactKindSchema, ArtifactRefKindSchema, RunArtifactSchema } from './artifact'
 export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema } from './company'
 export { CompanyScopeSchema, ProjectScopeSchema, ScopeDefaultsSchema } from './scope'
+export {
+	PackDependencySchema,
+	RegistrySchema,
+	RegistriesFileSchema,
+	PackCategorySchema,
+	PackRequiredEnvSchema,
+	PackManualStepSchema,
+	PackFileSchema,
+	PackManifestSchema,
+	PackLockEntrySchema,
+	PackLockfileSchema,
+} from './pack'
 export { WorkerEventTypeSchema, WorkerEventSchema, RunCompletionSchema } from './worker-event'
 export { ScheduleSchema, SchedulesFileSchema } from './schedule'
 export {

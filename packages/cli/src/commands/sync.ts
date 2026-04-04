@@ -1,8 +1,11 @@
 import { Command } from 'commander'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, cpSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { parse as parseYaml } from 'yaml'
+import { CompanyScopeSchema, PATHS } from '@questpie/autopilot-spec'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
+import { loadRegistries, resolveAllPacks, materializePacks } from '../packs'
 import { success, dim, error, warning, separator } from '../utils/format'
 
 const MARKER_START = '<!-- autopilot:start -->'
@@ -71,6 +74,49 @@ const syncCmd = new Command('sync')
 			console.log(dim(`Company root: ${companyRoot}`))
 			console.log(separator())
 
+			// ── Install packs from registries ───────────────────────────
+			const companyConfigPath = join(companyRoot, PATHS.COMPANY_CONFIG)
+			const companyConfig = CompanyScopeSchema.parse(
+				parseYaml(readFileSync(companyConfigPath, 'utf-8')),
+			)
+
+			if (companyConfig.packs.length > 0) {
+				const registries = loadRegistries(companyRoot)
+				if (registries.length === 0) {
+					console.log(warning('Packs declared but no registries configured'))
+					console.log(dim('  Add registries to ~/.config/autopilot/registries.yaml or .autopilot/registries.yaml'))
+				} else {
+					console.log(dim(`Registries: ${registries.map((r) => r.id).join(', ')}`))
+					const { resolved, errors } = resolveAllPacks(companyConfig.packs, registries, companyRoot)
+
+					for (const err of errors) {
+						console.log(warning(err))
+					}
+
+					if (resolved.length > 0) {
+						const result = materializePacks(resolved, companyRoot)
+
+						for (const ref of result.installed) {
+							console.log(success(`Pack installed: ${ref}`))
+						}
+						for (const skip of result.skipped) {
+							console.log(dim(`  Skipped: ${skip}`))
+						}
+						for (const conflict of result.conflicts) {
+							console.log(warning(`Conflict: ${conflict} — exists locally and is not pack-managed. Skipped.`))
+						}
+
+						if (result.installed.length > 0) {
+							console.log(success(`Lockfile updated: ${PATHS.PACKS_LOCKFILE}`))
+						}
+					}
+				}
+			} else {
+				console.log(dim('No packs declared in company.yaml'))
+			}
+
+			console.log(separator())
+
 			const autopilotDir = join(companyRoot, '.autopilot')
 
 			// ── Generate CLAUDE.md from .autopilot/context/ ──────────────
@@ -109,7 +155,6 @@ const syncCmd = new Command('sync')
 					.sort()
 
 				if (agentFiles.length > 0) {
-					const { parse: parseYaml } = await import('yaml')
 					const lines: string[] = []
 					for (const f of agentFiles) {
 						const raw = readFileSync(join(agentsDir, f), 'utf-8')

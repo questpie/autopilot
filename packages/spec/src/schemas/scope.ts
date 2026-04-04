@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { CompanyOwnerSchema } from './company'
+import { PackDependencySchema } from './pack'
 
 /**
  * Defaults that can be set at company or project scope.
@@ -25,6 +26,8 @@ export const CompanyScopeSchema = z.object({
 	language: z.string().default('en'),
 	owner: CompanyOwnerSchema.default({}),
 	defaults: ScopeDefaultsSchema.default({}),
+	/** Desired pack dependencies — resolved by `autopilot sync`. */
+	packs: z.array(PackDependencySchema).default([]),
 })
 
 /**

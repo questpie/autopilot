@@ -17,7 +17,16 @@ export const PATHS = {
 	SKILLS_DIR: '.autopilot/skills',
 	CONTEXT_DIR: '.autopilot/context',
 
+	// Pack distribution
+	REGISTRIES_CONFIG: '.autopilot/registries.yaml',
+	PACKS_LOCKFILE: '.autopilot/packs.lock.yaml',
+
+	// Global user config (under ~/.config/autopilot/)
+	GLOBAL_CONFIG_DIR: '.config/autopilot',
+	GLOBAL_REGISTRIES_CONFIG: '.config/autopilot/registries.yaml',
+
 	// Runtime state (not under .autopilot/)
 	DATA_DIR: '.data',
 	WORKTREES_DIR: '.worktrees',
+	PACK_CACHE_DIR: '.data/pack-cache',
 } as const

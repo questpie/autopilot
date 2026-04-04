@@ -57,6 +57,15 @@ export type CompanyScope = z.infer<typeof schemas.CompanyScopeSchema>
 export type ProjectScope = z.infer<typeof schemas.ProjectScopeSchema>
 export type ScopeDefaults = z.infer<typeof schemas.ScopeDefaultsSchema>
 
+// Packs
+export type PackDependency = z.infer<typeof schemas.PackDependencySchema>
+export type Registry = z.infer<typeof schemas.RegistrySchema>
+export type PackCategory = z.infer<typeof schemas.PackCategorySchema>
+export type PackFile = z.infer<typeof schemas.PackFileSchema>
+export type PackManifest = z.infer<typeof schemas.PackManifestSchema>
+export type PackLockEntry = z.infer<typeof schemas.PackLockEntrySchema>
+export type PackLockfile = z.infer<typeof schemas.PackLockfileSchema>
+
 // Providers
 export type Provider = z.infer<typeof schemas.ProviderSchema>
 export type ProviderKind = z.infer<typeof schemas.ProviderKindSchema>
