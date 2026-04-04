@@ -304,11 +304,11 @@ function LandingPage() {
 									</a>
 								</div>
 								<p className="text-muted-foreground mb-5 max-w-2xl text-sm leading-[1.7]">
-									Shipping today: workflow-driven runs, worker routing, durable previews,
-									approval loops, structured artifacts.
+									Works with your existing Claude subscription. Codex and OpenCode adapters coming.
+									No new AI vendor — Autopilot reuses the tools you already pay for.
 								</p>
 								<div className="flex flex-wrap gap-2">
-									{['CLI-first', 'Repo-native', 'Durable previews', 'Approval-aware'].map((t) => (
+									{['CLI-first', 'Repo-native', 'Durable previews', 'Approval-aware', 'BYOS (bring your own subscription)'].map((t) => (
 										<Badge key={t}>{t}</Badge>
 									))}
 								</div>

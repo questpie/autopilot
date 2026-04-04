@@ -121,14 +121,43 @@ That is enough for plan/review/implement loops without turning the workflow engi
 
 ## Runtime adapters
 
-Workers execute runs through adapters. Today, the only real adapter is **Claude Code**.
+Autopilot does not ship its own AI runtime. Workers execute runs through **adapters** that wrap existing AI tools you already have installed and subscribed to.
 
-The adapter currently supports:
+The adapter model works like this:
 
-- one run per worker at a time
-- per-run git worktrees
-- structured outputs and artifacts
-- same-worker continuation through local runtime session refs
+1. The worker resolves a binary on the host machine (e.g. `claude`, `codex`, `opencode`)
+2. The adapter spawns that binary as a subprocess with the run's prompt and instructions
+3. The adapter feeds the run context (task, instructions, MCP config) to the subprocess
+4. The subprocess does the actual AI work using **your existing subscription**
+5. The adapter parses the result back into Autopilot's structured format (summary, outputs, artifacts)
+
+This means:
+
+- **No new AI vendor.** Autopilot reuses the AI tools and subscriptions you already pay for.
+- **No API key management for models.** The adapter delegates to the CLI tool, which handles its own auth.
+- **New runtimes are just new adapters.** Adding Codex or OpenCode support means implementing the same `start → parse → return` contract against a different binary.
+
+### Today: Claude Code
+
+The shipping adapter spawns the `claude` CLI. It supports:
+
+- One run per worker at a time
+- Per-run git worktrees for isolation
+- Structured outputs and artifacts
+- Session resumption via local session refs (for same-worker continuation)
+- MCP integration — the worker injects Autopilot's task/run tools so the AI can inspect and create tasks during execution
+
+Works with any Claude plan that includes CLI access (Pro, Team, Enterprise).
+
+### Coming: Codex, OpenCode
+
+The adapter interface is intentionally minimal — `start(context)`, `onEvent(handler)`, `stop()`. Adding a new runtime means:
+
+1. Map the runtime kind to a binary name
+2. Build the CLI arguments from the `RunContext`
+3. Parse the output into `RuntimeResult`
+
+`codex` and `opencode` are already declared in the type system and binary mapping. The adapters are not yet implemented, but the worker routing, capability advertisement, and run targeting already support multiple runtimes per worker.
 
 ## Durable previews
 
