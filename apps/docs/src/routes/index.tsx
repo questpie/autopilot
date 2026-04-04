@@ -304,7 +304,7 @@ function LandingPage() {
 									</a>
 								</div>
 								<p className="text-muted-foreground mb-5 max-w-2xl text-sm leading-[1.7]">
-									Works with your existing Claude subscription. Codex and OpenCode adapters coming.
+									Works with your existing Claude, Codex, or OpenCode subscription.
 									No new AI vendor — Autopilot reuses the tools you already pay for.
 								</p>
 								<div className="flex flex-wrap gap-2">

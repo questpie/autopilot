@@ -149,7 +149,9 @@ The shipping adapter spawns the `claude` CLI. It supports:
 
 Works with any Claude plan that includes CLI access (Pro, Team, Enterprise).
 
-### Coming: Codex, OpenCode
+### Codex, OpenCode
+
+The same adapter model applies to Codex and OpenCode. The worker spawns `codex` or `opencode` instead of `claude`, feeds the same `RunContext`, and parses the result back into the same structured format.
 
 The adapter interface is intentionally minimal — `start(context)`, `onEvent(handler)`, `stop()`. Adding a new runtime means:
 
@@ -157,7 +159,7 @@ The adapter interface is intentionally minimal — `start(context)`, `onEvent(ha
 2. Build the CLI arguments from the `RunContext`
 3. Parse the output into `RuntimeResult`
 
-`codex` and `opencode` are already declared in the type system and binary mapping. The adapters are not yet implemented, but the worker routing, capability advertisement, and run targeting already support multiple runtimes per worker.
+Worker routing, capability advertisement, and run targeting already support multiple runtimes per worker. You can run a Claude Code worker and a Codex worker side by side, and the orchestrator routes runs based on the `required_runtime` field in workflow steps.
 
 ## Durable previews
 
