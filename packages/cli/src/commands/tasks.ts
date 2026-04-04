@@ -58,23 +58,18 @@ const tasksCmd = new Command('tasks')
 
 			console.log(
 				table(
-					tasks.map((t) => {
-						const waitHint = t.status === 'blocked' && t.workflow_step?.includes('wait')
-							? dim(' [children]')
-							: ''
-						return [
-							dim(t.id),
-							badge(t.status, statusColor(t.status)) + waitHint,
-							t.title,
-							t.assigned_to ? dim(`-> ${t.assigned_to}`) : '',
-						]
-					}),
+					tasks.map((t) => [
+						dim(t.id),
+						badge(t.status, statusColor(t.status)),
+						t.title,
+						t.assigned_to ? dim(`-> ${t.assigned_to}`) : '',
+					]),
 				),
 			)
 			console.log('')
 			console.log(separator())
 			const blockedCount = tasks.filter((t) => t.status === 'blocked').length
-			console.log(dim(`${tasks.length} task(s)`) + (blockedCount > 0 ? `  ${badge(`${blockedCount} awaiting approval`, 'red')}` : ''))
+			console.log(dim(`${tasks.length} task(s)`) + (blockedCount > 0 ? `  ${badge(`${blockedCount} blocked`, 'yellow')}` : ''))
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))
 			process.exit(1)
@@ -126,8 +121,8 @@ tasksCmd.addCommand(
 				if (task.updated_at) console.log(`  ${dim('Updated at:')}  ${task.updated_at}`)
 
 				if (task.status === 'blocked') {
-					const isJoinStep = task.workflow_step && await isWaitingForChildren(client, task)
-					if (isJoinStep) {
+					const childCount = await getChildCount(client, task.id)
+					if (childCount > 0) {
 						console.log('')
 						console.log(`  ${badge('WAITING FOR CHILDREN', 'yellow')}`)
 						await printRollupSummary(client, task.id)
@@ -506,12 +501,16 @@ function printRollupLine(r: ChildRollup): void {
 	console.log(dim(`  ${r.total} children: ${parts.join(', ')}`))
 }
 
-async function isWaitingForChildren(client: ReturnType<typeof createApiClient>, task: { workflow_step?: string | null }): Promise<boolean> {
-	// A task is waiting for children if its workflow_step name suggests it
-	// The definitive check is via the rollup endpoint — if it has children, it's a parent
-	// We use a heuristic: blocked + has children = waiting for children
-	// (The workflow engine sets status=blocked for wait_for_children steps)
-	return task.workflow_step?.includes('wait') === true
+/** Check if a blocked task has children via the rollup endpoint (ground truth). */
+async function getChildCount(client: ReturnType<typeof createApiClient>, taskId: string): Promise<number> {
+	try {
+		const res = await client.api.tasks[':id'].rollup.$get({ param: { id: taskId }, query: {} })
+		if (!res.ok) return 0
+		const rollup = (await res.json()) as ChildRollup
+		return rollup.total
+	} catch {
+		return 0
+	}
 }
 
 async function printRollupSummary(client: ReturnType<typeof createApiClient>, taskId: string): Promise<void> {
