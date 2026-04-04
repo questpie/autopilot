@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { eq, and } from 'drizzle-orm'
 import { ExecutionTargetSchema } from '@questpie/autopilot-spec'
 import type { WorkerCapability } from '@questpie/autopilot-spec'
@@ -202,7 +203,7 @@ export class RunService {
 			return undefined
 		}
 
-		const id = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+		const id = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
 		const now = new Date().toISOString()
 
 		await this.db.insert(runs).values({

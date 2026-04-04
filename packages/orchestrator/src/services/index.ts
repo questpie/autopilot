@@ -21,5 +21,11 @@ export type { ArtifactRow } from './artifacts'
 export { ConversationBindingService } from './conversation-bindings'
 export type { ConversationBindingRow } from './conversation-bindings'
 
+export { TaskRelationService } from './task-relations'
+export type { TaskRelationRow } from './task-relations'
+
+export { TaskGraphService } from './task-graph'
+export type { SpawnChildrenInput, SpawnChildrenResult, SpawnedChild, ChildCandidate, ChildRollup } from './task-graph'
+
 export { WorkflowEngine } from './workflow-engine'
 export type { AuthoredConfig, IntakeResult, AdvanceResult } from './workflow-engine'

@@ -28,6 +28,9 @@ const MCP_TOOL_NAMES = [
   'mcp__autopilot__task_get',
   'mcp__autopilot__task_create',
   'mcp__autopilot__task_update',
+  'mcp__autopilot__task_spawn_children',
+  'mcp__autopilot__task_children',
+  'mcp__autopilot__task_parents',
   'mcp__autopilot__run_list',
   'mcp__autopilot__run_get',
 ].join(',')

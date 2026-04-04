@@ -12,6 +12,7 @@
  * 4. validateMachineSecret(workerId, secret) checks on every request
  */
 
+import { randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { joinTokens, workers } from '../db/company-schema'
 import type { CompanyDb } from '../db'
@@ -52,7 +53,7 @@ export class EnrollmentService {
     const expiresAt = new Date(now.getTime() + ttl * 1000).toISOString()
 
     const secret = generateSecret()
-    const tokenId = `jt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const tokenId = `jt-${Date.now()}-${randomBytes(6).toString('hex')}`
 
     await this.db.insert(joinTokens).values({
       id: tokenId,
@@ -112,7 +113,7 @@ export class EnrollmentService {
 
     // Generate durable machine credential
     const machineSecret = generateSecret()
-    const workerId = `worker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const workerId = `worker-${Date.now()}-${randomBytes(6).toString('hex')}`
     const now = new Date().toISOString()
 
     // Create worker with machine secret

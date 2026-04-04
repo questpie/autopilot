@@ -12,6 +12,7 @@
  * 5. Looks up binding by provider + external conversation/thread IDs
  * 6. Dispatches through existing workflow engine primitives
  */
+import { randomBytes } from 'node:crypto'
 import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
@@ -61,7 +62,7 @@ const conversations = new Hono<AppEnv>()
 				}
 			}
 
-			const id = `bind-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+			const id = `bind-${Date.now()}-${randomBytes(6).toString('hex')}`
 			let binding
 			try {
 				binding = await conversationBindingService.create({

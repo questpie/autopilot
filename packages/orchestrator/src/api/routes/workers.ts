@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import {
@@ -77,7 +78,7 @@ const workers = new Hono<AppEnv>()
 	})
 	// POST /workers/claim — claim next pending run (one-at-a-time)
 	.post('/claim', zValidator('json', WorkerClaimRequestSchema), async (c) => {
-		const { runService, workerService, taskService } = c.get('services')
+		const { runService, workerService, taskService, workflowEngine } = c.get('services')
 		const authWorkerId = c.get('workerId')
 		const body = c.req.valid('json')
 
@@ -88,7 +89,11 @@ const workers = new Hono<AppEnv>()
 
 		// Expire stale leases — prevents crashed workers from being stuck forever
 		await workerService.expireStaleAndRecover(async (runId) => {
+			const run = await runService.get(runId)
 			await runService.complete(runId, { status: 'failed', error: 'lease expired' })
+			if (run?.task_id) {
+				await workflowEngine.handleRunFailure(run.task_id, runId)
+			}
 		})
 
 		// Concurrency guard: one active run per worker
@@ -107,7 +112,7 @@ const workers = new Hono<AppEnv>()
 		if (!run) return c.json({ run: null, lease_id: null }, 200)
 
 		// Create a lease for the claimed run
-		const leaseId = `lease-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+		const leaseId = `lease-${Date.now()}-${randomBytes(6).toString('hex')}`
 		const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 min
 		await workerService.createLease({
 			id: leaseId,

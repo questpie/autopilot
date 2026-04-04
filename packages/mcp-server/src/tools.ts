@@ -1,49 +1,137 @@
 /**
  * MCP tool definitions for QUESTPIE Autopilot.
  *
- * Only tools that map to real, existing orchestrator endpoints.
+ * Type-safe wrappers around orchestrator endpoints via Hono RPC client.
  * Tasks: GET/POST/PATCH /api/tasks
  * Runs:  GET /api/runs
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { apiGet, apiPost, apiPatch } from './api-client'
+import { tasks, runs } from './api-client'
+
+type ToolResult = { content: Array<{ type: 'text'; text: string }> }
+
+async function ok(res: Response): Promise<ToolResult> {
+	if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+	const data = await res.json()
+	return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+}
+
+// ─── Handlers (standalone to avoid TS2589 depth overflow) ───────────
+
+async function handleTaskList(args: { status?: string; assigned_to?: string }) {
+	return ok(await tasks.$get({ query: { status: args.status, assigned_to: args.assigned_to } }))
+}
+
+async function handleTaskGet(args: { id: string }) {
+	return ok(await tasks[':id'].$get({ param: { id: args.id } }))
+}
+
+async function handleTaskCreate(args: {
+	title: string
+	type: string
+	description?: string
+	priority?: string
+	assigned_to?: string
+}) {
+	return ok(await tasks.$post({ json: args }))
+}
+
+async function handleTaskUpdate(args: {
+	id: string
+	status?: string
+	title?: string
+	description?: string
+	assigned_to?: string
+}) {
+	const { id, ...updates } = args
+	return ok(await tasks[':id'].$patch({ param: { id }, json: updates }))
+}
+
+async function handleRunList(args: { task_id?: string; status?: string }) {
+	return ok(await runs.$get({ query: { task_id: args.task_id, status: args.status } }))
+}
+
+async function handleRunGet(args: { id: string }) {
+	return ok(await runs[':id'].$get({ param: { id: args.id } }))
+}
+
+async function handleTaskApprove(args: { id: string }) {
+	return ok(await tasks[':id'].approve.$post({ param: { id: args.id } }))
+}
+
+async function handleTaskReject(args: { id: string; message: string }) {
+	return ok(await tasks[':id'].reject.$post({ param: { id: args.id }, json: { message: args.message } }))
+}
+
+async function handleTaskReply(args: { id: string; message: string }) {
+	return ok(await tasks[':id'].reply.$post({ param: { id: args.id }, json: { message: args.message } }))
+}
+
+async function handleTaskActivity(args: { id: string }) {
+	return ok(await tasks[':id'].activity.$get({ param: { id: args.id } }))
+}
+
+async function handleRunArtifacts(args: { run_id: string }) {
+	return ok(await runs[':id'].artifacts.$get({ param: { id: args.run_id } }))
+}
+
+async function handleTaskSpawnChildren(args: {
+	parent_task_id: string
+	children: Array<{
+		title: string
+		type: string
+		description?: string
+		priority?: string
+		assigned_to?: string
+		workflow_id?: string
+		context?: string
+		metadata?: string
+		dedupe_key?: string
+	}>
+	relation_type?: string
+	origin_run_id?: string
+}) {
+	return ok(
+		await tasks[':id']['spawn-children'].$post({
+			param: { id: args.parent_task_id },
+			json: {
+				children: args.children,
+				relation_type: args.relation_type,
+				origin_run_id: args.origin_run_id,
+			},
+		}),
+	)
+}
+
+async function handleTaskChildren(args: { id: string; relation_type?: string }) {
+	return ok(await tasks[':id'].children.$get({ param: { id: args.id }, query: { relation_type: args.relation_type } }))
+}
+
+async function handleTaskParents(args: { id: string; relation_type?: string }) {
+	return ok(await tasks[':id'].parents.$get({ param: { id: args.id }, query: { relation_type: args.relation_type } }))
+}
+
+// ─── Tool registration ─────────────────────────────────────────────
 
 export function registerTools(server: McpServer): void {
-	// ─── Tasks ──────────────────────────────────────────────────────────
-
 	server.tool('task_list', 'List tasks with optional filters', {
 		status: z.string().optional().describe('Filter by status (backlog, in_progress, done, etc.)'),
 		assigned_to: z.string().optional().describe('Filter by assigned agent ID'),
-		limit: z.number().optional().describe('Max results (default 50)'),
-	}, async (args) => {
-		const params = new URLSearchParams()
-		if (args.status) params.set('status', args.status)
-		if (args.assigned_to) params.set('assigned_to', args.assigned_to)
-		if (args.limit) params.set('limit', String(args.limit))
-		const qs = params.toString()
-		const data = await apiGet(`/api/tasks${qs ? `?${qs}` : ''}`)
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
+	}, handleTaskList)
 
 	server.tool('task_get', 'Get a single task by ID', {
 		id: z.string().describe('Task ID'),
-	}, async (args) => {
-		const data = await apiGet(`/api/tasks/${encodeURIComponent(args.id)}`)
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
+	}, handleTaskGet)
 
 	server.tool('task_create', 'Create a new task', {
 		title: z.string().describe('Task title'),
+		type: z.string().describe('Task type (feature, bug, chore, etc.)'),
 		description: z.string().optional().describe('Task description'),
-		type: z.string().optional().describe('Task type (feature, bug, chore, etc.)'),
 		priority: z.string().optional().describe('Priority (critical, high, medium, low)'),
 		assigned_to: z.string().optional().describe('Agent ID to assign'),
-	}, async (args) => {
-		const data = await apiPost('/api/tasks', args)
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
+	}, handleTaskCreate)
 
 	server.tool('task_update', 'Update a task', {
 		id: z.string().describe('Task ID'),
@@ -51,73 +139,63 @@ export function registerTools(server: McpServer): void {
 		title: z.string().optional().describe('New title'),
 		description: z.string().optional().describe('New description'),
 		assigned_to: z.string().optional().describe('New assignee'),
-	}, async (args) => {
-		const { id, ...updates } = args
-		const data = await apiPatch(`/api/tasks/${encodeURIComponent(id)}`, updates)
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
-
-	// ─── Runs ───────────────────────────────────────────────────────────
+	}, handleTaskUpdate)
 
 	server.tool('run_list', 'List runs with optional filters', {
 		task_id: z.string().optional().describe('Filter by task ID'),
 		status: z.string().optional().describe('Filter by status'),
-		limit: z.number().optional().describe('Max results (default 50)'),
-	}, async (args) => {
-		const params = new URLSearchParams()
-		if (args.task_id) params.set('task_id', args.task_id)
-		if (args.status) params.set('status', args.status)
-		if (args.limit) params.set('limit', String(args.limit))
-		const qs = params.toString()
-		const data = await apiGet(`/api/runs${qs ? `?${qs}` : ''}`)
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
+	}, handleRunList)
 
 	server.tool('run_get', 'Get a single run by ID', {
 		id: z.string().describe('Run ID'),
-	}, async (args) => {
-		const data = await apiGet(`/api/runs/${encodeURIComponent(args.id)}`)
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
-
-	// ─── Approval ──────────────────────────────────────────────────────
+	}, handleRunGet)
 
 	server.tool('task_approve', 'Approve a task waiting on a human_approval workflow step', {
 		id: z.string().describe('Task ID'),
-	}, async (args) => {
-		const data = await apiPost(`/api/tasks/${encodeURIComponent(args.id)}/approve`, {})
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
+	}, handleTaskApprove)
 
 	server.tool('task_reject', 'Reject a task waiting on a human_approval workflow step', {
 		id: z.string().describe('Task ID'),
 		message: z.string().describe('Rejection reason'),
-	}, async (args) => {
-		const data = await apiPost(`/api/tasks/${encodeURIComponent(args.id)}/reject`, { message: args.message })
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
+	}, handleTaskReject)
 
 	server.tool('task_reply', 'Reply to a task waiting on a human_approval step and advance the workflow. The reply message becomes instructions for the next agent step.', {
 		id: z.string().describe('Task ID'),
 		message: z.string().describe('Reply message (becomes instructions for next run)'),
-	}, async (args) => {
-		const data = await apiPost(`/api/tasks/${encodeURIComponent(args.id)}/reply`, { message: args.message })
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
+	}, handleTaskReply)
 
 	server.tool('task_activity', 'Get approval/rejection/reply history for a task', {
 		id: z.string().describe('Task ID'),
-	}, async (args) => {
-		const data = await apiGet(`/api/tasks/${encodeURIComponent(args.id)}/activity`)
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
-
-	// ─── Artifacts ─────────────────────────────────────────────────────
+	}, handleTaskActivity)
 
 	server.tool('run_artifacts', 'List artifacts produced by a run. Artifacts are references (file paths, URLs, or short inline text) — not large blobs.', {
 		run_id: z.string().describe('Run ID'),
-	}, async (args) => {
-		const data = await apiGet(`/api/runs/${encodeURIComponent(args.run_id)}/artifacts`)
-		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
-	})
+	}, handleRunArtifacts)
+
+	server.tool('task_spawn_children', 'Create child tasks for a parent task (idempotent). Use dedupe_key to avoid duplicates on rerun.', {
+		parent_task_id: z.string().describe('Parent task ID'),
+		children: z.array(z.object({
+			title: z.string().describe('Child task title'),
+			description: z.string().optional().describe('Child task description'),
+			type: z.string().describe('Task type (feature, bug, chore, etc.)'),
+			priority: z.string().optional().describe('Priority (critical, high, medium, low)'),
+			assigned_to: z.string().optional().describe('Agent ID to assign'),
+			workflow_id: z.string().optional().describe('Workflow ID override'),
+			context: z.string().optional().describe('Task context JSON'),
+			metadata: z.string().optional().describe('Task metadata JSON'),
+			dedupe_key: z.string().optional().describe('Unique key for idempotent creation'),
+		})).describe('Child task candidates'),
+		relation_type: z.string().optional().describe('Relation type (default: decomposes_to)'),
+		origin_run_id: z.string().optional().describe('Run ID that triggered this decomposition'),
+	}, handleTaskSpawnChildren)
+
+	server.tool('task_children', 'List child tasks of a parent task', {
+		id: z.string().describe('Parent task ID'),
+		relation_type: z.string().optional().describe('Relation type filter (default: decomposes_to)'),
+	}, handleTaskChildren)
+
+	server.tool('task_parents', 'List parent tasks of a child task', {
+		id: z.string().describe('Child task ID'),
+		relation_type: z.string().optional().describe('Relation type filter (default: decomposes_to)'),
+	}, handleTaskParents)
 }

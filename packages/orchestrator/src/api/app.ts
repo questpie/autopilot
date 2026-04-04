@@ -16,7 +16,7 @@ import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, AuthoredConfig } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, AuthoredConfig } from '../services'
 import type { Actor } from '../auth/types'
 import { authMiddleware } from './middleware/auth'
 import { workerAuthMiddleware } from './middleware/worker-auth'
@@ -28,6 +28,7 @@ import { enrollment } from './routes/enrollment'
 import { previews } from './routes/previews'
 import { intake } from './routes/intake'
 import { conversations } from './routes/conversations'
+import { taskGraph } from './routes/task-graph'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,8 @@ export interface Services {
 	activityService: ActivityService
 	artifactService: ArtifactService
 	conversationBindingService: ConversationBindingService
+	taskRelationService: TaskRelationService
+	taskGraphService: TaskGraphService
 	workflowEngine: WorkflowEngine
 }
 
@@ -185,6 +188,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/previews', previews)
 		.route('/api/intake', intake)
 		.route('/api/conversations', conversations)
+		.route('/api/tasks', taskGraph)
 
 	return typedApp
 }

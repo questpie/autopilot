@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
@@ -70,7 +71,7 @@ const runs = new Hono<AppEnv>()
 		const { runService } = c.get('services')
 		const actor = c.get('actor')
 		const body = c.req.valid('json')
-		const id = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+		const id = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
 		const { targeting, ...rest } = body
 		const run = await runService.create({
 			id,
@@ -163,7 +164,7 @@ const runs = new Hono<AppEnv>()
 			if (body.artifacts?.length) {
 				for (const art of body.artifacts) {
 					await artifactService.create({
-						id: `art-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+						id: `art-${Date.now()}-${randomBytes(6).toString('hex')}`,
 						run_id: id,
 						task_id: run.task_id ?? undefined,
 						kind: art.kind,
@@ -188,7 +189,7 @@ const runs = new Hono<AppEnv>()
 				const origin = new URL(c.req.url).origin
 				const previewUrl = `${origin}/api/previews/${id}/${entry}`
 				await artifactService.create({
-					id: `art-preview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+					id: `art-preview-${Date.now()}-${randomBytes(6).toString('hex')}`,
 					run_id: id,
 					task_id: run.task_id ?? undefined,
 					kind: 'preview_url',
@@ -215,10 +216,13 @@ const runs = new Hono<AppEnv>()
 				status: body.status,
 			})
 
-			// Workflow progression: if run completed successfully and has a task, advance workflow
-			// Pass the completing run's ID as the source for context forwarding
-			if (body.status === 'completed' && run.task_id) {
-				await workflowEngine.advance(run.task_id, body.outputs, id)
+			// Workflow progression: advance on success, mark failed on failure
+			if (run.task_id) {
+				if (body.status === 'completed') {
+					await workflowEngine.advance(run.task_id, body.outputs, id)
+				} else if (body.status === 'failed') {
+					await workflowEngine.handleRunFailure(run.task_id, id)
+				}
 			}
 
 			return c.json(result, 200)
@@ -230,7 +234,7 @@ const runs = new Hono<AppEnv>()
 		zValidator('param', z.object({ id: z.string() })),
 		zValidator('json', z.object({ reason: z.string().optional() }).optional()),
 		async (c) => {
-			const { runService, workerService } = c.get('services')
+			const { runService, workerService, workflowEngine } = c.get('services')
 			const { id } = c.req.valid('param')
 			const body = c.req.valid('json')
 
@@ -249,6 +253,11 @@ const runs = new Hono<AppEnv>()
 					await workerService.completeLease(lease.id, 'failed')
 				}
 				await workerService.setOnline(run.worker_id)
+			}
+
+			// Normalize failure signal — same path as run completion with status: failed
+			if (run.task_id) {
+				await workflowEngine.handleRunFailure(run.task_id, id)
 			}
 
 			eventBus.emit({ type: 'run_completed', runId: id, status: 'failed' })

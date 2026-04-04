@@ -266,6 +266,31 @@ export const conversationBindings = sqliteTable(
 	],
 )
 
+// ─── Task Relations ───────────────────────────────────────────────────────
+
+export const taskRelations = sqliteTable(
+	'task_relations',
+	{
+		id: text('id').primaryKey(),
+		source_task_id: text('source_task_id').notNull(),
+		target_task_id: text('target_task_id').notNull(),
+		relation_type: text('relation_type').notNull(), // decomposes_to
+		dedupe_key: text('dedupe_key'),
+		origin_run_id: text('origin_run_id'),
+		created_by: text('created_by').notNull(),
+		created_at: text('created_at').notNull(),
+		metadata: text('metadata').default('{}'),
+	},
+	(table) => [
+		index('idx_task_relations_source').on(table.source_task_id, table.relation_type),
+		index('idx_task_relations_target').on(table.target_task_id, table.relation_type),
+		uniqueIndex('uq_task_relation').on(table.source_task_id, table.target_task_id, table.relation_type),
+		// SQLite treats NULL as distinct in unique indexes, so this only enforces
+		// uniqueness when dedupe_key is non-null — exactly what we need.
+		uniqueIndex('uq_task_relation_dedupe').on(table.source_task_id, table.relation_type, table.dedupe_key),
+	],
+)
+
 // ─── Activity ──────────────────────────────────────────────────────────────
 
 export const activity = sqliteTable(

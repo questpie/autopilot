@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider } from '@questpie/autopilot-spec'
 import type { TaskService, TaskRow } from './tasks'
 import type { RunService } from './runs'
@@ -189,9 +190,12 @@ export class WorkflowEngine {
 		context?: string
 		metadata?: string
 		created_by: string
+		/** Optional deterministic ID. If omitted, a random ID is generated. */
+		id?: string
 	}): Promise<{ task: TaskRow; runId: string | null } | null> {
-		const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-		const task = await this.taskService.create({ id, ...input })
+		const id = input.id ?? `task-${Date.now()}-${randomBytes(6).toString('hex')}`
+		const { id: _discardedId, ...rest } = input
+		const task = await this.taskService.create({ id, ...rest })
 		if (!task) return null
 
 		const result = await this.intake(id)
@@ -240,6 +244,25 @@ export class WorkflowEngine {
 			? (await this.taskService.get(taskId))!
 			: updated
 		return { task: final, runId, actions }
+	}
+
+	/**
+	 * Handle a failed run. Marks the task as failed so child rollups and
+	 * future wait_for_children joins can trust the signal.
+	 */
+	async handleRunFailure(taskId: string, runId: string): Promise<TaskRow | null> {
+		const updated = await this.taskService.update(taskId, { status: 'failed' })
+		if (!updated) return null
+
+		eventBus.emit({ type: 'task_changed', taskId, status: 'failed' })
+		await this.activityService?.log({
+			actor: 'workflow-engine',
+			type: 'run_failed',
+			summary: `Run ${runId} failed — task ${taskId} marked as failed`,
+			details: JSON.stringify({ task_id: taskId, run_id: runId }),
+		})
+
+		return updated
 	}
 
 	async approve(taskId: string, actor?: string): Promise<AdvanceResult | null> {
@@ -422,7 +445,7 @@ export class WorkflowEngine {
 				// Build instructions: [context] + [step instructions] + [human reply] + [output suffix]
 				const instructions = await this.buildInstructions(task, step, ctx)
 
-				const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+				const runId = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
 				await this.runService.create({
 					id: runId,
 					agent_id: agentId,
