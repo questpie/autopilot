@@ -175,22 +175,11 @@ function HeroProofPanel() {
 /* ─── Nav ─── */
 
 function Nav() {
-	const [isScrolled, setIsScrolled] = useState(false)
 	const [mobileOpen, setMobileOpen] = useState(false)
 
-	useEffect(() => {
-		const handleScroll = () => setIsScrolled(window.scrollY > 8)
-		window.addEventListener('scroll', handleScroll, { passive: true })
-		return () => window.removeEventListener('scroll', handleScroll)
-	}, [])
-
 	return (
-		<header
-			className={cn(
-				'bg-background fixed inset-x-0 top-0 z-50 h-14 border-b transition-colors duration-200',
-				isScrolled ? 'border-border' : 'border-border',
-			)}
-		>
+		<header className="bg-background border-border fixed inset-x-0 top-0 z-50 h-14 border-b transition-colors duration-200">
+
 			<div className="border-border bg-background mx-auto flex h-full max-w-[1200px] items-center justify-between border-x px-4 md:px-8">
 				<div className="flex items-center gap-8">
 					<a href="/" className="flex items-center gap-2">
@@ -322,9 +311,7 @@ function LandingPage() {
 								</div>
 							</div>
 
-							<div className="relative">
-								<HeroProofPanel />
-							</div>
+							<HeroProofPanel />
 						</div>
 					</section>
 
