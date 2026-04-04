@@ -1,0 +1,189 @@
+---
+title: Architecture
+description: Orchestrator, workers, truth boundaries, and the execution model.
+---
+
+Autopilot splits into three layers:
+
+- **Orchestrator** — the control plane. Owns tasks, runs, workflow progression, events, artifacts, and durable previews.
+- **Workers** — execution nodes. Run on real machines with real repo access, toolchains, and credentials.
+- **`.autopilot/`** — repo-authored policy. Agents, workflows, environments, providers, and handlers — all versioned in git.
+
+Every client (CLI, bound conversations, future Worker App) operates over the same primitives. The orchestrator is the system of record. Workers execute. The repo defines the rules.
+
+## At a glance
+
+| Layer | Owns | Does not own |
+|---|---|---|
+| Orchestrator | Tasks, runs, workflow progression, events, artifacts, durable previews | Runtime sessions, worktrees, local credentials |
+| Worker | Runtime execution, repo access, per-run worktrees, raw local session state | Workflow truth, shared operational state |
+| Repo config | Agents, workflows, environments, providers, handlers | Mutable runtime state |
+
+## Orchestrator
+
+The orchestrator is the system of record for operational state. It:
+
+- Stores tasks, runs, workers, leases, events, and artifacts
+- Advances workflows based on explicit step outputs
+- Serves durable preview URLs from stored artifacts
+- Exposes the API used by the CLI and future clients
+- Dispatches notification and conversation-provider flows when configured
+
+It does **not** execute AI sessions itself.
+
+Start it with:
+
+```bash
+autopilot server start
+```
+
+## Worker
+
+A worker is a long-running execution node on a host machine. It:
+
+- Claims pending runs from the orchestrator
+- Executes through a runtime adapter
+- Uses real repo access, toolchain access, and machine-local credentials
+- Creates isolated git worktrees per run
+- Stores raw transcript/session state locally
+- Reports summaries, outputs, and artifacts back to the orchestrator
+
+Start it with:
+
+```bash
+autopilot worker start
+```
+
+For local development, `autopilot start` still exists as a convenience shortcut that boots both processes.
+
+## Repo-authored config
+
+Autopilot policy lives in `.autopilot/` and stays reviewable in git:
+
+```text
+.autopilot/
+├── company.yaml
+├── project.yaml
+├── agents/
+├── workflows/
+├── environments/
+├── providers/
+└── handlers/
+```
+
+That keeps workflows and operator policy:
+
+- versioned
+- diffable
+- branchable
+- editable without a separate admin UI
+
+## Truth boundaries
+
+Use this mental model when deciding where something belongs:
+
+| Place | Put here |
+|---|---|
+| Repo filesystem | Authored config and reviewable policy |
+| Orchestrator DB/API | Shared operational state and durable artifact metadata/content |
+| Worker-local state | Raw transcripts, local sessions, worktrees, resolved secrets |
+
+This is the key architectural boundary: the orchestrator owns shared truth, while workers own machine-local runtime reality.
+
+## Execution flow
+
+The normal path is:
+
+1. A task is created
+2. A workflow attaches and selects the current step
+3. The orchestrator creates a run
+4. A worker claims the run
+5. The worker executes through its runtime adapter
+6. The worker reports summary, outputs, and artifacts
+7. The orchestrator stores results and advances the workflow
+8. If the next step is `human_approval`, the task blocks until an operator acts
+
+This is intentionally explicit. Autopilot is not hiding a giant chat loop behind the scenes.
+
+## Workflow I/O
+
+Workflows declare step outputs directly in YAML. The engine adds the machine-readable output suffix automatically, then routes using named output fields.
+
+Current capabilities:
+
+- explicit `next`
+- ordered `transitions`
+- `on_approve`, `on_reply`, `on_reject`
+- source-run summary forwarding
+- explicit `input.artifacts`
+
+That is enough for plan/review/implement loops without turning the workflow engine into a rules platform.
+
+## Runtime adapters
+
+Workers execute runs through adapters. Today, the only real adapter is **Claude Code**.
+
+The adapter currently supports:
+
+- one run per worker at a time
+- per-run git worktrees
+- structured outputs and artifacts
+- same-worker continuation through local runtime session refs
+
+## Durable previews
+
+Preview URLs are orchestrator-backed, not worker-hosted.
+
+Current flow:
+
+1. The worker collects previewable files from the run worktree
+2. Those files are sent back as `preview_file` artifacts
+3. The orchestrator stores them durably
+4. The orchestrator serves them via `/api/previews/:runId/*path`
+5. A `preview_url` artifact points to the entry page
+
+That means previews survive worker shutdown. If the worker laptop goes offline, the orchestrator can still serve the preview.
+
+Important: preview URLs are **not automatically public**. They are served through the orchestrator's normal access model.
+
+## Providers and handlers
+
+Autopilot has a provider runtime for outbound notifications and inbound normalization.
+
+Current shape:
+
+- **Providers** are authored YAML under `.autopilot/providers/`
+- **Handlers** are Bun scripts under `.autopilot/handlers/`
+- The orchestrator invokes handlers with typed envelopes
+- Handlers normalize or deliver
+- The orchestrator still executes the real primitive
+
+Current operations:
+
+| Operation | Purpose |
+|---|---|
+| `notify.send` | Send an outbound notification |
+| `intent.ingest` | Turn inbound payload into task creation |
+| `conversation.ingest` | Turn inbound conversation payload into task actions |
+
+## Async operator model
+
+The current product is still **CLI-first**.
+
+The intended async loop is:
+
+1. A task or run reaches an actionable state
+2. An operator is notified out of band
+3. The operator inspects via CLI or a bound external conversation
+4. The operator replies, approves, or rejects
+5. The workflow continues
+
+Current operator surfaces:
+
+- `autopilot inbox` and `autopilot inbox --watch`
+- `autopilot tasks approve|reject|reply`
+- `autopilot runs show`
+- durable `preview_url` artifacts
+- optional provider-driven notifications and conversation bindings
+
+That is the current architecture in practice: control plane on the orchestrator, execution on workers, and a CLI-first async loop over explicit workflow primitives.

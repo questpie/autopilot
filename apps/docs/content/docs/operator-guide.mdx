@@ -1,19 +1,33 @@
 ---
 title: Operator Guide
-description: How to operate Autopilot day-to-day — CLI, inbox, approvals, previews, and the async loop.
+description: Day-to-day operation: tasks, inbox, approvals, previews, and the CLI.
 ---
 
-Operating Autopilot means managing the flow of tasks through workflows. You submit intent, monitor progress, review outputs, and act on blocked steps. The system notifies you when attention is needed.
+Autopilot is a CLI-first async system. You submit work, workers execute, and the system notifies you when a run needs attention. You inspect the result, then approve, reject, or reply.
 
 ## The operator loop
 
-The core operating cycle:
+The cycle:
 
-1. **Submit** — create tasks via CLI, intake provider, or conversation
-2. **Monitor** — watch progress via inbox or notifications
-3. **Review** — inspect previews, artifacts, run summaries
-4. **Act** — approve, reject, or reply to continue the workflow
-5. **Repeat** — the workflow advances and may produce more review steps
+1. **Create** a task
+2. **Watch** the inbox or notifications
+3. **Review** summaries, artifacts, and durable previews
+4. **Decide** — approve, reject, or reply with feedback
+5. **Repeat** until the workflow reaches `done`
+
+No Worker App required. The CLI exposes the full operator loop today.
+
+## Fast path
+
+If you only remember a few commands, remember these:
+
+```bash
+autopilot tasks create --title "..." --type feature
+autopilot inbox --watch
+autopilot runs show <run-id>
+autopilot tasks approve <task-id>
+autopilot tasks reply <task-id> --message "..."
+```
 
 ## CLI reference
 
@@ -43,13 +57,17 @@ autopilot tasks reply <task-id> --message "..."
 
 ### Inbox
 
-The inbox shows actionable items — tasks that need your attention.
+The inbox is the current operator dashboard in terminal form. It shows:
+
+- blocked tasks waiting for approval
+- failed runs
+- recently completed runs with durable preview URLs
 
 ```bash
-# Check inbox
+# Snapshot
 autopilot inbox
 
-# Watch inbox in real-time
+# Live watch mode
 autopilot inbox --watch
 ```
 
@@ -71,37 +89,53 @@ autopilot runs continue <run-id> --message "..."
 autopilot runs cancel <run-id>
 ```
 
+`autopilot runs show` is the main review command. It exposes:
+
+- run status
+- compact event history
+- summary or error
+- artifacts
+- preview URLs when present
+
 ## Previews
 
-When a run produces previewable files, the orchestrator stores them durably and serves them via HTTP.
+When a run produces previewable files, the orchestrator stores them durably and serves them itself.
 
 Preview URLs look like:
 
-```
-http://<orchestrator-url>/api/previews/<run-id>/index.html
+```text
+http://<orchestrator-url>/api/previews/<run-id>/src/index.html
 ```
 
-Previews survive worker shutdown. You can open them from another device as long as the orchestrator is running.
+Important:
+
+- previews survive worker shutdown
+- previews are orchestrator-backed, not worker-hosted
+- opening them from another device still depends on having access to the orchestrator
+
+Use them to review landing pages, generated docs, or other static outputs without checking out the worker branch manually.
 
 ## Notifications
 
-With a notification provider configured, Autopilot sends alerts for:
+With a notification provider configured, Autopilot can send alerts for:
 
-- Task completion
-- Approval needed
-- Run failure
-- Task blocked
+- approval needed
+- task blocked
+- run failure
+- run completion
 
-See [Providers and Handlers](/docs/providers-and-handlers) for setup.
+This is the main wake-up path when you are not watching the terminal.
+
+See [Providers and Handlers](/docs/providers-and-handlers) for the integration model.
 
 ## Workflows
 
-Workflows are authored YAML files under `.autopilot/workflows/`. They define:
+Workflows are authored YAML under `.autopilot/workflows/`. They define:
 
-- **Steps** — what work happens at each stage
-- **Routing** — which step follows based on outputs
-- **Approvals** — which steps require human sign-off
-- **Outputs** — structured data passed between steps
+- **Steps** — what happens
+- **Routing** — which step follows based on structured outputs
+- **Approvals** — where human sign-off is required
+- **Outputs** — the explicit fields a step produces
 
 A minimal workflow:
 
@@ -128,17 +162,17 @@ steps:
     type: done
 ```
 
-The workflow engine handles progression automatically. When a step completes, the engine evaluates outputs and routes to the next step.
+The engine handles progression automatically. When a step completes, it evaluates outputs and moves the task forward or blocks for operator input.
 
 ## Deployment patterns
 
 ### Local development
 
 ```bash
-autopilot start  # boots orchestrator + worker
+autopilot start
 ```
 
-Good for development and testing. Everything runs on your machine.
+Good for development, testing, and proving the full workflow loop on one machine.
 
 ### VPS orchestrator + local worker
 
@@ -150,8 +184,19 @@ autopilot server start
 ORCHESTRATOR_URL=https://your-vps.example.com autopilot worker start
 ```
 
-The orchestrator runs on a durable host. Workers connect from wherever access exists. Preview URLs are reachable from any device.
+This is the most important practical setup right now:
+
+- the orchestrator runs on a durable host
+- workers can run on laptops or other machines
+- previews remain available after worker shutdown
+- the operator can keep working through CLI plus notifications
 
 ### Multiple workers
 
-Multiple workers can connect to the same orchestrator. Each worker claims runs independently. Use this when different workers have access to different repos or environments.
+Multiple workers can connect to the same orchestrator and claim runs independently.
+
+Use this when:
+
+- different workers have access to different repos
+- different workers have different environments or credentials
+- you want one durable control plane with distributed execution nodes

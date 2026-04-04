@@ -1,23 +1,48 @@
 ---
 title: Conversation-Assisted Operation
-description: Bind external chat threads to tasks for bidirectional async operation.
+description: Bind an external thread to a task for scoped inbound actions and outbound updates.
 ---
 
-Autopilot supports conversation bindings — connecting an external chat thread (Slack, Telegram, Discord, or any conversation provider) to a specific task. This lets operators take task actions and receive updates directly from their existing communication tools.
+Autopilot can bind an external conversation thread to a task. The thread becomes a transport surface — the task stays the unit of truth.
 
-## How it works
+- Inbound messages in the bound thread become real task actions (approve, reject, reply).
+- Outbound updates flow back to the same thread when the task changes state.
+- The orchestrator owns the state. The thread is just how the operator interacts with it.
 
-1. A conversation binding is created, linking an external thread to a task
-2. **Inbound**: when a message arrives on that thread, the conversation provider normalizes it into a task action
-3. The orchestrator executes the action and the workflow continues
-4. **Outbound**: when the bound task updates (blocked, failed, completed), the orchestrator delivers a notification back into the same thread
+This is how Autopilot supports async operation from chat-like surfaces without turning into a chat product.
+
+## What a binding does
+
+A conversation binding connects:
+
+- a provider instance
+- an external conversation identity
+- an optional external thread identity
+- a task
+
+In practice that means a message in one external thread can map back to one task-scoped workflow loop.
+
+## The loop
+
+The normal conversation-assisted loop is:
+
+1. A task exists and reaches an actionable state
+2. A bound thread receives an update
+3. An operator replies or issues a command in that same thread
+4. The provider normalizes that inbound payload
+5. The orchestrator executes the real task primitive
+6. The workflow continues
+7. The same thread receives the next outbound update
+
+The important point is that the thread is only a transport and interaction surface. It is not the system of record.
 
 ## Creating a binding
 
-Bindings connect an external conversation identity to a task via the API:
+Bindings are created through the API.
 
-```bash
-# Local development (X-Local-Dev bypass — only works with `autopilot start`)
+> `X-Local-Dev` is only for local proving with `autopilot start`. In production, use your normal authenticated operator path.
+
+```bash title="Local development only"
 curl -X POST http://localhost:7778/api/conversations/bindings \
   -H "Content-Type: application/json" \
   -H "X-Local-Dev: true" \
@@ -28,83 +53,115 @@ curl -X POST http://localhost:7778/api/conversations/bindings \
     "mode": "task_thread",
     "task_id": "task-xxx"
   }'
+```
 
-# Production — use session auth or API key instead
+```bash title="Production shape"
 curl -X POST https://your-orchestrator.example.com/api/conversations/bindings \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
   -d '{ ... }'
 ```
 
-The binding stores:
-- Which provider handles the conversation
-- The external conversation/thread identity
-- Which task is bound
-- Binding mode (`task_thread` for task-scoped interaction)
+The stored binding records:
+
+- which provider owns the thread
+- the external conversation and thread IDs
+- which task is bound
+- the binding mode
 
 ## Inbound actions
 
-When a message arrives on a bound thread, the handler normalizes it:
+When a message arrives on a bound thread, the provider handler normalizes it into a task action.
 
-| User message | Normalized action | Effect |
-|---|---|---|
-| `/approve` | `task.approve` | Approves the blocked step |
-| `/reject [reason]` | `task.reject` | Rejects the step with the message as reason |
-| Any other text | `task.reply` | Feeds message into workflow as operator feedback |
+Current supported outcomes:
 
-The conversation provider handler decides how to interpret messages. The orchestrator trusts the normalized action.
+| Incoming message | Normalized action |
+|---|---|
+| `/approve` | `task.approve` |
+| `/reject ...` | `task.reject` |
+| any other text | `task.reply` |
+| empty/ignored payload | `noop` |
+
+The orchestrator then executes the real workflow primitive. The provider does not mutate task state directly.
 
 ## Outbound updates
 
-When a bound task changes state, the orchestrator delivers updates back into the same conversation thread:
+When the bound task changes state, the orchestrator can deliver the update back to the same thread.
 
-| Event | Delivered to thread |
-|---|---|
-| Task blocked (needs approval) | Title, task link, "needs attention" alert |
-| Run completed | Summary, preview URL if available |
-| Run failed | Error excerpt, run link |
+Current useful cases:
 
-Outbound delivery includes `conversation_id` and `thread_id` in the payload so the handler can post to the correct external thread.
+- task blocked and waiting on approval
+- run failed
+- run completed
 
-## Auth
+Outbound payloads can include:
 
-Inbound callbacks are protected by provider-secret auth. Each conversation provider must declare an `auth_secret` in its `secret_refs`. Callbacks must include the secret in the `X-Provider-Secret` header.
+- task link
+- run link
+- preview URL
+- bound conversation context (`conversation_id`, `thread_id`)
 
-```yaml
-# .autopilot/providers/my-conversation.yaml
+That is what closes the async loop.
+
+## Auth model
+
+Inbound provider callbacks are protected by provider-secret auth.
+
+A conversation provider should declare an `auth_secret`:
+
+```yaml title=".autopilot/providers/my-conversation.yaml"
 id: my-conversation
 kind: conversation_channel
 handler: handlers/my-conversation.ts
 capabilities:
   - op: conversation.ingest
   - op: notify.send
-events:
-  - types: [run_completed]
-    statuses: [failed, completed]
-  - types: [task_changed]
-    statuses: [blocked]
 secret_refs:
   - name: auth_secret
     source: env
     key: MY_CONVERSATION_SECRET
 ```
 
-## What conversation bindings are not
+The provider callback then supplies that secret via `X-Provider-Secret`.
 
-- **Not a chat product.** There is no internal message store or timeline UI.
-- **Not automatic.** Bindings must be explicitly created for specific tasks.
-- **Not a general messaging system.** Bindings are task-scoped operational tools.
+## What this is not
 
-## The full async loop
+Conversation bindings are intentionally narrow.
 
-With conversation bindings, the operator loop becomes:
+They are **not**:
 
-1. Task is created (via CLI, intake, or conversation)
-2. Workflow runs → reaches approval step → task blocks
-3. Bound conversation thread receives "Task needs attention" notification
-4. Operator types `/approve` or replies with feedback in the same thread
-5. Workflow continues → run completes
-6. Bound thread receives completion notification with preview URL
-7. Operator opens preview from any device
+- an internal message history product
+- a company chat workspace
+- a general inbox database
+- a replacement for task state
 
-This works without Worker App, web UI, or any custom client. The chat surface is the client.
+They are a task-scoped operational bridge between an external thread and the workflow engine.
+
+## Why this matters
+
+Without bindings, chat integrations usually collapse back into one of two bad models:
+
+- everything important lives in a transcript
+- operators are forced back into a custom UI for every action
+
+Autopilot avoids both:
+
+- the task remains the durable unit of truth
+- the chat surface stays useful for async replies and approvals
+- the workflow engine still decides what happens next
+
+## Today’s practical use
+
+You can already use conversation-assisted operation for:
+
+- receiving “needs attention” updates in a bound thread
+- replying with implementation feedback
+- approving or rejecting from that same thread
+- opening the durable preview from another device
+
+That is enough to prove the async operator loop without building a Worker App first.
+
+## Related docs
+
+- [Operator Guide](/docs/operator-guide)
+- [Providers and Handlers](/docs/providers-and-handlers)

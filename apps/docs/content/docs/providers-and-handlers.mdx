@@ -1,23 +1,32 @@
 ---
 title: Providers and Handlers
-description: Extend Autopilot with notifications, intent intake, and conversation bindings through authored config.
+description: Extend Autopilot with outbound notifications and inbound normalization — without hardcoding integrations.
 ---
 
-Autopilot uses a provider/extension model instead of hardcoding integrations. Providers are authored YAML config. Handlers are Bun scripts that receive typed JSON envelopes on stdin and return results on stdout.
+Autopilot uses a provider/handler model instead of hardcoded integrations:
+
+- A **provider** is config in `.autopilot/providers/` — declares what it connects to and what it can do.
+- A **handler** is a Bun script in `.autopilot/handlers/` — normalizes inbound payloads or delivers outbound messages.
+- The **orchestrator** invokes the handler, validates the result, and executes the real action.
+
+Handlers do not become the system of record. They normalize or deliver. The orchestrator still owns tasks, workflow actions, and durable state.
+
+## Current scope
+
+Today this covers outbound notifications, intent intake, and conversation-assisted task actions. It is not a generic plugin platform.
 
 ## How it works
 
-1. You define a **provider instance** as YAML under `.autopilot/providers/`
-2. You write a **handler** as a Bun script under `.autopilot/handlers/`
-3. The orchestrator invokes handlers with typed JSON envelopes when events occur
-4. Handlers normalize data and return results on stdout
-5. The orchestrator executes the real primitive
-
-Handlers normalize and send, but they do not own state. The orchestrator executes the real primitive (create task, send notification, etc.).
+1. You define a provider instance in YAML
+2. You point it at a Bun handler script
+3. The orchestrator decides when to invoke it
+4. The handler reads JSON from `stdin`
+5. The handler writes JSON to `stdout`
+6. The orchestrator validates the result and executes the real action
 
 ## Provider config
 
-A provider instance definition:
+Example:
 
 ```yaml
 # .autopilot/providers/webhook-ops.yaml
@@ -31,7 +40,7 @@ events:
   - types: [run_completed]
     statuses: [failed]
   - types: [task_changed]
-    statuses: [blocked, needs_approval]
+    statuses: [blocked]
 config:
   channel: "#ops"
 secret_refs:
@@ -40,35 +49,31 @@ secret_refs:
     key: WEBHOOK_URL
 ```
 
-### Provider kinds
+## Provider kinds
 
-| Kind | Purpose |
+| Kind | Use it for |
 |---|---|
-| `notification_channel` | Send outbound alerts to external channels |
-| `intent_channel` | Normalize inbound requests into task creation |
-| `conversation_channel` | Bidirectional task-scoped interaction (inbound actions + outbound updates) |
+| `notification_channel` | Send outbound alerts to email, Slack, webhooks, or similar |
+| `intent_channel` | Turn inbound payloads into task creation |
+| `conversation_channel` | Bind an external thread to task-scoped replies and updates |
 
-### Key fields
+## Key fields
 
-| Field | Description |
+| Field | Meaning |
 |---|---|
-| `id` | Unique provider instance ID (lowercase alphanumeric + hyphens) |
-| `kind` | One of the three provider kinds |
-| `handler` | Path to Bun handler script, relative to `.autopilot/` (must be under `handlers/`) |
-| `capabilities` | Operations this provider supports (`notify.send`, `intent.ingest`, `conversation.ingest`) |
-| `events` | Event filters — which orchestrator events trigger this provider |
-| `config` | Static config passed to the handler (non-secret, JSON-safe values) |
-| `secret_refs` | Secret references resolved on the orchestrator host |
+| `id` | Unique provider ID |
+| `kind` | Provider class (`notification_channel`, `intent_channel`, `conversation_channel`) |
+| `handler` | Bun script under `handlers/` |
+| `capabilities` | Operations the provider supports |
+| `events` | Optional event filters for outbound delivery |
+| `config` | Non-secret static values passed to the handler |
+| `secret_refs` | Secrets resolved on the orchestrator host |
 
 ## Handler contract
 
-Handlers are Bun scripts that:
+Handlers are small Bun programs with one job: accept a typed envelope, do the external work or normalization, and return a typed result.
 
-1. Read a JSON envelope from **stdin**
-2. Process the request
-3. Write a JSON result to **stdout**
-
-### Envelope (stdin)
+### Envelope example
 
 ```json
 {
@@ -81,7 +86,7 @@ Handlers are Bun scripts that:
 }
 ```
 
-### Result (stdout)
+### Result example
 
 ```json
 {
@@ -91,7 +96,7 @@ Handlers are Bun scripts that:
 }
 ```
 
-Or on failure:
+On failure:
 
 ```json
 {
@@ -100,16 +105,14 @@ Or on failure:
 }
 ```
 
-### Example handler
+### Minimal handler
 
 ```typescript
 // .autopilot/handlers/webhook-notify.ts
 const input = await Bun.stdin.text()
 const envelope = JSON.parse(input)
 
-const url = envelope.secrets.webhook_url
-
-const response = await fetch(url, {
+const response = await fetch(envelope.secrets.webhook_url, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(envelope.payload),
@@ -121,52 +124,82 @@ console.log(JSON.stringify({
 }))
 ```
 
+## Supported operations
+
+| Operation | What the handler does | What the orchestrator does |
+|---|---|---|
+| `notify.send` | Delivers a notification outward | Keeps tasks/runs/artifacts as source of truth |
+| `intent.ingest` | Normalizes inbound payload into a task-create decision | Creates the real task through normal task flow |
+| `conversation.ingest` | Normalizes inbound thread activity into approve/reject/reply actions | Applies the action through workflow primitives |
+
 ## Notification providers
 
-Notification providers deliver alerts when actionable events occur (blocked tasks, failed runs, completed runs). The orchestrator calls `notify.send` with an envelope containing event details, task/run links, and preview URLs where available.
+Notification providers are the most useful current integration point.
+
+They receive actionable events such as:
+
+- task blocked
+- approval needed
+- run completed
+- run failed
+
+When available, payloads can include task links, run links, and durable preview URLs.
+
+Current caveat: there is **no retry queue yet**. Failed deliveries are logged, not retried automatically.
 
 ## Intent providers
 
-Intent providers normalize inbound requests into task creation. The orchestrator sends `intent.ingest` to the handler, which returns either:
+Intent providers let you accept inbound requests from another surface and normalize them into real tasks.
 
-- `{ action: "task.create", input: { title, type, ... } }` — creates a real task
-- `{ action: "noop", reason: "..." }` — ignores the payload
+Typical result shapes:
 
-The task is created through the same path as `autopilot tasks create`.
+- `{ action: "task.create", input: { ... } }`
+- `{ action: "noop", reason: "..." }`
+
+The task still goes through the same intake path as `autopilot tasks create`.
 
 ## Conversation providers
 
-Conversation providers enable task-scoped bidirectional interaction from external platforms:
+Conversation providers let an external thread act as a task-scoped operator surface.
 
-**Inbound** (`conversation.ingest`): Messages on a bound thread are normalized into `task.reply`, `task.approve`, or `task.reject` actions.
+Typical inbound mapping:
 
-**Outbound** (`notify.send`): When a bound task updates (blocked, failed, completed), the orchestrator delivers the notification back into the same external thread with preview URLs and action links.
+- `/approve` -> `task.approve`
+- `/reject reason` -> `task.reject`
+- ordinary text -> `task.reply`
 
-Conversation providers require `auth_secret` in their `secret_refs` for inbound callback authentication.
+Typical outbound usage:
 
-See [Conversation-Assisted Operation](/docs/conversation-assisted-operation) for the full model.
+- notify the same bound thread when a task blocks
+- send completion/failure updates
+- include preview URLs where relevant
+
+See [Conversation-Assisted Operation](/docs/conversation-assisted-operation) for the binding model.
 
 ## Secret references
 
-Secrets are never stored in provider YAML. Instead, providers declare `secret_refs` that are resolved on the orchestrator host:
+Secrets do not live in provider YAML. Providers declare `secret_refs`, and the orchestrator resolves them locally.
 
 ```yaml
 secret_refs:
   - name: webhook_url
-    source: env          # read from environment variable
+    source: env
     key: WEBHOOK_URL
   - name: token
-    source: file         # read from file
+    source: file
     key: /path/to/token
   - name: dynamic
-    source: exec         # execute shell command
+    source: exec
     key: "vault read secret/key"
 ```
 
-## Current operations
+This keeps provider config reviewable without hardcoding credentials into the repo.
 
-| Operation | Invoked when | Handler receives | Handler returns |
-|---|---|---|---|
-| `notify.send` | Actionable event occurs | Event type, task/run context, preview URL | `{ ok, error? }` |
-| `intent.ingest` | External request arrives | Raw inbound payload | `{ action: "task.create"\|"noop", ... }` |
-| `conversation.ingest` | Message on bound thread | Raw inbound payload | `{ action: "task.reply"\|"task.approve"\|"task.reject"\|"noop", ... }` |
+## What providers are not
+
+- not a replacement for workflows
+- not a second state machine
+- not the source of truth for tasks or runs
+- not a generic long-running extension host
+
+Use them to integrate Autopilot with the outside world while keeping the orchestrator in charge of the core model.
