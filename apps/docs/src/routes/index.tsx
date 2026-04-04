@@ -308,7 +308,7 @@ function LandingPage() {
 									No new AI vendor — Autopilot reuses the tools you already pay for.
 								</p>
 								<div className="flex flex-wrap gap-2">
-									{['CLI-first', 'Repo-native', 'Durable previews', 'Approval-aware', 'BYOS (bring your own subscription)'].map((t) => (
+									{['CLI-first', 'Repo-native', 'Durable previews', 'Approval-aware', 'Bring your own subscription'].map((t) => (
 										<Badge key={t}>{t}</Badge>
 									))}
 								</div>
