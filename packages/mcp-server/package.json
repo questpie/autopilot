@@ -2,7 +2,7 @@
 	"name": "@questpie/autopilot-mcp",
 	"version": "1.0.0",
 	"type": "module",
-	"description": "MCP server for QUESTPIE Autopilot — expose tasks, agents, search, sessions to Claude Desktop/Code",
+	"description": "MCP server for QUESTPIE Autopilot — expose tasks, agents, search, and sessions to Claude Code, Codex, OpenCode, and other agents",
 	"main": "src/index.ts",
 	"bin": {
 		"autopilot-mcp": "./src/index.ts"
