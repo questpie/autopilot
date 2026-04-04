@@ -1,11 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import {
 	ArrowRight,
+	BookOpen,
 	CheckCircle,
 	FileCode2,
 	GitBranch,
 	Layers,
 	Monitor,
+	Search,
 	Shield,
 	Terminal,
 	Workflow,
@@ -388,8 +390,8 @@ function LandingPage() {
 								<FeatureCell
 									num="04"
 									icon={Layers}
-									title="Done reconstructing state from transcripts"
-									desc="Tasks, runs, artifacts, previews, and approvals as first-class primitives — not buried in chat history."
+									title="Teams producing recurring research or reports"
+									desc="Weekly summaries, competitor briefs, docs audits — through a controlled loop with durable outputs, not one-off prompts."
 								/>
 							</BrutalistGrid>
 						</section>
@@ -442,18 +444,49 @@ function LandingPage() {
 							/>
 							<div className="bg-border border-border grid grid-cols-1 gap-[1px] border sm:grid-cols-2">
 								{[
-									'Create a task and let workflow intake spawn the first run.',
-									'Route runs to the worker that matches runtime, tags, and machine constraints.',
-									'Inspect run summaries, events, and artifacts from the CLI.',
-									'Open a durable preview URL — even after the worker that produced it is offline.',
-									'Reply on a human-approval step and send feedback back into implementation.',
-									'Trigger post-run webhooks after a step completes.',
+									'Implement a feature end-to-end: spec, plan, code, review, deploy.',
+									'Respond to an incident: triage, investigate, hotfix, deploy, verify.',
+									'Monitor competitors: scrape changelogs, analyze changes, produce a brief.',
+									'Draft a blog post, get human approval, publish via CMS webhook.',
+									'Generate an executive report from task activity and deliver via Slack.',
+									'Maintain internal knowledge: scan for changes, update docs, human review.',
 								].map((text) => (
 									<div key={text} className="bg-background flex items-start gap-3 p-5">
 										<CheckCircle className="text-primary mt-0.5 h-4 w-4 shrink-0" />
 										<span className="text-[13px]">{text}</span>
 									</div>
 								))}
+							</div>
+						</section>
+					</Reveal>
+
+					{/* ─── §05 SAME LOOP, BEYOND CODE ─── */}
+					<Reveal>
+						<section className="border-border border-t px-4 py-16 md:px-8 md:py-24">
+							<SectionHeader
+								num="05"
+								title="The same loop, beyond code"
+								subtitle="The operator loop is domain-agnostic. The same primitives that implement a feature also produce a research brief or publish a blog post."
+							/>
+							<div className="bg-border border-border grid grid-cols-1 gap-[1px] border md:grid-cols-3">
+								<FeatureCell
+									num="01"
+									icon={GitBranch}
+									title="Engineering"
+									desc={'"Implement dark mode" \u2192 plan \u2192 code \u2192 preview \u2192 approve \u2192 deploy'}
+								/>
+								<FeatureCell
+									num="02"
+									icon={Search}
+									title="Research"
+									desc={'"Monitor competitor pricing" \u2192 scrape \u2192 analyze \u2192 brief \u2192 human review'}
+								/>
+								<FeatureCell
+									num="03"
+									icon={BookOpen}
+									title="Content"
+									desc={'"Write launch blog post" \u2192 research \u2192 draft \u2192 preview \u2192 approve \u2192 publish via API'}
+								/>
 							</div>
 						</section>
 					</Reveal>
