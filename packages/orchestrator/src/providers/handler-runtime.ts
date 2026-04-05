@@ -35,8 +35,13 @@ export async function resolveSecrets(
 
 	// Batch-resolve shared refs from the encrypted store
 	const sharedNames = refs.filter((r) => r.source === 'shared').map((r) => r.name)
-	const sharedValues = sharedNames.length > 0 && secretService
-		? await secretService.resolveForScopes(sharedNames, ['worker', 'provider', 'orchestrator_only'])
+	if (sharedNames.length > 0 && !secretService) {
+		throw new Error(
+			`Cannot resolve shared secret refs [${sharedNames.join(', ')}]: SecretService not available`,
+		)
+	}
+	const sharedValues = sharedNames.length > 0
+		? await secretService!.resolveForScopes(sharedNames, ['provider', 'orchestrator_only'])
 		: new Map<string, string>()
 
 	for (const ref of refs) {

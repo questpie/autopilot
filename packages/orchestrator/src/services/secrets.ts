@@ -91,7 +91,7 @@ export class SecretService {
 	 *
 	 * Used by:
 	 * - Provider handler resolution (scope: provider, orchestrator_only)
-	 * - Worker claim delivery (scope: worker, provider — never orchestrator_only)
+	 * - Worker claim delivery (scope: worker only)
 	 */
 	async resolveForScopes(
 		names: string[],
@@ -106,14 +106,15 @@ export class SecretService {
 
 		for (const row of rows) {
 			if (!allowedScopes.includes(row.scope as SharedSecretScope)) continue
-			try {
-				resolved.set(row.name, decryptRow(row))
-			} catch {
-				console.warn(`[secrets] failed to decrypt shared secret "${row.name}"`)
-			}
+			resolved.set(row.name, decryptRow(row))
 		}
 
 		return resolved
+	}
+
+	async hasAny(): Promise<boolean> {
+		const row = await this.db.query.sharedSecrets.findFirst()
+		return row !== undefined
 	}
 
 	private async findByName(name: string) {

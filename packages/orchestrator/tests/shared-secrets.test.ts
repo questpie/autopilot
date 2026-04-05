@@ -278,6 +278,40 @@ describe('Encryption', () => {
 	})
 })
 
+// ─── Master Key Failure Propagation ─────────────────────────────────────────
+
+describe('Master Key Failure Propagation', () => {
+	test('resolveForScopes throws MasterKeyError when key is wrong', async () => {
+		// Store a secret with the correct key
+		await secretService.set({ name: 'PROPAGATE_TEST', scope: 'worker', value: 'test-val' })
+
+		// Swap to a wrong key
+		const saved = process.env.AUTOPILOT_MASTER_KEY
+		process.env.AUTOPILOT_MASTER_KEY = randomBytes(32).toString('hex')
+		try {
+			await expect(
+				secretService.resolveForScopes(['PROPAGATE_TEST'], ['worker']),
+			).rejects.toThrow()
+		} finally {
+			process.env.AUTOPILOT_MASTER_KEY = saved
+		}
+	})
+
+	test('resolveForScopes throws MasterKeyError when key is missing', async () => {
+		await secretService.set({ name: 'MISSING_KEY_TEST', scope: 'worker', value: 'test-val' })
+
+		const saved = process.env.AUTOPILOT_MASTER_KEY
+		delete process.env.AUTOPILOT_MASTER_KEY
+		try {
+			await expect(
+				secretService.resolveForScopes(['MISSING_KEY_TEST'], ['worker']),
+			).rejects.toThrow(MasterKeyError)
+		} finally {
+			process.env.AUTOPILOT_MASTER_KEY = saved
+		}
+	})
+})
+
 // ─── SecretService CRUD ─────────────────────────────────────────────────────
 
 describe('SecretService', () => {
@@ -364,22 +398,22 @@ describe('Scoped Resolution', () => {
 		await secretService.set({ name: 'ORCH_ONLY_SECRET', scope: 'orchestrator_only', value: 'orch-val' })
 	})
 
-	test('worker delivery excludes orchestrator_only secrets', async () => {
+	test('worker delivery receives only worker-scoped secrets', async () => {
 		const resolved = await secretService.resolveForScopes(
 			['WORKER_SECRET', 'PROVIDER_SECRET', 'ORCH_ONLY_SECRET'],
-			['worker', 'provider'],
+			['worker'],
 		)
 		expect(resolved.get('WORKER_SECRET')).toBe('worker-val')
-		expect(resolved.get('PROVIDER_SECRET')).toBe('provider-val')
+		expect(resolved.has('PROVIDER_SECRET')).toBe(false)
 		expect(resolved.has('ORCH_ONLY_SECRET')).toBe(false)
 	})
 
-	test('orchestrator can access all scopes', async () => {
+	test('provider-side resolution accesses provider + orchestrator_only', async () => {
 		const resolved = await secretService.resolveForScopes(
 			['WORKER_SECRET', 'PROVIDER_SECRET', 'ORCH_ONLY_SECRET'],
-			['worker', 'provider', 'orchestrator_only'],
+			['provider', 'orchestrator_only'],
 		)
-		expect(resolved.get('WORKER_SECRET')).toBe('worker-val')
+		expect(resolved.has('WORKER_SECRET')).toBe(false)
 		expect(resolved.get('PROVIDER_SECRET')).toBe('provider-val')
 		expect(resolved.get('ORCH_ONLY_SECRET')).toBe('orch-val')
 	})
@@ -387,7 +421,7 @@ describe('Scoped Resolution', () => {
 	test('missing secret names are silently skipped', async () => {
 		const resolved = await secretService.resolveForScopes(
 			['WORKER_SECRET', 'NONEXISTENT'],
-			['worker', 'provider'],
+			['worker'],
 		)
 		expect(resolved.get('WORKER_SECRET')).toBe('worker-val')
 		expect(resolved.has('NONEXISTENT')).toBe(false)
@@ -429,12 +463,18 @@ describe('Provider-Side Resolution (resolveSecrets)', () => {
 		}
 	})
 
-	test('shared refs without secretService are skipped', async () => {
+	test('shared refs without secretService throw', async () => {
 		const refs = [
 			{ name: 'ORPHAN', source: 'shared' as const },
 		]
-		const resolved = await resolveSecrets(refs)
-		expect(resolved.has('ORPHAN')).toBe(false)
+		await expect(resolveSecrets(refs)).rejects.toThrow('SecretService not available')
+	})
+
+	test('worker-scoped secrets are not resolved provider-side', async () => {
+		await secretService.set({ name: 'WORKER_ONLY', scope: 'worker', value: 'worker-val' })
+		const refs = [{ name: 'WORKER_ONLY', source: 'shared' as const }]
+		const resolved = await resolveSecrets(refs, secretService)
+		expect(resolved.has('WORKER_ONLY')).toBe(false)
 	})
 })
 

@@ -23,6 +23,7 @@ import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngi
 import type { AuthoredConfig } from './services'
 import { NotificationBridge } from './providers'
 import { eventBus } from './events/event-bus'
+import { hasMasterKey, MasterKeyError } from './crypto'
 
 export interface StartServerOptions {
 	/** Absolute path to start scope discovery from. Defaults to first CLI arg or cwd. */
@@ -96,6 +97,24 @@ export async function startServer(options?: StartServerOptions) {
 	const conversationBindingService = new ConversationBindingService(companyDb)
 	const taskRelationService = new TaskRelationService(companyDb)
 	const secretService = new SecretService(companyDb)
+
+	// ── 6b. Validate master key if shared secrets are in use ────────────
+	if (!hasMasterKey()) {
+		const hasSharedRefs = [...authoredConfig.providers.values()].some(
+			(p) => p.secret_refs.some((r) => r.source === 'shared'),
+		)
+		const hasStoredSecrets = await secretService.hasAny()
+
+		if (hasSharedRefs || hasStoredSecrets) {
+			throw new MasterKeyError(
+				'AUTOPILOT_MASTER_KEY is not set but shared secrets are in use.\n' +
+				(hasSharedRefs ? '  - Authored config contains source:shared secret refs\n' : '') +
+				(hasStoredSecrets ? '  - Encrypted shared secrets exist in the database\n' : '') +
+				'Set AUTOPILOT_MASTER_KEY (64-char hex) or remove shared secret usage.\n' +
+				'Generate one with: openssl rand -hex 32',
+			)
+		}
+	}
 
 	const workflowEngine = new WorkflowEngine(authoredConfig, taskService, runService, activityService, artifactService)
 	const taskGraphService = new TaskGraphService(taskService, taskRelationService, workflowEngine)

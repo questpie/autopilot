@@ -85,7 +85,8 @@ export const ClaimedRunSchema = z.object({
 	// ─── Pre-resolved shared secrets ───────���───────────────────────
 	/**
 	 * Decrypted shared secret values delivered by the orchestrator at claim time.
-	 * Only includes secrets with scope 'worker' or 'provider' — never 'orchestrator_only'.
+	 * Only includes secrets with scope 'worker'.
+	 * 'provider' and 'orchestrator_only' scoped secrets stay orchestrator-side.
 	 * Keyed by secret name → plaintext value.
 	 */
 	resolved_shared_secrets: z.record(z.string()).default({}),

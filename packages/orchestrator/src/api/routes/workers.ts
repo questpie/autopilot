@@ -143,14 +143,15 @@ const workers = new Hono<AppEnv>()
 		const { constraints, actions, secretRefs } = splitTargeting(run.targeting)
 
 		// Resolve shared secret refs for worker delivery.
-		// Workers receive only 'worker' and 'provider' scoped secrets — never 'orchestrator_only'.
+		// Workers receive only 'worker' scoped secrets.
+		// 'provider' and 'orchestrator_only' scoped secrets stay orchestrator-side.
 		const { secretService } = c.get('services')
 		const sharedRefNames = secretRefs
 			.filter((r) => r.source === 'shared')
 			.map((r) => r.name)
 		const resolvedSharedSecrets = sharedRefNames.length > 0
 			? Object.fromEntries(
-				await secretService.resolveForScopes(sharedRefNames, ['worker', 'provider']),
+				await secretService.resolveForScopes(sharedRefNames, ['worker']),
 			)
 			: {}
 
