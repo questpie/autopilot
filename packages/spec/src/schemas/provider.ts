@@ -150,6 +150,20 @@ export const ConversationResultSchema = z.discriminatedUnion('action', [
 	}),
 ])
 
+// ─── Notification Actions ────────────────────────────────────────────────────
+
+/** Task-level control action advertised in an outbound notification. */
+export const NotificationActionSchema = z.object({
+	/** Normalized task action. */
+	action: z.enum(['task.approve', 'task.reject', 'task.reply']),
+	/** User-facing button/action label. */
+	label: z.string(),
+	/** Optional visual style hint for the handler. */
+	style: z.enum(['primary', 'secondary', 'danger']).optional(),
+	/** Whether this action requires a text message from the user. */
+	requires_message: z.boolean().default(false),
+})
+
 // ─── Notification Payload ────────────────────────────────────────────────────
 
 /** Normalized notification payload for notify.send operations. */
@@ -182,4 +196,6 @@ export const NotificationPayloadSchema = z.object({
 	thread_id: z.string().optional(),
 	/** Binding mode. */
 	binding_mode: z.enum(['task_thread', 'intent_intake']).optional(),
+	/** Normalized task actions available for this notification. */
+	actions: z.array(NotificationActionSchema).optional(),
 })

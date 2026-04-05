@@ -45,6 +45,7 @@ export {
 	IntakeResultSchema,
 	ConversationResultSchema,
 	NotificationPayloadSchema,
+	NotificationActionSchema,
 } from './provider'
 export {
 	WorkerRegisterRequestSchema,

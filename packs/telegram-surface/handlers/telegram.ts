@@ -37,7 +37,8 @@ if (!botToken) {
 	process.exit(0)
 }
 
-const TELEGRAM_API = `https://api.telegram.org/bot${botToken}`
+const apiBase = (envelope.config?.api_base_url as string) ?? 'https://api.telegram.org'
+const TELEGRAM_API = `${apiBase}/bot${botToken}`
 
 // ─── Outbound: notify.send ─────────────────────────────────────────────
 
@@ -72,13 +73,36 @@ if (op === 'notify.send') {
 	if (previewUrl) lines.push('', `\ud83d\udd17 <a href="${escapeHtml(previewUrl)}">Preview</a>`)
 	if (taskUrl) lines.push(`\ud83d\udcdd <a href="${escapeHtml(taskUrl)}">Task details</a>`)
 
-	// Build inline keyboard for blocked/approval tasks
+	// Build inline keyboard from normalized actions (if present)
+	const actions = payload.actions as Array<{
+		action: string
+		label: string
+		style?: string
+		requires_message?: boolean
+	}> | undefined
+
 	const keyboard: Array<Array<{ text: string; callback_data: string }>> = []
-	if (taskId && (eventType === 'task_changed' || eventType === 'task_blocked')) {
-		keyboard.push([
-			{ text: '\u2705 Approve', callback_data: `approve:${taskId}` },
-			{ text: '\u274c Reject', callback_data: `reject:${taskId}` },
-		])
+	if (taskId && actions && actions.length > 0) {
+		const buttons: Array<{ text: string; callback_data: string }> = []
+		for (const act of actions) {
+			if (act.requires_message) continue
+
+			const STYLE_ICONS: Record<string, string> = { primary: '\u2705 ', danger: '\u274c ' }
+			const ACTION_PREFIXES: Record<string, string> = { 'task.approve': 'approve', 'task.reject': 'reject' }
+
+			const icon = STYLE_ICONS[act.style ?? ''] ?? ''
+			const callbackPrefix = ACTION_PREFIXES[act.action]
+			if (!callbackPrefix) continue
+
+			buttons.push({ text: `${icon}${act.label}`, callback_data: `${callbackPrefix}:${taskId}` })
+		}
+		if (buttons.length > 0) keyboard.push(buttons)
+
+		// If there's a requires_message action (e.g. task.reply), add a text hint
+		const replyAction = actions.find((a) => a.requires_message)
+		if (replyAction) {
+			lines.push('', `\ud83d\udcac Reply to this message to ${replyAction.label.toLowerCase()}`)
+		}
 	}
 
 	const body: Record<string, unknown> = {

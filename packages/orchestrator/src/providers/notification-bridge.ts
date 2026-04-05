@@ -9,7 +9,7 @@
  */
 import type { AutopilotEvent } from '../events/event-bus'
 import type { EventBus } from '../events/event-bus'
-import type { Provider, NotificationPayload } from '@questpie/autopilot-spec'
+import type { Provider, NotificationPayload, NotificationAction } from '@questpie/autopilot-spec'
 import type { AuthoredConfig } from '../services/workflow-engine'
 import type { RunService } from '../services/runs'
 import type { TaskService } from '../services/tasks'
@@ -198,6 +198,8 @@ export class NotificationBridge {
 				if (event.status !== 'blocked' && event.status !== 'needs_approval') return null
 
 				const task = await this.taskService.get(event.taskId)
+				const actions = task ? this.resolveNotificationActions(task) : undefined
+
 				return {
 					orchestrator_url: baseUrl,
 					event_type: 'task_blocked',
@@ -206,12 +208,37 @@ export class NotificationBridge {
 					summary: task?.title ?? `Task ${event.taskId} is ${event.status}`,
 					task_id: event.taskId,
 					task_url: baseUrl ? `${baseUrl}/api/tasks/${event.taskId}` : undefined,
+					actions,
 				}
 			}
 
 			default:
 				return null
 		}
+	}
+
+	/**
+	 * Resolve notification actions from real workflow step truth.
+	 * Only includes actions when the task is on a human_approval step.
+	 */
+	private resolveNotificationActions(
+		task: { workflow_id?: string | null; workflow_step?: string | null },
+	): NotificationAction[] | undefined {
+		if (!task.workflow_id || !task.workflow_step) return undefined
+
+		const workflow = this.authoredConfig.workflows.get(task.workflow_id)
+		if (!workflow) return undefined
+
+		const step = workflow.steps.find((s) => s.id === task.workflow_step)
+		if (!step || step.type !== 'human_approval') return undefined
+
+		const actions: NotificationAction[] = [
+			{ action: 'task.approve', label: 'Approve', style: 'primary', requires_message: false },
+			{ action: 'task.reject', label: 'Reject', style: 'danger', requires_message: false },
+			{ action: 'task.reply', label: 'Reply', style: 'secondary', requires_message: true },
+		]
+
+		return actions
 	}
 
 	private async findPreviewUrl(runId: string): Promise<string | null> {

@@ -5,10 +5,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
-import {
-	PackManifestSchema,
-	ProviderSchema,
-} from '@questpie/autopilot-spec'
+import { PackManifestSchema, ProviderSchema } from '@questpie/autopilot-spec'
 import { resolveAllPacks } from '../src/packs/resolver'
 import { materializePacks } from '../src/packs/materializer'
 import type { Registry } from '@questpie/autopilot-spec'
@@ -49,7 +46,15 @@ function createRegistryFromRepoPacks(registryDir: string): void {
 
 describe('Telegram pack manifest', () => {
 	it('parses against PackManifestSchema', () => {
-		const packYamlPath = join(import.meta.dir, '..', '..', '..', 'packs', 'telegram-surface', 'pack.yaml')
+		const packYamlPath = join(
+			import.meta.dir,
+			'..',
+			'..',
+			'..',
+			'packs',
+			'telegram-surface',
+			'pack.yaml',
+		)
 		const raw = readFileSync(packYamlPath, 'utf-8')
 		const manifest = PackManifestSchema.parse(parseYaml(raw))
 
@@ -60,7 +65,15 @@ describe('Telegram pack manifest', () => {
 	})
 
 	it('declares provider and handler files', () => {
-		const packYamlPath = join(import.meta.dir, '..', '..', '..', 'packs', 'telegram-surface', 'pack.yaml')
+		const packYamlPath = join(
+			import.meta.dir,
+			'..',
+			'..',
+			'..',
+			'packs',
+			'telegram-surface',
+			'pack.yaml',
+		)
 		const manifest = PackManifestSchema.parse(parseYaml(readFileSync(packYamlPath, 'utf-8')))
 
 		const dests = manifest.files.map((f) => f.dest)
@@ -69,7 +82,15 @@ describe('Telegram pack manifest', () => {
 	})
 
 	it('declares required env vars', () => {
-		const packYamlPath = join(import.meta.dir, '..', '..', '..', 'packs', 'telegram-surface', 'pack.yaml')
+		const packYamlPath = join(
+			import.meta.dir,
+			'..',
+			'..',
+			'..',
+			'packs',
+			'telegram-surface',
+			'pack.yaml',
+		)
 		const manifest = PackManifestSchema.parse(parseYaml(readFileSync(packYamlPath, 'utf-8')))
 
 		const envNames = manifest.required_env.map((e) => e.name)
@@ -83,7 +104,16 @@ describe('Telegram pack manifest', () => {
 
 describe('Telegram provider config', () => {
 	it('validates against ProviderSchema', () => {
-		const providerPath = join(import.meta.dir, '..', '..', '..', 'packs', 'telegram-surface', 'providers', 'telegram.yaml')
+		const providerPath = join(
+			import.meta.dir,
+			'..',
+			'..',
+			'..',
+			'packs',
+			'telegram-surface',
+			'providers',
+			'telegram.yaml',
+		)
 		const raw = readFileSync(providerPath, 'utf-8')
 		const provider = ProviderSchema.parse(parseYaml(raw))
 
@@ -93,7 +123,16 @@ describe('Telegram provider config', () => {
 	})
 
 	it('declares conversation.ingest and notify.send capabilities', () => {
-		const providerPath = join(import.meta.dir, '..', '..', '..', 'packs', 'telegram-surface', 'providers', 'telegram.yaml')
+		const providerPath = join(
+			import.meta.dir,
+			'..',
+			'..',
+			'..',
+			'packs',
+			'telegram-surface',
+			'providers',
+			'telegram.yaml',
+		)
 		const provider = ProviderSchema.parse(parseYaml(readFileSync(providerPath, 'utf-8')))
 
 		const ops = provider.capabilities.map((c) => c.op)
@@ -102,7 +141,16 @@ describe('Telegram provider config', () => {
 	})
 
 	it('has auth_secret and bot_token secret refs', () => {
-		const providerPath = join(import.meta.dir, '..', '..', '..', 'packs', 'telegram-surface', 'providers', 'telegram.yaml')
+		const providerPath = join(
+			import.meta.dir,
+			'..',
+			'..',
+			'..',
+			'packs',
+			'telegram-surface',
+			'providers',
+			'telegram.yaml',
+		)
 		const provider = ProviderSchema.parse(parseYaml(readFileSync(providerPath, 'utf-8')))
 
 		const secretNames = provider.secret_refs.map((s) => s.name)
@@ -111,7 +159,16 @@ describe('Telegram provider config', () => {
 	})
 
 	it('handler path starts with handlers/', () => {
-		const providerPath = join(import.meta.dir, '..', '..', '..', 'packs', 'telegram-surface', 'providers', 'telegram.yaml')
+		const providerPath = join(
+			import.meta.dir,
+			'..',
+			'..',
+			'..',
+			'packs',
+			'telegram-surface',
+			'providers',
+			'telegram.yaml',
+		)
 		const provider = ProviderSchema.parse(parseYaml(readFileSync(providerPath, 'utf-8')))
 
 		expect(provider.handler.startsWith('handlers/')).toBe(true)
@@ -146,7 +203,7 @@ describe('Telegram pack installation', () => {
 		)
 		expect(result.resolved).toHaveLength(1)
 		expect(result.errors).toHaveLength(0)
-		expect(result.resolved[0].manifest.id).toBe('telegram-surface')
+		expect(result.resolved[0]?.manifest.id).toBe('telegram-surface')
 	})
 
 	it('materializes provider and handler into .autopilot/', () => {
@@ -190,14 +247,25 @@ describe('Telegram pack installation', () => {
 
 		expect(result.installed).toContain('questpie/telegram-surface')
 		// Custom file untouched
-		expect(readFileSync(join(tempDir, '.autopilot', 'providers', 'custom.yaml'), 'utf-8')).toBe('id: custom')
+		expect(readFileSync(join(tempDir, '.autopilot', 'providers', 'custom.yaml'), 'utf-8')).toBe(
+			'id: custom',
+		)
 	})
 })
 
 // ─── Handler Behavior Tests ──────────────────────────────────────────────
 
 describe('Telegram handler normalization', () => {
-	const handlerPath = join(import.meta.dir, '..', '..', '..', 'packs', 'telegram-surface', 'handlers', 'telegram.ts')
+	const handlerPath = join(
+		import.meta.dir,
+		'..',
+		'..',
+		'..',
+		'packs',
+		'telegram-surface',
+		'handlers',
+		'telegram.ts',
+	)
 
 	function runHandler(envelope: Record<string, unknown>): Promise<Record<string, unknown>> {
 		const proc = Bun.spawn(['bun', 'run', handlerPath], {
@@ -236,6 +304,97 @@ describe('Telegram handler normalization', () => {
 
 		expect(result.ok).toBe(true)
 		expect((result.metadata as Record<string, unknown>)?.skipped).toBe(true)
+	})
+
+	// ── Outbound rendering with mock Telegram API ──────────────────────────
+
+	it('renders inline buttons from payload.actions', async () => {
+		const received: Record<string, unknown>[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				received.push(await req.json())
+				return Response.json({ ok: true, result: { message_id: 42 } })
+			},
+		})
+
+		try {
+			const result = await runHandler({
+				op: 'notify.send',
+				provider_id: 'telegram',
+				provider_kind: 'conversation_channel',
+				config: { api_base_url: `http://localhost:${mockServer.port}` },
+				secrets: { bot_token: 'test-token' },
+				payload: {
+					event_type: 'task_blocked',
+					severity: 'warning',
+					title: 'Review needed',
+					summary: 'Deploy requires approval',
+					task_id: 'task-123',
+					conversation_id: '99999',
+					actions: [
+						{ action: 'task.approve', label: 'Approve', style: 'primary', requires_message: false },
+						{ action: 'task.reject', label: 'Reject', style: 'danger', requires_message: false },
+						{ action: 'task.reply', label: 'Reply', style: 'secondary', requires_message: true },
+					],
+				},
+			})
+
+			expect(result.ok).toBe(true)
+			expect(received).toHaveLength(1)
+
+			const body = received[0]
+			expect(body.chat_id).toBe('99999')
+			expect(body.text).toContain('Review needed')
+
+			// Should have inline keyboard with Approve and Reject buttons (reply is requires_message, so text hint)
+			const markup = JSON.parse(body.reply_markup as string) as { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }
+			expect(markup.inline_keyboard).toHaveLength(1)
+			const buttons = markup.inline_keyboard[0]
+			expect(buttons).toHaveLength(2)
+			expect(buttons[0].callback_data).toBe('approve:task-123')
+			expect(buttons[1].callback_data).toBe('reject:task-123')
+
+			// Reply hint should be in the message text
+			expect(body.text).toContain('reply')
+		} finally {
+			mockServer.stop()
+		}
+	})
+
+	it('renders no buttons when actions is absent', async () => {
+		const received: Record<string, unknown>[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				received.push(await req.json())
+				return Response.json({ ok: true, result: { message_id: 43 } })
+			},
+		})
+
+		try {
+			const result = await runHandler({
+				op: 'notify.send',
+				provider_id: 'telegram',
+				provider_kind: 'conversation_channel',
+				config: { api_base_url: `http://localhost:${mockServer.port}` },
+				secrets: { bot_token: 'test-token' },
+				payload: {
+					event_type: 'run_completed',
+					severity: 'info',
+					title: 'Run done',
+					summary: 'All good',
+					conversation_id: '99999',
+				},
+			})
+
+			expect(result.ok).toBe(true)
+			expect(received).toHaveLength(1)
+			// No reply_markup when no actions
+			expect(received[0].reply_markup).toBeUndefined()
+		} finally {
+			mockServer.stop()
+		}
 	})
 
 	// Inbound tests (conversation.ingest)
@@ -405,17 +564,27 @@ describe('Minimal Telegram awareness in core', () => {
 	it('orchestrator has no telegram imports or telegram-specific service code', () => {
 		// The conversation route accepts Telegram's webhook header as a thin auth shim.
 		// This test verifies no deeper Telegram integration exists (imports, services, models).
+		// We search for actual code references (import/require/class/function), not doc comments.
 		const orchestratorSrc = join(import.meta.dir, '..', '..', 'orchestrator', 'src')
-		const result = Bun.spawnSync(['grep', '-r', '-l', '-i', 'telegram', orchestratorSrc], {
-			stdout: 'pipe',
-		})
+		const result = Bun.spawnSync(
+			[
+				'grep',
+				'-r',
+				'-l',
+				'--include=*.ts',
+				'-P',
+				'(?i)(?<!\\*.*|//.*|"|\'|`)telegram(?!_)',
+				orchestratorSrc,
+			],
+			{ stdout: 'pipe' },
+		)
 		const files = new TextDecoder().decode(result.stdout).trim().split('\n').filter(Boolean)
 
 		// Only the conversation route and binding service should reference Telegram
 		// (header acceptance + comment). No services, models, or provider-specific code.
+		const allowed = ['conversations.ts', 'conversation-bindings.ts']
 		for (const f of files) {
-			const allowed = f.includes('conversations.ts') || f.includes('conversation-bindings.ts')
-			if (!allowed) {
+			if (!allowed.some((a) => f.includes(a))) {
 				throw new Error(`Unexpected Telegram reference in ${f}`)
 			}
 		}

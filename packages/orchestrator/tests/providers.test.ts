@@ -19,6 +19,7 @@ import {
 	HandlerEnvelopeSchema,
 	HandlerResultSchema,
 	NotificationPayloadSchema,
+	NotificationActionSchema,
 } from '@questpie/autopilot-spec'
 import type { Provider, HandlerEnvelope } from '@questpie/autopilot-spec'
 import { executeHandler, invokeProvider, resolveSecrets } from '../src/providers/handler-runtime'
@@ -666,5 +667,302 @@ describe('Webhook Example Provider E2E', () => {
 
 		expect(result.ok).toBe(false)
 		expect(result.error).toContain('webhook_url')
+	})
+})
+
+// ─── Notification Action Schema ─────────────────────────────────────────────
+
+describe('NotificationActionSchema', () => {
+	test('parses a valid approve action', () => {
+		const result = NotificationActionSchema.safeParse({
+			action: 'task.approve',
+			label: 'Approve',
+			style: 'primary',
+		})
+		expect(result.success).toBe(true)
+		if (result.success) {
+			expect(result.data.requires_message).toBe(false)
+		}
+	})
+
+	test('parses a reply action with requires_message', () => {
+		const result = NotificationActionSchema.safeParse({
+			action: 'task.reply',
+			label: 'Reply',
+			requires_message: true,
+		})
+		expect(result.success).toBe(true)
+		if (result.success) {
+			expect(result.data.requires_message).toBe(true)
+		}
+	})
+
+	test('rejects non-task actions (no script.execute)', () => {
+		const result = NotificationActionSchema.safeParse({
+			action: 'script.execute',
+			label: 'Run deploy',
+		})
+		expect(result.success).toBe(false)
+	})
+
+	test('rejects arbitrary action strings', () => {
+		const result = NotificationActionSchema.safeParse({
+			action: 'arbitrary.action',
+			label: 'Do something',
+		})
+		expect(result.success).toBe(false)
+	})
+
+	test('notification payload accepts optional actions array', () => {
+		const result = NotificationPayloadSchema.safeParse({
+			event_type: 'task_blocked',
+			severity: 'warning',
+			title: 'Task needs approval',
+			summary: 'Review required',
+			task_id: 'task-1',
+			actions: [
+				{ action: 'task.approve', label: 'Approve', style: 'primary' },
+				{ action: 'task.reject', label: 'Reject', style: 'danger' },
+				{ action: 'task.reply', label: 'Reply', requires_message: true },
+			],
+		})
+		expect(result.success).toBe(true)
+		if (result.success) {
+			expect(result.data.actions).toHaveLength(3)
+		}
+	})
+
+	test('notification payload without actions still parses (backward compat)', () => {
+		const result = NotificationPayloadSchema.safeParse({
+			event_type: 'run_completed',
+			severity: 'info',
+			title: 'Run done',
+			summary: 'All good',
+		})
+		expect(result.success).toBe(true)
+		if (result.success) {
+			expect(result.data.actions).toBeUndefined()
+		}
+	})
+})
+
+// ─── NotificationBridge Action Inclusion ────────────────────────────────────
+
+describe('NotificationBridge action resolution', () => {
+	const testRoot2 = join(tmpdir(), `qp-action-bridge-${Date.now()}`)
+	let eventBus2: EventBus
+
+	beforeAll(async () => {
+		await mkdir(join(testRoot2, '.autopilot', 'handlers'), { recursive: true })
+
+		// Handler that captures the payload actions
+		await writeFile(
+			join(testRoot2, '.autopilot', 'handlers', 'capture.ts'),
+			`import { appendFileSync } from 'node:fs'
+const input = await Bun.stdin.text()
+const envelope = JSON.parse(input)
+appendFileSync('${join(testRoot2, 'actions-log.jsonl')}', JSON.stringify({ actions: envelope.payload.actions }) + '\\n')
+console.log(JSON.stringify({ ok: true }))`,
+		)
+
+		eventBus2 = new EventBus()
+	})
+
+	afterAll(async () => {
+		await rm(testRoot2, { recursive: true, force: true })
+	})
+
+	function makeApprovalConfig() {
+		const provider: Provider = {
+			id: 'action-notif',
+			name: 'Action Notifier',
+			kind: 'notification_channel',
+			handler: 'handlers/capture.ts',
+			capabilities: [{ op: 'notify.send' }],
+			events: [{ types: ['task_changed'], statuses: ['blocked'] }],
+			config: {},
+			secret_refs: [],
+			description: '',
+		}
+
+		return {
+			company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: '', email: '' }, defaults: {} },
+			agents: new Map(),
+			workflows: new Map([
+				['wf-review', {
+					id: 'wf-review',
+					name: 'Review Workflow',
+					steps: [
+						{ id: 'review', type: 'human_approval', name: 'Human Review' },
+						{ id: 'deploy', type: 'agent', name: 'Deploy' },
+					],
+				}],
+				['wf-auto', {
+					id: 'wf-auto',
+					name: 'Auto Workflow',
+					steps: [
+						{ id: 'build', type: 'agent', name: 'Build' },
+					],
+				}],
+			]),
+			environments: new Map(),
+			providers: new Map([['action-notif', provider]]),
+			capabilityProfiles: new Map(),
+			defaults: { runtime: 'claude-code' },
+		}
+	}
+
+	test('includes actions for task on human_approval step', async () => {
+		const localBus = new EventBus()
+
+		const mockTask = {
+			get: async (id: string) => ({
+				id,
+				title: 'Review deploy',
+				status: 'blocked',
+				workflow_id: 'wf-review',
+				workflow_step: 'review',
+			}),
+		}
+
+		const bridge = new NotificationBridge(
+			localBus,
+			makeApprovalConfig() as any,
+			{ get: async () => null } as any,
+			mockTask as any,
+			{ listForRun: async () => [] } as any,
+			{ listForTask: async () => [] } as any,
+			{ companyRoot: testRoot2 },
+		)
+		bridge.start()
+
+		localBus.emit({ type: 'task_changed', taskId: 'task-approval-1', status: 'blocked' })
+
+		await new Promise((resolve) => setTimeout(resolve, 2000))
+		bridge.stop()
+
+		const logFile = Bun.file(join(testRoot2, 'actions-log.jsonl'))
+		const exists = await logFile.exists()
+		expect(exists).toBe(true)
+
+		const lines = (await logFile.text()).trim().split('\n')
+		const entry = JSON.parse(lines[lines.length - 1])
+		expect(entry.actions).toBeDefined()
+		expect(entry.actions).toHaveLength(3)
+
+		const actionTypes = entry.actions.map((a: { action: string }) => a.action)
+		expect(actionTypes).toContain('task.approve')
+		expect(actionTypes).toContain('task.reject')
+		expect(actionTypes).toContain('task.reply')
+	})
+
+	test('omits actions for task on agent step (not human_approval)', async () => {
+		const localBus = new EventBus()
+
+		const mockTask = {
+			get: async (id: string) => ({
+				id,
+				title: 'Build thing',
+				status: 'blocked',
+				workflow_id: 'wf-auto',
+				workflow_step: 'build',
+			}),
+		}
+
+		const bridge = new NotificationBridge(
+			localBus,
+			makeApprovalConfig() as any,
+			{ get: async () => null } as any,
+			mockTask as any,
+			{ listForRun: async () => [] } as any,
+			{ listForTask: async () => [] } as any,
+			{ companyRoot: testRoot2 },
+		)
+		bridge.start()
+
+		localBus.emit({ type: 'task_changed', taskId: 'task-agent-1', status: 'blocked' })
+
+		await new Promise((resolve) => setTimeout(resolve, 2000))
+		bridge.stop()
+
+		const logFile = Bun.file(join(testRoot2, 'actions-log.jsonl'))
+		const lines = (await logFile.text()).trim().split('\n')
+		const entry = JSON.parse(lines[lines.length - 1])
+		expect(entry.actions).toBeUndefined()
+	})
+
+	test('omits actions for task without workflow', async () => {
+		const localBus = new EventBus()
+
+		const mockTask = {
+			get: async (id: string) => ({
+				id,
+				title: 'Ad hoc task',
+				status: 'blocked',
+				// No workflow_id or workflow_step
+			}),
+		}
+
+		const bridge = new NotificationBridge(
+			localBus,
+			makeApprovalConfig() as any,
+			{ get: async () => null } as any,
+			mockTask as any,
+			{ listForRun: async () => [] } as any,
+			{ listForTask: async () => [] } as any,
+			{ companyRoot: testRoot2 },
+		)
+		bridge.start()
+
+		localBus.emit({ type: 'task_changed', taskId: 'task-adhoc-1', status: 'blocked' })
+
+		await new Promise((resolve) => setTimeout(resolve, 2000))
+		bridge.stop()
+
+		const logFile = Bun.file(join(testRoot2, 'actions-log.jsonl'))
+		const lines = (await logFile.text()).trim().split('\n')
+		const entry = JSON.parse(lines[lines.length - 1])
+		expect(entry.actions).toBeUndefined()
+	})
+
+	test('run_completed events never include actions', async () => {
+		const localBus = new EventBus()
+
+		const config = makeApprovalConfig()
+		// Add run_completed to event filters
+		const provider = config.providers.get('action-notif')!
+		provider.events.push({ types: ['run_completed'], statuses: ['failed'] })
+
+		const mockRun = {
+			get: async (id: string) => ({
+				id,
+				status: 'failed',
+				summary: 'Crashed',
+				task_id: 'task-1',
+				agent_id: 'agent-1',
+				worker_id: null,
+			}),
+		}
+
+		const bridge = new NotificationBridge(
+			localBus,
+			config as any,
+			mockRun as any,
+			{ get: async () => null } as any,
+			{ listForRun: async () => [] } as any,
+			{ listForTask: async () => [] } as any,
+			{ companyRoot: testRoot2 },
+		)
+		bridge.start()
+
+		localBus.emit({ type: 'run_completed', runId: 'run-1', status: 'failed' })
+
+		await new Promise((resolve) => setTimeout(resolve, 2000))
+		bridge.stop()
+
+		const logFile = Bun.file(join(testRoot2, 'actions-log.jsonl'))
+		const lines = (await logFile.text()).trim().split('\n')
+		const entry = JSON.parse(lines[lines.length - 1])
+		expect(entry.actions).toBeUndefined()
 	})
 })
