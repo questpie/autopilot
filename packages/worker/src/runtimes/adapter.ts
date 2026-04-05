@@ -1,11 +1,11 @@
-import type { WorkerEvent, RunArtifact } from '@questpie/autopilot-spec'
+import type { WorkerEvent, RunArtifact, ResolvedCapabilities } from '@questpie/autopilot-spec'
 export type { WorkerEvent } from '@questpie/autopilot-spec'
 
 /**
  * Context passed to a runtime adapter when starting a run.
  *
  * Fields come from two sources:
- * - Orchestrator (via ClaimedRun): run/task/agent identity, instructions, session refs
+ * - Orchestrator (via ClaimedRun): run/task/agent identity, instructions, session refs, capabilities
  * - Worker-local: orchestratorUrl, apiKey, workDir
  *
  * The runtime adapter should not need to resolve config or walk filesystems.
@@ -25,6 +25,8 @@ export interface RunContext {
   runtimeSessionRef: string | null
   /** Per-run isolated workspace path. Overrides adapter's default workDir. */
   workDir: string | null
+  /** Resolved capability intent from merged agent + step profiles. */
+  capabilities: ResolvedCapabilities | null
 }
 
 /** Result returned by a runtime adapter after completing. */

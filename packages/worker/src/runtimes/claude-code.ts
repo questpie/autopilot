@@ -192,6 +192,17 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       parts.push(`## Instructions\n${context.instructions}`)
     }
 
+    // Inject capability profile hints
+    if (context.capabilities) {
+      const cap = context.capabilities
+      if (cap.skills.length > 0) {
+        parts.push(`## Active Skills\n${cap.skills.map((s) => `- ${s}`).join('\n')}`)
+      }
+      if (cap.prompts.length > 0) {
+        parts.push(cap.prompts.join('\n\n'))
+      }
+    }
+
     if (parts.length === 0) {
       parts.push(`Execute run ${context.runId} for agent ${context.agentId}`)
     }

@@ -427,6 +427,7 @@ console.log(JSON.stringify({ ok: true }))`,
 			workflows: new Map(),
 			environments: new Map(),
 			providers: new Map([['test-notif', provider]]),
+			capabilityProfiles: new Map(),
 			defaults: { runtime: 'claude-code' },
 		}
 	}
@@ -508,6 +509,7 @@ console.log(JSON.stringify({ ok: true }))`,
 		const config = {
 			...makeConfig(),
 			providers: new Map([['test-notif-2', provider]]),
+			capabilityProfiles: new Map(),
 		}
 
 		const localBus = new EventBus()

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { ExecutionTargetSchema } from './workflow'
 import { ExternalActionSchema } from './external-action'
 import { SecretRefSchema } from './secret-ref'
+import { ResolvedCapabilitiesSchema } from './capability-profile'
 
 // ─── Shared ────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,10 @@ export const ClaimedRunSchema = z.object({
 	 * Keyed by secret name → plaintext value.
 	 */
 	resolved_shared_secrets: z.record(z.string()).default({}),
+
+	// ─── Capability intent ──────────────────────────────────────────
+	/** Resolved capability set for this run (merged agent + step profiles). */
+	resolved_capabilities: ResolvedCapabilitiesSchema.optional(),
 })
 
 export const WorkerClaimResponseSchema = z.object({

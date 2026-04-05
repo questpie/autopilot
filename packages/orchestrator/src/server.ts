@@ -78,6 +78,7 @@ export async function startServer(options?: StartServerOptions) {
 		workflows: resolved.workflows,
 		environments: resolved.environments,
 		providers: resolved.providers,
+		capabilityProfiles: resolved.capabilityProfiles,
 		defaults: resolved.defaults,
 	}
 	console.log(

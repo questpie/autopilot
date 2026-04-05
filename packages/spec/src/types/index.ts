@@ -28,6 +28,10 @@ export type SharedSecretScope = z.infer<typeof schemas.SharedSecretScopeSchema>
 export type SharedSecretInput = z.infer<typeof schemas.SharedSecretInputSchema>
 export type SharedSecretMetadata = z.infer<typeof schemas.SharedSecretMetadataSchema>
 
+// Capability Profiles
+export type CapabilityProfile = z.infer<typeof schemas.CapabilityProfileSchema>
+export type ResolvedCapabilities = z.infer<typeof schemas.ResolvedCapabilitiesSchema>
+
 // Artifacts
 export type Artifact = z.infer<typeof schemas.ArtifactSchema>
 export type RunArtifact = z.infer<typeof schemas.RunArtifactSchema>

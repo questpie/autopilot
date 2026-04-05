@@ -14,6 +14,7 @@ export const PATHS = {
 	ENVIRONMENTS_DIR: '.autopilot/environments',
 	PROVIDERS_DIR: '.autopilot/providers',
 	HANDLERS_DIR: '.autopilot/handlers',
+	CAPABILITIES_DIR: '.autopilot/capabilities',
 	SKILLS_DIR: '.autopilot/skills',
 	CONTEXT_DIR: '.autopilot/context',
 

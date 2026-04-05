@@ -100,6 +100,7 @@ function makeConfig(
 		workflows,
 		environments: new Map(),
 		providers: new Map(),
+		capabilityProfiles: new Map(),
 		defaults: { runtime: 'claude-code', workflow: 'default', task_assignee: 'ceo' },
 	}
 }

@@ -115,6 +115,8 @@ export const WorkflowStepSchema = z.object({
 	targeting: ExecutionTargetSchema.optional(),
 	/** External actions to execute after the step's run completes. */
 	actions: z.array(ExternalActionSchema).default([]),
+	/** Capability profile IDs active for this step. Extends agent-level profiles (deduplicated). */
+	capability_profiles: z.array(z.string()).default([]),
 })
 
 export const WorkflowSchema = z.object({
