@@ -7,7 +7,7 @@
 
 import { parseStructuredOutput, getSummary } from '../structured-output'
 import type { RunArtifact } from '@questpie/autopilot-spec'
-import type { RunContext, WorkerEvent } from './adapter'
+import type { RunContext } from './adapter'
 
 /**
  * Build a prompt string from RunContext.
@@ -66,10 +66,3 @@ export function extractResult(rawText: string): ExtractedResult {
 
 /** Convenience type for subprocess handle. */
 export type Subprocess = ReturnType<typeof Bun.spawn>
-
-/** Create an event emitter helper bound to an event handler. */
-export function createEmitter(handler: ((event: WorkerEvent) => void) | null) {
-  return (event: WorkerEvent): void => {
-    handler?.(event)
-  }
-}

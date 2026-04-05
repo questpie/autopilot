@@ -173,6 +173,18 @@ export class CodexAdapter implements RuntimeAdapter {
     const stdout = proc.stdout
     if (!stdout) return { sessionId, lastAgentMessage, tokens }
 
+    const processLine = (line: string): void => {
+      try {
+        const event = JSON.parse(line)
+        const result = this.handleCodexEvent(event)
+        if (result.sessionId) sessionId = result.sessionId
+        if (result.agentMessage) lastAgentMessage = result.agentMessage
+        if (result.tokens) tokens = result.tokens
+      } catch {
+        console.warn('[codex] skipping malformed JSONL line:', line.slice(0, 100))
+      }
+    }
+
     const reader = stdout.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
@@ -183,39 +195,16 @@ export class CodexAdapter implements RuntimeAdapter {
         if (done) break
         buffer += decoder.decode(value, { stream: true })
 
-        // Process complete lines
         while (buffer.includes('\n')) {
           const lineEnd = buffer.indexOf('\n')
           const line = buffer.slice(0, lineEnd).trim()
           buffer = buffer.slice(lineEnd + 1)
-          if (!line) continue
-
-          try {
-            const event = JSON.parse(line)
-            const result = this.handleCodexEvent(event)
-            if (result.sessionId) sessionId = result.sessionId
-            if (result.agentMessage) lastAgentMessage = result.agentMessage
-            if (result.tokens) tokens = result.tokens
-          } catch {
-            // Malformed JSONL line — skip with warning
-            console.warn('[codex] skipping malformed JSONL line:', line.slice(0, 100))
-          }
+          if (line) processLine(line)
         }
       }
 
-      // Process remaining buffer
       const remaining = buffer.trim()
-      if (remaining) {
-        try {
-          const event = JSON.parse(remaining)
-          const result = this.handleCodexEvent(event)
-          if (result.sessionId) sessionId = result.sessionId
-          if (result.agentMessage) lastAgentMessage = result.agentMessage
-          if (result.tokens) tokens = result.tokens
-        } catch {
-          console.warn('[codex] skipping malformed final JSONL:', remaining.slice(0, 100))
-        }
-      }
+      if (remaining) processLine(remaining)
     } finally {
       reader.releaseLock()
     }
@@ -236,16 +225,15 @@ export class CodexAdapter implements RuntimeAdapter {
       case 'thread.started':
         return { sessionId: event.thread_id }
 
-      case 'item.started':
-        if (event.item?.type === 'command_execution' || event.item?.type === 'mcp_tool_call') {
-          this.emit({
-            type: 'tool_use',
-            summary: event.item.type === 'mcp_tool_call'
-              ? `MCP: ${event.item.name ?? 'tool call'}`
-              : `Command: ${event.item.command ?? 'executing'}`,
-          })
+      case 'item.started': {
+        const itemType = event.item?.type
+        if (itemType === 'mcp_tool_call') {
+          this.emit({ type: 'tool_use', summary: `MCP: ${event.item!.name ?? 'tool call'}` })
+        } else if (itemType === 'command_execution') {
+          this.emit({ type: 'tool_use', summary: `Command: ${event.item!.command ?? 'executing'}` })
         }
         return {}
+      }
 
       case 'item.completed':
         if (event.item?.type === 'agent_message') {

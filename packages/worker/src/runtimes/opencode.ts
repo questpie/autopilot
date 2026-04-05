@@ -147,11 +147,12 @@ export class OpenCodeAdapter implements RuntimeAdapter {
       const sessionId = result.session_id ?? result.sessionId ?? undefined
 
       // Extract token usage — try multiple possible shapes
-      const tokens = result.usage
-        ? { input: result.usage.input_tokens ?? 0, output: result.usage.output_tokens ?? 0 }
-        : result.tokens
-          ? { input: result.tokens.input ?? 0, output: result.tokens.output ?? 0 }
-          : undefined
+      let tokens: { input: number; output: number } | undefined
+      if (result.usage) {
+        tokens = { input: result.usage.input_tokens ?? 0, output: result.usage.output_tokens ?? 0 }
+      } else if (result.tokens) {
+        tokens = { input: result.tokens.input ?? 0, output: result.tokens.output ?? 0 }
+      }
 
       const extracted = extractResult(rawText)
 

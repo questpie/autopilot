@@ -54,4 +54,3 @@ export async function createMcpConfig(opts: McpConfigOptions): Promise<{
     },
   }
 }
-
