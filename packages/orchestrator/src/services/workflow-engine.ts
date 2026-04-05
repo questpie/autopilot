@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities } from '@questpie/autopilot-spec'
 import type { TaskService, TaskRow } from './tasks'
 import type { RunService } from './runs'
 import type { ActivityService } from './activity'
@@ -15,6 +15,7 @@ export interface AuthoredConfig {
 	workflows: Map<string, Workflow>
 	environments: Map<string, Environment>
 	providers: Map<string, Provider>
+	capabilityProfiles: Map<string, CapabilityProfile>
 	defaults: { runtime: string; workflow?: string; task_assignee?: string }
 }
 
@@ -33,6 +34,7 @@ export interface AdvanceResult {
 interface ResolvedTargeting extends ExecutionTarget {
 	secret_refs?: SecretRef[]
 	actions?: ExternalAction[]
+	resolved_capabilities?: ResolvedCapabilities
 }
 
 /** Context carried from the source step that caused advancement. */
@@ -457,7 +459,7 @@ export class WorkflowEngine {
 
 				await this.taskService.update(task.id, { status: 'active' })
 
-				const targeting = this.resolveTargeting(step)
+				const targeting = this.resolveTargeting(step, agentId)
 				const runtime = step.targeting?.required_runtime ?? this.defaultRuntime
 
 				// Build instructions: [context] + [step instructions] + [human reply] + [output suffix]
@@ -581,11 +583,12 @@ export class WorkflowEngine {
 
 	// ─── Targeting ──────────────────────────────────────────────────────
 
-	private resolveTargeting(step: WorkflowStep): string | undefined {
+	private resolveTargeting(step: WorkflowStep, agentId?: string): string | undefined {
 		const hasStepTargeting = !!step.targeting
 		const hasActions = (step.actions?.length ?? 0) > 0
+		const capabilities = agentId ? this.resolveCapabilities(agentId, step) : undefined
 
-		if (!hasStepTargeting && !hasActions) return undefined
+		if (!hasStepTargeting && !hasActions && !capabilities) return undefined
 
 		const tags = [...(step.targeting?.required_worker_tags ?? [])]
 		const target: ResolvedTargeting = {
@@ -613,9 +616,56 @@ export class WorkflowEngine {
 			target.actions = step.actions!
 		}
 
-		const hasConstraints = target.required_worker_id || target.required_runtime || tags.length > 0 || target.actions || target.secret_refs
+		if (capabilities) {
+			target.resolved_capabilities = capabilities
+		}
+
+		const hasConstraints = target.required_worker_id || target.required_runtime || tags.length > 0 || target.actions || target.secret_refs || target.resolved_capabilities
 		if (!hasConstraints) return undefined
 		return JSON.stringify(target)
+	}
+
+	// ─── Capability Resolution ─────────────────────────────────────────
+
+	/**
+	 * Resolve capability profiles for a run.
+	 * Merge rule: agent profiles first, step profiles extend. Deduplicated.
+	 * Returns undefined if no profiles are referenced.
+	 */
+	private resolveCapabilities(agentId: string, step: WorkflowStep): ResolvedCapabilities | undefined {
+		const agent = this.config.agents.get(agentId)
+		const agentProfileIds = agent?.capability_profiles ?? []
+		const stepProfileIds = step.capability_profiles ?? []
+
+		if (agentProfileIds.length === 0 && stepProfileIds.length === 0) return undefined
+
+		// Deduplicate: agent first, step extends (preserves order, first wins)
+		const profileIds = [...new Set([...agentProfileIds, ...stepProfileIds])]
+
+		// Merge all referenced profiles into a single resolved set
+		const skills = new Set<string>()
+		const mcpServers = new Set<string>()
+		const context = new Set<string>()
+		const prompts: string[] = []
+
+		for (const profileId of profileIds) {
+			const profile = this.config.capabilityProfiles.get(profileId)
+			if (!profile) {
+				console.warn(`[workflow-engine] capability profile "${profileId}" not found`)
+				continue
+			}
+			for (const s of profile.skills) skills.add(s)
+			for (const m of profile.mcp_servers) mcpServers.add(m)
+			for (const c of profile.context) context.add(c)
+			for (const p of profile.prompts) prompts.push(p)
+		}
+
+		return {
+			skills: [...skills],
+			mcp_servers: [...mcpServers],
+			context: [...context],
+			prompts,
+		}
 	}
 
 	// ─── Join Evaluation ────────────────────────────────────────────────

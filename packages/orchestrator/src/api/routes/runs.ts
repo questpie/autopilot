@@ -8,6 +8,7 @@ import {
 	CreateRunRequestSchema,
 	ContinueRunRequestSchema,
 } from '@questpie/autopilot-spec'
+import type { ResolvedCapabilities, CapabilityProfile } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
 
@@ -70,14 +71,31 @@ const runs = new Hono<AppEnv>()
 	.post('/', zValidator('json', CreateRunRequestSchema), async (c) => {
 		const { runService } = c.get('services')
 		const actor = c.get('actor')
+		const authoredConfig = c.get('authoredConfig')
 		const body = c.req.valid('json')
 		const id = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
 		const { targeting, ...rest } = body
+
+		// Resolve agent-level capability profiles into the targeting blob
+		const agent = authoredConfig.agents.get(body.agent_id)
+		const agentProfiles = agent?.capability_profiles ?? []
+		const resolvedCaps = agentProfiles.length > 0
+			? resolveAgentCapabilities(agentProfiles, authoredConfig.capabilityProfiles)
+			: undefined
+
+		let targetingJson: string | undefined
+		if (targeting || resolvedCaps) {
+			targetingJson = JSON.stringify({
+				...targeting,
+				...(resolvedCaps && { resolved_capabilities: resolvedCaps }),
+			})
+		}
+
 		const run = await runService.create({
 			id,
 			...rest,
 			initiated_by: body.initiated_by ?? actor?.id ?? 'system',
-			targeting: targeting ? JSON.stringify(targeting) : undefined,
+			targeting: targetingJson,
 		})
 		if (!run) return c.json({ error: 'failed to create run' }, 500)
 
@@ -320,3 +338,31 @@ const runs = new Hono<AppEnv>()
 	)
 
 export { runs }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+function resolveAgentCapabilities(
+	profileIds: string[],
+	profiles: Map<string, CapabilityProfile>,
+): ResolvedCapabilities {
+	const skills = new Set<string>()
+	const mcpServers = new Set<string>()
+	const context = new Set<string>()
+	const prompts: string[] = []
+
+	for (const id of profileIds) {
+		const profile = profiles.get(id)
+		if (!profile) continue
+		for (const s of profile.skills) skills.add(s)
+		for (const m of profile.mcp_servers) mcpServers.add(m)
+		for (const c of profile.context) context.add(c)
+		for (const p of profile.prompts) prompts.push(p)
+	}
+
+	return {
+		skills: [...skills],
+		mcp_servers: [...mcpServers],
+		context: [...context],
+		prompts,
+	}
+}

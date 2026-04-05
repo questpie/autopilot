@@ -145,6 +145,7 @@ console.log(JSON.stringify({ ok: true }))`
 			workflows: new Map(),
 			environments: new Map(),
 			providers: new Map([['conv-loop-1', convProvider]]),
+			capabilityProfiles: new Map(),
 			defaults: { runtime: 'claude-code' },
 		}
 
@@ -194,6 +195,7 @@ console.log(JSON.stringify({ ok: true }))`
 			workflows: new Map(),
 			environments: new Map(),
 			providers: new Map([['conv-loop-2', convProvider]]),
+			capabilityProfiles: new Map(),
 			defaults: { runtime: 'claude-code' },
 		}
 
@@ -255,6 +257,7 @@ console.log(JSON.stringify({ ok: true }))`
 			workflows: new Map(),
 			environments: new Map(),
 			providers: new Map([['conv-loop-3', convProvider]]),
+			capabilityProfiles: new Map(),
 			defaults: { runtime: 'claude-code' },
 		}
 
@@ -299,6 +302,7 @@ console.log(JSON.stringify({ ok: true }))`
 			workflows: new Map(),
 			environments: new Map(),
 			providers: new Map([['webhook-notif', notifProvider]]),
+			capabilityProfiles: new Map(),
 			defaults: { runtime: 'claude-code' },
 		}
 
@@ -363,6 +367,7 @@ console.log(JSON.stringify({ ok: true }))`
 				['webhook-notif', notifProvider],
 				['conv-loop-both', convProvider],
 			]),
+			capabilityProfiles: new Map(),
 			defaults: { runtime: 'claude-code' },
 		}
 

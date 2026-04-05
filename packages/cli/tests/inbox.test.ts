@@ -60,6 +60,7 @@ function buildTestApp(config: {
 			workflows: new Map(),
 			environments: new Map(),
 			providers: new Map(),
+			capabilityProfiles: new Map(),
 		})
 		c.set('actor', FAKE_ACTOR)
 		c.set('workerId', null)
@@ -114,6 +115,7 @@ describe('Inbox Data', () => {
 				workflows: new Map(),
 				environments: new Map(),
 				providers: new Map(),
+				capabilityProfiles: new Map(),
 				defaults: { runtime: 'claude-code' },
 			},
 			taskService,

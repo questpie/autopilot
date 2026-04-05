@@ -19,9 +19,10 @@ import {
 	WorkflowSchema,
 	EnvironmentSchema,
 	ProviderSchema,
+	CapabilityProfileSchema,
 	PATHS,
 } from '@questpie/autopilot-spec'
-import type { CompanyScope, ProjectScope, Agent, Workflow, Environment, Provider } from '@questpie/autopilot-spec'
+import type { CompanyScope, ProjectScope, Agent, Workflow, Environment, Provider, CapabilityProfile } from '@questpie/autopilot-spec'
 import type { z, ZodTypeDef } from 'zod'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export interface ResolvedConfig {
 	workflows: Map<string, Workflow>
 	environments: Map<string, Environment>
 	providers: Map<string, Provider>
+	capabilityProfiles: Map<string, CapabilityProfile>
 	skills: Map<string, string>
 	context: Map<string, string>
 	/** Resolved defaults (project overrides company). */
@@ -167,6 +169,10 @@ export async function loadProvidersFromRoot(root: string) {
 	return loadYamlDir(join(root, PATHS.PROVIDERS_DIR), ProviderSchema)
 }
 
+export async function loadCapabilityProfilesFromRoot(root: string) {
+	return loadYamlDir(join(root, PATHS.CAPABILITIES_DIR), CapabilityProfileSchema)
+}
+
 export async function loadSkillsFromRoot(root: string) {
 	return loadSkillsDir(join(root, PATHS.SKILLS_DIR))
 }
@@ -203,6 +209,7 @@ export async function resolveConfig(chain: ScopeChain): Promise<ResolvedConfig> 
 	const companyWorkflows = companyRoot ? await loadWorkflowsFromRoot(companyRoot) : []
 	const companyEnvs = companyRoot ? await loadEnvironmentsFromRoot(companyRoot) : []
 	const companyProviders = companyRoot ? await loadProvidersFromRoot(companyRoot) : []
+	const companyCapProfiles = companyRoot ? await loadCapabilityProfilesFromRoot(companyRoot) : []
 	const companySkills = companyRoot ? await loadSkillsFromRoot(companyRoot) : new Map<string, string>()
 	const companyContext = companyRoot ? await loadContextFromRoot(companyRoot) : new Map<string, string>()
 
@@ -213,6 +220,7 @@ export async function resolveConfig(chain: ScopeChain): Promise<ResolvedConfig> 
 	const projectWorkflows = hasProjectRoot ? await loadWorkflowsFromRoot(projectRoot) : []
 	const projectEnvs = hasProjectRoot ? await loadEnvironmentsFromRoot(projectRoot) : []
 	const projectProviders = hasProjectRoot ? await loadProvidersFromRoot(projectRoot) : []
+	const projectCapProfiles = hasProjectRoot ? await loadCapabilityProfilesFromRoot(projectRoot) : []
 	const projectSkills = hasProjectRoot ? await loadSkillsFromRoot(projectRoot) : new Map<string, string>()
 	const projectContext = hasProjectRoot ? await loadContextFromRoot(projectRoot) : new Map<string, string>()
 
@@ -230,6 +238,7 @@ export async function resolveConfig(chain: ScopeChain): Promise<ResolvedConfig> 
 		workflows: mergeMapById(companyWorkflows, projectWorkflows),
 		environments: mergeMapById(companyEnvs, projectEnvs),
 		providers: mergeMapById(companyProviders, projectProviders),
+		capabilityProfiles: mergeMapById(companyCapProfiles, projectCapProfiles),
 		skills: mergeMaps(companySkills, projectSkills),
 		context: mergeMaps(companyContext, projectContext),
 		defaults,

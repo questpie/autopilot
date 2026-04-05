@@ -301,6 +301,7 @@ export class AutopilotWorker {
       apiKey: this.machineSecret ?? '',
       runtimeSessionRef: run.runtime_session_ref ?? null,
       workDir: ws?.path ?? null,
+      capabilities: run.resolved_capabilities ?? null,
     }
 
     const isResume = !!run.resumed_from_run_id

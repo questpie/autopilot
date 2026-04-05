@@ -8,8 +8,9 @@ import {
 	WorkerDeregisterRequestSchema,
 	ExternalActionSchema,
 	SecretRefSchema,
+	ResolvedCapabilitiesSchema,
 } from '@questpie/autopilot-spec'
-import type { ExternalAction, SecretRef } from '@questpie/autopilot-spec'
+import type { ExternalAction, SecretRef, ResolvedCapabilities } from '@questpie/autopilot-spec'
 import { z } from 'zod'
 import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
@@ -140,7 +141,7 @@ const workers = new Hono<AppEnv>()
 		const agentRole = agent?.role ?? null
 
 		// Split targeting blob into constraints vs post-run hooks
-		const { constraints, actions, secretRefs } = splitTargeting(run.targeting)
+		const { constraints, actions, secretRefs, resolvedCapabilities } = splitTargeting(run.targeting)
 
 		// Resolve shared secret refs for worker delivery.
 		// Workers receive only 'worker' scoped secrets.
@@ -174,6 +175,7 @@ const workers = new Hono<AppEnv>()
 					actions,
 					secret_refs: secretRefs,
 					resolved_shared_secrets: resolvedSharedSecrets,
+					resolved_capabilities: resolvedCapabilities,
 				},
 				lease_id: leaseId,
 			},
@@ -205,37 +207,49 @@ export { workers }
 const TargetingBlobSchema = z.object({
 	actions: z.array(ExternalActionSchema).default([]),
 	secret_refs: z.array(SecretRefSchema).default([]),
+	resolved_capabilities: ResolvedCapabilitiesSchema.optional(),
 }).passthrough()
 
 /**
  * Split the JSON-serialized targeting blob into execution constraints
- * (what the claiming logic uses) and post-run hooks (what the worker executes after).
+ * (what the claiming logic uses), post-run hooks, and capability intent.
  */
-function splitTargeting(raw: string | null | undefined): {
+interface SplitTargetingResult {
 	constraints: Record<string, unknown> | null
 	actions: ExternalAction[]
 	secretRefs: SecretRef[]
-} {
-	if (!raw) return { constraints: null, actions: [], secretRefs: [] }
+	resolvedCapabilities: ResolvedCapabilities | undefined
+}
+
+const EMPTY_TARGETING: SplitTargetingResult = {
+	constraints: null,
+	actions: [],
+	secretRefs: [],
+	resolvedCapabilities: undefined,
+}
+
+function splitTargeting(raw: string | null | undefined): SplitTargetingResult {
+	if (!raw) return EMPTY_TARGETING
 
 	let parsed: unknown
 	try {
 		parsed = JSON.parse(raw)
 	} catch {
-		return { constraints: null, actions: [], secretRefs: [] }
+		return EMPTY_TARGETING
 	}
 
 	const result = TargetingBlobSchema.safeParse(parsed)
 	if (!result.success) {
-		return { constraints: parsed as Record<string, unknown>, actions: [], secretRefs: [] }
+		return { ...EMPTY_TARGETING, constraints: parsed as Record<string, unknown> }
 	}
 
-	const { actions, secret_refs, ...rest } = result.data
+	const { actions, secret_refs, resolved_capabilities, ...rest } = result.data
 	const hasConstraints = Object.keys(rest).some((k) => rest[k] !== undefined)
 
 	return {
 		constraints: hasConstraints ? rest : null,
 		actions,
 		secretRefs: secret_refs,
+		resolvedCapabilities: resolved_capabilities,
 	}
 }

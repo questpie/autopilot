@@ -19,4 +19,6 @@ export const AgentSchema = z.object({
 	model: z.string().optional(),
 	fs_scope: FsScopeSchema.optional(),
 	triggers: z.array(AgentTriggerSchema).default([]),
+	/** Capability profile IDs active for all runs by this agent. Step-level profiles extend these. */
+	capability_profiles: z.array(z.string()).default([]),
 })

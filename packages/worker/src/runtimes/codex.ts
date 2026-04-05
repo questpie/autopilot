@@ -171,7 +171,7 @@ export class CodexAdapter implements RuntimeAdapter {
     let tokens: { input: number; output: number } | undefined
 
     const stdout = proc.stdout
-    if (!stdout) return { sessionId, lastAgentMessage, tokens }
+    if (!stdout || typeof stdout === 'number') return { sessionId, lastAgentMessage, tokens }
 
     const processLine = (line: string): void => {
       try {
@@ -309,8 +309,10 @@ function extractAgentMessageContent(item: CodexEvent['item']): string | null {
 
   if (Array.isArray(item.content)) {
     const texts = item.content
-      .filter((block: unknown) => typeof block === 'object' && block !== null && 'text' in block)
-      .map((block: { text: string }) => block.text)
+      .filter((block: unknown): block is { text: string } =>
+        typeof block === 'object' && block !== null && 'text' in block && typeof (block as Record<string, unknown>).text === 'string',
+      )
+      .map((block) => block.text)
     return texts.length > 0 ? texts.join('\n') : null
   }
 

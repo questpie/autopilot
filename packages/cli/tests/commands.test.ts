@@ -36,8 +36,12 @@ describe('command registration', () => {
 		expect(commandNames).toContain('bootstrap')
 	})
 
-	it('has exactly 11 top-level commands', () => {
-		expect(program.commands.length).toBe(11)
+	it('registers secrets command', () => {
+		expect(commandNames).toContain('secrets')
+	})
+
+	it('has exactly 12 top-level commands', () => {
+		expect(program.commands.length).toBe(12)
 	})
 
 	it('registers inbox command', () => {
