@@ -149,6 +149,60 @@ describe('ConversationBindingService', () => {
 		expect(found).toBeUndefined()
 	})
 
+	test('findByExternal falls back to chat-level binding when thread_id not matched', async () => {
+		// Create chat-level binding (no thread_id)
+		const binding = await service.create({
+			id: 'bind-fallback-chat',
+			provider_id: 'tg-fallback',
+			external_conversation_id: 'chat-500',
+			mode: 'task_thread',
+			task_id: 'task-fallback',
+		})
+		expect(binding).toBeDefined()
+
+		// Verify it's findable without thread_id
+		const direct = await service.findByExternal('tg-fallback', 'chat-500')
+		expect(direct).toBeDefined()
+
+		// Lookup with a thread_id that doesn't have its own binding
+		// Should fall back to the chat-level binding
+		const found = await service.findByExternal('tg-fallback', 'chat-500', 'msg-999')
+		expect(found).toBeDefined()
+		expect(found!.id).toBe('bind-fallback-chat')
+		expect(found!.task_id).toBe('task-fallback')
+	})
+
+	test('findByExternal prefers exact thread match over chat-level fallback', async () => {
+		// Create chat-level binding
+		await service.create({
+			id: 'bind-exact-chat',
+			provider_id: 'tg-exact',
+			external_conversation_id: 'chat-600',
+			mode: 'task_thread',
+			task_id: 'task-chat',
+		})
+
+		// Create thread-specific binding
+		await service.create({
+			id: 'bind-exact-thread',
+			provider_id: 'tg-exact',
+			external_conversation_id: 'chat-600',
+			external_thread_id: 'thread-42',
+			mode: 'task_thread',
+			task_id: 'task-thread',
+		})
+
+		// Exact thread match should win
+		const threadMatch = await service.findByExternal('tg-exact', 'chat-600', 'thread-42')
+		expect(threadMatch).toBeDefined()
+		expect(threadMatch!.id).toBe('bind-exact-thread')
+
+		// Unknown thread should fall back to chat-level
+		const chatFallback = await service.findByExternal('tg-exact', 'chat-600', 'other-thread')
+		expect(chatFallback).toBeDefined()
+		expect(chatFallback!.id).toBe('bind-exact-chat')
+	})
+
 	test('listForTask returns bindings', async () => {
 		const bindings = await service.listForTask('task-1')
 		expect(bindings.length).toBeGreaterThanOrEqual(1)
@@ -307,7 +361,7 @@ console.log(JSON.stringify({
 		delete process.env.__TEST_CONV_SECRET_conv2
 	})
 
-	test('provider-secret auth accepts correct secret', async () => {
+	test('provider-secret auth accepts correct secret via X-Provider-Secret', async () => {
 		process.env.__TEST_CONV_SECRET_conv3 = 'valid-secret'
 		const providers = new Map([['conv3', makeProvider('conv3', 'handlers/noop.ts')]])
 		const services = makeServices()
@@ -321,6 +375,22 @@ console.log(JSON.stringify({
 		const body = await res.json() as any
 		expect(body.action).toBe('noop')
 		delete process.env.__TEST_CONV_SECRET_conv3
+	})
+
+	test('provider-secret auth accepts Telegram webhook secret header', async () => {
+		process.env.__TEST_CONV_SECRET_conv3b = 'tg-webhook-secret'
+		const providers = new Map([['conv3b', makeProvider('conv3b', 'handlers/noop.ts')]])
+		const services = makeServices()
+		const app = buildApp(providers, services)
+
+		const res = await app.request(
+			'/api/conversations/conv3b',
+			post({ text: '' }, { 'x-telegram-bot-api-secret-token': 'tg-webhook-secret' }),
+		)
+		expect(res.status).toBe(200)
+		const body = await res.json() as any
+		expect(body.action).toBe('noop')
+		delete process.env.__TEST_CONV_SECRET_conv3b
 	})
 
 	test('unbound conversation returns 422', async () => {

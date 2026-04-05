@@ -119,9 +119,11 @@ const conversations = new Hono<AppEnv>()
 				return c.json({ error: `Provider ${providerId} has no auth_secret configured — inbound callbacks require authentication` }, 403)
 			}
 
+			// Accept X-Provider-Secret (generic) or X-Telegram-Bot-Api-Secret-Token (Telegram webhook)
 			const providerSecret = c.req.header('x-provider-secret')
+				?? c.req.header('x-telegram-bot-api-secret-token')
 			if (!providerSecret) {
-				return c.json({ error: 'X-Provider-Secret header required' }, 401)
+				return c.json({ error: 'Provider secret header required (X-Provider-Secret or X-Telegram-Bot-Api-Secret-Token)' }, 401)
 			}
 			const resolved = await resolveSecrets([authSecretRef])
 			const expected = resolved.get('auth_secret')

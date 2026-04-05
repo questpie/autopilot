@@ -20,8 +20,8 @@ export class ConversationBindingService {
 		task_id?: string
 		metadata?: string
 	}): Promise<ConversationBindingRow | undefined> {
-		// Enforce uniqueness at service level (SQLite unique index doesn't prevent NULL duplicates)
-		const existing = await this.findByExternal(input.provider_id, input.external_conversation_id, input.external_thread_id)
+		// Enforce uniqueness at service level (exact match, no fallback)
+		const existing = await this.findExact(input.provider_id, input.external_conversation_id, input.external_thread_id)
 		if (existing) {
 			throw new Error(
 				`Binding already exists for provider=${input.provider_id} conversation=${input.external_conversation_id}` +
@@ -43,7 +43,8 @@ export class ConversationBindingService {
 		return _getBinding(this.db, id)
 	}
 
-	async findByExternal(
+	/** Exact match — no fallback. Used for uniqueness checks in create(). */
+	private async findExact(
 		providerId: string,
 		externalConversationId: string,
 		externalThreadId?: string,
@@ -61,9 +62,56 @@ export class ConversationBindingService {
 				)
 				.get()
 		}
+		return this.db
+			.select()
+			.from(conversationBindings)
+			.where(
+				and(
+					eq(conversationBindings.provider_id, providerId),
+					eq(conversationBindings.external_conversation_id, externalConversationId),
+					isNull(conversationBindings.external_thread_id),
+				),
+			)
+			.get()
+	}
+
+	async findByExternal(
+		providerId: string,
+		externalConversationId: string,
+		externalThreadId?: string,
+	): Promise<ConversationBindingRow | undefined> {
+		if (externalThreadId) {
+			// Try exact thread match first
+			const exact = await this.db
+				.select()
+				.from(conversationBindings)
+				.where(
+					and(
+						eq(conversationBindings.provider_id, providerId),
+						eq(conversationBindings.external_conversation_id, externalConversationId),
+						eq(conversationBindings.external_thread_id, externalThreadId),
+					),
+				)
+				.get()
+			if (exact) return exact
+
+			// Fall back to chat-level binding (no thread) for the same provider + conversation.
+			// This supports surfaces like Telegram where callbacks carry a per-message thread_id
+			// but the operator creates a single chat-level binding.
+			return this.db
+				.select()
+				.from(conversationBindings)
+				.where(
+					and(
+						eq(conversationBindings.provider_id, providerId),
+						eq(conversationBindings.external_conversation_id, externalConversationId),
+						isNull(conversationBindings.external_thread_id),
+					),
+				)
+				.get()
+		}
 
 		// For conversation-level bindings (no thread), explicitly match NULL
-		// to avoid SQLite's NULL != NULL uniqueness quirk
 		return this.db
 			.select()
 			.from(conversationBindings)

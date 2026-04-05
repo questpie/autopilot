@@ -46,7 +46,10 @@ This materializes the provider config and handler into `.autopilot/`.
 
 ## Configure Telegram webhook
 
-Point Telegram at your orchestrator's conversation inbound endpoint:
+Point Telegram at your orchestrator's conversation inbound endpoint.
+
+Telegram sends a `X-Telegram-Bot-Api-Secret-Token` header on each webhook delivery.
+The orchestrator accepts this header natively — no proxy header rewrite is needed.
 
 ```bash
 curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
@@ -66,7 +69,8 @@ ngrok http 7778
 
 ## Create a conversation binding
 
-Bind a Telegram chat to a specific task for the review loop:
+Create a **chat-level** binding that links your Telegram chat to a task.
+All messages, commands, and button presses in that chat route to the bound task.
 
 ```bash
 curl -X POST "<ORCHESTRATOR_URL>/api/conversations/bindings" \
@@ -80,16 +84,21 @@ curl -X POST "<ORCHESTRATOR_URL>/api/conversations/bindings" \
   }'
 ```
 
+Note: this is a chat-level binding (no `external_thread_id`). Inline button callbacks
+and reply messages carry per-message IDs, but the orchestrator falls back to the
+chat-level binding automatically. You do not need per-message bindings.
+
 ## Operator commands
 
 In the bound Telegram chat:
 
-| Command | Action |
-|---------|--------|
+| Input | Action |
+|-------|--------|
 | `/approve` | Approve the bound task |
 | `/reject <reason>` | Reject with optional reason |
-| Any text | Reply to the bound task (becomes instructions for next step) |
-| Inline buttons | Approve/Reject buttons on notification messages |
+| Any text message | Reply to the bound task (becomes instructions for next step) |
+| Approve button | Approve via inline keyboard on notification messages |
+| Reject button | Reject via inline keyboard on notification messages |
 
 ## Outbound notifications
 
