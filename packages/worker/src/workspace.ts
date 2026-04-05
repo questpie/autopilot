@@ -44,12 +44,16 @@ export interface WorkspaceManagerConfig {
 }
 
 export class WorkspaceManager {
-  private repoRoot: string
-  private worktreeBase: string
+  #repoRoot: string
+  #worktreeBase: string
 
   constructor(config: WorkspaceManagerConfig) {
-    this.repoRoot = config.repoRoot
-    this.worktreeBase = config.worktreeBase ?? join(config.repoRoot, '.worktrees')
+    this.#repoRoot = config.repoRoot
+    this.#worktreeBase = config.worktreeBase ?? join(config.repoRoot, '.worktrees')
+  }
+
+  get repoRoot(): string {
+    return this.#repoRoot
   }
 
   /**
@@ -66,9 +70,9 @@ export class WorkspaceManager {
   }): Promise<WorkspaceInfo> {
     // Check if this is a git repo
     if (!this.isGitRepo()) {
-      console.warn(`[workspace] DEGRADED MODE: ${this.repoRoot} is not a git repo — no worktree isolation`)
+      console.warn(`[workspace] DEGRADED MODE: ${this.#repoRoot} is not a git repo — no worktree isolation`)
       return {
-        path: this.repoRoot,
+        path: this.#repoRoot,
         branch: '',
         created: false,
         runId: opts.runId,
@@ -100,12 +104,12 @@ export class WorkspaceManager {
     }
 
     // Ensure base directory exists
-    await mkdir(this.worktreeBase, { recursive: true })
+    await mkdir(this.#worktreeBase, { recursive: true })
 
     // Create worktree + new branch from current HEAD
     const result = Bun.spawnSync(
       ['git', 'worktree', 'add', '-b', branch, wtPath],
-      { cwd: this.repoRoot, stdout: 'pipe', stderr: 'pipe' },
+      { cwd: this.#repoRoot, stdout: 'pipe', stderr: 'pipe' },
     )
 
     if (result.exitCode !== 0) {
@@ -114,7 +118,7 @@ export class WorkspaceManager {
       if (stderr.includes('already exists')) {
         const retry = Bun.spawnSync(
           ['git', 'worktree', 'add', wtPath, branch],
-          { cwd: this.repoRoot, stdout: 'pipe', stderr: 'pipe' },
+          { cwd: this.#repoRoot, stdout: 'pipe', stderr: 'pipe' },
         )
         if (retry.exitCode !== 0) {
           throw new Error(
@@ -156,14 +160,14 @@ export class WorkspaceManager {
 
     // Remove worktree
     Bun.spawnSync(['git', 'worktree', 'remove', '--force', wtPath], {
-      cwd: this.repoRoot,
+      cwd: this.#repoRoot,
       stdout: 'pipe',
       stderr: 'pipe',
     })
 
     // Prune stale worktree metadata
     Bun.spawnSync(['git', 'worktree', 'prune'], {
-      cwd: this.repoRoot,
+      cwd: this.#repoRoot,
       stdout: 'pipe',
       stderr: 'pipe',
     })
@@ -171,7 +175,7 @@ export class WorkspaceManager {
     // Optionally remove branch
     if (opts.removeBranch) {
       Bun.spawnSync(['git', 'branch', '-D', branch], {
-        cwd: this.repoRoot,
+        cwd: this.#repoRoot,
         stdout: 'pipe',
         stderr: 'pipe',
       })
@@ -189,7 +193,7 @@ export class WorkspaceManager {
   worktreePath(runId: string): string {
     // Sanitize runId for filesystem safety
     const safe = runId.replace(/[^a-zA-Z0-9_-]/g, '_')
-    return join(this.worktreeBase, safe)
+    return join(this.#worktreeBase, safe)
   }
 
   /** Get the branch name for a run ID. */
@@ -201,7 +205,7 @@ export class WorkspaceManager {
   private isGitRepo(): boolean {
     const result = Bun.spawnSync(
       ['git', 'rev-parse', '--is-inside-work-tree'],
-      { cwd: this.repoRoot, stdout: 'pipe', stderr: 'pipe' },
+      { cwd: this.#repoRoot, stdout: 'pipe', stderr: 'pipe' },
     )
     return result.exitCode === 0
   }

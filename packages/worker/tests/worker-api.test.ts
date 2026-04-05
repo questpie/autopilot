@@ -6,10 +6,22 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { createWorkerApi, type WorkerApiDeps } from '../src/api'
+import { createWorkerApi, type WorkerApiDeps, type WorkerApiAppType } from '../src/api'
+import { createWorkerApiClient } from '../src/api-client'
 import { WorkspaceManager } from '../src/workspace'
 import type { ResolvedRuntime } from '../src/runtime-config'
 import type { WorkerCapability } from '../src/worker'
+import {
+  HealthResponseSchema,
+  WorkerStatusSchema,
+  WorkspaceEntrySchema,
+  WorkspaceDetailSchema,
+  DiffResultSchema,
+  FileEntrySchema,
+  ErrorResponseSchema,
+} from '../src/api-schemas'
+import { z } from 'zod'
+import { hc } from 'hono/client'
 
 // ─── Test helpers ───────────────────────────────────────────────────────────
 
@@ -421,5 +433,142 @@ describe('File listing sort order', () => {
     expect(dirIdx).toBeLessThan(fileIdx)
 
     await workspace.release({ runId: 'run-sort-test', removeBranch: true })
+  })
+})
+
+// ─── Response schema conformance ───────────────────────────────────────────
+
+describe('Response schema conformance', () => {
+  test('GET /health conforms to HealthResponseSchema', async () => {
+    const { app } = createTestApi(makeDeps())
+    const res = await fetchApi(app, '/health')
+    const data = await res.json()
+    expect(() => HealthResponseSchema.parse(data)).not.toThrow()
+  })
+
+  test('GET /status conforms to WorkerStatusSchema', async () => {
+    const repoRoot = await createTempGitRepo()
+    const { app } = createTestApi(makeDeps({ repoRoot }))
+    const res = await fetchApi(app, '/status')
+    const data = await res.json()
+    expect(() => WorkerStatusSchema.parse(data)).not.toThrow()
+  })
+
+  test('GET /workspaces conforms to WorkspaceEntrySchema[]', async () => {
+    const repoRoot = await createTempGitRepo()
+    const workspace = new WorkspaceManager({ repoRoot })
+    await workspace.acquire({ runId: 'run-schema-ws' })
+
+    const { app } = createTestApi(makeDeps({
+      repoRoot,
+      getWorkspace: () => workspace,
+      getActiveRunId: () => 'run-schema-ws',
+    }))
+
+    const res = await fetchApi(app, '/workspaces')
+    const data = await res.json()
+    expect(() => z.array(WorkspaceEntrySchema).parse(data)).not.toThrow()
+
+    await workspace.release({ runId: 'run-schema-ws', removeBranch: true })
+  })
+
+  test('GET /workspaces/:runId conforms to WorkspaceDetailSchema', async () => {
+    const repoRoot = await createTempGitRepo()
+    const workspace = new WorkspaceManager({ repoRoot })
+    await workspace.acquire({ runId: 'run-schema-detail' })
+
+    const { app } = createTestApi(makeDeps({
+      repoRoot,
+      getWorkspace: () => workspace,
+    }))
+
+    const res = await fetchApi(app, '/workspaces/run-schema-detail')
+    const data = await res.json()
+    expect(() => WorkspaceDetailSchema.parse(data)).not.toThrow()
+
+    await workspace.release({ runId: 'run-schema-detail', removeBranch: true })
+  })
+
+  test('GET /workspaces/:runId/diff conforms to DiffResultSchema', async () => {
+    const repoRoot = await createTempGitRepo()
+    const workspace = new WorkspaceManager({ repoRoot })
+    await workspace.acquire({ runId: 'run-schema-diff' })
+    const wtPath = workspace.worktreePath('run-schema-diff')
+    await writeFile(join(wtPath, 'file.ts'), 'export {}\n')
+    Bun.spawnSync(['git', 'add', '.'], { cwd: wtPath, stdout: 'pipe', stderr: 'pipe' })
+    Bun.spawnSync(['git', 'commit', '-m', 'change'], { cwd: wtPath, stdout: 'pipe', stderr: 'pipe' })
+
+    const { app } = createTestApi(makeDeps({
+      repoRoot,
+      getWorkspace: () => workspace,
+    }))
+
+    const res = await fetchApi(app, '/workspaces/run-schema-diff/diff')
+    const data = await res.json()
+    expect(() => DiffResultSchema.parse(data)).not.toThrow()
+
+    await workspace.release({ runId: 'run-schema-diff', removeBranch: true })
+  })
+
+  test('GET /workspaces/:runId/files conforms to FileEntrySchema[]', async () => {
+    const repoRoot = await createTempGitRepo()
+    const workspace = new WorkspaceManager({ repoRoot })
+    await workspace.acquire({ runId: 'run-schema-files' })
+
+    const { app } = createTestApi(makeDeps({
+      repoRoot,
+      getWorkspace: () => workspace,
+    }))
+
+    const res = await fetchApi(app, '/workspaces/run-schema-files/files')
+    const data = await res.json()
+    expect(() => z.array(FileEntrySchema).parse(data)).not.toThrow()
+
+    await workspace.release({ runId: 'run-schema-files', removeBranch: true })
+  })
+
+  test('404 errors conform to ErrorResponseSchema', async () => {
+    const repoRoot = await createTempGitRepo()
+    const workspace = new WorkspaceManager({ repoRoot })
+
+    const { app } = createTestApi(makeDeps({
+      repoRoot,
+      getWorkspace: () => workspace,
+    }))
+
+    const res = await fetchApi(app, '/workspaces/nonexistent')
+    expect(res.status).toBe(404)
+    const data = await res.json()
+    expect(() => ErrorResponseSchema.parse(data)).not.toThrow()
+  })
+})
+
+// ─── Typed client ──────────────────────────────────────────────────────────
+
+describe('Typed worker API client', () => {
+  test('WorkerApiAppType is usable with hc<>', () => {
+    // Compile-time check: this must type-check without errors
+    const _client = hc<WorkerApiAppType>('http://localhost:7779', {
+      headers: { Authorization: 'Bearer test' },
+    })
+    // Verify the typed routes exist on the client
+    expect(_client.health).toBeDefined()
+    expect(_client.status).toBeDefined()
+    expect(_client.workspaces).toBeDefined()
+  })
+
+  test('createWorkerApiClient returns typed client', () => {
+    const client = createWorkerApiClient('http://localhost:7779', 'test-token')
+    expect(client.health).toBeDefined()
+    expect(client.status).toBeDefined()
+    expect(client.workspaces).toBeDefined()
+  })
+
+  test('typed client can hit health endpoint via app.request', async () => {
+    const { app } = createTestApi(makeDeps())
+    // Use app.request directly (no real server needed)
+    const res = await fetchApi(app, '/health')
+    const data = await res.json()
+    expect(() => HealthResponseSchema.parse(data)).not.toThrow()
   })
 })
