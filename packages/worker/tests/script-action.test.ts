@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { WorkerEvent, ExternalAction, ScriptAction, RunArtifact } from '@questpie/autopilot-spec'
 import { ExternalActionSchema, ScriptResultSchema } from '@questpie/autopilot-spec'
-import { executeActions } from '../src/actions/webhook'
+import { executeActions, mergeOutputs } from '../src/actions/webhook'
 import { executeScriptAction, type ScriptActionContext } from '../src/actions/script'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -517,5 +517,40 @@ describe('Mixed webhook and script actions', () => {
 				// no workspacePath
 			}),
 		).rejects.toThrow('requires a workspace')
+	})
+})
+
+// ─── Runtime-vs-script output collision ────────────────────────────────────
+
+describe('Runtime-vs-script output collision (mergeOutputs)', () => {
+	test('non-overlapping keys merge cleanly', () => {
+		const result = mergeOutputs(
+			{ outcome: 'approved', priority: 'high' },
+			{ deploy_url: 'https://staging.example.com' },
+		)
+		expect(result).toEqual({
+			outcome: 'approved',
+			priority: 'high',
+			deploy_url: 'https://staging.example.com',
+		})
+	})
+
+	test('colliding key hard-fails', () => {
+		expect(() =>
+			mergeOutputs(
+				{ outcome: 'approved' },
+				{ outcome: 'deployed' },
+			),
+		).toThrow('Output key collision: script action set "outcome" which already exists in runtime outputs')
+	})
+
+	test('empty script outputs merge cleanly', () => {
+		const result = mergeOutputs({ outcome: 'done' }, {})
+		expect(result).toEqual({ outcome: 'done' })
+	})
+
+	test('empty runtime outputs merge cleanly', () => {
+		const result = mergeOutputs({}, { deploy_url: 'https://a.com' })
+		expect(result).toEqual({ deploy_url: 'https://a.com' })
 	})
 })

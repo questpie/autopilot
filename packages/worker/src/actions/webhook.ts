@@ -93,7 +93,27 @@ export async function executeActions(opts: ExecuteActionsOptions): Promise<Actio
 	return merged
 }
 
-// ─── Merge logic ───────────────────────────────────────────────────────────
+// ─── Output merge with collision detection ─────────────────────────────────
+
+/**
+ * Merge script action outputs into runtime outputs, hard-failing on collision.
+ * Used by the worker after both the adapter and post-run actions have completed.
+ */
+export function mergeOutputs(
+	runtimeOutputs: Record<string, string>,
+	scriptOutputs: Record<string, string>,
+): Record<string, string> {
+	for (const key of Object.keys(scriptOutputs)) {
+		if (key in runtimeOutputs) {
+			throw new Error(
+				`Output key collision: script action set "${key}" which already exists in runtime outputs`,
+			)
+		}
+	}
+	return { ...runtimeOutputs, ...scriptOutputs }
+}
+
+// ─── Merge logic (across script actions) ───────────────────────────────────
 
 function mergeScriptResult(
 	merged: ActionsMergedResult,

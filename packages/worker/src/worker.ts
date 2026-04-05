@@ -1,6 +1,6 @@
 import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse, RunArtifact } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
-import { executeActions, type ActionsMergedResult } from './actions/webhook'
+import { executeActions, mergeOutputs, type ActionsMergedResult } from './actions/webhook'
 import { collectPreviewFiles } from './preview'
 import { WorkspaceManager, type WorkspaceInfo } from './workspace'
 import { resolveRuntime, type RuntimeConfig, type ResolvedRuntime } from './runtime-config'
@@ -340,17 +340,10 @@ export class AutopilotWorker {
         allArtifacts = [...allArtifacts, ...actionResult.artifacts]
       }
 
-      const runtimeOutputs = result?.outputs ?? {}
-      const scriptOutputs = actionResult?.outputs ?? {}
-
-      // Hard-fail on collision between runtime outputs and script outputs
-      for (const key of Object.keys(scriptOutputs)) {
-        if (key in runtimeOutputs) {
-          throw new Error(`Output key collision: script action set "${key}" which already exists in runtime outputs`)
-        }
-      }
-
-      const mergedOutputs = { ...runtimeOutputs, ...scriptOutputs }
+      const mergedOutputs = mergeOutputs(
+        result?.outputs ?? {},
+        actionResult?.outputs ?? {},
+      )
       const finalSummary = actionResult?.summary ?? result?.summary
 
       await this.completeRun(run.id, {
