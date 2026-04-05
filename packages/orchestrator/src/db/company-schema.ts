@@ -316,6 +316,38 @@ export const sharedSecrets = sqliteTable(
 	],
 )
 
+// ─── Queries ──────────────────────────────────────────────────────────────
+
+export const queries = sqliteTable(
+	'queries',
+	{
+		id: text('id').primaryKey(),
+		prompt: text('prompt').notNull(),
+		agent_id: text('agent_id').notNull(),
+		run_id: text('run_id'),
+		status: text('status').notNull().default('pending'), // pending | running | completed | failed
+		allow_repo_mutation: integer('allow_repo_mutation', { mode: 'boolean' }).notNull().default(false),
+		mutated_repo: integer('mutated_repo', { mode: 'boolean' }).notNull().default(false),
+		summary: text('summary'),
+
+		// ─── Thin continuity (foundation for Pass 24.9) ──────────────
+		continue_from: text('continue_from'), // prior query ID
+		carryover_summary: text('carryover_summary'), // short derived context
+		runtime_session_ref: text('runtime_session_ref'), // optional adapter resume handle
+
+		created_by: text('created_by').notNull(),
+		created_at: text('created_at').notNull(),
+		ended_at: text('ended_at'),
+		metadata: text('metadata').default('{}'),
+	},
+	(table) => [
+		index('idx_queries_status').on(table.status),
+		index('idx_queries_agent').on(table.agent_id),
+		index('idx_queries_created').on(table.created_at),
+		index('idx_queries_continue_from').on(table.continue_from),
+	],
+)
+
 // ─── Activity ──────────────────────────────────────────────────────────────
 
 export const activity = sqliteTable(

@@ -9,7 +9,7 @@ import {
 	ContinueRunRequestSchema,
 } from '@questpie/autopilot-spec'
 import type { ResolvedCapabilities, CapabilityProfile } from '@questpie/autopilot-spec'
-import type { AppEnv } from '../app'
+import type { AppEnv, Services } from '../app'
 import { eventBus } from '../../events/event-bus'
 
 const runs = new Hono<AppEnv>()
@@ -233,6 +233,22 @@ const runs = new Hono<AppEnv>()
 				runId: id,
 				status: body.status,
 			})
+
+			// Query completion: if this run belongs to a query, update the query record
+			const { queryService } = c.get('services') as { queryService?: Services['queryService'] }
+			if (queryService) {
+				const queryRow = await queryService.getByRunId(id)
+				if (queryRow) {
+					const hasMutation = body.artifacts?.some((a) => a.kind === 'changed_file') ?? false
+					await queryService.complete(queryRow.id, {
+						status: body.status,
+						summary: body.summary,
+						mutated_repo: hasMutation,
+						runtime_session_ref: body.runtime_session_ref,
+						error: body.error,
+					})
+				}
+			}
 
 			// Workflow progression: advance on success, mark failed on failure
 			if (run.task_id) {

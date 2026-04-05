@@ -48,6 +48,11 @@ export {
 	NotificationActionSchema,
 } from './provider'
 export {
+	QueryRequestSchema,
+	QueryResultSchema,
+	QueryRowSchema,
+} from './query'
+export {
 	WorkerRegisterRequestSchema,
 	WorkerCapabilitySchema,
 	WorkerRegisterResponseSchema,

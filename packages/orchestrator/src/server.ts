@@ -19,7 +19,7 @@ import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, SecretService } from './services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, SecretService, QueryService } from './services'
 import type { AuthoredConfig } from './services'
 import { NotificationBridge } from './providers'
 import { eventBus } from './events/event-bus'
@@ -98,6 +98,7 @@ export async function startServer(options?: StartServerOptions) {
 	const conversationBindingService = new ConversationBindingService(companyDb)
 	const taskRelationService = new TaskRelationService(companyDb)
 	const secretService = new SecretService(companyDb)
+	const queryService = new QueryService(companyDb)
 
 	// ── 6b. Validate master key if shared secrets are in use ────────────
 	if (!hasMasterKey()) {
@@ -141,6 +142,7 @@ export async function startServer(options?: StartServerOptions) {
 		taskGraphService,
 		workflowEngine,
 		secretService,
+		queryService,
 	}
 
 	// ── 7. Start notification bridge ─────────────────────────────────────

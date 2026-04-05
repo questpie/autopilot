@@ -78,6 +78,11 @@ export type PackManifest = z.infer<typeof schemas.PackManifestSchema>
 export type PackLockEntry = z.infer<typeof schemas.PackLockEntrySchema>
 export type PackLockfile = z.infer<typeof schemas.PackLockfileSchema>
 
+// Queries
+export type QueryRequest = z.infer<typeof schemas.QueryRequestSchema>
+export type QueryResult = z.infer<typeof schemas.QueryResultSchema>
+export type QueryRow = z.infer<typeof schemas.QueryRowSchema>
+
 // Providers
 export type Provider = z.infer<typeof schemas.ProviderSchema>
 export type ProviderKind = z.infer<typeof schemas.ProviderKindSchema>
