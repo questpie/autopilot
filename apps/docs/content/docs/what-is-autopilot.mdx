@@ -59,15 +59,19 @@ The core system is operational:
 - Full task → run → claim → execute → complete flow
 - Workflow-driven intake, step progression, approvals
 - Durable previews (orchestrator-backed, not worker-dependent)
-- Provider/extension runtime v1
+- Provider/handler extension runtime v1 (notifications, intent intake, conversations)
+- Surface packs (Telegram is the first real proof surface)
+- Pack distribution with git registries, lockfile, and `autopilot sync`
 - Notification bridge
 - CLI inbox/watch for async operation
 - Conversation bindings for task-scoped actions
 - Per-run git worktree isolation
 - Worker-local session persistence
+- Parent/child task graphs with wait/join
 
 **Not yet implemented:**
 - Worker App (planned, not the center of the current story)
 - Multi-runtime parity beyond Claude Code
 - Schedule/trigger runtime layer
-- Polished human-facing review routes
+- Per-step runtime capability injection
+- Orchestrator-managed shared secret store

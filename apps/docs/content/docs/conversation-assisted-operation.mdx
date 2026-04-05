@@ -161,7 +161,19 @@ You can already use conversation-assisted operation for:
 
 That is enough to prove the async operator loop without building a Worker App first.
 
+## Real example: Telegram
+
+The [Telegram surface pack](/docs/telegram-surface) is the first real implementation of conversation-assisted operation. It demonstrates:
+
+- Inbound webhook normalization (Telegram callback queries and text messages → task actions)
+- Outbound notifications with inline approve/reject buttons
+- Chat-level bindings with automatic thread fallback
+- Orchestrator-boundary webhook auth via Telegram's native secret token header
+
+The same binding model works for any surface — Telegram is just the first proof.
+
 ## Related docs
 
 - [Operator Guide](/docs/operator-guide)
 - [Providers and Handlers](/docs/providers-and-handlers)
+- [Telegram Surface](/docs/telegram-surface)

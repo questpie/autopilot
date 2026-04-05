@@ -1,19 +1,29 @@
 ---
 title: Providers and Handlers
-description: Extend Autopilot with outbound notifications and inbound normalization — without hardcoding integrations.
+description: "Providers, handlers, surfaces, and packs — Autopilot's extension model."
 ---
 
-Autopilot uses a provider/handler model instead of hardcoded integrations:
+Autopilot extends through four related concepts:
 
-- A **provider** is config in `.autopilot/providers/` — declares what it connects to and what it can do.
-- A **handler** is a Bun script in `.autopilot/handlers/` — normalizes inbound payloads or delivers outbound messages.
-- The **orchestrator** invokes the handler, validates the result, and executes the real action.
+- A **provider** is an authored integration instance — YAML config in `.autopilot/providers/` that declares what it connects to and what operations it supports.
+- A **handler** is an executable adapter — a Bun script in `.autopilot/handlers/` that does the actual protocol-specific work (API calls, payload normalization, message formatting).
+- A **surface** is a human-facing channel pattern — like Telegram, Slack, or email — built over one or more providers and handlers. Surfaces are not a separate primitive; they are the user-visible result of combining providers, handlers, and conversation bindings.
+- A **pack** is a distribution unit — an installable bundle that delivers providers, handlers, workflows, skills, and other material into your `.autopilot/` directory via `autopilot sync`.
 
 Handlers do not become the system of record. They normalize or deliver. The orchestrator still owns tasks, workflow actions, and durable state.
 
+## How these relate
+
+<Mermaid chart="graph TD
+  Pack[Pack — distribution unit] --> Provider[Provider — authored config]
+  Provider --> Handler[Handler — executable adapter]
+  Handler --> Surface[Surface — user-facing result]" />
+
+A pack like `questpie/telegram-surface` installs a provider config and a handler script. Together they create a Telegram surface — but the orchestrator primitives (tasks, bindings, workflow actions) are the same regardless of which surface delivered the interaction.
+
 ## Current scope
 
-Today this covers outbound notifications, intent intake, and conversation-assisted task actions. It is not a generic plugin platform.
+Today providers support outbound notifications, intent intake, and conversation-assisted task actions. This is not a generic plugin platform — providers integrate Autopilot with the outside world while keeping the orchestrator in charge of the core model.
 
 ## How it works
 
@@ -194,6 +204,36 @@ secret_refs:
 ```
 
 This keeps provider config reviewable without hardcoding credentials into the repo.
+
+## Surfaces
+
+A surface is not a separate config object. It is the user-visible result of combining a provider, a handler, and conversation bindings into a coherent human-facing channel.
+
+The Telegram surface, for example, is:
+
+- A `conversation_channel` provider with `notify.send` and `conversation.ingest` capabilities
+- A handler that speaks the Telegram Bot API
+- Conversation bindings that map Telegram chats to tasks
+- Orchestrator-boundary webhook auth
+
+The same pattern applies to Slack, Discord, email, or any future surface. Different handler code, same orchestrator primitives.
+
+See [Telegram Surface](/docs/telegram-surface) for the first real example.
+
+## Installed skills vs runtime capability injection
+
+There is an important distinction between:
+
+- **Installed skills** — repo-resident skill definitions, prompts, and context under `.autopilot/`. These exist on disk and are available to any agent that references them.
+- **Runtime capability injection** — per-step or per-agent selection of which skills, tools, and context are active during a run. This would allow workflows to scope what an agent can access at each step.
+
+Today, installed skills are real. Runtime capability injection per workflow step is planned but not yet implemented. When it arrives, it will work through the workflow engine — steps will declare capability profiles that control what tools and context the runtime adapter provides.
+
+## Providers and packs
+
+Providers and handlers often arrive as packs — installable bundles distributed through git registries. When you run `autopilot sync`, pack contents materialize into `.autopilot/` as normal files.
+
+See [Packs and Distribution](/docs/packs-and-distribution) for the full distribution model.
 
 ## What providers are not
 

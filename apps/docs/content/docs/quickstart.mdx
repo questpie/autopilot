@@ -17,31 +17,35 @@ This guide gets you from zero to a working local Autopilot instance — orchestr
 bun add -g @questpie/autopilot
 ```
 
-## Initialize your project
+## Bootstrap your project
 
 In your repo root:
 
 ```bash
-autopilot init
+autopilot bootstrap
 ```
 
-This creates the `.autopilot/` directory with default config:
+Bootstrap walks you through setup interactively:
+
+1. Choose mode: **local-first** (scaffold and run locally) or **join-existing** (connect to an existing orchestrator)
+2. Choose operator surface: **Claude Code + MCP** (recommended) or **CLI-only**
+3. Enter company/project basics
+4. Select a starter workflow template
+
+This creates the `.autopilot/` directory with your config:
 
 ```
 .autopilot/
 ├── company.yaml
 ├── project.yaml
 ├── agents/
+│   └── dev.yaml
+├── workflows/
 │   └── default.yaml
-└── workflows/
-    └── default.yaml
+└── context/
+    ├── company.md
+    └── project.md
 ```
-
-## Configure
-
-Edit `.autopilot/company.yaml` to set your company name and any global settings.
-
-Edit `.autopilot/project.yaml` to configure the project.
 
 Set your AI provider credentials as environment variables:
 
@@ -108,8 +112,25 @@ autopilot runs show <run-id>
 
 If the run produced previews, the orchestrator serves them at the URL shown in the run's artifacts section.
 
+## Install a surface pack
+
+To add a notification or conversation surface (e.g., Telegram), declare it in your company config and sync:
+
+```yaml title=".autopilot/company.yaml"
+packs:
+  - ref: questpie/telegram-surface
+```
+
+```bash
+autopilot sync
+```
+
+This materializes the provider and handler into `.autopilot/`. See [Packs and Distribution](/docs/packs-and-distribution) for details and [Telegram Surface](/docs/telegram-surface) for the full setup guide.
+
 ## Next steps
 
 - **[Architecture](/docs/architecture)** — understand orchestrator, worker, and truth boundaries
 - **[Operator Guide](/docs/operator-guide)** — full CLI workflows and async operation
-- **[Providers and Handlers](/docs/providers-and-handlers)** — add notifications, intake, conversations
+- **[Providers and Handlers](/docs/providers-and-handlers)** — providers, handlers, and surfaces
+- **[Packs and Distribution](/docs/packs-and-distribution)** — install integrations via the pack system
+- **[Cloud and Deployment](/docs/cloud-and-deployment)** — multi-worker and remote deployment

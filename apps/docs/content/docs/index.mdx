@@ -11,8 +11,11 @@ Autopilot keeps authored policy in git, operational state in the orchestrator, a
 - **[Architecture](/docs/architecture)** — orchestrator, worker, truth boundaries
 - **[Quickstart](/docs/quickstart)** — get running locally
 - **[Operator Guide](/docs/operator-guide)** — CLI workflows, inbox, approvals
-- **[Providers and Handlers](/docs/providers-and-handlers)** — extend with notifications, intake, conversations
+- **[Providers and Handlers](/docs/providers-and-handlers)** — providers, handlers, and surfaces
+- **[Packs and Distribution](/docs/packs-and-distribution)** — install integrations via the pack system
 - **[Conversation-Assisted Operation](/docs/conversation-assisted-operation)** — chat bindings for task actions
+- **[Telegram Surface](/docs/telegram-surface)** — the first real surface pack example
+- **[Cloud and Deployment](/docs/cloud-and-deployment)** — truth layers, multi-worker, deployment patterns
 - **[FAQ](/docs/faq)** — common questions
 
 ## Core idea
@@ -20,3 +23,5 @@ Autopilot keeps authored policy in git, operational state in the orchestrator, a
 Tasks are intent. Workflows decide what happens. Workers execute where access exists.
 
 The system is designed around a small set of stable primitives — tasks, workflows, runs, workers — with multiple clients (CLI, notifications, chat surfaces) operating over those primitives. There is no single app that owns the product. The orchestrator owns operational truth. Workers own runtime execution. Git owns authored policy.
+
+Integrations arrive as **packs** — installable units that deliver providers, handlers, workflows, and more into your `.autopilot/` directory via `autopilot sync`. Surfaces like Telegram, Slack, and Discord are built over the same provider/handler primitives, not hardcoded.

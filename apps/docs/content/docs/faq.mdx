@@ -45,7 +45,21 @@ Yes. Each worker independently claims available runs. This is useful when differ
 
 ## Where do secrets live?
 
-On the worker machine. Never centralized. The orchestrator stores operational state and authored config, but credentials, API keys, and runtime secrets stay on the machine that needs them.
+Provider secrets (API tokens, webhook secrets) are resolved by the orchestrator at handler invocation time — declared as references in provider YAML, not embedded values. Machine credentials (SSH keys, git tokens) and runtime auth (AI provider API keys) stay on the worker machine.
+
+Shared company secrets managed centrally by the orchestrator are planned but not yet implemented. Today, secrets are configured per-host via environment variables, files, or exec commands.
+
+## What is a pack?
+
+A distribution unit that installs providers, handlers, workflows, skills, or other material into your `.autopilot/` directory. Packs are declared in `company.yaml`, resolved from git registries, and materialized by `autopilot sync`. See [Packs and Distribution](/docs/packs-and-distribution).
+
+## What is a surface?
+
+A human-facing channel pattern — like Telegram, Slack, or email — built over providers, handlers, and conversation bindings. Surfaces are not a separate config object; they are the user-visible result of combining provider capabilities with the orchestrator's binding and notification model. The [Telegram surface pack](/docs/telegram-surface) is the first real example.
+
+## How do I add a Telegram bot?
+
+Install the Telegram surface pack: add `questpie/telegram-surface` to your company.yaml packs, run `autopilot sync`, configure your bot token and webhook, and create a conversation binding. Full guide: [Telegram Surface](/docs/telegram-surface).
 
 ## Is this open source?
 
@@ -58,3 +72,11 @@ The repo-native config directory. It contains authored YAML for agents, workflow
 ## What happens if a worker goes down?
 
 The orchestrator still has all state. Previews and artifacts are stored by the orchestrator, not the worker. When a worker comes back (or a different worker picks up), runs can be reclaimed. Raw session transcripts on the worker are lost, but operational state is durable.
+
+## Is local development different from cloud deployment?
+
+No. Local and cloud are the same architecture with a different URL. `autopilot start` runs the orchestrator and worker on localhost. For cloud, run the orchestrator on a VPS and point workers at it with `ORCHESTRATOR_URL`. Same config, same primitives, same behavior. See [Cloud and Deployment](/docs/cloud-and-deployment).
+
+## What is `autopilot sync`?
+
+The command that installs and applies packs. It resolves pack refs from your `company.yaml`, fetches them from configured registries, materializes files into `.autopilot/`, and writes a lockfile. See [Packs and Distribution](/docs/packs-and-distribution).

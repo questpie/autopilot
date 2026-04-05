@@ -2,6 +2,7 @@ import defaultComponents from 'fumadocs-ui/mdx'
 import type { ComponentProps } from 'react'
 
 import { cn } from '@/lib/utils'
+import { Mermaid } from './mermaid'
 
 function CustomPre({
 	title,
@@ -31,4 +32,5 @@ function CustomPre({
 export const components = {
 	...defaultComponents,
 	pre: CustomPre,
+	Mermaid,
 }

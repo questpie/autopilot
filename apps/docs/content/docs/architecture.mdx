@@ -177,17 +177,25 @@ That means previews survive worker shutdown. If the worker laptop goes offline, 
 
 Important: preview URLs are **not automatically public**. They are served through the orchestrator's normal access model.
 
-## Providers and handlers
+## Pack distribution
 
-Autopilot has a provider runtime for outbound notifications and inbound normalization.
+Reusable integration material — providers, handlers, workflows, skills, context — is distributed through **packs**.
 
-Current shape:
+- Desired packs are declared in `.autopilot/company.yaml`
+- Packs are resolved from git-backed registries
+- `autopilot sync` materializes pack files into `.autopilot/` and writes a lockfile
+- Installed files are normal repo config — editable, reviewable, version-controlled
 
-- **Providers** are authored YAML under `.autopilot/providers/`
-- **Handlers** are Bun scripts under `.autopilot/handlers/`
-- The orchestrator invokes handlers with typed envelopes
-- Handlers normalize or deliver
-- The orchestrator still executes the real primitive
+This keeps integrations installable without hardcoding them into the core. See [Packs and Distribution](/docs/packs-and-distribution) for the full model.
+
+## Providers, handlers, and surfaces
+
+Autopilot extends through a provider/handler model:
+
+- **Providers** are authored YAML under `.autopilot/providers/` — integration instances that declare capabilities and secret refs
+- **Handlers** are Bun scripts under `.autopilot/handlers/` — executable adapters that do protocol-specific work
+- **Surfaces** are human-facing channels (Telegram, Slack, email) built over providers, handlers, and conversation bindings
+- The orchestrator invokes handlers with typed envelopes, validates results, and executes the real primitives
 
 Current operations:
 
@@ -196,6 +204,22 @@ Current operations:
 | `notify.send` | Send an outbound notification |
 | `intent.ingest` | Turn inbound payload into task creation |
 | `conversation.ingest` | Turn inbound conversation payload into task actions |
+
+Surface integrations arrive as packs, not hardcoded features. See [Providers and Handlers](/docs/providers-and-handlers) for the extension model and [Telegram Surface](/docs/telegram-surface) for the first real example.
+
+## Security model
+
+Auth and verification live at the orchestrator boundary:
+
+- **Inbound webhooks** are verified by provider-declared `auth_secret` refs
+- **Surface-specific headers** (e.g., Telegram's `X-Telegram-Bot-Api-Secret-Token`) are recognized natively
+- **Generic providers** use `X-Provider-Secret` for webhook auth
+- **Workers** authenticate via join tokens during enrollment
+- **Better Auth** capabilities are reused for session management and OAuth flows where they fit
+
+Handlers normalize provider-specific details but do not invent private auth subsystems. Webhook signatures, headers, and verification steps are always explicit and inspectable in the provider config and handler code.
+
+Provider secrets are declared as references, not values. The orchestrator resolves them at handler invocation time and passes only the scoped subset needed for that operation.
 
 ## Async operator model
 
@@ -218,3 +242,5 @@ Current operator surfaces:
 - optional provider-driven notifications and conversation bindings
 
 That is the current architecture in practice: control plane on the orchestrator, execution on workers, and a CLI-first async loop over explicit workflow primitives.
+
+For deployment topology, multi-worker patterns, and the cloud-first model, see [Cloud and Deployment](/docs/cloud-and-deployment).

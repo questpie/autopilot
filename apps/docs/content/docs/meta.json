@@ -7,7 +7,10 @@
 		"quickstart",
 		"operator-guide",
 		"providers-and-handlers",
+		"packs-and-distribution",
 		"conversation-assisted-operation",
+		"telegram-surface",
+		"cloud-and-deployment",
 		"faq"
 	]
 }
