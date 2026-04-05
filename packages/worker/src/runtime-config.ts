@@ -12,6 +12,8 @@
  */
 
 import { ClaudeCodeAdapter, type ClaudeCodeConfig } from './runtimes/claude-code'
+import { CodexAdapter, type CodexConfig } from './runtimes/codex'
+import { OpenCodeAdapter, type OpenCodeConfig } from './runtimes/opencode'
 import type { RuntimeAdapter } from './runtimes/adapter'
 import type { WorkerCapability } from './worker'
 
@@ -152,10 +154,39 @@ function createAdapter(config: RuntimeConfig, resolvedBinaryPath: string): Runti
       }
       return new ClaudeCodeAdapter(adapterConfig)
     }
+    case 'codex': {
+      if (config.maxTurns !== undefined) {
+        console.warn(
+          `[runtime] maxTurns=${config.maxTurns} configured for codex runtime, ` +
+            `but Codex CLI has no max-turns equivalent. The setting will be ignored.`,
+        )
+      }
+      const codexConfig: CodexConfig = {
+        binaryPath: resolvedBinaryPath,
+        useMcp: config.useMcp ?? true,
+        sessionPersistence: config.sessionPersistence ?? 'local',
+        sandboxMode: 'workspace-write',
+      }
+      return new CodexAdapter(codexConfig)
+    }
+    case 'opencode': {
+      if (config.maxTurns !== undefined) {
+        console.warn(
+          `[runtime] maxTurns=${config.maxTurns} configured for opencode runtime, ` +
+            `but OpenCode CLI has no max-turns equivalent. The setting will be ignored.`,
+        )
+      }
+      const opencodeConfig: OpenCodeConfig = {
+        binaryPath: resolvedBinaryPath,
+        useMcp: config.useMcp ?? true,
+        sessionPersistence: config.sessionPersistence ?? 'local',
+      }
+      return new OpenCodeAdapter(opencodeConfig)
+    }
     default:
       throw new Error(
         `No adapter implementation for runtime '${config.runtime}'.\n` +
-          `Supported runtimes: claude-code`,
+          `Supported runtimes: claude-code, codex, opencode`,
       )
   }
 }
