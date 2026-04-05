@@ -14,8 +14,9 @@ export async function executeActions(
 	actions: ExternalAction[],
 	emitEvent: (event: WorkerEvent) => void,
 	secretRefs?: SecretRef[],
+	preResolvedSharedSecrets?: Record<string, string>,
 ): Promise<void> {
-	const { resolved: secrets, errors } = resolveSecretRefs(secretRefs ?? [])
+	const { resolved: secrets, errors } = resolveSecretRefs(secretRefs ?? [], preResolvedSharedSecrets)
 
 	for (const err of errors) {
 		emitEvent({ type: 'external_action', summary: `Secret resolution warning: ${err}` })

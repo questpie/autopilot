@@ -368,6 +368,7 @@ export class AutopilotWorker {
       actions,
       (event) => { this.postEvent(run.id, event).catch((err) => console.warn('[worker] failed to post action event:', err)) },
       secretRefs,
+      run.resolved_shared_secrets ?? {},
     )
   }
 

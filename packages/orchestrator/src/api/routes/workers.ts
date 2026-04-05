@@ -142,6 +142,18 @@ const workers = new Hono<AppEnv>()
 		// Split targeting blob into constraints vs post-run hooks
 		const { constraints, actions, secretRefs } = splitTargeting(run.targeting)
 
+		// Resolve shared secret refs for worker delivery.
+		// Workers receive only 'worker' and 'provider' scoped secrets — never 'orchestrator_only'.
+		const { secretService } = c.get('services')
+		const sharedRefNames = secretRefs
+			.filter((r) => r.source === 'shared')
+			.map((r) => r.name)
+		const resolvedSharedSecrets = sharedRefNames.length > 0
+			? Object.fromEntries(
+				await secretService.resolveForScopes(sharedRefNames, ['worker', 'provider']),
+			)
+			: {}
+
 		return c.json(
 			{
 				run: {
@@ -160,6 +172,7 @@ const workers = new Hono<AppEnv>()
 					targeting: constraints,
 					actions,
 					secret_refs: secretRefs,
+					resolved_shared_secrets: resolvedSharedSecrets,
 				},
 				lease_id: leaseId,
 			},

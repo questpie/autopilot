@@ -81,6 +81,14 @@ export const ClaimedRunSchema = z.object({
 	// ─── Post-run hooks (separated from targeting) ─────────────────
 	actions: z.array(ExternalActionSchema).default([]),
 	secret_refs: z.array(SecretRefSchema).default([]),
+
+	// ─── Pre-resolved shared secrets ───────���───────────────────────
+	/**
+	 * Decrypted shared secret values delivered by the orchestrator at claim time.
+	 * Only includes secrets with scope 'worker' or 'provider' — never 'orchestrator_only'.
+	 * Keyed by secret name → plaintext value.
+	 */
+	resolved_shared_secrets: z.record(z.string()).default({}),
 })
 
 export const WorkerClaimResponseSchema = z.object({

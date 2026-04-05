@@ -11,6 +11,7 @@ import { join, resolve } from 'node:path'
 import { existsSync } from 'node:fs'
 import { HandlerResultSchema } from '@questpie/autopilot-spec'
 import type { HandlerEnvelope, HandlerResult, Provider, SecretRef } from '@questpie/autopilot-spec'
+import type { SecretService } from '../services/secrets'
 
 export interface HandlerRuntimeConfig {
 	/** Company root — handler paths are resolved relative to .autopilot/ */
@@ -21,13 +22,30 @@ export interface HandlerRuntimeConfig {
 
 /**
  * Resolve secret refs on the orchestrator host.
- * Same model as worker-side resolution: env, file, exec.
+ *
+ * Local refs (env/file/exec) are resolved on the host machine.
+ * Shared refs are resolved from the orchestrator's encrypted secret store.
+ * Orchestrator can resolve all scopes (worker, provider, orchestrator_only).
  */
-export async function resolveSecrets(refs: SecretRef[]): Promise<Map<string, string>> {
+export async function resolveSecrets(
+	refs: SecretRef[],
+	secretService?: SecretService,
+): Promise<Map<string, string>> {
 	const resolved = new Map<string, string>()
+
+	// Batch-resolve shared refs from the encrypted store
+	const sharedNames = refs.filter((r) => r.source === 'shared').map((r) => r.name)
+	const sharedValues = sharedNames.length > 0 && secretService
+		? await secretService.resolveForScopes(sharedNames, ['worker', 'provider', 'orchestrator_only'])
+		: new Map<string, string>()
 
 	for (const ref of refs) {
 		switch (ref.source) {
+			case 'shared': {
+				const val = sharedValues.get(ref.name)
+				if (val !== undefined) resolved.set(ref.name, val)
+				break
+			}
 			case 'env': {
 				const val = process.env[ref.key]
 				if (val !== undefined) resolved.set(ref.name, val)
@@ -153,8 +171,9 @@ export async function invokeProvider(
 	op: string,
 	payload: Record<string, unknown>,
 	config: HandlerRuntimeConfig,
+	secretService?: SecretService,
 ): Promise<HandlerResult> {
-	const secrets = await resolveSecrets(provider.secret_refs)
+	const secrets = await resolveSecrets(provider.secret_refs, secretService)
 
 	const envelope: HandlerEnvelope = {
 		op,

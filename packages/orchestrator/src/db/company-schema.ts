@@ -291,6 +291,31 @@ export const taskRelations = sqliteTable(
 	],
 )
 
+// ─── Shared Secrets ───────────────────────────────────────────────────────
+
+export const sharedSecrets = sqliteTable(
+	'shared_secrets',
+	{
+		/** Unique secret name (e.g. "TELEGRAM_BOT_TOKEN"). */
+		name: text('name').primaryKey(),
+		/** Delivery scope: worker | provider | orchestrator_only. */
+		scope: text('scope').notNull(),
+		/** AES-256-GCM ciphertext (base64). */
+		encrypted_value: text('encrypted_value').notNull(),
+		/** AES-256-GCM initialization vector (base64). */
+		iv: text('iv').notNull(),
+		/** AES-256-GCM authentication tag (base64). */
+		auth_tag: text('auth_tag').notNull(),
+		/** Optional human-readable description. */
+		description: text('description'),
+		created_at: text('created_at').notNull(),
+		updated_at: text('updated_at').notNull(),
+	},
+	(table) => [
+		index('idx_shared_secrets_scope').on(table.scope),
+	],
+)
+
 // ─── Activity ──────────────────────────────────────────────────────────────
 
 export const activity = sqliteTable(

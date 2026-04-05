@@ -22,6 +22,11 @@ export type Environment = z.infer<typeof schemas.EnvironmentSchema>
 
 // Secret Refs
 export type SecretRef = z.infer<typeof schemas.SecretRefSchema>
+export type LocalSecretRef = z.infer<typeof schemas.LocalSecretRefSchema>
+export type SharedSecretRef = z.infer<typeof schemas.SharedSecretRefSchema>
+export type SharedSecretScope = z.infer<typeof schemas.SharedSecretScopeSchema>
+export type SharedSecretInput = z.infer<typeof schemas.SharedSecretInputSchema>
+export type SharedSecretMetadata = z.infer<typeof schemas.SharedSecretMetadataSchema>
 
 // Artifacts
 export type Artifact = z.infer<typeof schemas.ArtifactSchema>

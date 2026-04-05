@@ -1,6 +1,8 @@
 /**
- * Secret resolution — resolves SecretRef definitions to actual values locally on the worker.
- * Values never leave the machine. The orchestrator only stores ref metadata.
+ * Secret resolution — resolves SecretRef definitions to actual values on the worker.
+ *
+ * Local refs (env/file/exec) are resolved on the worker machine.
+ * Shared refs are pre-resolved by the orchestrator and delivered in the claim payload.
  */
 
 import { readFileSync } from 'node:fs'
@@ -13,18 +15,29 @@ export interface SecretResolutionResult {
 
 /**
  * Resolve a list of SecretRef definitions to their actual values.
- * Runs locally on the worker — values never leave the machine.
+ *
+ * Local refs (env/file/exec) are resolved on this machine.
+ * Shared refs are looked up from the pre-resolved map delivered at claim time.
+ *
+ * @param refs - Secret refs from the claimed run
+ * @param preResolved - Shared secret values delivered by the orchestrator (from resolved_shared_secrets)
  */
-export function resolveSecretRefs(refs: SecretRef[]): SecretResolutionResult {
+export function resolveSecretRefs(
+	refs: SecretRef[],
+	preResolved?: Record<string, string>,
+): SecretResolutionResult {
 	const resolved = new Map<string, string>()
 	const errors: string[] = []
 
 	for (const ref of refs) {
 		try {
-			resolved.set(ref.name, resolveOne(ref))
+			resolved.set(ref.name, resolveOne(ref, preResolved))
 		} catch (err) {
+			const detail = ref.source === 'shared'
+				? `(shared)`
+				: `(${ref.source}:${ref.key})`
 			errors.push(
-				`Secret "${ref.name}" (${ref.source}:${ref.key}): ${err instanceof Error ? err.message : String(err)}`,
+				`Secret "${ref.name}" ${detail}: ${err instanceof Error ? err.message : String(err)}`,
 			)
 		}
 	}
@@ -32,8 +45,15 @@ export function resolveSecretRefs(refs: SecretRef[]): SecretResolutionResult {
 	return { resolved, errors }
 }
 
-function resolveOne(ref: SecretRef): string {
+function resolveOne(ref: SecretRef, preResolved?: Record<string, string>): string {
 	switch (ref.source) {
+		case 'shared': {
+			const val = preResolved?.[ref.name]
+			if (val === undefined) {
+				throw new Error('Shared secret not delivered by orchestrator (missing or scope mismatch)')
+			}
+			return val
+		}
 		case 'env': {
 			const val = process.env[ref.key]
 			if (val === undefined) throw new Error(`Environment variable "${ref.key}" not set`)
@@ -52,14 +72,13 @@ function resolveOne(ref: SecretRef): string {
 			}
 			return result.stdout.toString().trim()
 		}
-		default: {
-			const _exhaustive: never = ref.source
-			throw new Error(`Unknown source type: ${_exhaustive}`)
-		}
 	}
 }
 
 /** Validate that all required secret refs can be resolved. Returns error list. */
-export function validateSecretRefs(refs: SecretRef[]): string[] {
-	return resolveSecretRefs(refs).errors
+export function validateSecretRefs(
+	refs: SecretRef[],
+	preResolved?: Record<string, string>,
+): string[] {
+	return resolveSecretRefs(refs, preResolved).errors
 }

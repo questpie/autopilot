@@ -16,7 +16,7 @@ import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, AuthoredConfig } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, AuthoredConfig } from '../services'
 import type { Actor } from '../auth/types'
 import { authMiddleware } from './middleware/auth'
 import { workerAuthMiddleware } from './middleware/worker-auth'
@@ -29,6 +29,7 @@ import { previews } from './routes/previews'
 import { intake } from './routes/intake'
 import { conversations } from './routes/conversations'
 import { taskGraph } from './routes/task-graph'
+import { secrets } from './routes/secrets'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ export interface Services {
 	taskRelationService: TaskRelationService
 	taskGraphService: TaskGraphService
 	workflowEngine: WorkflowEngine
+	secretService: SecretService
 }
 
 export interface AppEnv {
@@ -167,6 +169,10 @@ export function createApp(config: AppConfig) {
 	// ── Intake routes (user auth for V1) ─────────────────────────────────
 	app.use('/api/intake/*', userAuth)
 
+	// ── Secrets routes (user auth — operator surface) ───────────────────
+	app.use('/api/secrets/*', userAuth)
+	app.use('/api/secrets', userAuth)
+
 	// ── Conversation routes ──────────────────────────────────────────────
 	// Binding management requires user auth; inbound /:providerId is self-authenticated via provider secret
 	app.use('/api/conversations/bindings', userAuth)
@@ -189,6 +195,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/intake', intake)
 		.route('/api/conversations', conversations)
 		.route('/api/tasks', taskGraph)
+		.route('/api/secrets', secrets)
 
 	return typedApp
 }

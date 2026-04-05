@@ -48,11 +48,13 @@ const intake = new Hono<AppEnv>()
 			}
 
 			// Invoke the handler with intent.ingest
+			const { secretService } = c.get('services')
 			const handlerResult = await invokeProvider(
 				provider,
 				'intent.ingest',
 				payload as Record<string, unknown>,
 				{ companyRoot },
+				secretService,
 			)
 
 			if (!handlerResult.ok) {

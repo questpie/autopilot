@@ -19,7 +19,7 @@ import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge } from './services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, SecretService } from './services'
 import type { AuthoredConfig } from './services'
 import { NotificationBridge } from './providers'
 import { eventBus } from './events/event-bus'
@@ -95,6 +95,7 @@ export async function startServer(options?: StartServerOptions) {
 	const artifactService = new ArtifactService(companyDb)
 	const conversationBindingService = new ConversationBindingService(companyDb)
 	const taskRelationService = new TaskRelationService(companyDb)
+	const secretService = new SecretService(companyDb)
 
 	const workflowEngine = new WorkflowEngine(authoredConfig, taskService, runService, activityService, artifactService)
 	const taskGraphService = new TaskGraphService(taskService, taskRelationService, workflowEngine)
@@ -119,6 +120,7 @@ export async function startServer(options?: StartServerOptions) {
 		taskRelationService,
 		taskGraphService,
 		workflowEngine,
+		secretService,
 	}
 
 	// ── 7. Start notification bridge ─────────────────────────────────────
@@ -131,6 +133,7 @@ export async function startServer(options?: StartServerOptions) {
 		artifactService,
 		conversationBindingService,
 		{ companyRoot, orchestratorUrl },
+		secretService,
 	)
 	if (authoredConfig.providers.size > 0) {
 		notificationBridge.start()

@@ -15,6 +15,7 @@ import type { RunService } from '../services/runs'
 import type { TaskService } from '../services/tasks'
 import type { ArtifactService } from '../services/artifacts'
 import type { ConversationBindingService } from '../services/conversation-bindings'
+import type { SecretService } from '../services/secrets'
 import { invokeProvider, type HandlerRuntimeConfig } from './handler-runtime'
 
 export interface NotificationBridgeConfig {
@@ -34,6 +35,7 @@ export class NotificationBridge {
 		private artifactService: ArtifactService,
 		private conversationBindingService: ConversationBindingService,
 		private config: NotificationBridgeConfig,
+		private secretService?: SecretService,
 	) {}
 
 	start(): void {
@@ -80,7 +82,7 @@ export class NotificationBridge {
 		if (!hasNotifySend) return
 
 		try {
-			const result = await invokeProvider(provider, 'notify.send', payload, runtimeConfig)
+			const result = await invokeProvider(provider, 'notify.send', payload, runtimeConfig, this.secretService)
 			if (!result.ok) {
 				console.warn(`[notification-bridge] provider ${provider.id} failed: ${result.error}`)
 			}

@@ -29,5 +29,8 @@ export type { SpawnChildrenInput, SpawnChildrenResult, SpawnedChild, ChildCandid
 
 export { ParentJoinBridge } from './parent-join-bridge'
 
+export { SecretService } from './secrets'
+export type { SharedSecretRow } from './secrets'
+
 export { WorkflowEngine } from './workflow-engine'
 export type { AuthoredConfig, IntakeResult, AdvanceResult } from './workflow-engine'
