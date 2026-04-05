@@ -1,65 +1,162 @@
 /**
- * Webhook action executor — runs outbound HTTP requests as post-run side effects.
+ * Action executor — runs post-run side effects (webhooks, scripts).
  * Secret refs are resolved locally on the worker.
  */
 
-import type { ExternalAction, WorkerEvent, SecretRef } from '@questpie/autopilot-spec'
+import type { ExternalAction, WebhookAction, WorkerEvent, SecretRef, RunArtifact } from '@questpie/autopilot-spec'
 import { resolveSecretRefs } from '../secrets'
+import { executeScriptAction, type ScriptActionContext, type ScriptActionResult } from './script'
+
+// ─── Action result (merged across all actions) ─────────────────────────────
+
+export interface ActionsMergedResult {
+	/** Artifacts to append to the run completion. */
+	artifacts: RunArtifact[]
+	/** Outputs to merge into the run completion. */
+	outputs: Record<string, string>
+	/** Last non-empty script summary, if any. */
+	summary?: string
+}
+
+// ─── Execute all actions ───────────────────────────────────────────────────
+
+export interface ExecuteActionsOptions {
+	actions: ExternalAction[]
+	emitEvent: (event: WorkerEvent) => void
+	secretRefs?: SecretRef[]
+	preResolvedSharedSecrets?: Record<string, string>
+	/** Required for script actions. Absolute path to run workspace. */
+	workspacePath?: string
+	/** Artifacts from the just-completed run (for script input_artifacts). */
+	runArtifacts?: RunArtifact[]
+}
 
 /**
  * Execute a list of external actions (post-run side effects).
- * Each action result is reported as an 'external_action' event.
+ * Returns merged result from all script actions.
  */
-export async function executeActions(
-	actions: ExternalAction[],
-	emitEvent: (event: WorkerEvent) => void,
-	secretRefs?: SecretRef[],
-	preResolvedSharedSecrets?: Record<string, string>,
-): Promise<void> {
-	const { resolved: secrets, errors } = resolveSecretRefs(secretRefs ?? [], preResolvedSharedSecrets)
+export async function executeActions(opts: ExecuteActionsOptions): Promise<ActionsMergedResult> {
+	const { actions, emitEvent, workspacePath, runArtifacts = [] } = opts
+	const { resolved: secrets, errors } = resolveSecretRefs(
+		opts.secretRefs ?? [],
+		opts.preResolvedSharedSecrets,
+	)
 
 	for (const err of errors) {
 		emitEvent({ type: 'external_action', summary: `Secret resolution warning: ${err}` })
 	}
 
-	for (const action of actions) {
-		if (action.kind !== 'webhook') {
-			emitEvent({ type: 'external_action', summary: `Skipped unknown action kind: ${(action as { kind: string }).kind}` })
-			continue
-		}
+	const merged: ActionsMergedResult = { artifacts: [], outputs: {} }
 
-		try {
-			const result = await executeWebhook(action, secrets)
-			emitEvent({
-				type: 'external_action',
-				summary: `Webhook ${action.method} ${action.url_ref}: ${result.status}`,
-				metadata: {
-					action_kind: 'webhook',
-					url_ref: action.url_ref,
-					method: action.method,
-					status: result.status,
-					idempotency_key: action.idempotency_key,
-				},
-			})
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err)
-			emitEvent({
-				type: 'external_action',
-				summary: `Webhook ${action.method} ${action.url_ref} failed: ${msg}`,
-				metadata: {
-					action_kind: 'webhook',
-					url_ref: action.url_ref,
-					method: action.method,
-					error: msg,
-					idempotency_key: action.idempotency_key,
-				},
-			})
+	for (const action of actions) {
+		switch (action.kind) {
+			case 'webhook':
+				await runWebhook(action, secrets, emitEvent)
+				break
+
+			case 'script': {
+				if (!workspacePath) {
+					throw new Error(
+						`Script action "${action.script}" requires a workspace but none is available`,
+					)
+				}
+				const ctx: ScriptActionContext = { workspacePath, secrets, runArtifacts }
+				try {
+					const result = await executeScriptAction(action, ctx, emitEvent)
+					mergeScriptResult(merged, result, action.script)
+					emitEvent({
+						type: 'external_action',
+						summary: `Script ${action.runner} ${action.script}: success`,
+						metadata: {
+							action_kind: 'script',
+							script: action.script,
+							runner: action.runner,
+							artifacts_count: result.artifacts.length,
+							outputs_count: Object.keys(result.outputs).length,
+						},
+					})
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					throw new Error(`Script action "${action.script}" failed: ${msg}`)
+				}
+				break
+			}
+
+			default:
+				emitEvent({
+					type: 'external_action',
+					summary: `Skipped unknown action kind: ${(action as { kind: string }).kind}`,
+				})
 		}
+	}
+
+	return merged
+}
+
+// ─── Merge logic ───────────────────────────────────────────────────────────
+
+function mergeScriptResult(
+	merged: ActionsMergedResult,
+	result: ScriptActionResult,
+	scriptName: string,
+): void {
+	// Artifacts: append
+	merged.artifacts.push(...result.artifacts)
+
+	// Summary: last non-empty wins
+	if (result.summary) {
+		merged.summary = result.summary
+	}
+
+	// Outputs: collision = hard failure
+	for (const [key, value] of Object.entries(result.outputs)) {
+		if (key in merged.outputs) {
+			throw new Error(
+				`Output key collision: "${key}" already set by a previous action (script: ${scriptName})`,
+			)
+		}
+		merged.outputs[key] = value
+	}
+}
+
+// ─── Webhook execution ─────────────────────────────────────────────────────
+
+async function runWebhook(
+	action: WebhookAction,
+	secrets: Map<string, string>,
+	emitEvent: (event: WorkerEvent) => void,
+): Promise<void> {
+	try {
+		const result = await executeWebhook(action, secrets)
+		emitEvent({
+			type: 'external_action',
+			summary: `Webhook ${action.method} ${action.url_ref}: ${result.status}`,
+			metadata: {
+				action_kind: 'webhook',
+				url_ref: action.url_ref,
+				method: action.method,
+				status: result.status,
+				idempotency_key: action.idempotency_key,
+			},
+		})
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err)
+		emitEvent({
+			type: 'external_action',
+			summary: `Webhook ${action.method} ${action.url_ref} failed: ${msg}`,
+			metadata: {
+				action_kind: 'webhook',
+				url_ref: action.url_ref,
+				method: action.method,
+				error: msg,
+				idempotency_key: action.idempotency_key,
+			},
+		})
 	}
 }
 
 async function executeWebhook(
-	action: ExternalAction,
+	action: WebhookAction,
 	secrets: Map<string, string>,
 ): Promise<{ status: number; body: string }> {
 	const url = secrets.get(action.url_ref)

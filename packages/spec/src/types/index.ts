@@ -38,6 +38,9 @@ export type RunArtifact = z.infer<typeof schemas.RunArtifactSchema>
 
 // External Actions
 export type ExternalAction = z.infer<typeof schemas.ExternalActionSchema>
+export type WebhookAction = z.infer<typeof schemas.WebhookActionSchema>
+export type ScriptAction = z.infer<typeof schemas.ScriptActionSchema>
+export type ScriptResult = z.infer<typeof schemas.ScriptResultSchema>
 
 // Worker Events
 export type WorkerEventType = z.infer<typeof schemas.WorkerEventTypeSchema>

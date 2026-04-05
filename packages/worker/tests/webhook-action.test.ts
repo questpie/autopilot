@@ -27,14 +27,16 @@ afterAll(() => {
 	server.stop()
 })
 
-function collectEvents(fn: (emit: (e: WorkerEvent) => void) => Promise<void>): Promise<WorkerEvent[]> {
+function collectEvents(
+	fn: (emit: (e: WorkerEvent) => void) => Promise<unknown>,
+): Promise<WorkerEvent[]> {
 	const events: WorkerEvent[] = []
 	return fn((e) => events.push(e)).then(() => events)
 }
 
 describe('Webhook Action', () => {
 	test('successful webhook emits external_action event with status', async () => {
-		const secrets: SecretRef[] = [
+		const secretRefs: SecretRef[] = [
 			{ name: 'test-url', source: 'env', key: '__WEBHOOK_URL' },
 		]
 		process.env.__WEBHOOK_URL = `http://localhost:${server.port}/test`
@@ -43,7 +45,9 @@ describe('Webhook Action', () => {
 			{ kind: 'webhook', url_ref: 'test-url', method: 'POST', body: '{"msg":"hello"}' },
 		]
 
-		const events = await collectEvents((emit) => executeActions(actions, emit, secrets))
+		const events = await collectEvents((emit) =>
+			executeActions({ actions, emitEvent: emit, secretRefs }),
+		)
 		expect(events.length).toBe(1)
 		expect(events[0].type).toBe('external_action')
 		expect(events[0].summary).toContain('200')
@@ -57,7 +61,9 @@ describe('Webhook Action', () => {
 			{ kind: 'webhook', url_ref: 'nonexistent-url', method: 'POST' },
 		]
 
-		const events = await collectEvents((emit) => executeActions(actions, emit, []))
+		const events = await collectEvents((emit) =>
+			executeActions({ actions, emitEvent: emit, secretRefs: [] }),
+		)
 		expect(events.length).toBe(1)
 		expect(events[0].type).toBe('external_action')
 		expect(events[0].summary).toContain('failed')
@@ -66,7 +72,7 @@ describe('Webhook Action', () => {
 
 	test('idempotency key is set as request header', async () => {
 		receivedRequests.length = 0
-		const secrets: SecretRef[] = [
+		const secretRefs: SecretRef[] = [
 			{ name: 'idem-url', source: 'env', key: '__IDEM_URL' },
 		]
 		process.env.__IDEM_URL = `http://localhost:${server.port}/idem`
@@ -75,7 +81,9 @@ describe('Webhook Action', () => {
 			{ kind: 'webhook', url_ref: 'idem-url', method: 'POST', idempotency_key: 'key-123' },
 		]
 
-		await collectEvents((emit) => executeActions(actions, emit, secrets))
+		await collectEvents((emit) =>
+			executeActions({ actions, emitEvent: emit, secretRefs }),
+		)
 		expect(receivedRequests.length).toBeGreaterThan(0)
 		const last = receivedRequests[receivedRequests.length - 1]
 		expect(last.headers['idempotency-key']).toBe('key-123')
@@ -88,7 +96,7 @@ describe('Webhook Action', () => {
 		process.env.__HDR_URL = `http://localhost:${server.port}/headers`
 		process.env.__HDR_JSON = JSON.stringify({ Authorization: 'Bearer tok123' })
 
-		const secrets: SecretRef[] = [
+		const secretRefs: SecretRef[] = [
 			{ name: 'hdr-url', source: 'env', key: '__HDR_URL' },
 			{ name: 'hdr-headers', source: 'env', key: '__HDR_JSON' },
 		]
@@ -97,7 +105,9 @@ describe('Webhook Action', () => {
 			{ kind: 'webhook', url_ref: 'hdr-url', method: 'POST', headers_ref: 'hdr-headers' },
 		]
 
-		await collectEvents((emit) => executeActions(actions, emit, secrets))
+		await collectEvents((emit) =>
+			executeActions({ actions, emitEvent: emit, secretRefs }),
+		)
 		const last = receivedRequests[receivedRequests.length - 1]
 		expect(last.headers['authorization']).toBe('Bearer tok123')
 
@@ -107,7 +117,7 @@ describe('Webhook Action', () => {
 
 	test('secret resolution error is reported as event', async () => {
 		delete process.env.__MISSING_WEBHOOK
-		const secrets: SecretRef[] = [
+		const secretRefs: SecretRef[] = [
 			{ name: 'missing-secret', source: 'env', key: '__MISSING_WEBHOOK' },
 		]
 
@@ -115,7 +125,9 @@ describe('Webhook Action', () => {
 			{ kind: 'webhook', url_ref: 'some-url', method: 'POST' },
 		]
 
-		const events = await collectEvents((emit) => executeActions(actions, emit, secrets))
+		const events = await collectEvents((emit) =>
+			executeActions({ actions, emitEvent: emit, secretRefs }),
+		)
 		// Should have at least a secret warning + action failure
 		const warnings = events.filter((e) => e.summary.includes('Secret resolution'))
 		expect(warnings.length).toBeGreaterThan(0)

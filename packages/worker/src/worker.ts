@@ -1,6 +1,6 @@
 import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse, RunArtifact } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
-import { executeActions } from './actions/webhook'
+import { executeActions, type ActionsMergedResult } from './actions/webhook'
 import { collectPreviewFiles } from './preview'
 import { WorkspaceManager, type WorkspaceInfo } from './workspace'
 import { resolveRuntime, type RuntimeConfig, type ResolvedRuntime } from './runtime-config'
@@ -333,16 +333,34 @@ export class AutopilotWorker {
       }
 
       // Execute post-run external actions from targeting (before completing)
-      await this.runPostActions(run)
+      const actionResult = await this.runPostActions(run, ws?.path ?? null, allArtifacts)
+
+      // Merge script action results into the completion
+      if (actionResult) {
+        allArtifacts = [...allArtifacts, ...actionResult.artifacts]
+      }
+
+      const runtimeOutputs = result?.outputs ?? {}
+      const scriptOutputs = actionResult?.outputs ?? {}
+
+      // Hard-fail on collision between runtime outputs and script outputs
+      for (const key of Object.keys(scriptOutputs)) {
+        if (key in runtimeOutputs) {
+          throw new Error(`Output key collision: script action set "${key}" which already exists in runtime outputs`)
+        }
+      }
+
+      const mergedOutputs = { ...runtimeOutputs, ...scriptOutputs }
+      const finalSummary = actionResult?.summary ?? result?.summary
 
       await this.completeRun(run.id, {
         status: 'completed',
-        summary: result?.summary,
+        summary: finalSummary,
         tokens: result?.tokens,
         artifacts: allArtifacts.length > 0 ? allArtifacts : undefined,
         runtime_session_ref: result?.sessionId,
         resumable,
-        outputs: result?.outputs,
+        outputs: Object.keys(mergedOutputs).length > 0 ? mergedOutputs : undefined,
       })
 
       if (ws && this.workspace) {
@@ -360,17 +378,22 @@ export class AutopilotWorker {
   }
 
   /** Execute post-run external actions from the claim response. */
-  private async runPostActions(run: ClaimedRun): Promise<void> {
+  private async runPostActions(
+    run: ClaimedRun,
+    workspacePath: string | null,
+    runArtifacts: RunArtifact[],
+  ): Promise<ActionsMergedResult | null> {
     const actions = run.actions ?? []
-    if (actions.length === 0) return
+    if (actions.length === 0) return null
 
-    const secretRefs = run.secret_refs ?? []
-    await executeActions(
+    return executeActions({
       actions,
-      (event) => { this.postEvent(run.id, event).catch((err) => console.warn('[worker] failed to post action event:', err)) },
-      secretRefs,
-      run.resolved_shared_secrets ?? {},
-    )
+      emitEvent: (event) => { this.postEvent(run.id, event).catch((err) => console.warn('[worker] failed to post action event:', err)) },
+      secretRefs: run.secret_refs ?? [],
+      preResolvedSharedSecrets: run.resolved_shared_secrets ?? {},
+      workspacePath: workspacePath ?? undefined,
+      runArtifacts,
+    })
   }
 
   private async postEvent(runId: string, event: WorkerEvent): Promise<void> {
