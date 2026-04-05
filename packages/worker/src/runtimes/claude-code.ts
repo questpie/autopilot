@@ -1,7 +1,7 @@
 import { createMcpConfig } from '../mcp-config'
-import { parseStructuredOutput, getSummary } from '../structured-output'
 import type { RunArtifact } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext, RuntimeResult, WorkerEvent } from './adapter'
+import { buildPrompt, extractResult, type Subprocess } from './shared'
 
 export interface ClaudeCodeConfig {
   /** Path to claude binary. Defaults to 'claude'. */
@@ -46,7 +46,7 @@ const MCP_TOOL_NAMES = [
  */
 export class ClaudeCodeAdapter implements RuntimeAdapter {
   private eventHandler: ((event: WorkerEvent) => void) | null = null
-  private subprocess: ReturnType<typeof Bun.spawn> | null = null
+  private subprocess: Subprocess | null = null
   private config: ClaudeCodeConfig
 
   constructor(config?: ClaudeCodeConfig) {
@@ -58,7 +58,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
   }
 
   async start(context: RunContext): Promise<RuntimeResult | undefined> {
-    const prompt = this.buildPrompt(context)
+    const prompt = buildPrompt(context)
     const binaryPath = this.config.binaryPath ?? 'claude'
     const persistence = this.config.sessionPersistence ?? 'local'
     const isResume = !!context.runtimeSessionRef
@@ -140,32 +140,19 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       this.emit({ type: 'progress', summary: 'Claude Code completed' })
 
       const rawText = result.result ?? stdout.trim()
-      const structured = parseStructuredOutput(rawText)
-
-      // Build artifacts from structured block
-      const artifacts: RunArtifact[] = (structured?.artifacts ?? []).map((a) => ({
-        kind: a.kind as RunArtifact['kind'],
-        title: a.title,
-        ref_kind: 'inline' as const,
-        ref_value: a.content,
-      }))
-
-      // Extract all structured output tags for generic transition matching
-      const outputs = structured && Object.keys(structured.tags).length > 0
-        ? structured.tags
-        : undefined
+      const extracted = extractResult(rawText)
 
       return {
-        summary: (structured ? getSummary(structured) : null) ?? structured?.prose ?? rawText,
+        summary: extracted.summary,
         tokens: result.usage
           ? {
               input: result.usage.input_tokens ?? 0,
               output: result.usage.output_tokens ?? 0,
             }
           : undefined,
-        artifacts: artifacts.length > 0 ? artifacts : undefined,
+        artifacts: extracted.artifacts.length > 0 ? extracted.artifacts : undefined,
         sessionId: persistence === 'local' ? result.session_id : undefined,
-        outputs,
+        outputs: extracted.outputs,
       }
     } finally {
       if (mcpCleanup) await mcpCleanup()
@@ -177,37 +164,6 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       this.subprocess.kill()
       this.subprocess = null
     }
-  }
-
-  private buildPrompt(context: RunContext): string {
-    const parts: string[] = []
-
-    if (context.taskTitle) {
-      parts.push(`# Task: ${context.taskTitle}`)
-    }
-    if (context.taskDescription) {
-      parts.push(context.taskDescription)
-    }
-    if (context.instructions) {
-      parts.push(`## Instructions\n${context.instructions}`)
-    }
-
-    // Inject capability profile hints
-    if (context.capabilities) {
-      const cap = context.capabilities
-      if (cap.skills.length > 0) {
-        parts.push(`## Active Skills\n${cap.skills.map((s) => `- ${s}`).join('\n')}`)
-      }
-      if (cap.prompts.length > 0) {
-        parts.push(cap.prompts.join('\n\n'))
-      }
-    }
-
-    if (parts.length === 0) {
-      parts.push(`Execute run ${context.runId} for agent ${context.agentId}`)
-    }
-
-    return parts.join('\n\n')
   }
 
   private emit(event: WorkerEvent): void {

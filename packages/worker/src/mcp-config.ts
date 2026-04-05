@@ -1,7 +1,7 @@
 import { writeFile, mkdtemp, rm } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { resolveMcpCommand } from './mcp-config-shared'
 
 export interface McpConfigOptions {
   orchestratorUrl: string
@@ -24,10 +24,7 @@ export async function createMcpConfig(opts: McpConfigOptions): Promise<{
   const configPath = join(tmpDir, 'mcp.json')
 
   // Resolve MCP server binary path
-  const mcpBinary = opts.mcpBinaryPath ?? 'bun'
-  const mcpArgs = opts.mcpBinaryPath
-    ? []
-    : ['run', resolveMcpServerEntry()]
+  const { command: mcpBinary, args: mcpArgs } = resolveMcpCommand(opts.mcpBinaryPath)
 
   const config = {
     mcpServers: {
@@ -56,18 +53,4 @@ export async function createMcpConfig(opts: McpConfigOptions): Promise<{
       }
     },
   }
-}
-
-/** Resolve path to the MCP server entry point. */
-function resolveMcpServerEntry(): string {
-  // Try to find the mcp-server package relative to worker
-  const candidates = [
-    join(__dirname, '..', '..', 'mcp-server', 'src', 'index.ts'),
-    join(__dirname, '..', '..', '..', 'packages', 'mcp-server', 'src', 'index.ts'),
-  ]
-  for (const p of candidates) {
-    if (existsSync(p)) return p
-  }
-  // Fallback — assume it's available in PATH
-  return 'autopilot-mcp'
 }
