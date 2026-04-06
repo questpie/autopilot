@@ -145,6 +145,12 @@ export const ConversationResultSchema = z.discriminatedUnion('action', [
 		message: z.string().optional(),
 	}),
 	z.object({
+		action: z.literal('query.message'),
+		conversation_id: z.string(),
+		thread_id: z.string().optional(),
+		message: z.string().min(1),
+	}),
+	z.object({
 		action: z.literal('noop'),
 		reason: z.string().optional(),
 	}),

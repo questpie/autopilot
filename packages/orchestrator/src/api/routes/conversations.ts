@@ -1,5 +1,5 @@
 /**
- * Conversation binding routes.
+ * Conversation binding + session routes.
  *
  * POST /api/conversations/bindings — create a binding (user auth)
  * POST /api/conversations/:providerId — inbound conversation payload (provider-secret auth)
@@ -9,8 +9,10 @@
  * 2. Authenticates via X-Provider-Secret against provider's secret refs
  * 3. Invokes handler with conversation.ingest op
  * 4. Validates normalized ConversationResult
- * 5. Looks up binding by provider + external conversation/thread IDs
- * 6. Dispatches through existing workflow engine primitives
+ * 5. Routes based on action type:
+ *    - query.message → session-based query plane dispatch
+ *    - task.* → session or binding lookup → workflow engine dispatch
+ *    - noop → 200
  */
 import { randomBytes } from 'node:crypto'
 import { Hono } from 'hono'
@@ -19,6 +21,7 @@ import { z } from 'zod'
 import { ConversationResultSchema } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
 import { invokeProvider, resolveSecrets } from '../../providers/handler-runtime'
+import { buildQueryInstructions } from '../../services/queries'
 
 const conversations = new Hono<AppEnv>()
 	// POST /conversations/bindings — create a binding (user auth, handled in app.ts)
@@ -90,7 +93,7 @@ const conversations = new Hono<AppEnv>()
 	)
 	// POST /conversations/:providerId — inbound conversation payload (provider-secret auth)
 	.post('/:providerId', zValidator('param', z.object({ providerId: z.string() })), async (c) => {
-		const { workflowEngine, conversationBindingService } = c.get('services')
+		const { workflowEngine, conversationBindingService, sessionService, queryService, runService } = c.get('services')
 		const authoredConfig = c.get('authoredConfig')
 		const companyRoot = c.get('companyRoot')
 		const { providerId } = c.req.valid('param')
@@ -177,14 +180,102 @@ const conversations = new Hono<AppEnv>()
 			return c.json({ action: 'noop', reason: result.reason }, 200)
 		}
 
-		// Look up binding
-		const binding = await conversationBindingService.findByExternal(
+		// ── Query message routing ─────────────────────────────────────────
+		if (result.action === 'query.message') {
+			const session = await sessionService.findOrCreate({
+				provider_id: providerId,
+				external_conversation_id: result.conversation_id,
+				external_thread_id: result.thread_id,
+				mode: 'query',
+			})
+
+			const agentId = authoredConfig.defaults.task_assignee
+			if (!agentId) {
+				return c.json({ error: 'No default agent configured for query routing' }, 400)
+			}
+
+			// Resolve continuity from session's last query
+			let carryoverSummary: string | null = null
+			let runtimeSessionRef: string | undefined
+			let preferredWorkerId: string | undefined
+
+			if (session.last_query_id) {
+				const priorQuery = await queryService.get(session.last_query_id)
+				if (priorQuery) {
+					carryoverSummary = priorQuery.summary?.slice(0, 500) ?? null
+					if (priorQuery.runtime_session_ref && priorQuery.run_id) {
+						runtimeSessionRef = priorQuery.runtime_session_ref
+						const priorRun = await runService.get(priorQuery.run_id)
+						preferredWorkerId = priorRun?.worker_id ?? undefined
+					}
+				}
+			}
+
+			const initiator = `provider:${providerId}`
+
+			const query = await queryService.create({
+				prompt: result.message,
+				agent_id: agentId,
+				allow_repo_mutation: false,
+				continue_from: session.last_query_id ?? undefined,
+				carryover_summary: carryoverSummary ?? undefined,
+				created_by: initiator,
+			})
+
+			const instructions = buildQueryInstructions(result.message, false, carryoverSummary)
+
+			const runId = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
+			await runService.create({
+				id: runId,
+				agent_id: agentId,
+				runtime: authoredConfig.defaults.runtime,
+				initiated_by: initiator,
+				instructions,
+				runtime_session_ref: runtimeSessionRef,
+				preferred_worker_id: preferredWorkerId,
+			})
+
+			await queryService.linkRun(query.id, runId)
+
+			const continueFrom = session.last_query_id
+			await sessionService.updateLastQuery(session.id, query.id)
+
+			return c.json({
+				action: 'query.dispatched',
+				session_id: session.id,
+				query_id: query.id,
+				run_id: runId,
+				continue_from: continueFrom,
+			}, 200)
+		}
+
+		// ── Task action routing ───────────────────────────────────────────
+		// 1. Try session lookup first (preferred — explicit mode tracking)
+		const session = await sessionService.findByExternal(
 			providerId,
 			result.conversation_id,
 			result.thread_id,
 		)
 
-		if (!binding) {
+		let taskId: string | undefined
+
+		if (session?.mode === 'task_thread' && session.task_id) {
+			taskId = session.task_id
+		}
+
+		// 2. Fall back to conversation binding (backward compat)
+		if (!taskId) {
+			const binding = await conversationBindingService.findByExternal(
+				providerId,
+				result.conversation_id,
+				result.thread_id,
+			)
+			if (binding?.task_id) {
+				taskId = binding.task_id
+			}
+		}
+
+		if (!taskId) {
 			return c.json(
 				{
 					error: 'unbound_conversation',
@@ -196,16 +287,12 @@ const conversations = new Hono<AppEnv>()
 			)
 		}
 
-		if (!binding.task_id) {
-			return c.json({ error: 'Binding has no task_id' }, 422)
-		}
-
 		// Dispatch through workflow engine
 		const actor = `provider:${providerId}`
 
 		switch (result.action) {
 			case 'task.reply': {
-				const replyResult = await workflowEngine.reply(binding.task_id, result.message, actor)
+				const replyResult = await workflowEngine.reply(taskId, result.message, actor)
 				if (!replyResult) {
 					return c.json({ error: 'Task not found or not on a human_approval step' }, 400)
 				}
@@ -216,7 +303,7 @@ const conversations = new Hono<AppEnv>()
 			}
 
 			case 'task.approve': {
-				const approveResult = await workflowEngine.approve(binding.task_id, actor)
+				const approveResult = await workflowEngine.approve(taskId, actor)
 				if (!approveResult) {
 					return c.json({ error: 'Task not found or not on a human_approval step' }, 400)
 				}
@@ -225,7 +312,7 @@ const conversations = new Hono<AppEnv>()
 
 			case 'task.reject': {
 				const rejectResult = await workflowEngine.reject(
-					binding.task_id,
+					taskId,
 					result.message ?? 'Rejected via conversation',
 					actor,
 				)

@@ -27,6 +27,9 @@ import {
 	ActivityService,
 	ArtifactService,
 	ConversationBindingService,
+	SessionService,
+	QueryService,
+	SecretService,
 } from '../src/services'
 import type { AuthoredConfig } from '../src/services'
 import type { AppEnv, Services } from '../src/api/app'
@@ -322,6 +325,7 @@ console.log(JSON.stringify({
 	}
 
 	beforeAll(async () => {
+		process.env.AUTOPILOT_MASTER_KEY = '0'.repeat(64)
 		await mkdir(join(companyRoot, '.autopilot', 'handlers'), { recursive: true })
 		await writeFile(join(companyRoot, '.autopilot', 'company.yaml'), 'name: test\nslug: test\n')
 		await writeFile(join(companyRoot, '.autopilot', 'handlers', 'reply.ts'), REPLY_HANDLER)
@@ -334,6 +338,7 @@ console.log(JSON.stringify({
 	afterAll(async () => {
 		dbResult.raw.close()
 		await rm(companyRoot, { recursive: true, force: true })
+		delete process.env.AUTOPILOT_MASTER_KEY
 	})
 
 	test('provider-secret auth rejects missing header', async () => {
@@ -440,7 +445,12 @@ console.log(JSON.stringify({
 			activityService,
 			artifactService: new ArtifactService(dbResult.db),
 			conversationBindingService: bindingService,
+			sessionService: new SessionService(dbResult.db),
+			queryService: new QueryService(dbResult.db),
+			secretService: new SecretService(dbResult.db),
 			workflowEngine,
+			taskRelationService: {} as any,
+			taskGraphService: {} as any,
 		}
 
 		// Create a task at human_approval step
@@ -520,7 +530,12 @@ console.log(JSON.stringify({
 			activityService,
 			artifactService: new ArtifactService(dbResult.db),
 			conversationBindingService: bindingService,
+			sessionService: new SessionService(dbResult.db),
+			queryService: new QueryService(dbResult.db),
+			secretService: new SecretService(dbResult.db),
 			workflowEngine,
+			taskRelationService: {} as any,
+			taskGraphService: {} as any,
 		}
 
 		// Create task, advance to human_approval
@@ -683,7 +698,12 @@ console.log(JSON.stringify({
 			activityService: new ActivityService(dbResult.db),
 			artifactService: new ArtifactService(dbResult.db),
 			conversationBindingService: new ConversationBindingService(dbResult.db),
+			sessionService: new SessionService(dbResult.db),
+			queryService: new QueryService(dbResult.db),
+			secretService: new SecretService(dbResult.db),
 			workflowEngine: {} as any,
+			taskRelationService: {} as any,
+			taskGraphService: {} as any,
 		}
 	}
 })

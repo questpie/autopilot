@@ -32,6 +32,9 @@ export { ParentJoinBridge } from './parent-join-bridge'
 export { QueryService } from './queries'
 export type { QueryRow } from './queries'
 
+export { SessionService } from './sessions'
+export type { SessionRow } from './sessions'
+
 export { SecretService } from './secrets'
 export type { SharedSecretRow } from './secrets'
 

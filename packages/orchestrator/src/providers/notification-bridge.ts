@@ -9,12 +9,13 @@
  */
 import type { AutopilotEvent } from '../events/event-bus'
 import type { EventBus } from '../events/event-bus'
-import type { Provider, NotificationPayload, NotificationAction } from '@questpie/autopilot-spec'
+import type { Provider, NotificationPayload, NotificationAction, HandlerResult } from '@questpie/autopilot-spec'
 import type { AuthoredConfig } from '../services/workflow-engine'
 import type { RunService } from '../services/runs'
 import type { TaskService } from '../services/tasks'
 import type { ArtifactService } from '../services/artifacts'
 import type { ConversationBindingService } from '../services/conversation-bindings'
+import type { SessionService } from '../services/sessions'
 import type { SecretService } from '../services/secrets'
 import { invokeProvider, type HandlerRuntimeConfig } from './handler-runtime'
 
@@ -36,6 +37,7 @@ export class NotificationBridge {
 		private conversationBindingService: ConversationBindingService,
 		private config: NotificationBridgeConfig,
 		private secretService?: SecretService,
+		private sessionService?: SessionService,
 	) {}
 
 	start(): void {
@@ -77,20 +79,22 @@ export class NotificationBridge {
 		provider: Provider,
 		payload: NotificationPayload,
 		runtimeConfig: HandlerRuntimeConfig,
-	): Promise<void> {
+	): Promise<HandlerResult | undefined> {
 		const hasNotifySend = provider.capabilities.some((c) => c.op === 'notify.send')
-		if (!hasNotifySend) return
+		if (!hasNotifySend) return undefined
 
 		try {
 			const result = await invokeProvider(provider, 'notify.send', payload, runtimeConfig, this.secretService)
 			if (!result.ok) {
 				console.warn(`[notification-bridge] provider ${provider.id} failed: ${result.error}`)
 			}
+			return result
 		} catch (err) {
 			console.error(
 				`[notification-bridge] provider ${provider.id} error:`,
 				err instanceof Error ? err.message : String(err),
 			)
+			return undefined
 		}
 	}
 
@@ -123,7 +127,25 @@ export class NotificationBridge {
 				binding_mode: binding.mode,
 			}
 
-			await this.sendToProvider(provider, boundPayload, runtimeConfig)
+			const sendResult = await this.sendToProvider(provider, boundPayload, runtimeConfig)
+
+			// Create task_thread session keyed to the real outbound message identity.
+			// The handler's external_id (e.g. Telegram message_id) is the thread anchor —
+			// inbound callbacks/replies will carry this as thread_id, so the session must
+			// match it. Without this, a chat-level session would claim the entire chat as
+			// task_thread, breaking the general-chat = query-first invariant.
+			if (this.sessionService && payload.task_id) {
+				const threadId = sendResult?.external_id || (binding.external_thread_id ?? undefined)
+				await this.sessionService.findOrCreate({
+					provider_id: binding.provider_id,
+					external_conversation_id: binding.external_conversation_id,
+					external_thread_id: threadId,
+					mode: 'task_thread',
+					task_id: payload.task_id,
+				}).catch((err) => {
+					console.warn(`[notification-bridge] session creation failed for binding ${binding.id}:`, err instanceof Error ? err.message : String(err))
+				})
+			}
 		}
 	}
 

@@ -53,6 +53,11 @@ export {
 	QueryRowSchema,
 } from './query'
 export {
+	SessionModeSchema,
+	SessionStatusSchema,
+	SessionRowSchema,
+} from './session'
+export {
 	WorkerRegisterRequestSchema,
 	WorkerCapabilitySchema,
 	WorkerRegisterResponseSchema,

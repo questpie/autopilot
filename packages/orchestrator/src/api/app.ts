@@ -16,7 +16,7 @@ import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, AuthoredConfig } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, AuthoredConfig } from '../services'
 import type { Actor } from '../auth/types'
 import { authMiddleware } from './middleware/auth'
 import { workerAuthMiddleware } from './middleware/worker-auth'
@@ -31,6 +31,7 @@ import { conversations } from './routes/conversations'
 import { taskGraph } from './routes/task-graph'
 import { secrets } from './routes/secrets'
 import { queries } from './routes/queries'
+import { sessionsRoute } from './routes/sessions'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,7 @@ export interface Services {
 	workflowEngine: WorkflowEngine
 	secretService: SecretService
 	queryService: QueryService
+	sessionService: SessionService
 }
 
 export interface AppEnv {
@@ -179,6 +181,10 @@ export function createApp(config: AppConfig) {
 	app.use('/api/queries/*', userAuth)
 	app.use('/api/queries', userAuth)
 
+	// ── Session routes (user auth — operator surface) ────────────────
+	app.use('/api/sessions/*', userAuth)
+	app.use('/api/sessions', userAuth)
+
 	// ── Conversation routes ──────────────────────────────────────────────
 	// Binding management requires user auth; inbound /:providerId is self-authenticated via provider secret
 	app.use('/api/conversations/bindings', userAuth)
@@ -203,6 +209,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/tasks', taskGraph)
 		.route('/api/secrets', secrets)
 		.route('/api/queries', queries)
+		.route('/api/sessions', sessionsRoute)
 
 	return typedApp
 }

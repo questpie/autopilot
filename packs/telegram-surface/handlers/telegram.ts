@@ -220,7 +220,7 @@ if (op === 'conversation.ingest') {
 			process.exit(0)
 		}
 
-		// Command handling
+		// Command handling — explicit task actions
 		if (text === '/approve') {
 			console.log(JSON.stringify({
 				ok: true,
@@ -238,10 +238,31 @@ if (op === 'conversation.ingest') {
 			process.exit(0)
 		}
 
-		// Default: treat as reply
+		if (text.startsWith('/reply ')) {
+			const replyMessage = text.slice('/reply '.length).trim()
+			if (replyMessage) {
+				console.log(JSON.stringify({
+					ok: true,
+					metadata: { action: 'task.reply', conversation_id: chatId, thread_id: threadId, message: replyMessage },
+				}))
+				process.exit(0)
+			}
+		}
+
+		// If replying to a bot notification message, treat as task reply
+		// (replyTo indicates the user is responding to a specific notification)
+		if (replyTo) {
+			console.log(JSON.stringify({
+				ok: true,
+				metadata: { action: 'task.reply', conversation_id: chatId, thread_id: threadId, message: text },
+			}))
+			process.exit(0)
+		}
+
+		// General message (not a command, not replying to notification) → query mode
 		console.log(JSON.stringify({
 			ok: true,
-			metadata: { action: 'task.reply', conversation_id: chatId, thread_id: threadId, message: text },
+			metadata: { action: 'query.message', conversation_id: chatId, message: text },
 		}))
 		process.exit(0)
 	}

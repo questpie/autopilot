@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { randomBytes } from 'node:crypto'
 import { QueryRequestSchema } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
+import { buildQueryInstructions } from '../../services/queries'
 
 const queries = new Hono<AppEnv>()
 	// POST /queries — create and dispatch a query
@@ -133,27 +134,3 @@ const queries = new Hono<AppEnv>()
 	)
 
 export { queries }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────
-
-function buildQueryInstructions(
-	prompt: string,
-	allowMutation: boolean,
-	carryoverSummary: string | null,
-): string {
-	const parts: string[] = []
-
-	if (carryoverSummary) {
-		parts.push(`<PRIOR_QUERY_CONTEXT>\n${carryoverSummary}\n</PRIOR_QUERY_CONTEXT>`)
-	}
-
-	parts.push(
-		allowMutation
-			? 'You are in QUERY MODE with repo mutation allowed. You may read and edit files in the repo/company config.'
-			: 'You are in QUERY MODE (read-only). You may inspect, explain, brainstorm, and draft, but do NOT modify any files.',
-	)
-
-	parts.push(prompt)
-
-	return parts.join('\n\n')
-}

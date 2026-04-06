@@ -348,6 +348,32 @@ export const queries = sqliteTable(
 	],
 )
 
+// ─── Sessions ─────────────────────────────────────────────────────────────
+
+export const sessions = sqliteTable(
+	'sessions',
+	{
+		id: text('id').primaryKey(),
+		provider_id: text('provider_id').notNull(),
+		external_conversation_id: text('external_conversation_id').notNull(),
+		external_thread_id: text('external_thread_id').notNull(), // real thread ID or '__chat__' sentinel
+		mode: text('mode').notNull(), // query | task_thread
+		task_id: text('task_id'),
+		last_query_id: text('last_query_id'),
+		status: text('status').notNull().default('active'), // active | closed
+		created_at: text('created_at').notNull(),
+		updated_at: text('updated_at').notNull(),
+		metadata: text('metadata').default('{}'),
+	},
+	(table) => [
+		uniqueIndex('uq_session_provider_conv').on(table.provider_id, table.external_conversation_id, table.external_thread_id),
+		index('idx_sessions_provider').on(table.provider_id),
+		index('idx_sessions_task').on(table.task_id),
+		index('idx_sessions_status').on(table.status),
+		index('idx_sessions_mode').on(table.mode),
+	],
+)
+
 // ─── Activity ──────────────────────────────────────────────────────────────
 
 export const activity = sqliteTable(

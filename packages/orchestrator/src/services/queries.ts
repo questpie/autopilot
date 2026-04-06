@@ -108,3 +108,28 @@ export class QueryService {
 		return this.get(queryId)
 	}
 }
+
+// ─── Query Helpers ───────────────────────────────────────────────────────
+
+/** Build instructions envelope for a query run. Shared by query routes and conversation routing. */
+export function buildQueryInstructions(
+	prompt: string,
+	allowMutation: boolean,
+	carryoverSummary: string | null,
+): string {
+	const parts: string[] = []
+
+	if (carryoverSummary) {
+		parts.push(`<PRIOR_QUERY_CONTEXT>\n${carryoverSummary}\n</PRIOR_QUERY_CONTEXT>`)
+	}
+
+	parts.push(
+		allowMutation
+			? 'You are in QUERY MODE with repo mutation allowed. You may read and edit files in the repo/company config.'
+			: 'You are in QUERY MODE (read-only). You may inspect, explain, brainstorm, and draft, but do NOT modify any files.',
+	)
+
+	parts.push(prompt)
+
+	return parts.join('\n\n')
+}
