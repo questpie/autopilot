@@ -191,7 +191,7 @@ export async function startServer(options?: StartServerOptions) {
 		services,
 		authoredConfig,
 		corsOrigin: env.CORS_ORIGIN,
-		allowLocalDevBypass: options?.allowLocalDevBypass,
+		allowLocalDevBypass: effectiveBypass,
 		orchestratorUrl,
 	})
 
