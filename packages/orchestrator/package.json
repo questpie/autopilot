@@ -1,6 +1,6 @@
 {
 	"name": "@questpie/autopilot-orchestrator",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"private": false,
 	"type": "module",
 	"description": "QUESTPIE Autopilot orchestrator runtime",
@@ -27,8 +27,8 @@
 		"@google/genai": "^1.46.0",
 		"@hono/standard-validator": "^0.2.2",
 		"@huggingface/transformers": "^3.8.1",
-		"@questpie/autopilot-agents": "1.0.0",
-		"@questpie/autopilot-spec": "1.0.0",
+		"@questpie/autopilot-agents": "1.1.0",
+		"@questpie/autopilot-spec": "1.1.0",
 		"@scalar/hono-api-reference": "^0.10.4",
 		"agent-browser": "^0.22.3",
 		"better-auth": "^1.5.6",

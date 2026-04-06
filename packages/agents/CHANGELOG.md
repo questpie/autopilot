@@ -1,5 +1,12 @@
 # @questpie/autopilot-agents
 
+## 1.1.0
+
+### Patch Changes
+
+- Updated dependencies [[`4558577`](https://github.com/questpie/autopilot/commit/455857765ef97937992cad5fea1f632be1c7b987)]:
+  - @questpie/autopilot-spec@1.1.0
+
 ## 1.0.0
 
 ### Major Changes
