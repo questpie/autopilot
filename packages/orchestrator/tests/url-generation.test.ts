@@ -12,7 +12,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Hono } from 'hono'
-import { createCompanyDb, type CompanyDbResult } from '../src/db'
+import { createCompanyDb, type CompanyDbResult, type CompanyDb } from '../src/db'
 import {
 	TaskService,
 	RunService,
@@ -129,7 +129,7 @@ const FAKE_ACTOR: Actor = {
 	source: 'api',
 }
 
-function buildTestApp(companyRoot: string, db: ReturnType<typeof import('../src/db').createCompanyDb extends (...args: any[]) => Promise<infer R> ? R : never>['db'], services: Services, orchestratorUrl?: string) {
+function buildTestApp(companyRoot: string, db: CompanyDb, services: Services, orchestratorUrl?: string) {
 	const app = new Hono<AppEnv>()
 
 	app.use('*', async (c, next) => {
@@ -360,153 +360,64 @@ describe('URL Generation — Configured Base URL', () => {
 })
 
 describe('Notification Bridge URL Construction', () => {
-	test('notification payload uses configured orchestratorUrl for all links', async () => {
-		// Import NotificationBridge dynamically to avoid heavy setup
+	const CAPS = [{ runtime: 'claude-code', models: [], maxConcurrent: 1 }]
+	const EMPTY_CONFIG = { company: {} as any, agents: new Map(), workflows: new Map(), environments: new Map(), providers: new Map(), capabilityProfiles: new Map(), defaults: {} }
+
+	async function setupBridgeTest(orchestratorUrl: string | undefined) {
 		const { NotificationBridge } = await import('../src/providers/notification-bridge')
 		const { EventBus } = await import('../src/events/event-bus')
 
-		const companyRoot = join(tmpdir(), `qp-notif-url-${Date.now()}`)
-		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
-		await writeFile(
-			join(companyRoot, '.autopilot', 'company.yaml'),
-			'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n',
-		)
-		const dbResult = await createCompanyDb(companyRoot)
-		for (const sql of DDL) {
-			await dbResult.raw.execute(sql)
-		}
+		const root = join(tmpdir(), `qp-notif-${Date.now()}`)
+		await mkdir(join(root, '.autopilot'), { recursive: true })
+		await writeFile(join(root, '.autopilot', 'company.yaml'), 'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n')
+		const db = await createCompanyDb(root)
+		for (const sql of DDL) { await db.raw.execute(sql) }
 
-		const runService = new RunService(dbResult.db)
-		const taskService = new TaskService(dbResult.db)
-		const artifactService = new ArtifactService(dbResult.db)
-		const conversationBindingService = new ConversationBindingService(dbResult.db)
+		const runService = new RunService(db.db)
+		const taskService = new TaskService(db.db)
+		const artifactService = new ArtifactService(db.db)
+		const conversationBindingService = new ConversationBindingService(db.db)
 
-		// Create a run to test URL generation
 		const runId = `run-notif-${Date.now()}`
-		await runService.create({
-			id: runId,
-			agent_id: 'dev',
-			task_id: 'task-1',
-			runtime: 'claude-code',
-			initiated_by: 'test',
-		})
-		await runService.claim('worker-notif', 'claude-code', [
-			{ runtime: 'claude-code', models: [], maxConcurrent: 1 },
-		])
+		await runService.create({ id: runId, agent_id: 'dev', task_id: 'task-1', runtime: 'claude-code', initiated_by: 'test' })
+		await runService.claim('worker-notif', 'claude-code', CAPS)
 		await runService.complete(runId, { status: 'completed', summary: 'done' })
 
-		const publicUrl = 'https://my-autopilot.company.com'
-		const bus = new EventBus()
-
-		// Capture what the bridge builds — we'll intercept by creating a minimal test provider
-		const receivedPayloads: any[] = []
-		const testProvider = {
-			id: 'test-notif',
-			name: 'Test',
-			kind: 'notification_channel' as const,
-			handler: { runtime: 'bun', entry: 'dummy.ts' },
-			capabilities: [{ op: 'notify.send' }],
-			events: [{ types: ['run_completed'], statuses: [] }],
-			secret_refs: [],
-		}
-
-		const authoredConfig = {
-			company: {} as any,
-			agents: new Map(),
-			workflows: new Map(),
-			environments: new Map(),
-			providers: new Map([['test-notif', testProvider]]),
-			capabilityProfiles: new Map(),
-			defaults: {},
-		}
-
 		const bridge = new NotificationBridge(
-			bus,
-			authoredConfig,
-			runService,
-			taskService,
-			artifactService,
-			conversationBindingService,
-			{ companyRoot, orchestratorUrl: publicUrl },
+			new EventBus(), EMPTY_CONFIG,
+			runService, taskService, artifactService, conversationBindingService,
+			{ companyRoot: root, orchestratorUrl },
 		)
 
-		// Access the private buildPayload method via prototype to test URL construction
 		// @ts-expect-error accessing private method for test
-		const payload = await bridge.buildPayload({
-			type: 'run_completed',
-			runId,
-			status: 'completed',
-		})
+		const payload = await bridge.buildPayload({ type: 'run_completed', runId, status: 'completed' })
+
+		const cleanup = async () => { db.raw.close(); await rm(root, { recursive: true, force: true }) }
+		return { payload, runId, cleanup }
+	}
+
+	test('notification payload uses configured orchestratorUrl for all links', async () => {
+		const publicUrl = 'https://my-autopilot.company.com'
+		const { payload, runId, cleanup } = await setupBridgeTest(publicUrl)
 
 		expect(payload).not.toBeNull()
 		expect(payload!.orchestrator_url).toBe(publicUrl)
 		expect(payload!.run_url).toBe(`${publicUrl}/api/runs/${runId}`)
 		expect(payload!.task_url).toBe(`${publicUrl}/api/tasks/task-1`)
-		// No localhost in any URL
 		expect(payload!.run_url).not.toContain('localhost')
 		expect(payload!.task_url).not.toContain('localhost')
 
-		dbResult.raw.close()
-		await rm(companyRoot, { recursive: true, force: true })
+		await cleanup()
 	})
 
 	test('notification payload omits URLs when orchestratorUrl is undefined', async () => {
-		const { NotificationBridge } = await import('../src/providers/notification-bridge')
-		const { EventBus } = await import('../src/events/event-bus')
-
-		const companyRoot = join(tmpdir(), `qp-notif-nourl-${Date.now()}`)
-		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
-		await writeFile(
-			join(companyRoot, '.autopilot', 'company.yaml'),
-			'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n',
-		)
-		const dbResult = await createCompanyDb(companyRoot)
-		for (const sql of DDL) {
-			await dbResult.raw.execute(sql)
-		}
-
-		const runService = new RunService(dbResult.db)
-		const taskService = new TaskService(dbResult.db)
-		const artifactService = new ArtifactService(dbResult.db)
-		const conversationBindingService = new ConversationBindingService(dbResult.db)
-
-		const runId = `run-notif-nourl-${Date.now()}`
-		await runService.create({
-			id: runId,
-			agent_id: 'dev',
-			task_id: 'task-2',
-			runtime: 'claude-code',
-			initiated_by: 'test',
-		})
-		await runService.claim('worker-notif-2', 'claude-code', [
-			{ runtime: 'claude-code', models: [], maxConcurrent: 1 },
-		])
-		await runService.complete(runId, { status: 'completed', summary: 'done' })
-
-		const bus = new EventBus()
-		const bridge = new NotificationBridge(
-			bus,
-			{ company: {} as any, agents: new Map(), workflows: new Map(), environments: new Map(), providers: new Map(), capabilityProfiles: new Map(), defaults: {} },
-			runService,
-			taskService,
-			artifactService,
-			conversationBindingService,
-			{ companyRoot, orchestratorUrl: undefined },
-		)
-
-		// @ts-expect-error accessing private method for test
-		const payload = await bridge.buildPayload({
-			type: 'run_completed',
-			runId,
-			status: 'completed',
-		})
+		const { payload, cleanup } = await setupBridgeTest(undefined)
 
 		expect(payload).not.toBeNull()
 		expect(payload!.orchestrator_url).toBeUndefined()
 		expect(payload!.run_url).toBeUndefined()
 		expect(payload!.task_url).toBeUndefined()
 
-		dbResult.raw.close()
-		await rm(companyRoot, { recursive: true, force: true })
+		await cleanup()
 	})
 })

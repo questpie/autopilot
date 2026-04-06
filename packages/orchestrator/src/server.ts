@@ -177,11 +177,10 @@ export async function startServer(options?: StartServerOptions) {
 
 	// ── 8. Create Hono app ───────────────────────────────────────────────
 	const effectiveBypass = options?.allowLocalDevBypass && env.NODE_ENV !== 'production'
-	if (options?.allowLocalDevBypass && env.NODE_ENV === 'production') {
-		console.warn('[server] ⚠ allowLocalDevBypass requested but ignored in production mode')
-	}
-	if (effectiveBypass) {
-		console.log('[server] local dev bypass ENABLED (development mode only)')
+	if (options?.allowLocalDevBypass) {
+		console.log(effectiveBypass
+			? '[server] local dev bypass ENABLED (development mode only)'
+			: '[server] ⚠ allowLocalDevBypass requested but ignored in production mode')
 	}
 
 	const app = createApp({

@@ -204,14 +204,9 @@ const runs = new Hono<AppEnv>()
 			// Auto-create preview_url artifact if preview files were stored
 			if (hasPreviewFiles) {
 				const entry = previewEntry ?? 'index.html'
-				// Use canonical orchestrator URL for rendered links — never trust request-derived origin
-				// which can be wrong behind reverse proxies or spoofed by clients.
-				// Under normal startServer(), orchestratorUrl is always set (ORCHESTRATOR_URL or localhost fallback).
-				// The relative-path branch only fires if createApp() is called without orchestratorUrl (tests, custom embed).
+				// Canonical orchestrator URL for rendered links — not request-derived (reverse proxy / spoofing safe).
+				// Relative-path fallback only when orchestratorUrl is absent (tests, custom embed).
 				const baseUrl = c.get('orchestratorUrl')
-				if (!baseUrl) {
-					console.debug(`[runs] preview_url for run ${id} uses relative path — orchestratorUrl not set in app context`)
-				}
 				const previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
 				await artifactService.create({
 					id: `art-preview-${Date.now()}-${randomBytes(6).toString('hex')}`,

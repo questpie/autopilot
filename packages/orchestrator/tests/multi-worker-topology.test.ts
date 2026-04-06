@@ -234,19 +234,15 @@ describe('Multi-Worker Topology', () => {
 		expect(continuation!.preferred_worker_id).toBe('worker-sess')
 	})
 
-	// ── Non-resumable run cannot be continued ────────────────────────────
+	// ── Continuation always sets preferred_worker_id ────────────────────
 
-	test('non-resumable run cannot create continuation', async () => {
+	test('continuation sets preferred_worker_id regardless of resumable flag', async () => {
+		// resumable check is route-level; service always creates the continuation
 		const origId = `run-no-resume-${Date.now()}`
 		await runService.create({ id: origId, agent_id: 'dev', runtime: 'claude-code', initiated_by: 'test' })
 		await runService.claim('worker-nr', 'claude-code', CAPS_CLAUDE)
 		await runService.complete(origId, { status: 'completed', resumable: false })
 
-		// createContinuation returns undefined for non-resumable... actually
-		// it doesn't check resumable at service level — that's checked in the route.
-		// The service allows it. Let's verify the route-level check instead by
-		// verifying continuation IS created (service allows it) but the
-		// preferred_worker_id IS still set correctly.
 		const continuation = await runService.createContinuation(origId, { message: 'try' })
 		expect(continuation).not.toBeUndefined()
 		expect(continuation!.preferred_worker_id).toBe('worker-nr')
