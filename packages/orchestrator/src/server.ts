@@ -149,6 +149,13 @@ export async function startServer(options?: StartServerOptions) {
 
 	// ── 7. Start notification bridge ─────────────────────────────────────
 	const orchestratorUrl = env.ORCHESTRATOR_URL ?? `http://localhost:${port}`
+
+	if (!env.ORCHESTRATOR_URL && env.NODE_ENV === 'production') {
+		console.warn(
+			'[server] ⚠ ORCHESTRATOR_URL not set in production — preview links, notification URLs, and email links will point to localhost.\n' +
+			'         Set ORCHESTRATOR_URL to the public base URL of this orchestrator (e.g. https://autopilot.example.com).',
+		)
+	}
 	const notificationBridge = new NotificationBridge(
 		eventBus,
 		authoredConfig,
@@ -169,6 +176,14 @@ export async function startServer(options?: StartServerOptions) {
 	parentJoinBridge.start()
 
 	// ── 8. Create Hono app ───────────────────────────────────────────────
+	const effectiveBypass = options?.allowLocalDevBypass && env.NODE_ENV !== 'production'
+	if (options?.allowLocalDevBypass && env.NODE_ENV === 'production') {
+		console.warn('[server] ⚠ allowLocalDevBypass requested but ignored in production mode')
+	}
+	if (effectiveBypass) {
+		console.log('[server] local dev bypass ENABLED (development mode only)')
+	}
+
 	const app = createApp({
 		companyRoot,
 		db: companyDb,
@@ -177,6 +192,7 @@ export async function startServer(options?: StartServerOptions) {
 		authoredConfig,
 		corsOrigin: env.CORS_ORIGIN,
 		allowLocalDevBypass: options?.allowLocalDevBypass,
+		orchestratorUrl,
 	})
 
 	// ── 9. Start HTTP server ─────────────────────────────────────────────
@@ -187,6 +203,9 @@ export async function startServer(options?: StartServerOptions) {
 	})
 
 	console.log(`[server] listening on http://localhost:${server.port}`)
+	if (env.ORCHESTRATOR_URL) {
+		console.log(`[server] canonical URL: ${env.ORCHESTRATOR_URL}`)
+	}
 
 	return { server, app, services, companyRoot, auth, db: companyDb, notificationBridge }
 }

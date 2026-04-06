@@ -204,8 +204,13 @@ const runs = new Hono<AppEnv>()
 			// Auto-create preview_url artifact if preview files were stored
 			if (hasPreviewFiles) {
 				const entry = previewEntry ?? 'index.html'
-				const origin = new URL(c.req.url).origin
-				const previewUrl = `${origin}/api/previews/${id}/${entry}`
+				// Use canonical orchestrator URL for rendered links — never trust request-derived origin
+				// which can be wrong behind reverse proxies or spoofed by clients.
+				const baseUrl = c.get('orchestratorUrl')
+				if (!baseUrl) {
+					console.warn(`[runs] preview_url artifact skipped for run ${id} — ORCHESTRATOR_URL not configured`)
+				}
+				const previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
 				await artifactService.create({
 					id: `art-preview-${Date.now()}-${randomBytes(6).toString('hex')}`,
 					run_id: id,

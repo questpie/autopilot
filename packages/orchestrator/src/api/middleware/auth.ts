@@ -10,6 +10,7 @@ import { createMiddleware } from 'hono/factory'
 import type { AppEnv } from '../app'
 import type { Auth } from '../../auth'
 import type { Actor } from '../../auth/types'
+import { env } from '../../env'
 
 type HumanSession = {
 	user: {
@@ -146,9 +147,12 @@ function isLocalhostRequest(req: Request): boolean {
  * Header alone is never enough. Server flag alone is never enough.
  */
 export function authMiddleware(opts?: AuthMiddlewareOptions) {
+	// Production safety: never allow local dev bypass in production, regardless of flag
+	const effectiveBypass = (opts?.allowLocalDevBypass ?? false) && env.NODE_ENV !== 'production'
+
 	return createMiddleware<AppEnv>(async (c, next) => {
 		if (
-			opts?.allowLocalDevBypass &&
+			effectiveBypass &&
 			c.req.header('x-local-dev') === 'true' &&
 			isLocalhostRequest(c.req.raw)
 		) {

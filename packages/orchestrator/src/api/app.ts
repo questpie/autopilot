@@ -60,6 +60,8 @@ export interface AppEnv {
 		auth: Auth
 		services: Services
 		authoredConfig: AuthoredConfig
+		/** Canonical external base URL for rendered links (previews, notifications). Not the worker connection URL. */
+		orchestratorUrl: string | undefined
 	}
 }
 
@@ -76,6 +78,11 @@ export interface AppConfig {
 	 * NEVER set in production or multi-machine setups.
 	 */
 	allowLocalDevBypass?: boolean
+	/**
+	 * Canonical external base URL for rendered links (previews, notifications, emails).
+	 * This is the public-facing URL operators/users see — NOT the worker connection URL.
+	 */
+	orchestratorUrl?: string
 }
 
 // ─── App Factory ────────────────────────────────────────────────────────────
@@ -86,6 +93,10 @@ export function createApp(config: AppConfig) {
 	const corsOrigin = rawOrigin
 		? rawOrigin.split(',').map((o: string) => o.trim())
 		: ['http://localhost:3000', 'http://localhost:3001']
+
+	if (!rawOrigin && env.NODE_ENV === 'production') {
+		console.warn('[api] ⚠ CORS_ORIGIN not set in production — falling back to localhost defaults. Set CORS_ORIGIN to your dashboard URL(s).')
+	}
 
 	// ── Global middleware ─────────────────────────────────────────────────
 	app.use(
@@ -119,6 +130,7 @@ export function createApp(config: AppConfig) {
 		c.set('auth', config.auth)
 		c.set('services', config.services)
 		c.set('authoredConfig', config.authoredConfig)
+		c.set('orchestratorUrl', config.orchestratorUrl)
 		c.set('actor', null)
 		c.set('workerId', null)
 		await next()

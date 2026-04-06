@@ -15,6 +15,7 @@
 
 import { createMiddleware } from 'hono/factory'
 import type { AppEnv } from '../app'
+import { env } from '../../env'
 
 export interface WorkerAuthOptions {
   /** Only true when server is started in local dev convenience mode. */
@@ -37,6 +38,9 @@ function isLocalhostRequest(req: Request): boolean {
 }
 
 export function workerAuthMiddleware(opts: WorkerAuthOptions) {
+  // Production safety: never allow local dev bypass in production, regardless of flag
+  const effectiveBypass = opts.allowLocalDevBypass && env.NODE_ENV !== 'production'
+
   return createMiddleware<AppEnv>(async (c, next) => {
     const { enrollmentService } = c.get('services')
 
@@ -51,9 +55,9 @@ export function workerAuthMiddleware(opts: WorkerAuthOptions) {
       return next()
     }
 
-    // 2. Local dev bypass — requires server flag + header + localhost
+    // 2. Local dev bypass — requires server flag + header + localhost + non-production
     if (
-      opts.allowLocalDevBypass &&
+      effectiveBypass &&
       c.req.header('x-local-dev') === 'true' &&
       isLocalhostRequest(c.req.raw)
     ) {

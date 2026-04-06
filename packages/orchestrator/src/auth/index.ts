@@ -31,8 +31,13 @@ async function getUserCount(db: CompanyDb): Promise<number> {
 export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: MailService) {
 	const mailService = mail ?? createMailService()
 
+	const authBaseUrl = process.env.BETTER_AUTH_URL ?? env.ORCHESTRATOR_URL ?? 'http://localhost:7778'
+	if (!process.env.BETTER_AUTH_URL && !env.ORCHESTRATOR_URL && env.NODE_ENV === 'production') {
+		console.warn('[auth] ⚠ Neither BETTER_AUTH_URL nor ORCHESTRATOR_URL set in production — auth links (email verification) will point to localhost')
+	}
+
 	const auth = betterAuth({
-		baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:7778',
+		baseURL: authBaseUrl,
 		database: drizzleAdapter(db, {
 			provider: 'sqlite',
 			schema: authSchema,
