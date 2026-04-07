@@ -183,8 +183,8 @@ const workers = new Hono<AppEnv>()
 				try {
 					const entries = await readdir(absPath)
 					files = entries.filter((e) => !e.startsWith('.')).slice(0, 20)
-				} catch {
-					// Directory not readable — skip file listing
+				} catch (err) {
+					console.warn(`[workers/claim] cannot read context hint dir "${absPath}":`, err instanceof Error ? err.message : String(err))
 				}
 			}
 			contextHints.push({
