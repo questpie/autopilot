@@ -3,16 +3,9 @@
 	"changelog": ["@changesets/changelog-github", { "repo": "questpie/autopilot" }],
 	"commit": false,
 	"fixed": [],
-	"linked": [
-		[
-			"@questpie/autopilot",
-			"@questpie/autopilot-spec",
-			"@questpie/autopilot-agents",
-			"@questpie/autopilot-orchestrator"
-		]
-	],
+	"linked": [],
 	"access": "public",
 	"baseBranch": "main",
 	"updateInternalDependencies": "patch",
-	"ignore": ["@questpie/autopilot-dashboard", "@questpie/autopilot-docs", "@questpie/avatar"]
+	"ignore": ["dashboard-v2", "@questpie/autopilot-docs"]
 }
