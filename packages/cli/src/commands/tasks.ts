@@ -525,6 +525,7 @@ interface TimelineEntry {
 	run?: RunSummary
 	annotation?: string
 	isHumanApproval?: boolean
+	lastEvent?: string
 }
 
 function truncate(text: string, maxLen: number): string {
@@ -730,9 +731,10 @@ tasksCmd.addCommand(
 				}
 
 				// 2. Fetch workflow definition
+				const baseUrl = getBaseUrl()
 				const authHeaders: Record<string, string> = { ...getAuthHeaders() }
 				if (Object.keys(authHeaders).length === 0) authHeaders['X-Local-Dev'] = 'true'
-				const wfRes = await fetch(`${getBaseUrl()}/api/config/workflows`, {
+				const wfRes = await fetch(`${baseUrl}/api/config/workflows`, {
 					headers: authHeaders,
 				})
 				if (!wfRes.ok) {
@@ -769,6 +771,23 @@ tasksCmd.addCommand(
 					task.workflow_step ?? null,
 					metadata,
 				)
+
+				// 6. Fetch last event for running step
+				const runningEntry = entries.find((e) => e.status === 'running' && e.run)
+				if (runningEntry?.run) {
+					try {
+						const eventsRes = await fetch(`${baseUrl}/api/runs/${runningEntry.run.id}/events`, { headers: authHeaders })
+						if (eventsRes.ok) {
+							const events = (await eventsRes.json()) as Array<{ type: string; summary?: string }>
+							const last = events.filter((e) => e.type === 'progress' || e.type === 'tool_use').pop()
+							if (last?.summary) {
+								runningEntry.lastEvent = truncate(last.summary.replace(/\n/g, ' '), 90)
+							}
+						}
+					} catch (err) {
+						console.debug('[progress] failed to fetch run events:', err instanceof Error ? err.message : String(err))
+					}
+				}
 
 				// ── Header ──
 				console.log('')
@@ -844,7 +863,7 @@ tasksCmd.addCommand(
 					} else if (entry.isHumanApproval) {
 						summaryText = dim('(human approval)')
 					} else if (entry.run?.status === 'running') {
-						summaryText = dim('Running...')
+						summaryText = dim(entry.lastEvent ?? 'Running...')
 					}
 
 					// Build the padded row — account for ANSI escape sequences in padding
@@ -868,19 +887,90 @@ tasksCmd.addCommand(
 				}
 
 				// ── Footer ──
+				// Count lines below the running step (needed for ANSI cursor positioning)
+				let footerLines = 0
+				let pastRunning = false
+				for (const entry of entries) {
+					if (entry.status === 'running') { pastRunning = true; continue }
+					if (pastRunning) footerLines++
+				}
+				const revisionKeys = Object.keys(metadata).filter((k) => k.startsWith('_revisions:'))
+				footerLines += 3 // blank + branch + worktree
+				if (revisionKeys.length > 0) footerLines++ // revisions line
+
 				console.log('')
 				console.log(dim(`  Branch: autopilot/${task.id}`))
 				console.log(dim(`  Worktree: .worktrees/${task.id}`))
-
-				// Show revision counts from metadata
-				const revisionKeys = Object.keys(metadata).filter((k) => k.startsWith('_revisions:'))
 				if (revisionKeys.length > 0) {
 					const parts = revisionKeys.map((k) => {
 						const loop = k.replace('_revisions:', '')
-						const count = metadata[k] as number
+						const count = typeof metadata[k] === 'number' ? metadata[k] : 0
 						return `${loop.replace('\u2192', '\u2192')}: ${count}/3`
 					})
 					console.log(dim(`  Revisions: ${parts.join(', ')}`))
+				}
+
+				// ── Live SSE — overwrite running step line in-place ──
+				if (runningEntry?.run) {
+					const sseUrl = `${baseUrl}/api/events`
+					const runId = runningEntry.run.id
+					const controller = new AbortController()
+
+					process.on('SIGINT', () => {
+						controller.abort()
+						process.stdout.write('\n')
+						process.exit(0)
+					})
+
+					try {
+						const sseRes = await fetch(sseUrl, { headers: authHeaders, signal: controller.signal })
+						if (!sseRes.ok || !sseRes.body) return
+						const reader = sseRes.body.getReader()
+						const decoder = new TextDecoder()
+						let buffer = ''
+
+						while (true) {
+							const { done, value } = await reader.read()
+							if (done) break
+							buffer += decoder.decode(value, { stream: true })
+
+							while (buffer.includes('\n\n')) {
+								const blockEnd = buffer.indexOf('\n\n')
+								const block = buffer.slice(0, blockEnd)
+								buffer = buffer.slice(blockEnd + 2)
+
+								const dataLine = block.split('\n').find((l) => l.startsWith('data:'))
+								if (!dataLine) continue
+
+								try {
+									const event = JSON.parse(dataLine.slice(5).trim())
+									if (event.type === 'heartbeat') continue
+
+									const eventRunId = event.run_id ?? event.data?.run_id
+									if (eventRunId !== runId) continue
+
+									const eventType = event.data?.type ?? event.event_type ?? ''
+									const summary = event.data?.summary ?? event.summary ?? ''
+									if (!summary) continue
+
+									const icon = eventType === 'tool_use' ? '\u{1f527}' : eventType === 'error' ? '\u274c' : '\u{1f4ac}'
+									const line = `  ${icon} ${dim(truncate(summary.replace(/\n/g, ' '), 100))}`
+									// Move cursor up to running step line, clear it, write new content, move back down to footer
+									process.stdout.write(`\x1b[${footerLines + 1}A\x1b[2K${line}\x1b[${footerLines + 1}B\x1b[0G`)
+
+									if (event.type === 'run_completed' || event.type === 'task_status_changed') {
+										process.stdout.write('\n')
+										process.exit(0)
+									}
+								} catch {
+									// skip malformed SSE
+								}
+							}
+						}
+					} catch (err) {
+						if (controller.signal.aborted) return
+						console.debug('[progress] SSE error:', err instanceof Error ? err.message : String(err))
+					}
 				}
 				console.log('')
 			} catch (err) {
