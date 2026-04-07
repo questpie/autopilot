@@ -3,13 +3,16 @@
  *
  * Resolution order:
  * 1. Better Auth session via cookies → human Actor
- * 2. Authorization: Bearer token → worker/API Actor
+ * 2. Authorization: Bearer token:
+ *    a. Better Auth API key → API Actor
+ *    b. Worker machine secret → machine Actor (used by MCP server)
  * 3. null → 401
  */
 import { createMiddleware } from 'hono/factory'
 import type { AppEnv } from '../app'
 import type { Auth } from '../../auth'
 import type { Actor } from '../../auth/types'
+import type { EnrollmentService } from '../../services'
 import { env } from '../../env'
 
 type HumanSession = {
@@ -50,7 +53,11 @@ async function getHumanSession(request: Request, auth: Auth): Promise<HumanSessi
 	}
 }
 
-async function resolveActor(request: Request, auth: Auth): Promise<Actor | null> {
+async function resolveActor(
+	request: Request,
+	auth: Auth,
+	enrollmentService?: EnrollmentService,
+): Promise<Actor | null> {
 	// 1. Better Auth session via cookies
 	const session = await getHumanSession(request, auth)
 	if (session) {
@@ -65,12 +72,12 @@ async function resolveActor(request: Request, auth: Auth): Promise<Actor | null>
 		}
 	}
 
-	// 2. Bearer token (workers, API clients)
+	// 2. Bearer token (API clients, MCP server with machine secret)
 	const authHeader = request.headers.get('authorization')
 	if (authHeader?.startsWith('Bearer ')) {
 		const token = authHeader.slice(7)
 
-		// Try Better Auth API key
+		// 2a. Try Better Auth API key
 		try {
 			const authApi = auth.api as Record<string, (args: unknown) => Promise<unknown>>
 			const verifyFn = authApi.verifyApiKey
@@ -92,6 +99,21 @@ async function resolveActor(request: Request, auth: Auth): Promise<Actor | null>
 			}
 		} catch (err) {
 			console.debug('[auth] bearer token is not a Better Auth API key:', (err as Error).message)
+		}
+
+		// 2b. Try worker machine secret (used by MCP server spawned from worker)
+		if (enrollmentService) {
+			const workerId = await enrollmentService.validateMachineSecret(token)
+			if (workerId) {
+				return {
+					id: workerId,
+					type: 'api',
+					name: `worker:${workerId}`,
+					role: 'member',
+					source: 'internal',
+					ip: request.headers.get('x-forwarded-for') ?? undefined,
+				}
+			}
 		}
 	}
 
@@ -160,7 +182,8 @@ export function authMiddleware(opts?: AuthMiddlewareOptions) {
 			return next()
 		}
 
-		const actor = await resolveActor(c.req.raw, c.get('auth'))
+		const { enrollmentService } = c.get('services')
+		const actor = await resolveActor(c.req.raw, c.get('auth'), enrollmentService)
 		c.set('actor', actor)
 
 		if (!actor) {

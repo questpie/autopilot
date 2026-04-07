@@ -16,6 +16,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
 import { createServer } from 'node:http'
 import { registerTools } from './tools.js'
+import { env } from './env.js'
 
 const args = process.argv.slice(2)
 const transportArg = args.find(a => a.startsWith('--transport='))?.split('=')[1]
@@ -42,11 +43,35 @@ async function startStdio(server: McpServer): Promise<void> {
 	await server.connect(transport)
 }
 
+/**
+ * Validate SSE inbound auth.
+ * Requires either AUTOPILOT_API_KEY as Bearer token or AUTOPILOT_LOCAL_DEV mode.
+ */
+function validateSseAuth(req: import('node:http').IncomingMessage): boolean {
+	if (env.AUTOPILOT_LOCAL_DEV === 'true') return true
+
+	const authHeader = req.headers.authorization
+	if (!authHeader?.startsWith('Bearer ')) return false
+	const token = authHeader.slice(7)
+
+	// SSE clients must present the same API key that this MCP server uses
+	return !!env.AUTOPILOT_API_KEY && token === env.AUTOPILOT_API_KEY
+}
+
 async function startSSE(mcpServer: McpServer, port: number): Promise<void> {
 	const sessions = new Map<string, SSEServerTransport>()
 
 	const httpServer = createServer(async (req, res) => {
 		const url = new URL(req.url ?? '/', `http://localhost:${port}`)
+
+		// Auth check for all endpoints except health
+		if (url.pathname !== '/') {
+			if (!validateSseAuth(req)) {
+				res.writeHead(401, { 'Content-Type': 'application/json' })
+				res.end(JSON.stringify({ error: 'Unauthorized' }))
+				return
+			}
+		}
 
 		if (url.pathname === '/sse' && req.method === 'GET') {
 			const transport = new SSEServerTransport('/messages', res)

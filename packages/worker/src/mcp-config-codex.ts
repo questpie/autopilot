@@ -49,11 +49,18 @@ export async function createCodexMcpConfig(
   // Resolve MCP server command
   const { command, args } = resolveMcpCommand(opts.mcpBinaryPath)
 
-  // Write TOML config
-  const toml = buildToml(command, args, {
+  // Build env for MCP process
+  const mcpEnv: Record<string, string> = {
     AUTOPILOT_API_URL: opts.orchestratorUrl,
-    AUTOPILOT_API_KEY: opts.apiKey,
-  })
+  }
+  if (opts.localDev) {
+    mcpEnv.AUTOPILOT_LOCAL_DEV = 'true'
+  } else {
+    mcpEnv.AUTOPILOT_API_KEY = opts.apiKey
+  }
+
+  // Write TOML config
+  const toml = buildToml(command, args, mcpEnv)
   await writeFile(configPath, toml)
 
   return {

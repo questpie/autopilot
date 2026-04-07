@@ -8,6 +8,8 @@ export interface McpConfigOptions {
   apiKey: string
   /** Path to the autopilot-mcp binary. Defaults to finding it in node_modules. */
   mcpBinaryPath?: string
+  /** Local dev mode — MCP server uses X-Local-Dev header instead of Bearer auth. */
+  localDev?: boolean
 }
 
 /**
@@ -26,16 +28,22 @@ export async function createMcpConfig(opts: McpConfigOptions): Promise<{
   // Resolve MCP server binary path
   const { command: mcpBinary, args: mcpArgs } = resolveMcpCommand(opts.mcpBinaryPath)
 
+  const mcpEnv: Record<string, string> = {
+    AUTOPILOT_API_URL: opts.orchestratorUrl,
+  }
+  if (opts.localDev) {
+    mcpEnv.AUTOPILOT_LOCAL_DEV = 'true'
+  } else {
+    mcpEnv.AUTOPILOT_API_KEY = opts.apiKey
+  }
+
   const config = {
     mcpServers: {
       autopilot: {
         type: 'stdio' as const,
         command: mcpBinary,
         args: mcpArgs,
-        env: {
-          AUTOPILOT_API_URL: opts.orchestratorUrl,
-          AUTOPILOT_API_KEY: opts.apiKey,
-        },
+        env: mcpEnv,
       },
     },
   }

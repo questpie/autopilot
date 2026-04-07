@@ -21,6 +21,8 @@ export interface RunContext {
   instructions: string | null
   orchestratorUrl: string
   apiKey: string
+  /** Local dev mode — MCP server should use X-Local-Dev header instead of Bearer auth. */
+  localDev: boolean
   /** For continuation runs: the worker-local session ID to resume. */
   runtimeSessionRef: string | null
   /** Per-run isolated workspace path. Overrides adapter's default workDir. */

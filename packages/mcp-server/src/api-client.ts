@@ -14,7 +14,9 @@ function getBaseUrl(): string {
 
 function authHeaders(): Record<string, string> {
 	const headers: Record<string, string> = {}
-	if (env.AUTOPILOT_API_KEY) {
+	if (env.AUTOPILOT_LOCAL_DEV === 'true') {
+		headers['X-Local-Dev'] = 'true'
+	} else if (env.AUTOPILOT_API_KEY) {
 		headers.Authorization = `Bearer ${env.AUTOPILOT_API_KEY}`
 	}
 	return headers

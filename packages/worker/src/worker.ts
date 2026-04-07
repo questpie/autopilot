@@ -307,6 +307,7 @@ export class AutopilotWorker {
       instructions: run.instructions ?? null,
       orchestratorUrl: this.config.orchestratorUrl,
       apiKey: this.machineSecret ?? '',
+      localDev: this.isLocalDev,
       runtimeSessionRef: run.runtime_session_ref ?? null,
       workDir: ws?.path ?? null,
       capabilities: run.resolved_capabilities ?? null,

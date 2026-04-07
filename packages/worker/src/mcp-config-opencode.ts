@@ -44,6 +44,16 @@ export async function createOpenCodeMcpConfig(
   // Resolve MCP server command
   const { command, args } = resolveMcpCommand(opts.mcpBinaryPath)
 
+  // Build env for MCP process
+  const mcpEnv: Record<string, string> = {
+    AUTOPILOT_API_URL: opts.orchestratorUrl,
+  }
+  if (opts.localDev) {
+    mcpEnv.AUTOPILOT_LOCAL_DEV = 'true'
+  } else {
+    mcpEnv.AUTOPILOT_API_KEY = opts.apiKey
+  }
+
   // Build config object — OpenCode format
   const config = {
     $schema: 'https://opencode.ai/config.json',
@@ -51,10 +61,7 @@ export async function createOpenCodeMcpConfig(
       autopilot: {
         type: 'local' as const,
         command: [command, ...args],
-        environment: {
-          AUTOPILOT_API_URL: opts.orchestratorUrl,
-          AUTOPILOT_API_KEY: opts.apiKey,
-        },
+        environment: mcpEnv,
       },
     },
   }

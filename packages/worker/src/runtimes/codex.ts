@@ -101,6 +101,7 @@ export class CodexAdapter implements RuntimeAdapter {
         apiKey: context.apiKey,
         mcpBinaryPath: this.config.mcpBinaryPath,
         workDir: effectiveWorkDir,
+        localDev: context.localDev,
       })
       mcpCleanup = mcp.cleanup
     }

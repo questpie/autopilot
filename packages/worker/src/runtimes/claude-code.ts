@@ -94,6 +94,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
         orchestratorUrl: context.orchestratorUrl,
         apiKey: context.apiKey,
         mcpBinaryPath: this.config.mcpBinaryPath,
+        localDev: context.localDev,
       })
       args.push('--mcp-config', mcp.configPath, '--strict-mcp-config')
       args.push('--allowedTools', MCP_TOOL_NAMES)
