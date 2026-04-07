@@ -4,7 +4,8 @@ import { badge, dim, error } from '../utils/format'
 import { getBaseUrl } from '../utils/client'
 import { getAuthHeaders } from './auth'
 
-const eventsCmd = new Command('events')
+const eventsCmd = new Command('event')
+	.alias('events')
 	.description('Stream real-time events from the orchestrator (SSE)')
 	.option('-f, --filter <types>', 'Comma-separated event types to show (e.g. task_changed,run_completed)')
 	.action(async (opts: { filter?: string }) => {
@@ -55,7 +56,7 @@ const eventsCmd = new Command('events')
 							.join(' ')
 						console.log(`${dim(ts)} ${badge(event.type, 'cyan')} ${details}`)
 					} catch (err) {
-						console.debug('[events] malformed SSE data:', (err as Error).message)
+						console.debug('[events] malformed SSE data:', err instanceof Error ? err.message : String(err))
 					}
 				}
 			}

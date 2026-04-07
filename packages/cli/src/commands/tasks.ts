@@ -1,7 +1,8 @@
 import { Command } from 'commander'
 import { program } from '../program'
-import { section, badge, dim, table, success, error, separator, dot } from '../utils/format'
-import { createApiClient } from '../utils/client'
+import { section, badge, dim, table, success, error, separator, dot, header, warning, stripAnsi } from '../utils/format'
+import { createApiClient, getBaseUrl } from '../utils/client'
+import { getAuthHeaders } from './auth'
 
 // ─── Shared Types ─────────────────────────────────────────────────────────
 
@@ -23,7 +24,8 @@ interface ChildRollup {
 	backlog: number
 }
 
-const tasksCmd = new Command('tasks')
+const tasksCmd = new Command('task')
+	.alias('tasks')
 	.description('List and manage tasks')
 	.option('-s, --status <status>', 'Filter by task status')
 	.option('-a, --assigned <agent>', 'Filter by assigned agent ID')
@@ -485,6 +487,410 @@ tasksCmd.addCommand(
 		}),
 )
 
+// ─── Progress Subcommand ─────────────────────────────────────────────────
+
+interface RunSummary {
+	id: string
+	status: string
+	agent_id: string
+	task_id?: string | null
+	instructions?: string | null
+	summary?: string | null
+	initiated_by?: string | null
+	started_at?: string | null
+	ended_at?: string | null
+	created_at: string
+	error?: string | null
+}
+
+interface WorkflowStepDef {
+	id: string
+	name?: string
+	type: string
+	agent_id?: string
+	instructions?: string
+}
+
+interface WorkflowDef {
+	id: string
+	name: string
+	description?: string
+	steps: WorkflowStepDef[]
+}
+
+/** A single row in the progress timeline. */
+interface TimelineEntry {
+	stepId: string
+	label: string
+	status: 'done' | 'empty' | 'running' | 'pending' | 'failed'
+	run?: RunSummary
+	annotation?: string
+	isHumanApproval?: boolean
+}
+
+function truncate(text: string, maxLen: number): string {
+	if (text.length <= maxLen) return text
+	return text.slice(0, maxLen - 3) + '...'
+}
+
+function formatDuration(startedAt: string | null | undefined, endedAt: string | null | undefined): string {
+	if (!startedAt) return ''
+	const start = new Date(startedAt).getTime()
+	const end = endedAt ? new Date(endedAt).getTime() : Date.now()
+	const diffMs = end - start
+	if (diffMs < 0) return ''
+
+	const totalSec = Math.floor(diffMs / 1000)
+	if (totalSec < 60) return `${totalSec}s`
+	const min = Math.floor(totalSec / 60)
+	const sec = totalSec % 60
+	if (min < 60) return sec > 0 ? `${min}m ${sec}s` : `${min}m`
+	const hr = Math.floor(min / 60)
+	const remainMin = min % 60
+	return remainMin > 0 ? `${hr}h ${remainMin}m` : `${hr}h`
+}
+
+function shortRunId(id: string): string {
+	// run-1234567890-abcdef012345 → run-abcd…
+	if (id.length > 12) return id.slice(0, 10) + '\u2026'
+	return id
+}
+
+/**
+ * Build timeline entries by reconstructing which workflow step each run executed.
+ *
+ * Strategy: walk runs in chronological order, simulating the workflow step
+ * progression. For each run we track the "current step pointer" and detect
+ * revision loops (going backward), retries (same step), and normal advances.
+ */
+function buildTimeline(
+	steps: WorkflowStepDef[],
+	taskRuns: RunSummary[],
+	currentStep: string | null,
+	metadata: Record<string, unknown>,
+): TimelineEntry[] {
+	const entries: TimelineEntry[] = []
+	const stepIndex = new Map(steps.map((s, i) => [s.id, i]))
+
+	// Sort runs by created_at ascending
+	const sortedRuns = [...taskRuns]
+		.filter((r) => r.initiated_by === 'workflow-engine' || r.initiated_by === 'system')
+		.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+	// Track how many times each step has been visited
+	const stepVisits = new Map<string, number>()
+	let pointer = 0 // index into steps array
+
+	for (const run of sortedRuns) {
+		// Try to figure out which step this run belongs to.
+		// Heuristic: check if the run's instructions contain any step's instructions.
+		let matchedStepIdx = -1
+
+		// First try matching by instruction content
+		for (let i = 0; i < steps.length; i++) {
+			const step = steps[i]!
+			if (step.type !== 'agent') continue
+			if (step.instructions && run.instructions?.includes(step.instructions)) {
+				matchedStepIdx = i
+				break
+			}
+		}
+
+		// If no match by instructions, assume it's the step at the current pointer
+		if (matchedStepIdx === -1) {
+			// If this run is after some completed runs, try advancing the pointer
+			matchedStepIdx = pointer
+		}
+
+		const step = steps[matchedStepIdx]
+		if (!step) continue
+
+		const visits = (stepVisits.get(step.id) ?? 0) + 1
+		stepVisits.set(step.id, visits)
+
+		// Determine if this is a revision or retry
+		const isRevision = matchedStepIdx < pointer
+		const isRetry = matchedStepIdx === pointer && visits > 1
+		const isEmpty = !run.summary || run.summary.trim() === '' || /^(no output|empty|n\/a|completed? with no output)$/i.test(run.summary?.trim() ?? '')
+
+		let label = step.id
+		if (isRevision) label = `${step.id} (revision)`
+		else if (isRetry) label = `${step.id} (retry)`
+
+		let status: TimelineEntry['status'] = 'done'
+		if (run.status === 'running' || run.status === 'claimed') {
+			status = 'running'
+		} else if (run.status === 'failed') {
+			status = 'failed'
+		} else if (isEmpty && (run.status === 'completed')) {
+			status = 'empty'
+		}
+
+		entries.push({ stepId: step.id, label, status, run })
+
+		// Add revision annotation if validate step sent us back
+		if (isRevision && entries.length >= 2) {
+			const prevEntry = entries[entries.length - 2]
+			if (prevEntry && prevEntry.run?.summary) {
+				// Look for revision reason in metadata
+				const revKey = Object.keys(metadata).find(
+					(k) => k.startsWith('_revisions:') && k.includes(step.id),
+				)
+				if (revKey) {
+					const reason = prevEntry.run.summary
+					entries.splice(entries.length - 1, 0, {
+						stepId: prevEntry.stepId,
+						label: `  \u21b3 revision ${visits - 1}`,
+						status: 'done',
+						annotation: truncate(reason, 80),
+					})
+				}
+			}
+		}
+
+		if (isEmpty && run.status === 'completed') {
+			entries.push({
+				stepId: step.id,
+				label: `  \u21b3 retry (empty output)`,
+				status: 'empty',
+			})
+		}
+
+		// Advance pointer
+		if (!isRevision && run.status === 'completed' && !isEmpty) {
+			// Move pointer to the next step
+			pointer = matchedStepIdx + 1
+		} else if (isRevision) {
+			// Revision: pointer goes back to matched step
+			pointer = matchedStepIdx
+		}
+	}
+
+	// Add remaining pending steps
+	for (let i = pointer; i < steps.length; i++) {
+		const step = steps[i]!
+		// Skip if the step is the current running step already in entries
+		const alreadyShown = entries.some(
+			(e) => e.stepId === step.id && (e.status === 'running' || e.status === 'pending'),
+		)
+		if (alreadyShown) continue
+
+		const isCurrent = step.id === currentStep
+		if (isCurrent) {
+			// Current step might be running without a run yet (e.g. human_approval)
+			const hasRunning = entries.some((e) => e.stepId === step.id && e.status === 'running')
+			if (!hasRunning) {
+				entries.push({
+					stepId: step.id,
+					label: step.id,
+					status: 'pending',
+					isHumanApproval: step.type === 'human_approval',
+				})
+			}
+		} else {
+			entries.push({
+				stepId: step.id,
+				label: step.type === 'done' ? 'done' : step.id,
+				status: 'pending',
+				isHumanApproval: step.type === 'human_approval',
+			})
+		}
+	}
+
+	return entries
+}
+
+tasksCmd.addCommand(
+	new Command('progress')
+		.description('Show workflow step timeline with revision loops and summaries')
+		.argument('<id>', 'Task ID')
+		.action(async (id: string) => {
+			try {
+				const client = createApiClient()
+
+				// 1. Fetch task
+				const taskRes = await client.api.tasks[':id'].$get({ param: { id } })
+				if (!taskRes.ok) {
+					console.error(error(`Task not found: ${id}`))
+					console.error(dim('Use "autopilot tasks" to list all tasks.'))
+					process.exit(1)
+				}
+
+				const task = (await taskRes.json()) as {
+					id: string
+					title: string
+					status: string
+					workflow_id?: string | null
+					workflow_step?: string | null
+					metadata?: string | null
+				}
+
+				if (!task.workflow_id) {
+					console.error(error(`Task ${id} has no workflow attached`))
+					process.exit(1)
+				}
+
+				// 2. Fetch workflow definition
+				const authHeaders: Record<string, string> = { ...getAuthHeaders() }
+				if (Object.keys(authHeaders).length === 0) authHeaders['X-Local-Dev'] = 'true'
+				const wfRes = await fetch(`${getBaseUrl()}/api/config/workflows`, {
+					headers: authHeaders,
+				})
+				if (!wfRes.ok) {
+					console.error(error('Failed to fetch workflow definitions'))
+					process.exit(1)
+				}
+				const workflows = (await wfRes.json()) as WorkflowDef[]
+				const workflow = workflows.find((w) => w.id === task.workflow_id)
+				if (!workflow) {
+					console.error(error(`Workflow not found: ${task.workflow_id}`))
+					process.exit(1)
+				}
+
+				// 3. Fetch all runs for this task
+				const runsRes = await client.api.runs.$get({ query: { task_id: id } })
+				if (!runsRes.ok) {
+					console.error(error('Failed to fetch runs'))
+					process.exit(1)
+				}
+				const taskRuns = (await runsRes.json()) as RunSummary[]
+
+				// 4. Parse metadata for revision info
+				let metadata: Record<string, unknown> = {}
+				try {
+					metadata = JSON.parse(task.metadata ?? '{}')
+				} catch (err) {
+					console.debug('[progress] malformed task metadata:', err instanceof Error ? err.message : String(err))
+				}
+
+				// 5. Build and render timeline
+				const entries = buildTimeline(
+					workflow.steps,
+					taskRuns,
+					task.workflow_step ?? null,
+					metadata,
+				)
+
+				// ── Header ──
+				console.log('')
+				console.log(
+					`  ${header(task.title)}  ${badge(task.status, statusColor(task.status))}${task.workflow_step ? ` ${dim('\u2192 ' + task.workflow_step)}` : ''}`,
+				)
+				console.log('')
+
+				// ── Column headers ──
+				const colStep = 'Step'
+				const colStatus = 'Status'
+				const colRun = 'Run'
+				const colDur = 'Duration'
+				const colSummary = 'Summary'
+				console.log(
+					dim(
+						`  ${colStep.padEnd(26)}${colStatus.padEnd(11)}${colRun.padEnd(17)}${colDur.padEnd(10)}${colSummary}`,
+					),
+				)
+				console.log(dim(`  ${'\u2500'.repeat(76)}`))
+
+				// ── Timeline rows ──
+				for (const entry of entries) {
+					// Annotation-only rows (revision arrows)
+					if (entry.annotation !== undefined && !entry.run) {
+						console.log(
+							`  ${dim(entry.label.padEnd(26))}${''.padEnd(11)}${''.padEnd(17)}${''.padEnd(10)}${dim('"' + entry.annotation + '"')}`,
+						)
+						continue
+					}
+
+					// Status icon + text
+					let statusIcon: string
+					let statusText: string
+					switch (entry.status) {
+						case 'done':
+							statusIcon = success('\u2713')
+							statusText = success('done')
+							break
+						case 'empty':
+							statusIcon = warning('\u26a0')
+							statusText = warning('empty')
+							break
+						case 'running':
+							statusIcon = '\u{1f504}'
+							statusText = badge('run', 'cyan')
+							break
+						case 'failed':
+							statusIcon = error('\u2717')
+							statusText = error('fail')
+							break
+						case 'pending':
+						default:
+							statusIcon = dim('\u25cb')
+							statusText = dim('pending')
+							break
+					}
+
+					const stepLabel = (entry.status === 'pending' || (entry.status === 'done' && !entry.run))
+						? `${statusIcon} ${dim(entry.label)}`
+						: `${statusIcon} ${entry.label}`
+
+					const runId = entry.run ? dim(shortRunId(entry.run.id)) : ''
+					const duration = entry.run
+						? formatDuration(entry.run.started_at, entry.run.ended_at)
+						: ''
+
+					let summaryText = ''
+					if (entry.run?.summary) {
+						summaryText = truncate(entry.run.summary.replace(/\n/g, ' '), 100)
+					} else if (entry.run && entry.status === 'empty') {
+						summaryText = dim('[no output]')
+					} else if (entry.isHumanApproval) {
+						summaryText = dim('(human approval)')
+					} else if (entry.run?.status === 'running') {
+						summaryText = dim('Running...')
+					}
+
+					// Build the padded row — account for ANSI escape sequences in padding
+					const stepColWidth = 26
+					const statusColWidth = 11
+					const runColWidth = 17
+					const durColWidth = 10
+
+					const stepVisible = stripAnsi(stepLabel).length
+					const stepPadded = stepLabel + ' '.repeat(Math.max(0, stepColWidth - stepVisible))
+
+					const statusVisible = stripAnsi(statusText).length
+					const statusPadded = statusText + ' '.repeat(Math.max(0, statusColWidth - statusVisible))
+
+					const runVisible = stripAnsi(runId).length
+					const runPadded = runId + ' '.repeat(Math.max(0, runColWidth - runVisible))
+
+					const durPadded = duration.padEnd(durColWidth)
+
+					console.log(`  ${stepPadded}${statusPadded}${runPadded}${durPadded}${summaryText}`)
+				}
+
+				// ── Footer ──
+				console.log('')
+				console.log(dim(`  Branch: autopilot/${task.id}`))
+				console.log(dim(`  Worktree: .worktrees/${task.id}`))
+
+				// Show revision counts from metadata
+				const revisionKeys = Object.keys(metadata).filter((k) => k.startsWith('_revisions:'))
+				if (revisionKeys.length > 0) {
+					const parts = revisionKeys.map((k) => {
+						const loop = k.replace('_revisions:', '')
+						const count = metadata[k] as number
+						return `${loop.replace('\u2192', '\u2192')}: ${count}/3`
+					})
+					console.log(dim(`  Revisions: ${parts.join(', ')}`))
+				}
+				console.log('')
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function statusColor(status: string): string {
@@ -533,7 +939,8 @@ async function getChildCount(
 		if (!res.ok) return 0
 		const rollup = (await res.json()) as ChildRollup
 		return rollup.total
-	} catch {
+	} catch (err) {
+		console.debug('[tasks] rollup fetch failed:', err instanceof Error ? err.message : String(err))
 		return 0
 	}
 }
@@ -561,8 +968,8 @@ async function printRollupSummary(
 
 		console.log(dim(`  Children: ${rollup.total} (${parts.join(', ')})`))
 		console.log(dim(`  Use: autopilot tasks children ${taskId}`))
-	} catch {
-		// Rollup fetch failed — not critical
+	} catch (err) {
+		console.debug('[tasks] rollup summary fetch failed:', err instanceof Error ? err.message : String(err))
 	}
 }
 
@@ -586,8 +993,8 @@ async function printLastRunSummary(
 			console.log(dim('Last run summary:'))
 			console.log(`  ${lastRun.summary.slice(0, 300)}`)
 		}
-	} catch {
-		// Not critical
+	} catch (err) {
+		console.debug('[tasks] last run summary fetch failed:', err instanceof Error ? err.message : String(err))
 	}
 }
 

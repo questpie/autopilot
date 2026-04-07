@@ -1,9 +1,11 @@
 import { Command } from 'commander'
 import { program } from '../program'
-import { section, badge, dim, table, success, error, separator } from '../utils/format'
-import { createApiClient } from '../utils/client'
+import { section, badge, dim, table, success, error, separator, dot } from '../utils/format'
+import { createApiClient, getBaseUrl } from '../utils/client'
+import { getAuthHeaders } from './auth'
 
-const runsCmd = new Command('runs')
+const runsCmd = new Command('run')
+	.alias('runs')
 	.description('List and inspect runs')
 	.option('-s, --status <status>', 'Filter by run status (pending, claimed, running, completed, failed)')
 	.option('-a, --agent <agent>', 'Filter by agent ID')
@@ -51,7 +53,9 @@ const runsCmd = new Command('runs')
 						const t = (await tRes.json()) as { title: string }
 						taskTitles.set(tid, t.title)
 					}
-				} catch { /* skip */ }
+				} catch (err) {
+					console.debug(`[runs] failed to fetch task title for ${tid}:`, err instanceof Error ? err.message : String(err))
+				}
 			}
 
 			function statusColor(s: string): string {
@@ -170,7 +174,7 @@ runsCmd.addCommand(
 						}
 						console.log(`  ${dim('Fallback:')} ${t.allow_fallback !== false ? 'yes' : 'no'}`)
 					} catch (err) {
-						console.log(dim(`  (invalid targeting JSON: ${(err as Error).message})`))
+						console.log(dim(`  (invalid targeting JSON: ${err instanceof Error ? err.message : String(err)})`))
 					}
 				}
 
@@ -298,6 +302,221 @@ runsCmd.addCommand(
 				const run = (await res.json()) as { id: string; status: string }
 				console.log(success(`Run ${run.id} cancelled (status: ${run.status})`))
 			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+// ─── Watch Subcommand ───────────────────────────────────────────────────────
+
+interface RunEvent {
+	type: string
+	summary?: string | null
+	metadata?: string | null
+	created_at: string
+}
+
+function formatTime(iso: string): string {
+	const d = new Date(iso)
+	return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
+function eventIcon(type: string): string {
+	switch (type) {
+		case 'started': return `${dot('green')} `
+		case 'completed': return `${dot('green')} `
+		case 'progress': return '\uD83D\uDCAC '
+		case 'tool_use': return '\uD83D\uDD27 '
+		case 'error': return '\u274C '
+		case 'artifact': return '\uD83D\uDCE6 '
+		case 'message_sent': return '\u2709\uFE0F  '
+		case 'task_updated': return '\uD83D\uDCCB '
+		case 'approval_needed': return '\u270B '
+		case 'external_action': return '\u2699\uFE0F  '
+		default: return '\u2022 '
+	}
+}
+
+function renderEvent(evt: RunEvent): void {
+	const ts = dim(formatTime(evt.created_at))
+	const icon = eventIcon(evt.type)
+	const summary = evt.summary ?? ''
+
+	if (evt.type === 'error') {
+		console.log(`  ${ts}  ${icon}${error(summary)}`)
+	} else if (evt.type === 'tool_use') {
+		// Try to extract tool name from metadata
+		let detail = summary
+		if (evt.metadata) {
+			try {
+				const meta = typeof evt.metadata === 'string' ? JSON.parse(evt.metadata) : evt.metadata
+				if (meta.tool) detail = `${meta.tool}${summary ? ` ${summary}` : ''}`
+			} catch (err) {
+				console.debug('[watch] malformed tool_use metadata:', err instanceof Error ? err.message : String(err))
+			}
+		}
+		console.log(`  ${ts}  ${icon}${detail}`)
+	} else if (evt.type === 'progress') {
+		// Wrap in quotes like the spec shows
+		const text = summary.length > 200 ? `${summary.slice(0, 200)}...` : summary
+		console.log(`  ${ts}  ${icon}${dim(`"${text}"`)}`)
+	} else {
+		console.log(`  ${ts}  ${icon}${summary}`)
+	}
+}
+
+runsCmd.addCommand(
+	new Command('watch')
+		.description('Watch live events from a running (or completed) run via SSE')
+		.argument('<id>', 'Run ID')
+		.action(async (id: string) => {
+			try {
+				const client = createApiClient()
+
+				// Fetch run to validate it exists and get metadata
+				const runRes = await client.api.runs[':id'].$get({ param: { id } })
+				if (!runRes.ok) {
+					console.error(error(`Run not found: ${id}`))
+					console.error(dim('Use "autopilot runs" to list all runs.'))
+					process.exit(1)
+				}
+
+				const run = (await runRes.json()) as {
+					id: string
+					status: string
+					agent_id: string
+					task_id?: string | null
+				}
+
+				// Fetch task title for header
+				let taskLabel = run.task_id ?? ''
+				if (run.task_id) {
+					try {
+						const tRes = await client.api.tasks[':id'].$get({ param: { id: run.task_id } })
+						if (tRes.ok) {
+							const t = (await tRes.json()) as { title: string }
+							taskLabel = t.title
+						}
+					} catch (err) {
+						console.debug('[watch] failed to fetch task title:', err instanceof Error ? err.message : String(err))
+					}
+				}
+
+				// Print header
+				const shortId = run.id.length > 12 ? `${run.id.slice(0, 12)}...` : run.id
+				console.log('')
+				console.log(`  Run ${shortId}  ${badge(run.status)}  Agent: ${run.agent_id}${taskLabel ? `  Task: ${taskLabel}` : ''}`)
+				console.log('')
+
+				// If run is already completed/failed, show historical events and exit
+				if (run.status === 'completed' || run.status === 'failed') {
+					const eventsRes = await client.api.runs[':id'].events.$get({ param: { id } })
+					if (eventsRes.ok) {
+						const events = (await eventsRes.json()) as RunEvent[]
+						if (events.length === 0) {
+							console.log(dim('  No events recorded for this run.'))
+						} else {
+							for (const evt of events) {
+								renderEvent(evt)
+							}
+						}
+					}
+					console.log('')
+					console.log(dim(`  Run ${run.status}. Showing ${run.status === 'failed' ? 'error' : 'historical'} events.`))
+					return
+				}
+
+				// Show existing events first
+				const existingRes = await client.api.runs[':id'].events.$get({ param: { id } })
+				if (existingRes.ok) {
+					const existing = (await existingRes.json()) as RunEvent[]
+					for (const evt of existing) {
+						renderEvent(evt)
+					}
+				}
+
+				// Subscribe to SSE for live events
+				console.log(dim('  (streaming, Ctrl+C to detach)'))
+				console.log('')
+
+				const headers: Record<string, string> = { ...getAuthHeaders() }
+				if (Object.keys(headers).length === 0) headers['X-Local-Dev'] = 'true'
+
+				const res = await fetch(`${getBaseUrl()}/api/events`, { headers })
+				if (!res.ok) {
+					console.error(error(`Failed to connect to event stream (${res.status})`))
+					process.exit(1)
+				}
+
+				const reader = res.body?.getReader()
+				if (!reader) {
+					console.error(error('No response body from event stream'))
+					process.exit(1)
+				}
+
+				// Graceful Ctrl+C cleanup
+				const cleanup = () => {
+					reader.cancel().catch(() => {})
+					console.log('')
+					console.log(dim('  Detached from run stream.'))
+					process.exit(0)
+				}
+				process.on('SIGINT', cleanup)
+				process.on('SIGTERM', cleanup)
+
+				const decoder = new TextDecoder()
+				let buffer = ''
+
+				while (true) {
+					const { done, value } = await reader.read()
+					if (done) break
+
+					buffer += decoder.decode(value, { stream: true })
+					const lines = buffer.split('\n')
+					buffer = lines.pop()!
+
+					for (const line of lines) {
+						if (!line.startsWith('data: ')) continue
+						const json = line.slice(6)
+						try {
+							const event = JSON.parse(json) as { type: string; runId?: string; eventType?: string; summary?: string; status?: string }
+							if (event.type === 'heartbeat') continue
+
+							// Filter for events matching this run
+							if (event.type === 'run_event' && event.runId === id) {
+								renderEvent({
+									type: event.eventType ?? 'progress',
+									summary: event.summary ?? null,
+									created_at: new Date().toISOString(),
+								})
+							} else if (event.type === 'run_started' && event.runId === id) {
+								renderEvent({
+									type: 'started',
+									summary: 'Run started',
+									created_at: new Date().toISOString(),
+								})
+							} else if (event.type === 'run_completed' && event.runId === id) {
+								const status = event.status ?? 'completed'
+								renderEvent({
+									type: 'completed',
+									summary: `Run ${status}`,
+									created_at: new Date().toISOString(),
+								})
+								console.log('')
+								console.log(dim(`  Run ${status}.`))
+								reader.cancel().catch(() => {})
+								process.removeListener('SIGINT', cleanup)
+								process.removeListener('SIGTERM', cleanup)
+								return
+							}
+						} catch (err) {
+							console.debug('[watch] malformed SSE data:', err instanceof Error ? err.message : String(err))
+						}
+					}
+				}
+			} catch (err) {
+				if (err instanceof Error && err.name === 'AbortError') return
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				process.exit(1)
 			}

@@ -28,7 +28,7 @@ export function loadCredentials(): Credentials | null {
 	try {
 		return JSON.parse(readFileSync(CREDS_PATH, 'utf-8')) as Credentials
 	} catch (err) {
-		console.warn(`[auth] failed to parse credentials at ${CREDS_PATH}:`, (err as Error).message)
+		console.warn(`[auth] failed to parse credentials at ${CREDS_PATH}:`, err instanceof Error ? err.message : String(err))
 		return null
 	}
 }
@@ -95,9 +95,10 @@ authCmd.addCommand(
 					console.error(error('Login response did not contain a token'))
 					process.exit(1)
 				}
-			} catch {
+			} catch (err) {
 				console.error(error('Could not connect to orchestrator. Is it running?'))
 				console.error(dim(`Tried ${baseUrl}`))
+				console.debug('[auth login]', err instanceof Error ? err.message : String(err))
 				process.exit(1)
 			}
 		}),
@@ -146,8 +147,9 @@ authCmd.addCommand(
 				}
 				console.log(success('Owner account created'))
 				console.log(dim('  You can now use all autopilot commands.'))
-			} catch {
+			} catch (err) {
 				console.error(error('Could not connect to orchestrator. Is it running?'))
+				console.debug('[auth setup]', err instanceof Error ? err.message : String(err))
 				process.exit(1)
 			}
 		}),
@@ -177,18 +179,89 @@ authCmd.addCommand(
 		}),
 )
 
+async function logoutAction(): Promise<void> {
+	const { rm } = await import('node:fs/promises')
+	try {
+		await rm(CREDS_PATH)
+		console.log(success('Logged out'))
+	} catch (err) {
+		if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
+			console.log(dim('  Not logged in'))
+		} else {
+			console.error(error(`Failed to remove credentials: ${err instanceof Error ? err.message : String(err)}`))
+			process.exit(1)
+		}
+	}
+}
+
 authCmd.addCommand(
 	new Command('logout')
 		.description('Clear stored credentials')
-		.action(async () => {
-			const { rm } = await import('node:fs/promises')
+		.action(logoutAction),
+)
+
+program.addCommand(authCmd)
+
+// Top-level login/logout aliases for convenience
+program.addCommand(
+	new Command('login')
+		.description('Login to the orchestrator (shortcut for "auth login")')
+		.option('--api-key <key>', 'Login with an API key')
+		.option('--port <port>', 'Orchestrator port', '7778')
+		.option('--url <url>', 'Remote orchestrator URL')
+		.action(async (opts: { apiKey?: string; port: string; url?: string }) => {
+			const port = parseInt(opts.port, 10)
+			const baseUrl = opts.url ?? getBaseUrl(port)
+			const credBase = opts.url ? { port, url: opts.url } : { port }
+
+			if (opts.apiKey) {
+				saveCredentials({ type: 'api-key', key: opts.apiKey, ...credBase })
+				console.log(success('API key saved'))
+				return
+			}
+
+			const email = prompt('Email: ')
+			const password = prompt('Password: ')
+
+			if (!email || !password) {
+				console.error(error('Email and password are required'))
+				process.exit(1)
+			}
+
 			try {
-				await rm(CREDS_PATH)
-				console.log(success('Logged out'))
-			} catch {
-				console.log(dim('  Not logged in'))
+				const res = await fetch(`${baseUrl}/api/auth/sign-in/email`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ email, password }),
+				})
+
+				if (!res.ok) {
+					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
+						error: string
+					}
+					console.error(error(`Login failed: ${body.error}`))
+					process.exit(1)
+				}
+
+				const data = (await res.json()) as { token?: string }
+				if (data.token) {
+					saveCredentials({ type: 'bearer', token: data.token, ...credBase })
+					console.log(success('Logged in successfully'))
+				} else {
+					console.error(error('Login response did not contain a token'))
+					process.exit(1)
+				}
+			} catch (err) {
+				console.error(error('Could not connect to orchestrator. Is it running?'))
+				console.error(dim(`Tried ${baseUrl}`))
+				console.debug('[login]', err instanceof Error ? err.message : String(err))
+				process.exit(1)
 			}
 		}),
 )
 
-program.addCommand(authCmd)
+program.addCommand(
+	new Command('logout')
+		.description('Clear stored credentials (shortcut for "auth logout")')
+		.action(logoutAction),
+)

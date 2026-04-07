@@ -26,7 +26,8 @@ async function fetchWorkflows(): Promise<WorkflowDef[]> {
 	return res.json()
 }
 
-const workflowsCmd = new Command('workflows')
+const workflowsCmd = new Command('workflow')
+	.alias('workflows')
 	.description('List and inspect authored workflows')
 	.action(async () => {
 		try {
