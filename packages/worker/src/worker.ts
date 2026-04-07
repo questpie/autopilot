@@ -270,26 +270,30 @@ export class AutopilotWorker {
 
   private async poll(): Promise<void> {
     if (!this.running) return
-    if (this.activeRunIds.size >= this.maxConcurrentRuns) return
 
-    try {
-      const res = (await this.api('/api/workers/claim', {
-        method: 'POST',
-        body: { worker_id: this.workerId },
-      })) as WorkerClaimResponse
+    // Claim runs until at capacity or no more work available
+    while (this.running && this.activeRunIds.size < this.maxConcurrentRuns) {
+      try {
+        const res = (await this.api('/api/workers/claim', {
+          method: 'POST',
+          body: { worker_id: this.workerId },
+        })) as WorkerClaimResponse
 
-      if (res.run) {
+        if (!res.run) break // no more work available
+
         this.activeRunIds.add(res.run.id)
+        const runId = res.run.id
         this.executeRun(res.run)
           .catch((err) => {
-            console.error(`[worker] run ${res.run!.id} failed:`, err)
+            console.error(`[worker] run ${runId} failed:`, err)
           })
           .finally(() => {
-            this.activeRunIds.delete(res.run!.id)
+            this.activeRunIds.delete(runId)
           })
+      } catch (err) {
+        console.error('[worker] poll failed:', err)
+        break
       }
-    } catch (err) {
-      console.error('[worker] poll failed:', err)
     }
   }
 
