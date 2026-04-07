@@ -19,7 +19,7 @@ import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, SecretService, QueryService, SessionService, ScheduleService } from './services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, SecretService, QueryService, SessionService, ScheduleService, SchedulerDaemon } from './services'
 import type { AuthoredConfig } from './services'
 import { NotificationBridge } from './providers'
 import { eventBus } from './events/event-bus'
@@ -178,6 +178,10 @@ export async function startServer(options?: StartServerOptions) {
 	const parentJoinBridge = new ParentJoinBridge(eventBus, taskRelationService, workflowEngine)
 	parentJoinBridge.start()
 
+	// ── 7c. Start scheduler daemon ─────────────────────────────────────
+	const schedulerDaemon = new SchedulerDaemon(scheduleService, workflowEngine, queryService, activityService)
+	schedulerDaemon.start()
+
 	// ── 8. Create Hono app ───────────────────────────────────────────────
 	const effectiveBypass = options?.allowLocalDevBypass && env.NODE_ENV !== 'production'
 	if (options?.allowLocalDevBypass) {
@@ -251,5 +255,5 @@ export async function startServer(options?: StartServerOptions) {
 	// Ensure timer doesn't prevent process exit
 	leaseExpiryTimer.unref()
 
-	return { server, app, services, companyRoot, auth, db: companyDb, notificationBridge }
+	return { server, app, services, companyRoot, auth, db: companyDb, notificationBridge, schedulerDaemon }
 }

@@ -8,6 +8,8 @@
  *   enable <id>       — enable a schedule
  *   disable <id>      — disable a schedule
  *   delete <id>       — delete a schedule
+ *   history <id>      — show execution history
+ *   trigger <id>      — manually trigger a schedule
  */
 import { Command } from 'commander'
 import { program } from '../program'
@@ -22,9 +24,23 @@ interface ScheduleSummary {
 	timezone: string | null
 	agent_id: string
 	workflow_id: string | null
+	mode: string | null
+	concurrency_policy: string | null
 	enabled: boolean | number | null
 	last_run_at: string | null
 	next_run_at: string | null
+	created_at: string
+}
+
+interface ExecutionSummary {
+	id: string
+	schedule_id: string
+	task_id: string | null
+	query_id: string | null
+	status: string
+	skip_reason: string | null
+	error: string | null
+	triggered_at: string
 	created_at: string
 }
 
@@ -78,6 +94,7 @@ scheduleCmd.addCommand(
 							s.name,
 							dim(s.cron),
 							dim(s.agent_id),
+							dim(s.mode ?? 'task'),
 						]),
 					),
 				)
@@ -111,6 +128,7 @@ scheduleCmd.addCommand(
 				const s = (await res.json()) as ScheduleSummary & {
 					description?: string | null
 					task_template?: string | null
+					query_template?: string | null
 					created_by?: string | null
 					updated_at?: string
 				}
@@ -119,9 +137,11 @@ scheduleCmd.addCommand(
 				console.log('')
 				console.log(`  ${dim('ID:')}          ${s.id}`)
 				console.log(`  ${dim('Status:')}      ${isEnabled(s.enabled) ? badge('enabled', 'green') : badge('disabled', 'red')}`)
+				console.log(`  ${dim('Mode:')}        ${s.mode ?? 'task'}`)
 				console.log(`  ${dim('Cron:')}        ${s.cron}`)
 				console.log(`  ${dim('Timezone:')}    ${s.timezone ?? 'UTC'}`)
 				console.log(`  ${dim('Agent:')}       ${s.agent_id}`)
+				console.log(`  ${dim('Concurrency:')} ${s.concurrency_policy ?? 'skip'}`)
 				if (s.workflow_id) console.log(`  ${dim('Workflow:')}    ${s.workflow_id}`)
 				if (s.description) console.log(`  ${dim('Description:')} ${s.description}`)
 				if (s.last_run_at) console.log(`  ${dim('Last run:')}   ${s.last_run_at}`)
@@ -140,6 +160,20 @@ scheduleCmd.addCommand(
 					} catch (err) {
 						console.debug('[schedule] failed to parse task_template JSON:', err instanceof Error ? err.message : String(err))
 						console.log(`  ${s.task_template}`)
+					}
+				}
+
+				if (s.mode === 'query' && s.query_template && s.query_template !== '{}') {
+					console.log('')
+					console.log(dim('Query template:'))
+					try {
+						const tmpl = JSON.parse(s.query_template)
+						for (const [k, v] of Object.entries(tmpl)) {
+							console.log(`  ${dim(k + ':')} ${String(v)}`)
+						}
+					} catch (err) {
+						console.debug('[schedule] failed to parse query_template JSON:', err instanceof Error ? err.message : String(err))
+						console.log(`  ${s.query_template}`)
 					}
 				}
 			} catch (err) {
@@ -163,6 +197,10 @@ scheduleCmd.addCommand(
 		.option('--description <desc>', 'Schedule description')
 		.option('--timezone <tz>', 'Timezone (default: UTC)')
 		.option('--disabled', 'Create in disabled state')
+		.option('--mode <mode>', 'Execution mode: task or query (default: task)')
+		.option('--prompt <text>', 'Query prompt (for query mode)')
+		.option('--start-after <datetime>', 'Delay execution until after this datetime (ISO 8601)')
+		.option('--concurrency-policy <policy>', 'Concurrency policy: skip, allow, queue (default: skip)')
 		.action(async (opts: {
 			name: string
 			cron: string
@@ -173,6 +211,10 @@ scheduleCmd.addCommand(
 			description?: string
 			timezone?: string
 			disabled?: boolean
+			mode?: string
+			prompt?: string
+			startAfter?: string
+			concurrencyPolicy?: string
 		}) => {
 			try {
 				const taskTemplate: Record<string, string> = {}
@@ -188,8 +230,14 @@ scheduleCmd.addCommand(
 				if (opts.description) body.description = opts.description
 				if (opts.timezone) body.timezone = opts.timezone
 				if (opts.disabled) body.enabled = false
+				if (opts.mode) body.mode = opts.mode
+				if (opts.concurrencyPolicy) body.concurrency_policy = opts.concurrencyPolicy
 				if (Object.keys(taskTemplate).length > 0) {
 					body.task_template = JSON.stringify(taskTemplate)
+				}
+				if (opts.prompt) {
+					body.query_template = JSON.stringify({ prompt: opts.prompt })
+					if (!opts.mode) body.mode = 'query'
 				}
 
 				const baseUrl = getBaseUrl()
@@ -205,9 +253,12 @@ scheduleCmd.addCommand(
 					process.exit(1)
 				}
 
-				const created = (await res.json()) as { id: string; name: string }
+				const created = (await res.json()) as { id: string; name: string; next_run_at: string | null }
 				console.log(success(`Schedule created: ${created.id}`))
 				console.log(dim(`  ${created.name}`))
+				if (created.next_run_at) {
+					console.log(dim(`  Next run: ${created.next_run_at}`))
+				}
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				process.exit(1)
@@ -294,6 +345,96 @@ scheduleCmd.addCommand(
 				const deleted = (await res.json()) as { id: string; name: string }
 				console.log(success(`Schedule deleted: ${deleted.id}`))
 				console.log(dim(`  ${deleted.name}`))
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+// ─── history ────────────────────────────────────────────────────────────
+
+scheduleCmd.addCommand(
+	new Command('history')
+		.description('Show execution history for a schedule')
+		.argument('<id>', 'Schedule ID')
+		.option('--limit <n>', 'Number of executions to show', '20')
+		.action(async (id: string, opts: { limit: string }) => {
+			try {
+				const baseUrl = getBaseUrl()
+				const limit = parseInt(opts.limit, 10)
+				const res = await fetch(
+					`${baseUrl}/api/schedules/${encodeURIComponent(id)}/history?limit=${limit}`,
+					{ headers: getHeaders() },
+				)
+
+				if (!res.ok) {
+					console.error(error(`Schedule not found: ${id}`))
+					process.exit(1)
+				}
+
+				const items = (await res.json()) as ExecutionSummary[]
+
+				console.log(section(`Execution History: ${id}`))
+				if (items.length === 0) {
+					console.log(dim('  No executions yet'))
+					return
+				}
+
+				console.log(
+					table(
+						items.map((e) => {
+							const statusBadge = e.status === 'triggered'
+								? badge('triggered', 'green')
+								: e.status === 'skipped'
+									? badge('skipped', 'yellow')
+									: e.status === 'failed'
+										? badge('failed', 'red')
+										: badge(e.status, 'blue')
+							const ref = e.task_id ?? e.query_id ?? dim('—')
+							return [
+								dim(e.id),
+								statusBadge,
+								ref,
+								dim(e.triggered_at),
+								e.skip_reason ? dim(e.skip_reason) : e.error ? dim(e.error) : '',
+							]
+						}),
+					),
+				)
+				console.log('')
+				console.log(dim(`${items.length} execution(s)`))
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+// ─── trigger ────────────────────────────────────────────────────────────
+
+scheduleCmd.addCommand(
+	new Command('trigger')
+		.description('Manually trigger a schedule')
+		.argument('<id>', 'Schedule ID')
+		.action(async (id: string) => {
+			try {
+				const baseUrl = getBaseUrl()
+				const res = await fetch(
+					`${baseUrl}/api/schedules/${encodeURIComponent(id)}/trigger`,
+					{
+						method: 'POST',
+						headers: getHeaders(),
+					},
+				)
+
+				if (!res.ok) {
+					const errBody = (await res.json().catch(() => ({ error: 'Unknown error' }))) as { error?: string }
+					console.error(error(errBody.error ?? `Failed to trigger schedule: ${id}`))
+					process.exit(1)
+				}
+
+				console.log(success(`Schedule ${id} triggered`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				process.exit(1)

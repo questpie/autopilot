@@ -38,8 +38,10 @@ export type { SessionRow } from './sessions'
 export { SecretService } from './secrets'
 export type { SharedSecretRow } from './secrets'
 
-export { ScheduleService } from './schedules'
-export type { ScheduleRow } from './schedules'
+export { ScheduleService, computeNextRun, interpolateTemplate } from './schedules'
+export type { ScheduleRow, ScheduleExecutionRow } from './schedules'
+
+export { SchedulerDaemon } from './scheduler-daemon'
 
 export { WorkflowEngine } from './workflow-engine'
 export type { AuthoredConfig, IntakeResult, AdvanceResult } from './workflow-engine'

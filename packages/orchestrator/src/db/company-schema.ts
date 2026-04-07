@@ -390,6 +390,9 @@ export const schedules = sqliteTable(
 		agent_id: text('agent_id').notNull(),
 		workflow_id: text('workflow_id'),
 		task_template: text('task_template').default('{}'), // JSON: { title, description, type, priority }
+		mode: text('mode').default('task'), // task | query
+		query_template: text('query_template').default('{}'), // JSON: { prompt, allow_repo_mutation }
+		concurrency_policy: text('concurrency_policy').default('skip'), // skip | allow | queue
 		enabled: integer('enabled', { mode: 'boolean' }).default(true),
 		last_run_at: text('last_run_at'),
 		next_run_at: text('next_run_at'),
@@ -401,6 +404,28 @@ export const schedules = sqliteTable(
 		index('idx_schedules_enabled').on(table.enabled),
 		index('idx_schedules_next_run').on(table.next_run_at),
 		index('idx_schedules_agent').on(table.agent_id),
+	],
+)
+
+// ─── Schedule Executions ────────────────────────────────────────────────
+
+export const scheduleExecutions = sqliteTable(
+	'schedule_executions',
+	{
+		id: text('id').primaryKey(),
+		schedule_id: text('schedule_id').notNull(),
+		task_id: text('task_id'),
+		query_id: text('query_id'),
+		status: text('status').notNull().default('triggered'), // triggered | completed | skipped | failed
+		skip_reason: text('skip_reason'),
+		error: text('error'),
+		triggered_at: text('triggered_at').notNull(),
+		created_at: text('created_at').notNull(),
+	},
+	(table) => [
+		index('idx_schedule_executions_schedule').on(table.schedule_id),
+		index('idx_schedule_executions_status').on(table.status),
+		index('idx_schedule_executions_triggered').on(table.triggered_at),
 	],
 )
 

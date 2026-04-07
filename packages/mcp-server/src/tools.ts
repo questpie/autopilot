@@ -8,7 +8,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { tasks, runs } from './api-client'
+import { tasks, runs, schedulesApi } from './api-client'
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }> }
 
@@ -113,6 +113,46 @@ async function handleTaskParents(args: { id: string; relation_type?: string }) {
 	return ok(await tasks[':id'].parents.$get({ param: { id: args.id }, query: { relation_type: args.relation_type } }))
 }
 
+async function handleScheduleList() {
+	return ok(await schedulesApi.$get())
+}
+
+async function handleScheduleCreate(args: {
+	name: string
+	cron: string
+	agent_id: string
+	workflow_id?: string
+	task_template?: string
+	mode?: string
+	query_template?: string
+	concurrency_policy?: string
+	timezone?: string
+	enabled?: boolean
+}) {
+	return ok(await schedulesApi.$post({ json: args }))
+}
+
+async function handleScheduleUpdate(args: {
+	id: string
+	name?: string
+	cron?: string
+	agent_id?: string
+	workflow_id?: string
+	task_template?: string
+	mode?: string
+	query_template?: string
+	concurrency_policy?: string
+	timezone?: string
+	enabled?: boolean
+}) {
+	const { id, ...updates } = args
+	return ok(await schedulesApi[':id'].$patch({ param: { id }, json: updates }))
+}
+
+async function handleScheduleDelete(args: { id: string }) {
+	return ok(await schedulesApi[':id'].$delete({ param: { id: args.id } }))
+}
+
 // ─── Tool registration ─────────────────────────────────────────────
 
 export function registerTools(server: McpServer): void {
@@ -198,4 +238,39 @@ export function registerTools(server: McpServer): void {
 		id: z.string().describe('Child task ID'),
 		relation_type: z.string().optional().describe('Relation type filter (default: decomposes_to)'),
 	}, handleTaskParents)
+
+	// ─── Schedule tools ───────────────────────────────────────────────
+
+	server.tool('schedule_list', 'List all schedules', {}, handleScheduleList)
+
+	server.tool('schedule_create', 'Create a new schedule with a cron expression', {
+		name: z.string().describe('Schedule name'),
+		cron: z.string().describe('Cron expression (e.g. "0 9 * * *" for 9 AM daily)'),
+		agent_id: z.string().describe('Agent ID to run'),
+		workflow_id: z.string().optional().describe('Workflow ID'),
+		task_template: z.string().optional().describe('JSON string: { title, description, type, priority }'),
+		mode: z.enum(['task', 'query']).optional().describe('Execution mode: task or query'),
+		query_template: z.string().optional().describe('JSON string: { prompt, allow_repo_mutation }'),
+		concurrency_policy: z.enum(['skip', 'allow', 'queue']).optional().describe('Concurrency policy'),
+		timezone: z.string().optional().describe('Timezone (default: UTC)'),
+		enabled: z.boolean().optional().describe('Whether the schedule is enabled (default: true)'),
+	}, handleScheduleCreate)
+
+	server.tool('schedule_update', 'Update a schedule', {
+		id: z.string().describe('Schedule ID'),
+		name: z.string().optional().describe('New name'),
+		cron: z.string().optional().describe('New cron expression'),
+		agent_id: z.string().optional().describe('New agent ID'),
+		workflow_id: z.string().optional().describe('New workflow ID'),
+		task_template: z.string().optional().describe('New task template JSON'),
+		mode: z.enum(['task', 'query']).optional().describe('Execution mode'),
+		query_template: z.string().optional().describe('New query template JSON'),
+		concurrency_policy: z.enum(['skip', 'allow', 'queue']).optional().describe('Concurrency policy'),
+		timezone: z.string().optional().describe('Timezone'),
+		enabled: z.boolean().optional().describe('Enable/disable'),
+	}, handleScheduleUpdate)
+
+	server.tool('schedule_delete', 'Delete a schedule', {
+		id: z.string().describe('Schedule ID'),
+	}, handleScheduleDelete)
 }
