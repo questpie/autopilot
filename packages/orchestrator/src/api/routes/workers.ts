@@ -169,6 +169,8 @@ const workers = new Hono<AppEnv>()
 				const content = contextMap.get(name)
 				if (content) {
 					injectedContext[name] = content
+				} else {
+					console.warn(`[workers/claim] context "${name}" referenced by capability profile but not found in .autopilot/context/`)
 				}
 			}
 		}

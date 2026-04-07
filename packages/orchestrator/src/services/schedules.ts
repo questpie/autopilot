@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { eq, and, lte, desc } from 'drizzle-orm'
 import { Cron } from 'croner'
-import { schedules, scheduleExecutions } from '../db/company-schema'
+import { schedules, scheduleExecutions, tasks } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
 function _getSchedule(db: CompanyDb, id: string) {
@@ -27,8 +27,8 @@ export function computeNextRun(cron: string, timezone: string, from?: Date): str
 		const job = new Cron(cron, { timezone })
 		const next = job.nextRun(from ?? new Date())
 		return next ? next.toISOString() : null
-	} catch {
-		// Invalid cron expression
+	} catch (err) {
+		console.warn(`[schedules] invalid cron expression "${cron}":`, err instanceof Error ? err.message : String(err))
 		return null
 	}
 }
@@ -202,9 +202,14 @@ export class ScheduleService {
 
 	/**
 	 * Find an active (triggered, not yet completed/failed/skipped) execution for concurrency check.
+	 *
+	 * Note: Schedule execution status is not automatically transitioned when the
+	 * triggered task/query completes. To avoid permanently blocking future executions,
+	 * we auto-complete stale triggered executions whose referenced task has reached
+	 * a terminal state.
 	 */
 	async findActiveExecution(scheduleId: string): Promise<ScheduleExecutionRow | undefined> {
-		return this.db
+		const triggered = await this.db
 			.select()
 			.from(scheduleExecutions)
 			.where(
@@ -216,6 +221,23 @@ export class ScheduleService {
 			.orderBy(desc(scheduleExecutions.triggered_at))
 			.limit(1)
 			.get()
+
+		if (!triggered) return undefined
+
+		// Auto-complete stale triggered executions: if the referenced task/query
+		// is in a terminal state, mark this execution as completed.
+		if (triggered.task_id) {
+			const task = await this.db.select().from(tasks).where(eq(tasks.id, triggered.task_id)).get()
+			if (task && (task.status === 'done' || task.status === 'failed')) {
+				await this.db
+					.update(scheduleExecutions)
+					.set({ status: task.status === 'done' ? 'completed' : 'failed' })
+					.where(eq(scheduleExecutions.id, triggered.id))
+				return undefined // No longer active
+			}
+		}
+
+		return triggered
 	}
 
 	/**

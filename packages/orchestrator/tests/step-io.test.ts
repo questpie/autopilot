@@ -181,11 +181,13 @@ describe('Step I/O', () => {
 		await claimAndComplete('w3', a2!.runId!, 'Tests fail: fix line 42')
 		const a3 = await engine.advance(taskId, { outcome: 'revise' }, a2!.runId!)
 
-		// The re-impl run should have the VALIDATE summary (direct source),
-		// NOT the gen or first impl summary
+		// The re-impl run should have the VALIDATE summary as the direct source
+		// in "Previous Step Output", and prior runs in "Workflow History" for context.
 		const reimplRun = await runService.get(a3!.runId!)
+		expect(reimplRun!.instructions).toContain('## Previous Step Output')
 		expect(reimplRun!.instructions).toContain('Tests fail: fix line 42')
-		expect(reimplRun!.instructions).not.toContain('Generated prompt content')
+		// Workflow history includes prior completed runs for context continuity
+		expect(reimplRun!.instructions).toContain('## Workflow History')
 	})
 
 	// ── Explicit artifact input ─────────────────────────────────────

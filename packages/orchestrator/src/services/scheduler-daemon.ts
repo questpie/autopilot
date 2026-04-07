@@ -13,6 +13,7 @@ import type { ActivityService } from './activity'
 
 export class SchedulerDaemon {
 	private timer: ReturnType<typeof setInterval> | null = null
+	private ticking = false
 
 	constructor(
 		private scheduleService: ScheduleService,
@@ -37,6 +38,8 @@ export class SchedulerDaemon {
 	}
 
 	async tick(): Promise<void> {
+		if (this.ticking) return // prevent overlapping ticks
+		this.ticking = true
 		try {
 			const now = new Date()
 			const due = await this.scheduleService.findDue(now)
@@ -63,6 +66,8 @@ export class SchedulerDaemon {
 			}
 		} catch (err) {
 			console.error('[scheduler] tick error:', err instanceof Error ? err.message : String(err))
+		} finally {
+			this.ticking = false
 		}
 	}
 
@@ -99,8 +104,8 @@ export class SchedulerDaemon {
 		let template: Record<string, string> = {}
 		try {
 			template = JSON.parse(schedule.task_template ?? '{}')
-		} catch {
-			template = {}
+		} catch (err) {
+			console.warn(`[scheduler] malformed task_template JSON for schedule ${schedule.id}:`, err instanceof Error ? err.message : String(err))
 		}
 
 		const title = interpolateTemplate(
@@ -158,8 +163,8 @@ export class SchedulerDaemon {
 		let queryTemplate: Record<string, unknown> = {}
 		try {
 			queryTemplate = JSON.parse(schedule.query_template ?? '{}')
-		} catch {
-			queryTemplate = {}
+		} catch (err) {
+			console.warn(`[scheduler] malformed query_template JSON for schedule ${schedule.id}:`, err instanceof Error ? err.message : String(err))
 		}
 
 		const prompt = interpolateTemplate(

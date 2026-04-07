@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse, RunArtifact } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
@@ -106,7 +107,7 @@ export class AutopilotWorker {
     // ── Resolve identity ─────────────────────────────────────────────
     if (this.isLocalDev) {
       // Local dev bypass: generate a local worker ID, no enrollment
-      this.workerId = `worker-local-${this.config.deviceId}-${Math.random().toString(36).slice(2, 8)}`
+      this.workerId = `worker-local-${this.config.deviceId}-${randomBytes(4).toString('hex')}`
     } else {
       await this.resolveIdentity()
     }

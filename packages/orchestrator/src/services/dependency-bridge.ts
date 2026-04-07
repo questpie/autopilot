@@ -49,7 +49,12 @@ export class DependencyBridge {
 		let allDone = true
 		for (const dep of deps) {
 			const depTask = await this.taskService.get(dep.target_task_id)
-			if (!depTask) continue
+			if (!depTask) {
+				// Dependency task was deleted — treat as failed to prevent
+				// silent progression with missing prerequisites.
+				console.warn(`[dependency-bridge] dependency task ${dep.target_task_id} not found (deleted?) — treating as failed`)
+				return 'failed'
+			}
 			if (depTask.status === 'failed') return 'failed'
 			if (depTask.status !== 'done') allDone = false
 		}
