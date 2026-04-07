@@ -22,10 +22,10 @@ describe('Session persistence', () => {
 ARGS="$@"
 # Check that --no-session-persistence is NOT in args
 if echo "$ARGS" | grep -q "no-session-persistence"; then
-  echo '{"result":"ERROR: no-session-persistence was passed","session_id":"bad"}'
+  echo '{"type":"result","subtype":"error","error":"no-session-persistence was passed"}'
   exit 1
 fi
-echo '{"result":"done","session_id":"sess-abc-123","usage":{"input_tokens":10,"output_tokens":5}}'
+echo '{"type":"result","subtype":"success","result":"done","session_id":"sess-abc-123","usage":{"input_tokens":10,"output_tokens":5}}'
 exit 0
 `
     await writeFile(binaryPath, script)
@@ -62,10 +62,10 @@ exit 0
     const script = `#!/bin/bash
 ARGS="$@"
 if echo "$ARGS" | grep -q "no-session-persistence"; then
-  echo '{"result":"ok-ephemeral","session_id":"should-be-ignored","usage":{"input_tokens":1,"output_tokens":1}}'
+  echo '{"type":"result","subtype":"success","result":"ok-ephemeral","session_id":"should-be-ignored","usage":{"input_tokens":1,"output_tokens":1}}'
   exit 0
 fi
-echo '{"result":"ERROR: no-session-persistence was NOT passed"}'
+echo '{"type":"result","subtype":"error","error":"no-session-persistence was NOT passed"}'
 exit 1
 `
     await writeFile(binaryPath, script)
@@ -120,7 +120,7 @@ for arg in "$@"; do
   fi
 done
 
-echo "{\\"result\\":\\"resumed session $SESS_ID\\",\\"session_id\\":\\"$SESS_ID\\",\\"usage\\":{\\"input_tokens\\":20,\\"output_tokens\\":10}}"
+echo "{\\"type\\":\\"result\\",\\"subtype\\":\\"success\\",\\"result\\":\\"resumed session $SESS_ID\\",\\"session_id\\":\\"$SESS_ID\\",\\"usage\\":{\\"input_tokens\\":20,\\"output_tokens\\":10}}"
 exit 0
 `
     await writeFile(binaryPath, script)
@@ -155,7 +155,7 @@ exit 0
 
   test('resume emits progress event mentioning session resume', async () => {
     const binaryPath = join(tmpDir, 'claude-resume-evt')
-    await writeFile(binaryPath, '#!/bin/bash\necho \'{"result":"ok","session_id":"s1"}\'\nexit 0\n')
+    await writeFile(binaryPath, '#!/bin/bash\necho \'{"type":"result","subtype":"success","result":"ok","session_id":"s1"}\'\nexit 0\n')
     await chmod(binaryPath, 0o755)
 
     const adapter = new ClaudeCodeAdapter({
@@ -190,7 +190,7 @@ exit 0
     const binaryPath = join(tmpDir, 'claude-default')
     await writeFile(
       binaryPath,
-      '#!/bin/bash\necho \'{"result":"ok","session_id":"default-sess"}\'\nexit 0\n',
+      '#!/bin/bash\necho \'{"type":"result","subtype":"success","result":"ok","session_id":"default-sess"}\'\nexit 0\n',
     )
     await chmod(binaryPath, 0o755)
 

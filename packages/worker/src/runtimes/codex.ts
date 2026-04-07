@@ -17,7 +17,7 @@
 
 import { createCodexMcpConfig } from '../mcp-config-codex'
 import type { RuntimeAdapter, RunContext, RuntimeResult, WorkerEvent } from './adapter'
-import { buildPrompt, extractResult, type Subprocess } from './shared'
+import { buildPrompt, extractResult, streamLines, truncate, type Subprocess } from './shared'
 
 export interface CodexConfig {
   /** Path to codex binary. Defaults to 'codex'. */
@@ -178,7 +178,7 @@ export class CodexAdapter implements RuntimeAdapter {
     const stdout = proc.stdout
     if (!stdout || typeof stdout === 'number') return { sessionId, lastAgentMessage, tokens }
 
-    const processLine = (line: string): void => {
+    await streamLines(stdout as ReadableStream<Uint8Array>, (line) => {
       try {
         const event = JSON.parse(line)
         const result = this.handleCodexEvent(event)
@@ -188,31 +188,7 @@ export class CodexAdapter implements RuntimeAdapter {
       } catch {
         console.warn('[codex] skipping malformed JSONL line:', line.slice(0, 100))
       }
-    }
-
-    const reader = stdout.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-
-        while (buffer.includes('\n')) {
-          const lineEnd = buffer.indexOf('\n')
-          const line = buffer.slice(0, lineEnd).trim()
-          buffer = buffer.slice(lineEnd + 1)
-          if (line) processLine(line)
-        }
-      }
-
-      const remaining = buffer.trim()
-      if (remaining) processLine(remaining)
-    } finally {
-      reader.releaseLock()
-    }
+    })
 
     return { sessionId, lastAgentMessage, tokens }
   }
@@ -246,7 +222,7 @@ export class CodexAdapter implements RuntimeAdapter {
           if (content) {
             this.emit({
               type: 'progress',
-              summary: content.length > 200 ? content.slice(0, 200) + '…' : content,
+              summary: truncate(content),
             })
             return { agentMessage: content }
           }

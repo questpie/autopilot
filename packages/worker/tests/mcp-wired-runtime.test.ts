@@ -13,34 +13,14 @@ describe('MCP-wired Claude runtime', () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'mcp-wire-test-'))
     fakeBinaryPath = join(tmpDir, 'claude')
 
-    // Fake claude binary that captures args and reads the mcp-config file
+    // Fake claude binary that captures args to a file and outputs stream-json
+    const argsFile = join(tmpDir, 'captured-args.txt')
     const script = `#!/bin/bash
-# Capture all args
-ARGS="$@"
+# Capture all args to file for test verification
+echo "$@" > "${argsFile}"
 
-# Find --mcp-config value
-MCP_CONFIG=""
-FOUND_FLAG=0
-for arg in "$@"; do
-  if [ "$FOUND_FLAG" = "1" ]; then
-    MCP_CONFIG="$arg"
-    break
-  fi
-  if [ "$arg" = "--mcp-config" ]; then
-    FOUND_FLAG=1
-  fi
-done
-
-# Read MCP config content if file exists
-MCP_CONTENT=""
-if [ -n "$MCP_CONFIG" ] && [ -f "$MCP_CONFIG" ]; then
-  MCP_CONTENT=$(cat "$MCP_CONFIG")
-fi
-
-# Output as JSON
-cat <<JSONEOF
-{"result":"args: $ARGS","mcp_config_path":"$MCP_CONFIG","mcp_config_content":"$MCP_CONTENT","usage":{"input_tokens":10,"output_tokens":5}}
-JSONEOF
+# Output as stream-json JSONL (simple result)
+echo '{"type":"result","subtype":"success","result":"ok","usage":{"input_tokens":10,"output_tokens":5}}'
 exit 0
 `
     await writeFile(fakeBinaryPath, script)
@@ -78,12 +58,14 @@ exit 0
       model: null,
     }
 
-    const result = await adapter.start(context)
+    await adapter.start(context)
 
-    // Verify --mcp-config was in args
-    expect(result!.summary).toContain('--mcp-config')
-    expect(result!.summary).toContain('--strict-mcp-config')
-    expect(result!.summary).toContain('--allowedTools')
+    // Verify --mcp-config was in captured args
+    const argsFile = join(tmpDir, 'captured-args.txt')
+    const capturedArgs = await Bun.file(argsFile).text()
+    expect(capturedArgs).toContain('--mcp-config')
+    expect(capturedArgs).toContain('--strict-mcp-config')
+    expect(capturedArgs).toContain('--allowedTools')
   })
 
   test('does NOT pass --mcp-config when useMcp=false', async () => {
@@ -108,10 +90,12 @@ exit 0
       model: null,
     }
 
-    const result = await adapter.start(context)
+    await adapter.start(context)
 
-    expect(result!.summary).not.toContain('--mcp-config')
-    expect(result!.summary).not.toContain('--strict-mcp-config')
+    const argsFile = join(tmpDir, 'captured-args.txt')
+    const capturedArgs = await Bun.file(argsFile).text()
+    expect(capturedArgs).not.toContain('--mcp-config')
+    expect(capturedArgs).not.toContain('--strict-mcp-config')
   })
 
   test('MCP config contains correct orchestrator URL and transport', async () => {

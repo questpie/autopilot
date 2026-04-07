@@ -5,6 +5,12 @@ import { tmpdir } from 'node:os'
 import { ClaudeCodeAdapter } from '../src/runtimes/claude-code'
 import type { RunContext, WorkerEvent } from '../src/runtimes/adapter'
 
+/** Helper to build a fake claude binary that outputs stream-json JSONL events. */
+function buildClaudeScript(events: object[]): string {
+  const lines = events.map((e) => JSON.stringify(e))
+  return `#!/bin/bash\n${lines.map((l) => `echo '${l}'`).join('\n')}\nexit 0\n`
+}
+
 describe('ClaudeCodeAdapter', () => {
   let tmpDir: string
   let fakeBinaryPath: string
@@ -13,12 +19,25 @@ describe('ClaudeCodeAdapter', () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'claude-test-'))
     fakeBinaryPath = join(tmpDir, 'claude')
 
-    // Create a fake claude binary that outputs JSON
-    const script = `#!/bin/bash
-# Fake Claude Code binary for testing
-echo '{"result":"Task completed successfully. I analyzed the codebase and made the requested changes.","session_id":"test-session-123","usage":{"input_tokens":150,"output_tokens":50}}'
-exit 0
-`
+    // Create a fake claude binary that outputs stream-json JSONL
+    const script = buildClaudeScript([
+      { type: 'system', subtype: 'init', session_id: 'test-session-123', model: 'claude-sonnet-4-20250514', tools: [] },
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Task completed successfully. I analyzed the codebase and made the requested changes.' },
+          ],
+        },
+      },
+      {
+        type: 'result',
+        subtype: 'success',
+        result: 'Task completed successfully. I analyzed the codebase and made the requested changes.',
+        session_id: 'test-session-123',
+        usage: { input_tokens: 150, output_tokens: 50 },
+      },
+    ])
     await writeFile(fakeBinaryPath, script)
     await chmod(fakeBinaryPath, 0o755)
   })
@@ -39,6 +58,8 @@ exit 0
     const context: RunContext = {
       runId: 'run-test-1',
       agentId: 'developer',
+      agentName: null,
+      agentRole: null,
       taskId: 'task-1',
       taskTitle: 'Fix authentication bug',
       taskDescription: 'The login form is not validating email format',
@@ -47,6 +68,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      capabilities: null,
       model: null,
     }
 
@@ -58,12 +80,14 @@ exit 0
     // Session ID should be captured (default persistence = 'local')
     expect(result!.sessionId).toBe('test-session-123')
 
-    // Verify events were emitted (progress: launching + progress: completed)
+    // Verify events were emitted (progress: launching + init + assistant text + completed)
     expect(events.length).toBeGreaterThanOrEqual(2)
     expect(events[0]!.type).toBe('progress')
     expect(events[0]!.summary).toBe('Launching Claude Code')
-    expect(events[1]!.type).toBe('progress')
-    expect(events[1]!.summary).toBe('Claude Code completed')
+    // Last event should be "Claude Code completed"
+    const lastEvent = events[events.length - 1]!
+    expect(lastEvent.type).toBe('progress')
+    expect(lastEvent.summary).toBe('Claude Code completed')
   })
 
   test('handles non-zero exit code', async () => {
@@ -82,6 +106,8 @@ exit 0
     const context: RunContext = {
       runId: 'run-test-2',
       agentId: 'developer',
+      agentName: null,
+      agentRole: null,
       taskId: null,
       taskTitle: null,
       taskDescription: null,
@@ -90,6 +116,7 @@ exit 0
       apiKey: 'bad-key',
       runtimeSessionRef: null,
       workDir: null,
+      capabilities: null,
       model: null,
     }
 
@@ -101,8 +128,10 @@ exit 0
 
   test('builds prompt correctly from context', async () => {
     const echoBinaryPath = join(tmpDir, 'claude-echo')
+    // Write prompt to a file, then output it as JSON-escaped result
+    const promptFile = join(tmpDir, 'captured-prompt.txt')
     const echoScript = `#!/bin/bash
-# Find the -p flag and echo the prompt as the result
+# Find the -p flag and capture the prompt
 prompt=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -110,7 +139,11 @@ while [[ $# -gt 0 ]]; do
     *) shift ;;
   esac
 done
-echo "{\\"result\\":\\"PROMPT: $prompt\\"}"
+# Write prompt to file for verification
+echo "$prompt" > "${promptFile}"
+# JSON-escape newlines for valid JSONL output
+escaped=$(echo "$prompt" | sed ':a;N;$!ba;s/\\n/\\\\n/g')
+printf '{"type":"result","subtype":"success","result":"PROMPT: %s"}\\n' "$escaped"
 exit 0
 `
     await writeFile(echoBinaryPath, echoScript)
@@ -125,6 +158,8 @@ exit 0
     const context: RunContext = {
       runId: 'run-test-3',
       agentId: 'developer',
+      agentName: null,
+      agentRole: null,
       taskId: 'task-1',
       taskTitle: 'Write tests',
       taskDescription: 'Add unit tests for the auth module',
@@ -133,13 +168,16 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      capabilities: null,
       model: null,
     }
 
     const result = await adapter.start(context)
-    expect(result!.summary).toContain('Write tests')
-    expect(result!.summary).toContain('Add unit tests')
-    expect(result!.summary).toContain('Focus on edge cases')
+    // The prompt is now captured in a file; verify via the file
+    const capturedPrompt = await Bun.file(promptFile).text()
+    expect(capturedPrompt).toContain('Write tests')
+    expect(capturedPrompt).toContain('Add unit tests')
+    expect(capturedPrompt).toContain('Focus on edge cases')
   })
 
   test('handles plain text stdout gracefully', async () => {
@@ -156,6 +194,8 @@ exit 0
     const context: RunContext = {
       runId: 'run-test-4',
       agentId: 'developer',
+      agentName: null,
+      agentRole: null,
       taskId: null,
       taskTitle: null,
       taskDescription: null,
@@ -164,12 +204,14 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      capabilities: null,
       model: null,
     }
 
     const result = await adapter.start(context)
     expect(result).toBeDefined()
-    expect(result!.summary).toBe('Just some plain text output')
+    // No valid JSONL → no result text → "completed with no output"
+    expect(result!.summary).toContain('completed with no output')
     expect(result!.tokens).toBeUndefined()
   })
 
@@ -188,6 +230,8 @@ exit 0
     const context: RunContext = {
       runId: 'run-test-5',
       agentId: 'developer',
+      agentName: null,
+      agentRole: null,
       taskId: null,
       taskTitle: null,
       taskDescription: null,
@@ -196,6 +240,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      capabilities: null,
       model: null,
     }
 
@@ -210,14 +255,18 @@ exit 0
   })
 
   test('extracts structured outcome from AUTOPILOT_RESULT block', async () => {
+    const resultText = 'Plan looks good.\\n\\n<AUTOPILOT_RESULT>\\n<outcome>approved</outcome>\\n<summary>Plan validated.</summary>\\n</AUTOPILOT_RESULT>'
     const outcomeBinaryPath = join(tmpDir, 'claude-structured')
-    // Escape inner JSON properly for bash
-    const jsonResult = JSON.stringify({
-      result: 'Plan looks good.\\n\\n<AUTOPILOT_RESULT>\\n<outcome>approved</outcome>\\n<summary>Plan validated.</summary>\\n</AUTOPILOT_RESULT>',
-      session_id: 's-out',
-      usage: { input_tokens: 100, output_tokens: 30 },
-    })
-    const script = `#!/bin/bash\necho '${jsonResult}'\nexit 0\n`
+    const script = buildClaudeScript([
+      { type: 'system', subtype: 'init', session_id: 's-out' },
+      {
+        type: 'result',
+        subtype: 'success',
+        result: resultText,
+        session_id: 's-out',
+        usage: { input_tokens: 100, output_tokens: 30 },
+      },
+    ])
     await writeFile(outcomeBinaryPath, script)
     await chmod(outcomeBinaryPath, 0o755)
 
@@ -230,6 +279,8 @@ exit 0
     const context: RunContext = {
       runId: 'run-struct-1',
       agentId: 'dev',
+      agentName: null,
+      agentRole: null,
       taskId: null,
       taskTitle: null,
       taskDescription: null,
@@ -238,6 +289,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      capabilities: null,
       model: null,
     }
 
@@ -247,11 +299,15 @@ exit 0
   })
 
   test('extracts artifact from structured output', async () => {
+    const resultText = 'Generated prompt.\\n\\n<AUTOPILOT_RESULT>\\n<summary>Prompt ready.</summary>\\n<artifact kind="implementation_prompt" title="Impl Prompt">Step 1: modify foo.ts</artifact>\\n</AUTOPILOT_RESULT>'
     const artifactBinaryPath = join(tmpDir, 'claude-artifact')
-    const jsonResult = JSON.stringify({
-      result: 'Generated prompt.\\n\\n<AUTOPILOT_RESULT>\\n<summary>Prompt ready.</summary>\\n<artifact kind="implementation_prompt" title="Impl Prompt">Step 1: modify foo.ts</artifact>\\n</AUTOPILOT_RESULT>',
-    })
-    const script = `#!/bin/bash\necho '${jsonResult}'\nexit 0\n`
+    const script = buildClaudeScript([
+      {
+        type: 'result',
+        subtype: 'success',
+        result: resultText,
+      },
+    ])
     await writeFile(artifactBinaryPath, script)
     await chmod(artifactBinaryPath, 0o755)
 
@@ -264,6 +320,8 @@ exit 0
     const context: RunContext = {
       runId: 'run-struct-2',
       agentId: 'dev',
+      agentName: null,
+      agentRole: null,
       taskId: null,
       taskTitle: null,
       taskDescription: null,
@@ -272,6 +330,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      capabilities: null,
       model: null,
     }
 
@@ -293,6 +352,8 @@ exit 0
     const context: RunContext = {
       runId: 'run-struct-3',
       agentId: 'dev',
+      agentName: null,
+      agentRole: null,
       taskId: null,
       taskTitle: null,
       taskDescription: null,
@@ -301,11 +362,118 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      capabilities: null,
       model: null,
     }
 
     const result = await adapter.start(context)
     expect(result!.outputs).toBeUndefined()
     expect(result!.artifacts).toBeUndefined()
+  })
+
+  test('emits tool_use events from assistant messages', async () => {
+    const toolBinaryPath = join(tmpDir, 'claude-tools')
+    const script = buildClaudeScript([
+      { type: 'system', subtype: 'init', session_id: 'tool-session' },
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Let me read the file.' },
+            { type: 'tool_use', name: 'Read' },
+            { type: 'text', text: 'Now editing.' },
+            { type: 'tool_use', name: 'Edit' },
+          ],
+        },
+      },
+      {
+        type: 'result',
+        subtype: 'success',
+        result: 'Done with tools.',
+        session_id: 'tool-session',
+        usage: { input_tokens: 200, output_tokens: 100 },
+      },
+    ])
+    await writeFile(toolBinaryPath, script)
+    await chmod(toolBinaryPath, 0o755)
+
+    const adapter = new ClaudeCodeAdapter({
+      binaryPath: toolBinaryPath,
+      workDir: tmpDir,
+    })
+    const events: WorkerEvent[] = []
+    adapter.onEvent((e) => events.push(e))
+
+    const context: RunContext = {
+      runId: 'run-tools-1',
+      agentId: 'dev',
+      agentName: null,
+      agentRole: null,
+      taskId: null,
+      taskTitle: null,
+      taskDescription: null,
+      instructions: 'test',
+      orchestratorUrl: 'http://localhost:7778',
+      apiKey: 'test-key',
+      runtimeSessionRef: null,
+      workDir: null,
+      capabilities: null,
+      model: null,
+    }
+
+    await adapter.start(context)
+
+    const toolEvents = events.filter((e) => e.type === 'tool_use')
+    expect(toolEvents.length).toBe(2)
+    expect(toolEvents[0]!.summary).toBe('Read')
+    expect(toolEvents[1]!.summary).toBe('Edit')
+
+    // Should also have progress events for text blocks
+    const progressEvents = events.filter((e) => e.type === 'progress')
+    expect(progressEvents.some((e) => e.summary!.includes('Let me read the file'))).toBe(true)
+    expect(progressEvents.some((e) => e.summary!.includes('Now editing'))).toBe(true)
+  })
+
+  test('handles result error event', async () => {
+    const errorBinaryPath = join(tmpDir, 'claude-result-error')
+    const script = buildClaudeScript([
+      { type: 'system', subtype: 'init', session_id: 'err-session' },
+      { type: 'result', subtype: 'error', error: 'Max turns reached' },
+    ])
+    // Override to exit 0 so we test error handling in the event, not exit code
+    await writeFile(errorBinaryPath, script)
+    await chmod(errorBinaryPath, 0o755)
+
+    const adapter = new ClaudeCodeAdapter({
+      binaryPath: errorBinaryPath,
+      workDir: tmpDir,
+    })
+    const events: WorkerEvent[] = []
+    adapter.onEvent((e) => events.push(e))
+
+    const context: RunContext = {
+      runId: 'run-err-1',
+      agentId: 'dev',
+      agentName: null,
+      agentRole: null,
+      taskId: null,
+      taskTitle: null,
+      taskDescription: null,
+      instructions: 'test',
+      orchestratorUrl: 'http://localhost:7778',
+      apiKey: 'test-key',
+      runtimeSessionRef: null,
+      workDir: null,
+      capabilities: null,
+      model: null,
+    }
+
+    const result = await adapter.start(context)
+    // Error events should be emitted
+    const errorEvents = events.filter((e) => e.type === 'error')
+    expect(errorEvents.length).toBe(1)
+    expect(errorEvents[0]!.summary).toBe('Max turns reached')
+    // No result text from error → completed with no output
+    expect(result!.summary).toContain('completed with no output')
   })
 })

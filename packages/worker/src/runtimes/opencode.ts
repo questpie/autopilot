@@ -19,7 +19,7 @@
 
 import { createOpenCodeMcpConfig } from '../mcp-config-opencode'
 import type { RuntimeAdapter, RunContext, RuntimeResult, WorkerEvent } from './adapter'
-import { buildPrompt, extractResult, type Subprocess } from './shared'
+import { buildPrompt, extractResult, streamLines, truncate, type Subprocess } from './shared'
 
 export interface OpenCodeConfig {
   /** Path to opencode binary. Defaults to 'opencode'. */
@@ -114,8 +114,10 @@ export class OpenCodeAdapter implements RuntimeAdapter {
       })
       this.subprocess = proc
 
-      const stdout = await new Response(proc.stdout).text()
-      const stderr = await new Response(proc.stderr).text()
+      // Collect stderr in parallel with streaming stdout
+      const stderrPromise = new Response(proc.stderr).text()
+      const { sessionId, lastText, tokens } = await this.streamJsonl(proc)
+      const stderr = await stderrPromise
 
       const exitCode = await proc.exited
       this.subprocess = null
@@ -128,44 +130,17 @@ export class OpenCodeAdapter implements RuntimeAdapter {
 
       this.emit({ type: 'progress', summary: 'OpenCode completed' })
 
-      // Parse JSON output
-      let result: {
-        content?: string
-        result?: string
-        message?: string
-        session_id?: string
-        sessionId?: string
-        usage?: { input_tokens?: number; output_tokens?: number }
-        tokens?: { input?: number; output?: number }
-      }
-      try {
-        result = JSON.parse(stdout)
-      } catch {
-        // If not valid JSON, treat as plain text
-        result = { content: stdout.trim() }
+      if (!lastText) {
+        return { summary: 'OpenCode completed with no output' }
       }
 
-      // Extract text content — try multiple possible field names
-      const rawText = result.content ?? result.result ?? result.message ?? stdout.trim()
-
-      // Extract session ID — try multiple possible field names
-      const sessionId = result.session_id ?? result.sessionId ?? undefined
-
-      // Extract token usage — try multiple possible shapes
-      let tokens: { input: number; output: number } | undefined
-      if (result.usage) {
-        tokens = { input: result.usage.input_tokens ?? 0, output: result.usage.output_tokens ?? 0 }
-      } else if (result.tokens) {
-        tokens = { input: result.tokens.input ?? 0, output: result.tokens.output ?? 0 }
-      }
-
-      const extracted = extractResult(rawText)
+      const extracted = extractResult(lastText)
 
       return {
         summary: extracted.summary,
         tokens,
         artifacts: extracted.artifacts.length > 0 ? extracted.artifacts : undefined,
-        sessionId,
+        sessionId: sessionId ?? undefined,
         outputs: extracted.outputs,
       }
     } finally {
@@ -180,7 +155,126 @@ export class OpenCodeAdapter implements RuntimeAdapter {
     }
   }
 
+  /**
+   * Stream JSONL events from OpenCode stdout.
+   * Collects session ID, last text output, and token usage.
+   */
+  private async streamJsonl(proc: Subprocess): Promise<{
+    sessionId: string | null
+    lastText: string | null
+    tokens: { input: number; output: number } | undefined
+  }> {
+    let sessionId: string | null = null
+    let lastText: string | null = null
+    let tokens: { input: number; output: number } | undefined
+
+    const stdout = proc.stdout
+    if (!stdout || typeof stdout === 'number') return { sessionId, lastText, tokens }
+
+    await streamLines(stdout as ReadableStream<Uint8Array>, (line) => {
+      try {
+        const event: OpenCodeStreamEvent = JSON.parse(line)
+        const result = this.handleOpenCodeEvent(event)
+        if (result.sessionId) sessionId = result.sessionId
+        if (result.text) lastText = result.text
+        if (result.tokens) tokens = result.tokens
+      } catch {
+        // Not JSON — could be plain text output. Accumulate as lastText.
+        lastText = (lastText ? lastText + '\n' : '') + line
+      }
+    })
+
+    return { sessionId, lastText, tokens }
+  }
+
+  /**
+   * Handle a single OpenCode JSONL event.
+   * Maps to WorkerEvents and extracts session/result data.
+   */
+  private handleOpenCodeEvent(event: OpenCodeStreamEvent): {
+    sessionId?: string
+    text?: string
+    tokens?: { input: number; output: number }
+  } {
+    switch (event.type) {
+      case 'step_start': {
+        if (event.sessionID) {
+          // Extract session ID from first step_start
+        }
+        if (event.part?.type === 'tool' && event.part.name) {
+          this.emit({ type: 'tool_use', summary: event.part.name })
+        }
+        return { sessionId: event.sessionID ?? undefined }
+      }
+
+      case 'text': {
+        const text = event.text
+        if (text) {
+          this.emit({ type: 'progress', summary: truncate(text) })
+          return { text }
+        }
+        return {}
+      }
+
+      case 'step_finish': {
+        const eventTokens = event.tokens
+        if (eventTokens) {
+          return {
+            tokens: {
+              input: eventTokens.input ?? 0,
+              output: eventTokens.output ?? 0,
+            },
+          }
+        }
+        return {}
+      }
+
+      default: {
+        // Handle any event with content/result/message fields (fallback for single-JSON mode)
+        const text = event.content ?? event.result ?? event.message
+        if (text) {
+          this.emit({ type: 'progress', summary: truncate(text) })
+          return {
+            text,
+            sessionId: event.session_id ?? event.sessionId ?? undefined,
+            tokens: event.usage
+              ? { input: event.usage.input_tokens ?? 0, output: event.usage.output_tokens ?? 0 }
+              : undefined,
+          }
+        }
+        return {}
+      }
+    }
+  }
+
   private emit(event: WorkerEvent): void {
     this.eventHandler?.(event)
+  }
+}
+
+// ─── OpenCode JSONL event types (minimal, for parsing) ───────────────────
+
+interface OpenCodeStreamEvent {
+  type?: string
+  sessionID?: string
+  text?: string
+  part?: {
+    type?: string
+    name?: string
+  }
+  tokens?: {
+    input?: number
+    output?: number
+  }
+  cost?: number
+  // Fallback fields for single-JSON output mode
+  content?: string
+  result?: string
+  message?: string
+  session_id?: string
+  sessionId?: string
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
   }
 }

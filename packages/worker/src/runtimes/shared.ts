@@ -77,3 +77,43 @@ export function extractResult(rawText: string): ExtractedResult {
 
 /** Convenience type for subprocess handle. */
 export type Subprocess = ReturnType<typeof Bun.spawn>
+
+/**
+ * Stream lines from a ReadableStream, calling `onLine` for each complete line.
+ * Handles buffering of partial chunks and trailing content.
+ */
+export async function streamLines(
+  stdout: ReadableStream<Uint8Array> | null,
+  onLine: (line: string) => void,
+): Promise<void> {
+  if (!stdout) return
+
+  const reader = stdout.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      while (buffer.includes('\n')) {
+        const lineEnd = buffer.indexOf('\n')
+        const line = buffer.slice(0, lineEnd).trim()
+        buffer = buffer.slice(lineEnd + 1)
+        if (line) onLine(line)
+      }
+    }
+
+    const remaining = buffer.trim()
+    if (remaining) onLine(remaining)
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+/** Truncate text to `maxLen` characters, appending '...' if truncated. */
+export function truncate(text: string, maxLen = 200): string {
+  return text.length > maxLen ? text.slice(0, maxLen) + '...' : text
+}

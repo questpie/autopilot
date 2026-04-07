@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import { startServer } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
-import { findCompanyRoot } from '../utils/find-root'
+import { findCompanyRoot, findProjectRoot } from '../utils/find-root'
 import { createLocalWorker } from './worker'
 import { brandHeader, success, dim, error, warning, separator, dot } from '../utils/format'
 import type { AutopilotWorker } from '@questpie/autopilot-worker'
@@ -21,6 +21,8 @@ program.addCommand(
 
 			try {
 				const root = await findCompanyRoot()
+				const projectRoot = await findProjectRoot()
+				const workerDir = projectRoot ?? process.cwd()
 				const port = Number.parseInt(opts.port, 10)
 
 				// ── 1. Start orchestrator ─────────────────────────────────────
@@ -29,7 +31,7 @@ program.addCommand(
 
 				// ── 2. Start local worker ─────────────────────────────────────
 				if (opts.worker) {
-					worker = createLocalWorker({ orchestratorUrl, workDir: root })
+					worker = createLocalWorker({ orchestratorUrl, workDir: workerDir })
 					await worker.start()
 				}
 

@@ -1,7 +1,6 @@
 import { createMcpConfig } from '../mcp-config'
-import type { RunArtifact } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext, RuntimeResult, WorkerEvent } from './adapter'
-import { buildPrompt, extractResult, type Subprocess } from './shared'
+import { buildPrompt, extractResult, streamLines, truncate, type Subprocess } from './shared'
 
 export interface ClaudeCodeConfig {
   /** Path to claude binary. Defaults to 'claude'. */
@@ -70,7 +69,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       args.push('--resume', context.runtimeSessionRef!)
     }
 
-    args.push('-p', prompt, '--output-format', 'json')
+    args.push('-p', prompt, '--output-format', 'stream-json')
 
     // Model override (canonical model resolved by worker modelMap)
     if (context.model) {
@@ -117,8 +116,10 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       })
       this.subprocess = proc
 
-      const stdout = await new Response(proc.stdout).text()
-      const stderr = await new Response(proc.stderr).text()
+      // Collect stderr in parallel with streaming stdout
+      const stderrPromise = new Response(proc.stderr).text()
+      const { sessionId, lastResult, tokens } = await this.streamJsonl(proc)
+      const stderr = await stderrPromise
 
       const exitCode = await proc.exited
       this.subprocess = null
@@ -129,34 +130,19 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
         throw new Error(errorMsg)
       }
 
-      // Parse JSON output from claude --output-format json
-      let result: {
-        result?: string
-        session_id?: string
-        usage?: { input_tokens?: number; output_tokens?: number }
-      }
-      try {
-        result = JSON.parse(stdout)
-      } catch {
-        // If not valid JSON, treat stdout as plain text result
-        result = { result: stdout.trim() }
-      }
-
       this.emit({ type: 'progress', summary: 'Claude Code completed' })
 
-      const rawText = result.result ?? stdout.trim()
-      const extracted = extractResult(rawText)
+      if (!lastResult) {
+        return { summary: 'Claude Code completed with no output' }
+      }
+
+      const extracted = extractResult(lastResult)
 
       return {
         summary: extracted.summary,
-        tokens: result.usage
-          ? {
-              input: result.usage.input_tokens ?? 0,
-              output: result.usage.output_tokens ?? 0,
-            }
-          : undefined,
+        tokens,
         artifacts: extracted.artifacts.length > 0 ? extracted.artifacts : undefined,
-        sessionId: persistence === 'local' ? result.session_id : undefined,
+        sessionId: persistence === 'local' ? (sessionId ?? undefined) : undefined,
         outputs: extracted.outputs,
       }
     } finally {
@@ -171,7 +157,115 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
     }
   }
 
+  /**
+   * Stream JSONL events from Claude Code's stream-json stdout.
+   * Collects session ID, last result text, and token usage.
+   */
+  private async streamJsonl(proc: Subprocess): Promise<{
+    sessionId: string | null
+    lastResult: string | null
+    tokens: { input: number; output: number } | undefined
+  }> {
+    let sessionId: string | null = null
+    let lastResult: string | null = null
+    let tokens: { input: number; output: number } | undefined
+
+    const stdout = proc.stdout
+    if (!stdout || typeof stdout === 'number') return { sessionId, lastResult, tokens }
+
+    await streamLines(stdout as ReadableStream<Uint8Array>, (line) => {
+      try {
+        const event: ClaudeStreamEvent = JSON.parse(line)
+        const result = this.handleClaudeEvent(event)
+        if (result.sessionId) sessionId = result.sessionId
+        if (result.resultText) lastResult = result.resultText
+        if (result.tokens) tokens = result.tokens
+      } catch {
+        console.warn('[claude-code] skipping malformed JSONL line:', line.slice(0, 100))
+      }
+    })
+
+    return { sessionId, lastResult, tokens }
+  }
+
+  /**
+   * Handle a single Claude stream-json event.
+   * Maps to WorkerEvents and extracts session/result data.
+   */
+  private handleClaudeEvent(event: ClaudeStreamEvent): {
+    sessionId?: string
+    resultText?: string
+    tokens?: { input: number; output: number }
+  } {
+    switch (event.type) {
+      case 'system': {
+        if (event.subtype === 'init' && event.session_id) {
+          const model = event.model ? ` (model: ${event.model})` : ''
+          this.emit({ type: 'progress', summary: `Claude Code initialized${model}` })
+          return { sessionId: event.session_id }
+        }
+        return {}
+      }
+
+      case 'assistant': {
+        const content = event.message?.content
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === 'text' && block.text) {
+              this.emit({ type: 'progress', summary: truncate(block.text) })
+            } else if (block.type === 'tool_use' && block.name) {
+              this.emit({ type: 'tool_use', summary: block.name })
+            }
+          }
+        }
+        return {}
+      }
+
+      case 'result': {
+        if (event.subtype === 'error') {
+          this.emit({ type: 'error', summary: event.error ?? 'Claude Code result error' })
+          return {}
+        }
+        // subtype === 'success'
+        const resultTokens = event.usage
+          ? { input: event.usage.input_tokens ?? 0, output: event.usage.output_tokens ?? 0 }
+          : undefined
+        return {
+          resultText: event.result ?? undefined,
+          sessionId: event.session_id ?? undefined,
+          tokens: resultTokens,
+        }
+      }
+
+      default:
+        return {}
+    }
+  }
+
   private emit(event: WorkerEvent): void {
     this.eventHandler?.(event)
+  }
+}
+
+// ─── Claude stream-json event types (minimal, for parsing) ───────────────
+
+interface ClaudeStreamEvent {
+  type: string
+  subtype?: string
+  session_id?: string
+  model?: string
+  tools?: unknown[]
+  message?: {
+    content?: Array<{
+      type?: string
+      text?: string
+      name?: string
+    }>
+  }
+  result?: string
+  error?: string
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
   }
 }

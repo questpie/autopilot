@@ -137,9 +137,9 @@ describe('resolveRuntime', () => {
     const script = `#!/bin/bash
 ARGS="$@"
 if echo "$ARGS" | grep -q "no-session-persistence"; then
-  echo '{"result":"persistence-off","session_id":"ignored"}'
+  echo '{"type":"result","subtype":"success","result":"persistence-off","session_id":"ignored"}'
 else
-  echo '{"result":"persistence-on","session_id":"sess-123"}'
+  echo '{"type":"result","subtype":"success","result":"persistence-on","session_id":"sess-123"}'
 fi
 exit 0
 `

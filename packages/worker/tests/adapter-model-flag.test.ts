@@ -67,7 +67,7 @@ describe('Claude Code --model flag', () => {
 	test('omits --model when context.model is null', async () => {
 		const { binaryPath, argsFile } = await createArgCaptureBinary(
 			'claude-no-model',
-			'{"result":"done","session_id":"s1","usage":{"input_tokens":1,"output_tokens":1}}',
+			'{"type":"result","subtype":"success","result":"done","session_id":"s1","usage":{"input_tokens":1,"output_tokens":1}}',
 		)
 		const adapter = new ClaudeCodeAdapter({ binaryPath, useMcp: false })
 		adapter.onEvent(() => {})
@@ -80,7 +80,7 @@ describe('Claude Code --model flag', () => {
 	test('includes --model when context.model is set', async () => {
 		const { binaryPath, argsFile } = await createArgCaptureBinary(
 			'claude-with-model',
-			'{"result":"done","session_id":"s1","usage":{"input_tokens":1,"output_tokens":1}}',
+			'{"type":"result","subtype":"success","result":"done","session_id":"s1","usage":{"input_tokens":1,"output_tokens":1}}',
 		)
 		const adapter = new ClaudeCodeAdapter({ binaryPath, useMcp: false })
 		adapter.onEvent(() => {})
@@ -125,7 +125,7 @@ describe('OpenCode --model flag', () => {
 	test('omits --model when context.model is null', async () => {
 		const { binaryPath, argsFile } = await createArgCaptureBinary(
 			'opencode-no-model',
-			'{"content":"done","session_id":"s1"}',
+			'{"type":"text","text":"done","part":{"type":"text"}}',
 		)
 		const adapter = new OpenCodeAdapter({ binaryPath, useMcp: false })
 		adapter.onEvent(() => {})
@@ -138,7 +138,7 @@ describe('OpenCode --model flag', () => {
 	test('includes --model when context.model is set', async () => {
 		const { binaryPath, argsFile } = await createArgCaptureBinary(
 			'opencode-with-model',
-			'{"content":"done","session_id":"s1"}',
+			'{"type":"text","text":"done","part":{"type":"text"}}',
 		)
 		const adapter = new OpenCodeAdapter({ binaryPath, useMcp: false })
 		adapter.onEvent(() => {})

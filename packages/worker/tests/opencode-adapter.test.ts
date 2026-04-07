@@ -5,6 +5,12 @@ import { tmpdir } from 'node:os'
 import { OpenCodeAdapter } from '../src/runtimes/opencode'
 import type { RunContext, WorkerEvent } from '../src/runtimes/adapter'
 
+/** Helper to build a fake opencode binary that outputs JSONL events. */
+function buildOpenCodeScript(events: object[]): string {
+  const lines = events.map((e) => JSON.stringify(e))
+  return `#!/bin/bash\n${lines.map((l) => `echo '${l}'`).join('\n')}\nexit 0\n`
+}
+
 const BASIC_CONTEXT: RunContext = {
   runId: 'run-oc-1',
   agentId: 'developer',
@@ -18,6 +24,7 @@ const BASIC_CONTEXT: RunContext = {
   apiKey: 'test-key',
   runtimeSessionRef: null,
   workDir: null,
+  capabilities: null,
   model: null,
 }
 
@@ -40,15 +47,13 @@ describe('OpenCodeAdapter', () => {
   }
 
   test('executes a fresh run and returns result', async () => {
-    const output = JSON.stringify({
-      content: 'Task completed. I fixed the email validation.',
-      session_id: 'session-oc-123',
-      usage: { input_tokens: 200, output_tokens: 80 },
-    })
-
     const binaryPath = await createBinary(
       'opencode-basic',
-      `#!/bin/bash\necho '${output}'\nexit 0\n`,
+      buildOpenCodeScript([
+        { type: 'step_start', sessionID: 'session-oc-123', part: { type: 'text' } },
+        { type: 'text', text: 'Task completed. I fixed the email validation.', part: { type: 'text' } },
+        { type: 'step_finish', tokens: { input: 200, output: 80 }, cost: 0.01 },
+      ]),
     )
 
     const adapter = new OpenCodeAdapter({ binaryPath, workDir: tmpDir })
@@ -62,22 +67,21 @@ describe('OpenCodeAdapter', () => {
     expect(result!.tokens).toEqual({ input: 200, output: 80 })
     expect(result!.sessionId).toBe('session-oc-123')
 
-    // Should have progress events: launch + completed
+    // Should have progress events: launch + text + completed
     const progressEvents = events.filter((e) => e.type === 'progress')
-    expect(progressEvents.length).toBe(2)
+    expect(progressEvents.length).toBeGreaterThanOrEqual(2)
     expect(progressEvents[0]!.summary).toBe('Launching OpenCode')
-    expect(progressEvents[1]!.summary).toBe('OpenCode completed')
+    expect(progressEvents[progressEvents.length - 1]!.summary).toBe('OpenCode completed')
   })
 
   test('handles resume with runtimeSessionRef', async () => {
-    const output = JSON.stringify({
-      content: 'Resumed and completed.',
-      session_id: 'session-resumed',
-    })
-
     const binaryPath = await createBinary(
       'opencode-resume',
-      `#!/bin/bash\necho '${output}'\nexit 0\n`,
+      buildOpenCodeScript([
+        { type: 'step_start', sessionID: 'session-resumed', part: { type: 'text' } },
+        { type: 'text', text: 'Resumed and completed.', part: { type: 'text' } },
+        { type: 'step_finish', tokens: { input: 50, output: 20 } },
+      ]),
     )
 
     const adapter = new OpenCodeAdapter({ binaryPath, workDir: tmpDir })
@@ -122,17 +126,21 @@ describe('OpenCodeAdapter', () => {
     adapter.onEvent(() => {})
 
     const result = await adapter.start(BASIC_CONTEXT)
+    // Plain text (non-JSON) is accumulated as lastText
     expect(result!.summary).toBe('Just some plain text')
   })
 
   test('extracts structured output from AUTOPILOT_RESULT block', async () => {
     const content =
       'Review complete.\\n\\n<AUTOPILOT_RESULT>\\n<outcome>approved</outcome>\\n<summary>All tests pass.</summary>\\n</AUTOPILOT_RESULT>'
-    const output = JSON.stringify({ content, session_id: 'session-struct' })
 
     const binaryPath = await createBinary(
       'opencode-structured',
-      `#!/bin/bash\necho '${output}'\nexit 0\n`,
+      buildOpenCodeScript([
+        { type: 'step_start', sessionID: 'session-struct', part: { type: 'text' } },
+        { type: 'text', text: content, part: { type: 'text' } },
+        { type: 'step_finish', tokens: { input: 100, output: 50 } },
+      ]),
     )
 
     const adapter = new OpenCodeAdapter({ binaryPath, workDir: tmpDir })
@@ -143,8 +151,8 @@ describe('OpenCodeAdapter', () => {
     expect(result!.summary).toBe('All tests pass.')
   })
 
-  test('handles alternative JSON field names', async () => {
-    // OpenCode might use different field names — test resilience
+  test('handles single-JSON fallback output', async () => {
+    // OpenCode might output a single JSON object instead of JSONL events
     const output = JSON.stringify({
       result: 'Done via result field.',
       sessionId: 'session-alt',
@@ -162,7 +170,29 @@ describe('OpenCodeAdapter', () => {
     const result = await adapter.start(BASIC_CONTEXT)
     expect(result!.summary).toContain('Done via result field')
     expect(result!.sessionId).toBe('session-alt')
-    expect(result!.tokens).toEqual({ input: 100, output: 50 })
+  })
+
+  test('emits tool_use events from step_start', async () => {
+    const binaryPath = await createBinary(
+      'opencode-tools',
+      buildOpenCodeScript([
+        { type: 'step_start', sessionID: 'session-tools', part: { type: 'tool', name: 'read_file' } },
+        { type: 'step_start', sessionID: 'session-tools', part: { type: 'tool', name: 'write_file' } },
+        { type: 'text', text: 'Done with tools.', part: { type: 'text' } },
+        { type: 'step_finish', tokens: { input: 100, output: 40 } },
+      ]),
+    )
+
+    const adapter = new OpenCodeAdapter({ binaryPath, workDir: tmpDir })
+    const events: WorkerEvent[] = []
+    adapter.onEvent((e) => events.push(e))
+
+    await adapter.start(BASIC_CONTEXT)
+
+    const toolEvents = events.filter((e) => e.type === 'tool_use')
+    expect(toolEvents.length).toBe(2)
+    expect(toolEvents[0]!.summary).toBe('read_file')
+    expect(toolEvents[1]!.summary).toBe('write_file')
   })
 
   test('stop kills the subprocess', async () => {
@@ -185,7 +215,7 @@ describe('OpenCodeAdapter', () => {
     const customWorkDir = await mkdtemp(join(tmpdir(), 'opencode-workdir-'))
     const binaryPath = await createBinary(
       'opencode-cwd',
-      `#!/bin/bash\necho '{"content":"cwd='$(pwd)'"}'\nexit 0\n`,
+      `#!/bin/bash\necho '{"type":"text","text":"cwd='$(pwd)'","part":{"type":"text"}}'\nexit 0\n`,
     )
 
     const adapter = new OpenCodeAdapter({ binaryPath })
@@ -219,7 +249,6 @@ describe('OpenCodeAdapter', () => {
 
     const result = await adapter.start(BASIC_CONTEXT)
     expect(result).toBeDefined()
-    // Empty stdout → empty string summary
-    expect(result!.summary).toBeDefined()
+    expect(result!.summary).toContain('completed with no output')
   })
 })
