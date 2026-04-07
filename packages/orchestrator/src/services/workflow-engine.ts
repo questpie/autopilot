@@ -285,7 +285,7 @@ export class WorkflowEngine {
 		}
 
 		// ── Resolve next step ───────────────────────────────────────────
-		const nextStep = this.resolveNextStep(workflow, currentStep, outputs)
+		let nextStep = this.resolveNextStep(workflow, currentStep, outputs)
 		if (!nextStep) {
 			await this.taskService.update(taskId, { status: 'done', workflow_step: '__done__' })
 			return { task: (await this.taskService.get(taskId))!, runId: null, actions: ['done'] }
@@ -295,34 +295,27 @@ export class WorkflowEngine {
 		if (this.isRevisionLoop(workflow, currentStep, nextStep.id)) {
 			const revisionCount = await this.incrementRevisionCount(taskId, task.metadata, currentStep, nextStep.id)
 			if (revisionCount > DEFAULT_MAX_REVISIONS) {
-				console.warn(
-					`[workflow-engine] revision limit exceeded (${revisionCount - 1}/${DEFAULT_MAX_REVISIONS}) for loop "${currentStep}→${nextStep.id}" — escalating task "${taskId}"`,
-				)
+				// After N revision attempts, advance forward instead of looping back.
+				// The output is "good enough" — continuing to revise won't converge.
+				const currentIdx = workflow.steps.findIndex((s) => s.id === currentStep)
+				const forwardStep = currentIdx >= 0 ? workflow.steps[currentIdx + 1] : null
 
-				const humanStep = this.findHumanApprovalStep(workflow)
-				if (humanStep) {
-					await this.taskService.update(taskId, { workflow_step: humanStep.id, status: 'blocked' })
-					const actions = ['revision_limit_exceeded', 'approval_needed']
+				if (forwardStep && forwardStep.id !== nextStep.id) {
+					console.warn(
+						`[workflow-engine] revision limit exceeded (${revisionCount - 1}/${DEFAULT_MAX_REVISIONS}) for "${currentStep}→${nextStep.id}" — advancing to "${forwardStep.id}"`,
+					)
 					await this.activityService?.log({
 						actor: 'workflow-engine',
-						type: 'escalation',
-						summary: `Revision loop "${currentStep}→${nextStep.id}" exceeded ${DEFAULT_MAX_REVISIONS} revisions — escalated to human review`,
-						details: JSON.stringify({ task_id: taskId, from_step: currentStep, to_step: nextStep.id, revisions: revisionCount - 1 }),
+						type: 'revision_limit',
+						summary: `Revision loop "${currentStep}→${nextStep.id}" exceeded ${DEFAULT_MAX_REVISIONS} — advancing to "${forwardStep.id}"`,
+						details: JSON.stringify({ task_id: taskId, from_step: currentStep, to_step: forwardStep.id, revisions: revisionCount - 1 }),
 					})
-					eventBus.emit({ type: 'task_changed', taskId, status: 'blocked' })
-					return { task: (await this.taskService.get(taskId))!, runId: null, actions }
+					nextStep = forwardStep
+				} else {
+					console.warn(
+						`[workflow-engine] revision limit exceeded (${revisionCount - 1}/${DEFAULT_MAX_REVISIONS}) for "${currentStep}→${nextStep.id}" — no forward step, continuing loop`,
+					)
 				}
-
-				// No human approval step — fail with clear message
-				await this.taskService.update(taskId, { status: 'failed' })
-				await this.activityService?.log({
-					actor: 'workflow-engine',
-					type: 'escalation',
-					summary: `Revision loop "${currentStep}→${nextStep.id}" exceeded ${DEFAULT_MAX_REVISIONS} revisions — no human_approval step to escalate to, failing task`,
-					details: JSON.stringify({ task_id: taskId, from_step: currentStep, to_step: nextStep.id, revisions: revisionCount - 1 }),
-				})
-				eventBus.emit({ type: 'task_changed', taskId, status: 'failed' })
-				return { task: (await this.taskService.get(taskId))!, runId: null, actions: ['revision_limit_exceeded', 'failed'] }
 			}
 		}
 
