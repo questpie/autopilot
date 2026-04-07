@@ -82,10 +82,21 @@ docker compose logs -f orchestrator
 # Restart
 docker compose restart
 
-# Update to latest
+# Version info
+docker compose exec orchestrator autopilot version --offline
+
+# Check for updates
+autopilot update check
+
+# Update to latest (back up first!)
+tar czf autopilot-backup-$(date +%Y%m%d).tar.gz company/
 docker compose pull && docker compose up -d
 
-# Auto-update (pulls new images every 5 min — opt-in)
+# Rollback to a specific version
+# Edit docker-compose.yml: image: questpie/autopilot:2.0.0
+docker compose up -d
+
+# Auto-update (pulls new images every 5 min — opt-in, not default)
 docker compose --profile auto-update up -d
 
 # Backup
@@ -102,6 +113,8 @@ docker compose exec orchestrator autopilot worker list
 # Validate from an operator machine
 autopilot doctor --url http://SERVER_IP:7778
 ```
+
+See [Release Channels](../docs/guides/release-channels.md) for channel model, compatibility, and safe upgrade order.
 
 ## Environment Variables
 

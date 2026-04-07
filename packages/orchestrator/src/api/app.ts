@@ -9,6 +9,8 @@
  * - Task routes (/api/tasks) require user auth (session/API key)
  * - Events SSE (/api/events) requires user auth
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
@@ -85,6 +87,10 @@ export interface AppConfig {
 	orchestratorUrl?: string
 }
 
+const orchestratorPkg = JSON.parse(
+	readFileSync(resolve(import.meta.dir, '..', '..', 'package.json'), 'utf-8'),
+) as { version: string }
+
 // ─── App Factory ────────────────────────────────────────────────────────────
 
 export function createApp(config: AppConfig) {
@@ -143,7 +149,7 @@ export function createApp(config: AppConfig) {
 	})
 
 	// ── Public routes ────────────────────────────────────────────────────
-	app.get('/api/health', (c) => c.json({ ok: true, ts: new Date().toISOString() }))
+	app.get('/api/health', (c) => c.json({ ok: true, ts: new Date().toISOString(), version: orchestratorPkg.version }))
 
 	// ── Auth helper (local dev bypass gated behind server-side flag) ─────
 	const userAuth = authMiddleware({ allowLocalDevBypass: config.allowLocalDevBypass ?? false })

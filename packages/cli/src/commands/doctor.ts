@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { PATHS } from '@questpie/autopilot-spec'
 import { loadCredentials } from './auth'
+import { loadPackageVersions } from './version'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { badge, dim, error, header, section, success, table, warning } from '../utils/format'
@@ -57,6 +58,7 @@ export async function runDoctorChecks(options: DoctorOptions = {}): Promise<Doct
 
 	const checks: DoctorCheck[] = []
 
+	checkVersionMetadata(checks)
 	checkCompanyRoot(ctx, checks)
 	checkAuthAndSecretEnv(ctx, checks)
 	checkUrlEnv(ctx, checks)
@@ -65,6 +67,15 @@ export async function runDoctorChecks(options: DoctorOptions = {}): Promise<Doct
 	await checkOrchestratorHealth(options, ctx, checks)
 
 	return checks
+}
+
+function checkVersionMetadata(checks: DoctorCheck[]): void {
+	try {
+		const versions = loadPackageVersions()
+		checks.push(pass('cli-version', 'CLI version', `@questpie/autopilot ${versions.cli}`))
+	} catch {
+		checks.push(warn('cli-version', 'CLI version', 'Could not read CLI package version.', 'Reinstall @questpie/autopilot or check package.json integrity.'))
+	}
 }
 
 async function resolveCompanyRoot(companyRoot: string | undefined, cwd: string): Promise<string | undefined> {

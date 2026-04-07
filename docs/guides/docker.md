@@ -96,19 +96,53 @@ docker compose --profile dev up orchestrator-dev mailpit
 ## Updating
 
 ```bash
-# Pull latest image
+# 1. Back up your company directory first
+tar czf autopilot-backup-$(date +%Y%m%d).tar.gz ./company
+
+# 2. Pull latest image
 docker compose pull
 
-# Restart with new version
+# 3. Restart with new version
 docker compose up -d
+
+# 4. Verify
+docker compose exec orchestrator autopilot version --offline
 ```
 
-Or enable auto-updates (opt-in):
+Or enable auto-updates (opt-in — not the default, not silent):
 ```bash
 docker compose --profile auto-update up -d
 ```
 
-Release channels and version compatibility are not yet implemented (Pass 25.7).
+## Rollback
+
+If an update causes problems, pin the previous image tag:
+
+```bash
+# Stop current container
+docker compose down
+
+# Edit docker-compose.yml: change image to a specific tag
+#   image: questpie/autopilot:2.0.0
+
+# Restart
+docker compose up -d
+```
+
+## Version and channel management
+
+```bash
+# Check current versions
+autopilot version
+
+# Check for updates
+autopilot update check
+
+# Check canary channel
+autopilot update check --channel canary
+```
+
+See [Release Channels](./release-channels.md) for the full channel model, compatibility policy, and safe upgrade order.
 
 ## Backup
 

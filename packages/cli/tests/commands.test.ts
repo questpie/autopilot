@@ -40,8 +40,16 @@ describe('command registration', () => {
 		expect(commandNames).toContain('secrets')
 	})
 
-	it('has exactly 12 top-level commands', () => {
-		expect(program.commands.length).toBe(12)
+	it('registers version command', () => {
+		expect(commandNames).toContain('version')
+	})
+
+	it('registers update command', () => {
+		expect(commandNames).toContain('update')
+	})
+
+	it('has exactly 16 top-level commands', () => {
+		expect(program.commands.length).toBe(16)
 	})
 
 	it('registers inbox command', () => {

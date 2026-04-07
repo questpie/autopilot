@@ -348,22 +348,61 @@ export ANTHROPIC_API_KEY=sk-ant-...   # or configure per OpenCode docs
 
 ## Release and update story
 
-### Current (V1)
+### Channels
 
-- **Install:** Clone repo + `docker compose up`, or `install.sh`
-- **Update:** `docker compose pull && docker compose up -d`
-- **Auto-update:** Optional Watchtower profile (`docker compose --profile auto-update up -d`)
-- **Rollback:** Pin image tag in docker-compose.yml, or `docker compose pull questpie/autopilot:<tag>`
+| Channel | Docker tag | npm tag | Meaning |
+|---------|-----------|---------|---------|
+| stable | `questpie/autopilot:latest` | `@questpie/autopilot@latest` | Tested release, safe for durable dogfood |
+| canary | `questpie/autopilot:canary` | `@questpie/autopilot@canary` | Latest main, may contain breaking changes |
 
-### Not yet implemented (Pass 25.7)
+### Version inspection
 
-- Stable / canary release channels
-- CLI version check and upgrade commands
-- Orchestrator / worker version compatibility validation
-- Operator-controlled update policy
-- Silent autoupdate is explicitly **not** a V1 default
+```bash
+autopilot version                     # Local packages + remote orchestrator
+autopilot update check                # Check npm for latest stable
+autopilot update check --channel canary
+```
 
-Auto-update via Watchtower is opt-in. There is no silent background self-mutation.
+### Update paths
+
+**Docker:**
+```bash
+tar czf autopilot-backup-$(date +%Y%m%d).tar.gz ./company  # Backup first
+docker compose pull && docker compose up -d
+```
+
+**CLI (global install):**
+```bash
+bun add -g @questpie/autopilot@latest
+```
+
+**Source checkout:**
+```bash
+git pull origin main && bun install
+```
+
+### Rollback
+
+Pin a specific image tag in `docker-compose.yml`:
+```yaml
+image: questpie/autopilot:2.0.0  # instead of :latest
+```
+
+### Safe upgrade order
+
+1. Orchestrator first
+2. Workers second
+3. Local CLIs last
+
+### Compatibility
+
+Packages are versioned independently. Install from the same release and you are compatible. `autopilot version` shows local and remote orchestrator versions for comparison. Protocol-level enforcement is deferred.
+
+### Auto-update
+
+Watchtower is opt-in (`--profile auto-update`). It is **not** the default. There is no silent background self-mutation.
+
+See [Release Channels](./release-channels.md) for the full channel model and compatibility policy.
 
 ---
 
