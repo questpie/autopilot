@@ -49,9 +49,9 @@ autopilot worker start \
 ```
 
 Workers need runtime binaries installed locally:
-- Claude Code: `npm install -g @anthropics/claude-code && claude login`
+- Claude Code: `npm install -g @anthropic-ai/claude-code && claude login`
 - Codex: `npm install -g @openai/codex`
-- OpenCode: `go install github.com/opencode-ai/opencode@latest`
+- OpenCode: `npm install -g opencode-ai`
 
 See [Deployment Variants](../docs/guides/deployment-variants.md) for full topology details.
 

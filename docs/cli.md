@@ -41,6 +41,19 @@ autopilot doctor --json
 | `autopilot worker list` | List registered workers |
 | `autopilot worker start --url <url> --token <token>` | Enroll/start a worker |
 
+## Version and Updates
+
+| Command | Description |
+|---------|-------------|
+| `autopilot -v` | Show CLI version (short) |
+| `autopilot version` | Show all package versions and remote orchestrator version |
+| `autopilot version --offline` | Skip remote orchestrator check |
+| `autopilot version --json` | Machine-readable output |
+| `autopilot update check` | Check npm for latest stable version |
+| `autopilot update check --channel canary` | Check canary channel |
+
+See [Release Channels](./guides/release-channels.md) for the full channel model and compatibility policy.
+
 ## Admin
 
 | Command | Description |
@@ -59,3 +72,11 @@ autopilot doctor --json
 | `BETTER_AUTH_SECRET` | Secret for Better Auth cookies/tokens in production |
 | `PORT` | Orchestrator API port, default `7778` |
 | `WEBHOOK_PORT` | Webhook port, default `7777` |
+
+## See Also
+
+- [Deployment Variants](./guides/deployment-variants.md) — Architecture and topology
+- [Docker Guide](./guides/docker.md) — Container configuration
+- [Runtime Setup](./guides/runtime-setup.md) — Per-runtime install and auth for workers
+- [VPS Dogfood Runbook](./guides/vps-dogfood-runbook.md) — End-to-end deployment walkthrough
+- [Release Channels](./guides/release-channels.md) — Update, rollback, and channel management

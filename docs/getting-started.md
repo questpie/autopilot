@@ -60,7 +60,7 @@ autopilot worker token create --description "my laptop"
 
 # On worker machine
 bun add -g @questpie/autopilot
-npm install -g @anthropics/claude-code
+npm install -g @anthropic-ai/claude-code
 claude login
 autopilot worker start --url http://ORCHESTRATOR_HOST:7778 --token <join-token>
 ```

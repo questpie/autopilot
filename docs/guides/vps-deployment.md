@@ -31,7 +31,7 @@ autopilot worker start --url http://SERVER_IP:7778 --token <join-token>
 Workers need runtime binaries and auth on the worker host:
 
 ```bash
-npm install -g @anthropics/claude-code
+npm install -g @anthropic-ai/claude-code
 claude login
 ```
 

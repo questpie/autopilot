@@ -105,7 +105,7 @@ cp .env.example .env
 docker compose up -d
 
 # Create owner account
-docker compose exec autopilot autopilot auth setup
+docker compose exec orchestrator autopilot auth setup
 ```
 
 Your instance is live at `http://SERVER_IP:7778`.
@@ -198,7 +198,7 @@ git clone <your-company-repo>
 cd <company-repo>
 
 # 2. Install runtime binary
-npm install -g @anthropics/claude-code
+npm install -g @anthropic-ai/claude-code
 claude login  # or set ANTHROPIC_API_KEY
 
 # 3. Start worker
@@ -307,42 +307,29 @@ autopilot worker start --url http://10.147.20.1:7778
 
 Workers need runtime binaries installed and authenticated on the host machine. The Docker orchestrator container does **not** include these.
 
-Use `autopilot doctor --offline --require-runtime` on each worker machine to check whether supported runtime binaries are visible on `PATH`.
+### Quick reference
 
-### Claude Code (default runtime)
+| Runtime | Install | Auth |
+|---------|---------|------|
+| Claude Code (default) | `npm install -g @anthropic-ai/claude-code` | `claude login` or `ANTHROPIC_API_KEY` |
+| Codex | `npm install -g @openai/codex` | `OPENAI_API_KEY` |
+| OpenCode | `npm install -g opencode-ai` | Provider-specific API key |
 
-```bash
-npm install -g @anthropics/claude-code
-
-# Authenticate (pick one):
-claude login                          # Interactive OAuth
-export ANTHROPIC_API_KEY=sk-ant-...   # API key
-```
-
-### Codex
+### Verify on worker machines
 
 ```bash
-npm install -g @openai/codex
-
-# Authenticate:
-export OPENAI_API_KEY=sk-...
-```
-
-### OpenCode
-
-```bash
-go install github.com/opencode-ai/opencode@latest
-
-# Authenticate:
-export ANTHROPIC_API_KEY=sk-ant-...   # or configure per OpenCode docs
+autopilot doctor --offline --require-runtime
 ```
 
 ### V1 caveats
 
 - Runtime binaries must be installed on each worker machine independently
 - Runtime authentication (API keys, OAuth sessions) is machine-local
-- MCP config for Codex/OpenCode uses backup/restore during runs (documented V1 tradeoff)
-- Full runtime setup tutorials are a follow-up deliverable
+- MCP config for Codex/OpenCode uses backup/replace/restore during runs (documented V1 tradeoff)
+- Claude Code uses a CLI flag for MCP injection and does not modify project files
+- Runtime selection pipeline is not yet implemented (Pass 26.1)
+
+See [Runtime Setup](./runtime-setup.md) for full per-runtime install, auth, MCP config, and caveats.
 
 ---
 
@@ -442,3 +429,13 @@ See [Release Channels](./release-channels.md) for the full channel model and com
 | Private overlay | VPS/container | remote hosts | Tailscale/VPN | Tailscale HTTPS | join tokens |
 
 All variants use the same orchestrator/worker primitives. Packaging shape differs; semantics do not.
+
+---
+
+## See also
+
+- [VPS Dogfood Runbook](./vps-dogfood-runbook.md) — Step-by-step deployment walkthrough
+- [Runtime Setup](./runtime-setup.md) — Per-runtime install, auth, and caveats
+- [Docker Guide](./docker.md) — Container configuration details
+- [Release Channels](./release-channels.md) — Update, rollback, and channel management
+- [CLI Reference](../cli.md) — All available commands
