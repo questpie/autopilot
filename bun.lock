@@ -139,7 +139,7 @@
     },
     "packages/cli": {
       "name": "@questpie/autopilot",
-      "version": "1.0.0",
+      "version": "1.1.0-canary.0",
       "bin": {
         "autopilot": "./bin/autopilot.ts",
       },
@@ -158,7 +158,7 @@
     },
     "packages/mcp-server": {
       "name": "@questpie/autopilot-mcp",
-      "version": "1.0.0",
+      "version": "1.0.1-canary.0",
       "bin": {
         "autopilot-mcp": "./src/index.ts",
       },
@@ -176,7 +176,7 @@
     },
     "packages/orchestrator": {
       "name": "@questpie/autopilot-orchestrator",
-      "version": "2.0.0",
+      "version": "2.1.0-canary.0",
       "dependencies": {
         "@ai-sdk/openai": "^1.0.0",
         "@better-auth/api-key": "^1.5.6",
@@ -202,7 +202,7 @@
     },
     "packages/spec": {
       "name": "@questpie/autopilot-spec",
-      "version": "1.0.0",
+      "version": "1.1.0-canary.0",
       "dependencies": {
         "yaml": "^2.7.0",
         "zod": "^3.24.0",
@@ -217,7 +217,7 @@
     },
     "packages/worker": {
       "name": "@questpie/autopilot-worker",
-      "version": "1.0.0",
+      "version": "1.1.0-canary.0",
       "dependencies": {
         "@questpie/autopilot-spec": "1.0.0",
         "hono": "^4.12.10",
