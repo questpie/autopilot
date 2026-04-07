@@ -209,5 +209,47 @@ export async function startServer(options?: StartServerOptions) {
 		console.log(`[server] canonical URL: ${env.ORCHESTRATOR_URL}`)
 	}
 
+	// ── 10. Startup recovery for stale leases/workers from previous instance ──
+	const failRunOnExpiry = async (runId: string) => {
+		await runService.complete(runId, {
+			status: 'failed',
+			error: 'lease expired (orchestrator restart recovery)',
+		})
+	}
+
+	try {
+		const staleWorkerIds = await workerService.expireStale(90_000)
+		if (staleWorkerIds.length > 0) {
+			console.log(`[server] startup recovery: marked ${staleWorkerIds.length} stale worker(s) offline`)
+		}
+		const leaseRecovery = await workerService.expireStaleAndRecover(failRunOnExpiry)
+		if (leaseRecovery.failedRunIds.length > 0) {
+			console.log(`[server] startup recovery: failed ${leaseRecovery.failedRunIds.length} run(s) from expired leases`)
+		}
+	} catch (err) {
+		console.error('[server] startup recovery error:', err instanceof Error ? err.message : String(err))
+	}
+
+	// ── 11. Periodic lease/worker expiry timer (every 60s) ──────────────────
+	const leaseExpiryTimer = setInterval(async () => {
+		try {
+			await workerService.expireStale(90_000)
+			const result = await workerService.expireStaleAndRecover(async (runId) => {
+				await runService.complete(runId, {
+					status: 'failed',
+					error: 'lease expired (periodic cleanup)',
+				})
+			})
+			if (result.failedRunIds.length > 0) {
+				console.log(`[server] periodic cleanup: failed ${result.failedRunIds.length} run(s), recovered ${result.recoveredWorkerIds.length} worker(s)`)
+			}
+		} catch (err) {
+			console.error('[server] periodic lease expiry error:', err instanceof Error ? err.message : String(err))
+		}
+	}, 60_000)
+
+	// Ensure timer doesn't prevent process exit
+	leaseExpiryTimer.unref()
+
 	return { server, app, services, companyRoot, auth, db: companyDb, notificationBridge }
 }

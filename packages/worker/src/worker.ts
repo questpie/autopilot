@@ -102,6 +102,22 @@ export class AutopilotWorker {
       await this.resolveIdentity()
     }
 
+    // ── Clear stale state from previous instance ─────────────────────
+    // If we have an existing identity (stored credential or local dev),
+    // deregister first so the orchestrator can clean up stale leases.
+    if (this.workerId) {
+      try {
+        await this.api('/api/workers/deregister', {
+          method: 'POST',
+          body: { worker_id: this.workerId },
+        })
+        console.log('[worker] deregistered stale previous instance')
+      } catch (err) {
+        // Best effort — orchestrator may not know this worker yet
+        console.debug('[worker] pre-start deregister (best effort):', err instanceof Error ? err.message : String(err))
+      }
+    }
+
     // ── Register with orchestrator ───────────────────────────────────
     const res = (await this.api('/api/workers/register', {
       method: 'POST',

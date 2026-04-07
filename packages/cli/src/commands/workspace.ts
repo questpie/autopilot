@@ -301,7 +301,8 @@ async function fetchTaskStatus(
 		if (!res.ok) return null
 		const data = (await res.json()) as { status?: string }
 		return data.status ? { status: data.status } : null
-	} catch {
+	} catch (err) {
+		console.debug('[workspace] fetchTaskStatus failed:', err instanceof Error ? err.message : String(err))
 		return null
 	}
 }

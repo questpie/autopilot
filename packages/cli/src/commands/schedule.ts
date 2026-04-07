@@ -137,7 +137,8 @@ scheduleCmd.addCommand(
 						for (const [k, v] of Object.entries(tmpl)) {
 							console.log(`  ${dim(k + ':')} ${String(v)}`)
 						}
-					} catch (_) {
+					} catch (err) {
+						console.debug('[schedule] failed to parse task_template JSON:', err instanceof Error ? err.message : String(err))
 						console.log(`  ${s.task_template}`)
 					}
 				}

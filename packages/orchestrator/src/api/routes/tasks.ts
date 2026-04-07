@@ -163,9 +163,20 @@ const tasks = new Hono<AppEnv>()
 	.delete(
 		'/:id',
 		zValidator('param', z.object({ id: z.string() })),
+		zValidator('query', z.object({ force: z.string().optional() })),
 		async (c) => {
-			const { taskService } = c.get('services')
+			const { taskService, runService } = c.get('services')
 			const { id } = c.req.valid('param')
+			const { force } = c.req.valid('query')
+
+			// Block deletion if active runs exist (unless ?force=true)
+			if (force !== 'true') {
+				const taskRuns = await runService.list({ task_id: id })
+				const activeRuns = taskRuns.filter((r) => r.status === 'running' || r.status === 'claimed')
+				if (activeRuns.length > 0) {
+					return c.json({ error: 'Cannot delete task with active runs. Cancel runs first.' }, 409)
+				}
+			}
 
 			const deleted = await taskService.deleteCascade(id)
 			if (!deleted) return c.json({ error: 'task not found' }, 404)

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import { eq, and } from 'drizzle-orm'
-import { tasks } from '../db/company-schema'
+import { eq, and, or } from 'drizzle-orm'
+import { tasks, runs, runEvents, artifacts, taskRelations, conversationBindings, workerLeases } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
 /**
@@ -121,41 +121,45 @@ export class TaskService {
 
 	/**
 	 * Delete a task and cascade-delete all related rows:
-	 * runs, run_events, artifacts, task_relations, conversation_bindings.
+	 * runs, run_events, artifacts, worker_leases, task_relations, conversation_bindings.
+	 *
+	 * Wrapped in a transaction so partial deletes cannot leave orphaned rows.
 	 */
 	async deleteCascade(id: string): Promise<TaskRow | undefined> {
 		const existing = await this.get(id)
 		if (!existing) return undefined
 
-		// Import related tables inline to avoid circular deps at module level
-		const { runs: runsTable, runEvents, artifacts, taskRelations, conversationBindings } = await import('../db/company-schema')
+		await this.db.transaction(async (tx) => {
+			// 1. Find all runs for this task
+			const taskRuns = tx.select({ id: runs.id }).from(runs).where(eq(runs.task_id, id)).all()
+			const runIds = taskRuns.map((r) => r.id)
 
-		// 1. Find all runs for this task
-		const taskRuns = this.db.select({ id: runsTable.id }).from(runsTable).where(eq(runsTable.task_id, id)).all()
+			if (runIds.length > 0) {
+				// 2. Delete run_events + artifacts + worker_leases for each run
+				for (const runId of runIds) {
+					tx.delete(runEvents).where(eq(runEvents.run_id, runId)).run()
+					tx.delete(artifacts).where(eq(artifacts.run_id, runId)).run()
+					tx.delete(workerLeases).where(eq(workerLeases.run_id, runId)).run()
+				}
 
-		// 2. Delete run_events + artifacts for each run
-		for (const run of taskRuns) {
-			this.db.delete(runEvents).where(eq(runEvents.run_id, run.id)).run()
-			this.db.delete(artifacts).where(eq(artifacts.run_id, run.id)).run()
-		}
+				// 3. Delete runs
+				tx.delete(runs).where(eq(runs.task_id, id)).run()
+			}
 
-		// 3. Delete artifacts linked directly to this task
-		this.db.delete(artifacts).where(eq(artifacts.task_id, id)).run()
+			// 4. Delete artifacts linked directly to this task (not via run)
+			tx.delete(artifacts).where(eq(artifacts.task_id, id)).run()
 
-		// 4. Delete runs
-		this.db.delete(runsTable).where(eq(runsTable.task_id, id)).run()
+			// 5. Delete task_relations (both directions)
+			tx.delete(taskRelations).where(
+				or(eq(taskRelations.source_task_id, id), eq(taskRelations.target_task_id, id))!
+			).run()
 
-		// 5. Delete task_relations (both directions)
-		const { or } = await import('drizzle-orm')
-		this.db.delete(taskRelations).where(
-			or(eq(taskRelations.source_task_id, id), eq(taskRelations.target_task_id, id))!
-		).run()
+			// 6. Delete conversation bindings
+			tx.delete(conversationBindings).where(eq(conversationBindings.task_id, id)).run()
 
-		// 6. Delete conversation bindings
-		this.db.delete(conversationBindings).where(eq(conversationBindings.task_id, id)).run()
-
-		// 7. Delete the task itself
-		this.db.delete(tasks).where(eq(tasks.id, id)).run()
+			// 7. Delete the task itself
+			tx.delete(tasks).where(eq(tasks.id, id)).run()
+		})
 
 		return existing
 	}
