@@ -69,7 +69,7 @@ program.addCommand(
 				process.on('SIGINT', shutdown)
 				process.on('SIGTERM', shutdown)
 			} catch (err) {
-				if (worker) await worker.stop().catch(() => {})
+				if (worker) await worker.stop().catch((stopErr) => console.debug('[start] worker stop error:', stopErr instanceof Error ? stopErr.message : String(stopErr)))
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)

@@ -5,7 +5,6 @@ import { createApiClient, getBaseUrl } from '../utils/client'
 import { getAuthHeaders } from './auth'
 
 const runsCmd = new Command('run')
-	.alias('runs')
 	.description('List and inspect runs')
 	.option('-s, --status <status>', 'Filter by run status (pending, claimed, running, completed, failed)')
 	.option('-a, --agent <agent>', 'Filter by agent ID')
@@ -457,7 +456,7 @@ runsCmd.addCommand(
 
 				// Graceful Ctrl+C cleanup
 				const cleanup = () => {
-					reader.cancel().catch(() => {})
+					reader.cancel().catch((err) => console.debug('[watch] reader cancel error:', err instanceof Error ? err.message : String(err)))
 					console.log('')
 					console.log(dim('  Detached from run stream.'))
 					process.exit(0)
@@ -505,7 +504,7 @@ runsCmd.addCommand(
 								})
 								console.log('')
 								console.log(dim(`  Run ${status}.`))
-								reader.cancel().catch(() => {})
+								reader.cancel().catch((err) => console.debug('[watch] reader cancel error:', err instanceof Error ? err.message : String(err)))
 								process.removeListener('SIGINT', cleanup)
 								process.removeListener('SIGTERM', cleanup)
 								return

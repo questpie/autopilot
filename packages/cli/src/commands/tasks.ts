@@ -25,7 +25,6 @@ interface ChildRollup {
 }
 
 const tasksCmd = new Command('task')
-	.alias('tasks')
 	.description('List and manage tasks')
 	.option('-s, --status <status>', 'Filter by task status')
 	.option('-a, --assigned <agent>', 'Filter by assigned agent ID')

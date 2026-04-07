@@ -12,7 +12,7 @@ import { getBaseUrl } from '../utils/client'
 import { header, dim, success, error, badge, table, dot } from '../utils/format'
 import { getAuthHeaders } from './auth'
 
-const secretsCmd = new Command('secret').alias('secrets').description('Manage orchestrator-managed shared secrets')
+const secretsCmd = new Command('secret').description('Manage orchestrator-managed shared secrets')
 
 // ─── set ─────────────────────────────────────────────────────────────────
 

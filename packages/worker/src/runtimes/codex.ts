@@ -269,6 +269,7 @@ interface CodexEvent {
     type?: string
     name?: string
     command?: string
+    arguments?: Record<string, unknown>
     content?: unknown
     text?: string
   }
@@ -290,11 +291,12 @@ function extractAgentMessageContent(item: CodexEvent['item']): string | null {
   if (typeof item.text === 'string') return item.text
 
   if (Array.isArray(item.content)) {
-    const texts = item.content
-      .filter((block: unknown): block is { text: string } =>
-        typeof block === 'object' && block !== null && 'text' in block && typeof (block as Record<string, unknown>).text === 'string',
-      )
-      .map((block) => block.text)
+    const texts: string[] = []
+    for (const block of item.content) {
+      if (typeof block === 'object' && block !== null && 'text' in block && typeof block.text === 'string') {
+        texts.push(block.text)
+      }
+    }
     return texts.length > 0 ? texts.join('\n') : null
   }
 

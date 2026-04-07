@@ -240,6 +240,7 @@ export class WorkflowEngine {
 		const task = await this.taskService.get(taskId)
 		if (!task || !task.workflow_id || !task.workflow_step) return null
 
+		const currentStep = task.workflow_step
 		const workflow = this.config.workflows.get(task.workflow_id)
 		if (!workflow) return null
 
@@ -247,12 +248,12 @@ export class WorkflowEngine {
 		if (sourceRunId) {
 			const sourceRun = await this.runService.get(sourceRunId)
 			if (sourceRun && this.isEmptyOutput(sourceRun.summary)) {
-				console.warn(`[workflow-engine] run ${sourceRunId} completed with empty output at step "${task.workflow_step}"`)
+				console.warn(`[workflow-engine] run ${sourceRunId} completed with empty output at step "${currentStep}"`)
 
-				const retryCount = await this.getAndIncrementEmptyRetry(taskId, task.metadata, task.workflow_step)
+				const retryCount = await this.getAndIncrementEmptyRetry(taskId, task.metadata, currentStep)
 				if (retryCount <= 1) {
 					// First empty output: retry the same step once
-					console.warn(`[workflow-engine] retrying step "${task.workflow_step}" (empty output retry ${retryCount}/1)`)
+					console.warn(`[workflow-engine] retrying step "${currentStep}" (empty output retry ${retryCount}/1)`)
 					const actions: string[] = ['empty_output_retry']
 					const ctx = await this.buildStepContext(sourceRunId)
 					const updated = (await this.taskService.get(taskId))!
@@ -270,8 +271,8 @@ export class WorkflowEngine {
 					await this.activityService?.log({
 						actor: 'workflow-engine',
 						type: 'escalation',
-						summary: `Step "${task.workflow_step}" produced empty output after retry — escalated to human review`,
-						details: JSON.stringify({ task_id: taskId, step_id: task.workflow_step, run_id: sourceRunId }),
+						summary: `Step "${currentStep}" produced empty output after retry — escalated to human review`,
+						details: JSON.stringify({ task_id: taskId, step_id: currentStep, run_id: sourceRunId }),
 					})
 					eventBus.emit({ type: 'task_changed', taskId, status: 'blocked' })
 					return { task: (await this.taskService.get(taskId))!, runId: null, actions }
@@ -284,18 +285,18 @@ export class WorkflowEngine {
 		}
 
 		// ── Resolve next step ───────────────────────────────────────────
-		const nextStep = this.resolveNextStep(workflow, task.workflow_step, outputs)
+		const nextStep = this.resolveNextStep(workflow, currentStep, outputs)
 		if (!nextStep) {
 			await this.taskService.update(taskId, { status: 'done', workflow_step: '__done__' })
 			return { task: (await this.taskService.get(taskId))!, runId: null, actions: ['done'] }
 		}
 
 		// ── Revision loop guard ─────────────────────────────────────────
-		if (this.isRevisionLoop(workflow, task.workflow_step, nextStep.id)) {
-			const revisionCount = await this.incrementRevisionCount(taskId, task.metadata, task.workflow_step, nextStep.id)
+		if (this.isRevisionLoop(workflow, currentStep, nextStep.id)) {
+			const revisionCount = await this.incrementRevisionCount(taskId, task.metadata, currentStep, nextStep.id)
 			if (revisionCount > DEFAULT_MAX_REVISIONS) {
 				console.warn(
-					`[workflow-engine] revision limit exceeded (${revisionCount - 1}/${DEFAULT_MAX_REVISIONS}) for loop "${task.workflow_step}→${nextStep.id}" — escalating task "${taskId}"`,
+					`[workflow-engine] revision limit exceeded (${revisionCount - 1}/${DEFAULT_MAX_REVISIONS}) for loop "${currentStep}→${nextStep.id}" — escalating task "${taskId}"`,
 				)
 
 				const humanStep = this.findHumanApprovalStep(workflow)
@@ -305,8 +306,8 @@ export class WorkflowEngine {
 					await this.activityService?.log({
 						actor: 'workflow-engine',
 						type: 'escalation',
-						summary: `Revision loop "${task.workflow_step}→${nextStep.id}" exceeded ${DEFAULT_MAX_REVISIONS} revisions — escalated to human review`,
-						details: JSON.stringify({ task_id: taskId, from_step: task.workflow_step, to_step: nextStep.id, revisions: revisionCount - 1 }),
+						summary: `Revision loop "${currentStep}→${nextStep.id}" exceeded ${DEFAULT_MAX_REVISIONS} revisions — escalated to human review`,
+						details: JSON.stringify({ task_id: taskId, from_step: currentStep, to_step: nextStep.id, revisions: revisionCount - 1 }),
 					})
 					eventBus.emit({ type: 'task_changed', taskId, status: 'blocked' })
 					return { task: (await this.taskService.get(taskId))!, runId: null, actions }
@@ -317,8 +318,8 @@ export class WorkflowEngine {
 				await this.activityService?.log({
 					actor: 'workflow-engine',
 					type: 'escalation',
-					summary: `Revision loop "${task.workflow_step}→${nextStep.id}" exceeded ${DEFAULT_MAX_REVISIONS} revisions — no human_approval step to escalate to, failing task`,
-					details: JSON.stringify({ task_id: taskId, from_step: task.workflow_step, to_step: nextStep.id, revisions: revisionCount - 1 }),
+					summary: `Revision loop "${currentStep}→${nextStep.id}" exceeded ${DEFAULT_MAX_REVISIONS} revisions — no human_approval step to escalate to, failing task`,
+					details: JSON.stringify({ task_id: taskId, from_step: currentStep, to_step: nextStep.id, revisions: revisionCount - 1 }),
 				})
 				eventBus.emit({ type: 'task_changed', taskId, status: 'failed' })
 				return { task: (await this.taskService.get(taskId))!, runId: null, actions: ['revision_limit_exceeded', 'failed'] }
@@ -856,28 +857,21 @@ export class WorkflowEngine {
 	 * Get the revision count for a specific loop (e.g., "validate-plan→plan").
 	 * Stored in task metadata under `_revisions:<from>→<to>`.
 	 */
-	private getRevisionCount(metadata: string, fromStep: string, toStep: string): number {
-		try {
-			const meta = JSON.parse(metadata || '{}')
-			return meta[`${REVISION_KEY_PREFIX}${fromStep}→${toStep}`] ?? 0
-		} catch {
-			return 0
-		}
-	}
-
 	/**
 	 * Increment and persist the revision counter for a loop transition.
 	 * Returns the new count.
 	 */
-	private async incrementRevisionCount(taskId: string, metadata: string, fromStep: string, toStep: string): Promise<number> {
+	private async incrementRevisionCount(taskId: string, metadata: string | null, fromStep: string, toStep: string): Promise<number> {
 		let meta: Record<string, unknown>
 		try {
 			meta = JSON.parse(metadata || '{}')
-		} catch {
+		} catch (err) {
+			console.debug('[workflow-engine] malformed task metadata JSON:', err instanceof Error ? err.message : String(err))
 			meta = {}
 		}
 		const key = `${REVISION_KEY_PREFIX}${fromStep}→${toStep}`
-		const newCount = ((meta[key] as number) ?? 0) + 1
+		const prev = typeof meta[key] === 'number' ? meta[key] : 0
+		const newCount = prev + 1
 		meta[key] = newCount
 		await this.taskService.update(taskId, { metadata: JSON.stringify(meta) })
 		return newCount
@@ -924,15 +918,17 @@ export class WorkflowEngine {
 	 * Get and increment the empty output retry count for a step.
 	 * Stored in task metadata under `_empty_retries:<stepId>`.
 	 */
-	private async getAndIncrementEmptyRetry(taskId: string, metadata: string, stepId: string): Promise<number> {
+	private async getAndIncrementEmptyRetry(taskId: string, metadata: string | null, stepId: string): Promise<number> {
 		let meta: Record<string, unknown>
 		try {
 			meta = JSON.parse(metadata || '{}')
-		} catch {
+		} catch (err) {
+			console.debug('[workflow-engine] malformed task metadata JSON:', err instanceof Error ? err.message : String(err))
 			meta = {}
 		}
 		const key = `_empty_retries:${stepId}`
-		const count = ((meta[key] as number) ?? 0) + 1
+		const prev = typeof meta[key] === 'number' ? meta[key] : 0
+		const count = prev + 1
 		meta[key] = count
 		await this.taskService.update(taskId, { metadata: JSON.stringify(meta) })
 		return count

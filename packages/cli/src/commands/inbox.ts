@@ -98,7 +98,7 @@ async function renderInbox(): Promise<void> {
 				const preview = arts.find((a) => a.kind === 'preview_url')
 				if (preview) previewMap.set(run.id, preview.ref_value)
 			}
-		} catch { /* skip */ }
+		} catch (err) { console.debug('[inbox] failed to fetch preview URLs:', err instanceof Error ? err.message : String(err)) }
 	}
 
 	// Fetch task titles for runs
@@ -114,7 +114,7 @@ async function renderInbox(): Promise<void> {
 				const t = (await tRes.json()) as Task
 				taskTitles.set(tid, t.title)
 			}
-		} catch { /* skip */ }
+		} catch (err) { console.debug('[inbox] failed to fetch task title:', err instanceof Error ? err.message : String(err)) }
 	}
 
 	const completedWithPreviews = recentCompleted.filter((r) => previewMap.has(r.id))
@@ -153,7 +153,7 @@ async function renderInbox(): Promise<void> {
 						console.log(`  ${dim('Last run:')} ${lastRun.summary.slice(0, 150)}`)
 					}
 				}
-			} catch { /* skip */ }
+			} catch (err) { console.debug('[inbox] failed to fetch last run:', err instanceof Error ? err.message : String(err)) }
 
 			console.log('')
 			console.log(dim(`    autopilot tasks approve ${task.id}`))
@@ -252,8 +252,8 @@ async function runWatch(): Promise<void> {
 			try {
 				const event = JSON.parse(json) as { type: string; [key: string]: unknown }
 				await handleWatchEvent(event, client)
-			} catch {
-				// skip malformed
+			} catch (err) {
+				console.debug('[inbox] malformed SSE data:', err instanceof Error ? err.message : String(err))
 			}
 		}
 	}
@@ -278,7 +278,7 @@ async function handleWatchEvent(
 					const t = (await tRes.json()) as Task
 					title = t.title
 				}
-			} catch { /* skip */ }
+			} catch (err) { console.debug('[inbox:watch] failed to fetch task title:', err instanceof Error ? err.message : String(err)) }
 
 			console.log(`${dim(ts)} ${statusBadge('blocked')}  ${title}`)
 			console.log(`${dim('         ')} ${dim(taskId)}`)
@@ -310,7 +310,7 @@ async function handleWatchEvent(
 						}
 					}
 				}
-			} catch { /* skip */ }
+			} catch (err) { console.debug('[inbox:watch] failed to fetch run details:', err instanceof Error ? err.message : String(err)) }
 
 			try {
 				const artsRes = await client.api.runs[':id'].artifacts.$get({ param: { id: runId } })
@@ -319,7 +319,7 @@ async function handleWatchEvent(
 					const preview = arts.find((a) => a.kind === 'preview_url')
 					if (preview) previewUrl = preview.ref_value
 				}
-			} catch { /* skip */ }
+			} catch (err) { console.debug('[inbox:watch] failed to fetch artifacts:', err instanceof Error ? err.message : String(err)) }
 
 			if (status === 'failed') {
 				console.log(`${dim(ts)} ${statusBadge('failed')}  ${taskTitle ?? runId}`)
