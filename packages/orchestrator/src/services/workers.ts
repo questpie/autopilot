@@ -63,12 +63,23 @@ export class WorkerService {
 		return this.db.select().from(workers).all()
 	}
 
-	/** Update heartbeat timestamp — called periodically by the worker. */
+	/** Update heartbeat timestamp and renew any active lease for this worker. */
 	async heartbeat(workerId: string): Promise<void> {
+		const now = new Date().toISOString()
 		await this.db
 			.update(workers)
-			.set({ last_heartbeat: new Date().toISOString() })
+			.set({ last_heartbeat: now })
 			.where(eq(workers.id, workerId))
+
+		// Renew active lease — extend by 30 min from now
+		const activeLease = await this.getActiveLeaseForWorker(workerId)
+		if (activeLease) {
+			const newExpiry = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+			await this.db
+				.update(workerLeases)
+				.set({ expires_at: newExpiry })
+				.where(eq(workerLeases.id, activeLease.id))
+		}
 	}
 
 	/** Mark a worker as offline. */
