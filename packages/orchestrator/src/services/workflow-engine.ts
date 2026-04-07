@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities, QueueConfig } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities, QueueConfig, RetryPolicy } from '@questpie/autopilot-spec'
+import { classifyRunError } from './error-classifier'
 import { slugifyTaskId } from './tasks'
 import type { TaskService, TaskRow } from './tasks'
 import type { RunService } from './runs'
@@ -57,6 +58,18 @@ const DEFAULT_MAX_REVISIONS = 3
 
 /** Key prefix for revision counters in task metadata. */
 const REVISION_KEY_PREFIX = '_revisions:'
+
+/** Key prefix for retry counters in task metadata. */
+const RETRY_KEY_PREFIX = '_retry:'
+
+/** Default retry policy: no retries. */
+const NO_RETRY_POLICY: RetryPolicy = {
+	max_attempts: 1,
+	delay_seconds: 0,
+	backoff_multiplier: 1,
+	retry_on: ['infra', 'timeout'],
+	on_exhausted: 'fail',
+}
 
 // ─── Engine ─────────────────────────────────────────────────────────────────
 
@@ -361,10 +374,161 @@ export class WorkflowEngine {
 	}
 
 	/**
-	 * Handle a failed run. Marks the task as failed so child rollups and
-	 * future wait_for_children joins can trust the signal.
+	 * Handle a failed run. Evaluates retry policy before marking the task as failed.
+	 *
+	 * Retry flow:
+	 * 1. Look up retry policy: step.retry_policy → company defaults → no retry
+	 * 2. Classify the error
+	 * 3. Check if retryable (error type in retry_on list)
+	 * 4. Check attempt count (current attempts < max_attempts)
+	 * 5. If retryable: create new run for same step with delay
+	 * 6. If exhausted: fail, escalate, or skip based on on_exhausted
 	 */
 	async handleRunFailure(taskId: string, runId: string): Promise<TaskRow | null> {
+		const task = await this.taskService.get(taskId)
+		if (!task) return null
+
+		const run = await this.runService.get(runId)
+		const errorMessage = run?.error ?? null
+
+		// Resolve retry policy: step → company defaults → no retry
+		const policy = this.resolveRetryPolicy(task)
+
+		// Classify the error
+		const errorType = classifyRunError(errorMessage)
+
+		// Check if this error type is retryable
+		const isRetryable = policy.retry_on.includes(errorType)
+
+		if (isRetryable && policy.max_attempts > 1) {
+			const retryCount = this.getRetryCount(task.metadata, task.workflow_step ?? '')
+			const attempt = retryCount + 1 // current attempt number (1-indexed, original run = attempt 1)
+
+			if (attempt < policy.max_attempts) {
+				// Retry: increment counter and create a new run
+				const newRetryCount = await this.incrementRetryCount(taskId, task.metadata, task.workflow_step ?? '')
+				const delay = this.computeRetryDelay(policy, newRetryCount)
+
+				await this.activityService?.log({
+					actor: 'workflow-engine',
+					type: 'retry',
+					summary: `Retrying step "${task.workflow_step}" (attempt ${attempt + 1}/${policy.max_attempts}) after ${delay}s delay — error type: ${errorType}`,
+					details: JSON.stringify({
+						task_id: taskId,
+						run_id: runId,
+						step_id: task.workflow_step,
+						error_type: errorType,
+						attempt: attempt + 1,
+						max_attempts: policy.max_attempts,
+						delay_seconds: delay,
+					}),
+				})
+
+				console.log(
+					`[workflow-engine] retry step "${task.workflow_step}" for task ${taskId} (attempt ${attempt + 1}/${policy.max_attempts}, delay ${delay}s, error: ${errorType})`,
+				)
+
+				// Schedule retry: if delay > 0, use start_after on the task temporarily
+				if (delay > 0) {
+					const startAfter = new Date(Date.now() + delay * 1000).toISOString()
+					await this.taskService.update(taskId, { start_after: startAfter })
+				}
+
+				// Re-process current step to create a new run
+				await this.taskService.update(taskId, { status: 'active' })
+				const ctx = await this.buildStepContext(runId, taskId)
+				const updated = (await this.taskService.get(taskId))!
+				const actions: string[] = ['retry']
+				await this.processCurrentStep(updated, actions, ctx)
+
+				return (await this.taskService.get(taskId))!
+			}
+		}
+
+		// Not retryable or retries exhausted — apply on_exhausted policy
+		return this.applyExhaustedPolicy(taskId, runId, task, policy, errorType)
+	}
+
+	/**
+	 * Apply the on_exhausted policy after retry attempts are used up or error is not retryable.
+	 */
+	private async applyExhaustedPolicy(
+		taskId: string,
+		runId: string,
+		task: TaskRow,
+		policy: RetryPolicy,
+		errorType: string,
+	): Promise<TaskRow | null> {
+		switch (policy.on_exhausted) {
+			case 'escalate': {
+				// Try to find a human_approval step to escalate to
+				if (task.workflow_id) {
+					const workflow = this.config.workflows.get(task.workflow_id)
+					if (workflow) {
+						const humanStep = this.findHumanApprovalStep(workflow)
+						if (humanStep) {
+							await this.taskService.update(taskId, { workflow_step: humanStep.id, status: 'blocked' })
+							await this.activityService?.log({
+								actor: 'workflow-engine',
+								type: 'escalation',
+								summary: `Run ${runId} failed (${errorType}) — retries exhausted, escalated to human review at step "${humanStep.id}"`,
+								details: JSON.stringify({ task_id: taskId, run_id: runId, error_type: errorType }),
+							})
+							eventBus.emit({ type: 'task_changed', taskId, status: 'blocked' })
+							return (await this.taskService.get(taskId))!
+						}
+					}
+				}
+				// No human step found — fall through to fail
+				console.warn(`[workflow-engine] on_exhausted=escalate but no human_approval step found — failing task ${taskId}`)
+				return this.failTask(taskId, runId, errorType)
+			}
+
+			case 'skip': {
+				// Advance to the next step, skipping the current failed one
+				if (task.workflow_id && task.workflow_step) {
+					const workflow = this.config.workflows.get(task.workflow_id)
+					if (workflow) {
+						const currentIdx = workflow.steps.findIndex((s) => s.id === task.workflow_step)
+						const nextStep = currentIdx >= 0 ? workflow.steps[currentIdx + 1] : null
+						if (nextStep) {
+							await this.activityService?.log({
+								actor: 'workflow-engine',
+								type: 'retry_skip',
+								summary: `Run ${runId} failed (${errorType}) — retries exhausted, skipping to step "${nextStep.id}"`,
+								details: JSON.stringify({ task_id: taskId, run_id: runId, error_type: errorType, next_step: nextStep.id }),
+							})
+
+							const stepUpdates: Record<string, string> = { workflow_step: nextStep.id, status: 'active' }
+							if (nextStep.type === 'agent' && nextStep.agent_id) {
+								stepUpdates.assigned_to = nextStep.agent_id
+							}
+							await this.taskService.update(taskId, stepUpdates)
+
+							const ctx = await this.buildStepContext(runId, taskId)
+							const updated = (await this.taskService.get(taskId))!
+							const actions: string[] = ['retry_skipped']
+							await this.processCurrentStep(updated, actions, ctx)
+
+							return (await this.taskService.get(taskId))!
+						}
+					}
+				}
+				// No next step — fall through to fail
+				console.warn(`[workflow-engine] on_exhausted=skip but no next step found — failing task ${taskId}`)
+				return this.failTask(taskId, runId, errorType)
+			}
+
+			case 'fail':
+			default:
+				return this.failTask(taskId, runId, errorType)
+		}
+	}
+
+	/**
+	 * Mark a task as failed — the terminal failure path.
+	 */
+	private async failTask(taskId: string, runId: string, errorType: string): Promise<TaskRow | null> {
 		const updated = await this.taskService.update(taskId, { status: 'failed' })
 		if (!updated) return null
 
@@ -372,11 +536,78 @@ export class WorkflowEngine {
 		await this.activityService?.log({
 			actor: 'workflow-engine',
 			type: 'run_failed',
-			summary: `Run ${runId} failed — task ${taskId} marked as failed`,
-			details: JSON.stringify({ task_id: taskId, run_id: runId }),
+			summary: `Run ${runId} failed (${errorType}) — task ${taskId} marked as failed`,
+			details: JSON.stringify({ task_id: taskId, run_id: runId, error_type: errorType }),
 		})
 
 		return updated
+	}
+
+	/**
+	 * Resolve the effective retry policy for the current task step.
+	 * Priority: step.retry_policy → company defaults.retry_policy → no retry.
+	 */
+	private resolveRetryPolicy(task: TaskRow): RetryPolicy {
+		if (task.workflow_id && task.workflow_step) {
+			const workflow = this.config.workflows.get(task.workflow_id)
+			if (workflow) {
+				const step = workflow.steps.find((s) => s.id === task.workflow_step)
+				if (step?.retry_policy) return step.retry_policy
+			}
+		}
+
+		const companyDefault = this.config.company.defaults?.retry_policy
+		if (companyDefault) return companyDefault
+
+		return NO_RETRY_POLICY
+	}
+
+	/**
+	 * Compute delay for a retry attempt using backoff.
+	 */
+	private computeRetryDelay(policy: RetryPolicy, attempt: number): number {
+		const base = policy.delay_seconds
+		const multiplier = policy.backoff_multiplier
+		const delay = base * Math.pow(multiplier, attempt - 1)
+		if (policy.max_delay_seconds !== undefined) {
+			return Math.min(delay, policy.max_delay_seconds)
+		}
+		return delay
+	}
+
+	/**
+	 * Get current retry count for a step from task metadata.
+	 */
+	private getRetryCount(metadata: string | null, stepId: string): number {
+		let meta: Record<string, unknown>
+		try {
+			meta = JSON.parse(metadata || '{}')
+		} catch (err) {
+			console.debug('[workflow-engine] malformed task metadata JSON:', err instanceof Error ? err.message : String(err))
+			meta = {}
+		}
+		const key = `${RETRY_KEY_PREFIX}${stepId}`
+		return typeof meta[key] === 'number' ? meta[key] : 0
+	}
+
+	/**
+	 * Increment and persist the retry counter for a step.
+	 * Returns the new count.
+	 */
+	private async incrementRetryCount(taskId: string, metadata: string | null, stepId: string): Promise<number> {
+		let meta: Record<string, unknown>
+		try {
+			meta = JSON.parse(metadata || '{}')
+		} catch (err) {
+			console.debug('[workflow-engine] malformed task metadata JSON:', err instanceof Error ? err.message : String(err))
+			meta = {}
+		}
+		const key = `${RETRY_KEY_PREFIX}${stepId}`
+		const prev = typeof meta[key] === 'number' ? meta[key] : 0
+		const newCount = prev + 1
+		meta[key] = newCount
+		await this.taskService.update(taskId, { metadata: JSON.stringify(meta) })
+		return newCount
 	}
 
 	async approve(taskId: string, actor?: string): Promise<AdvanceResult | null> {

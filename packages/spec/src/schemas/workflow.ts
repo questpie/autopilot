@@ -73,6 +73,30 @@ export const StepTransitionSchema = z.object({
 	goto: z.string(),
 })
 
+// ─── Retry Policy ────────────────────────────────────────────────────────
+
+/** Error types for retry classification. */
+export const RetryErrorTypeSchema = z.enum(['infra', 'timeout', 'rate_limit', 'business', 'unknown'])
+
+/** What to do when all retry attempts are exhausted. */
+export const RetryExhaustedActionSchema = z.enum(['fail', 'escalate', 'skip'])
+
+/** Configurable retry policy for workflow steps. */
+export const RetryPolicySchema = z.object({
+	/** Maximum number of attempts (including the original). Default 1 = no retry. */
+	max_attempts: z.number().int().positive().default(1),
+	/** Delay in seconds before the first retry. Default 0. */
+	delay_seconds: z.number().nonnegative().default(0),
+	/** Multiplier applied to delay for each subsequent retry. 1=linear, 2=exponential. Default 1. */
+	backoff_multiplier: z.number().positive().default(1),
+	/** Maximum delay in seconds. Omit for no cap. */
+	max_delay_seconds: z.number().positive().optional(),
+	/** Which error types to retry. Default: ['infra', 'timeout']. */
+	retry_on: z.array(RetryErrorTypeSchema).default(['infra', 'timeout']),
+	/** What to do after max_attempts is exhausted. Default: 'fail'. */
+	on_exhausted: RetryExhaustedActionSchema.default('fail'),
+})
+
 // ─── Workflow Step ────────────────────────────────────────────────────────
 
 export const WorkflowStepSchema = z.object({
@@ -119,6 +143,8 @@ export const WorkflowStepSchema = z.object({
 	capability_profiles: z.array(z.string()).default([]),
 	/** Context file names (from .autopilot/context/) injected for this step's runs. */
 	context: z.array(z.string()).default([]),
+	/** Retry policy for failed runs at this step. Overrides company defaults. */
+	retry_policy: RetryPolicySchema.optional(),
 })
 
 export const WorkflowSchema = z.object({

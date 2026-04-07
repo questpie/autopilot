@@ -47,3 +47,5 @@ export { SchedulerDaemon } from './scheduler-daemon'
 
 export { WorkflowEngine } from './workflow-engine'
 export type { AuthoredConfig, IntakeResult, AdvanceResult } from './workflow-engine'
+
+export { classifyRunError } from './error-classifier'

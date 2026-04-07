@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { CompanyOwnerSchema } from './company'
 import { PackDependencySchema } from './pack'
+import { RetryPolicySchema } from './workflow'
 
 /**
  * Configuration for a named task queue controlling concurrency.
@@ -25,6 +26,8 @@ export const ScopeDefaultsSchema = z.object({
 	workflow: z.string().optional(),
 	/** Default agent ID for new task ownership. */
 	task_assignee: z.string().optional(),
+	/** Default retry policy for workflow steps that don't declare their own. */
+	retry_policy: RetryPolicySchema.optional(),
 })
 
 /**

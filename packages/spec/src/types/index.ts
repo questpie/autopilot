@@ -16,6 +16,9 @@ export type Workflow = z.infer<typeof schemas.WorkflowSchema>
 export type WorkflowStep = z.infer<typeof schemas.WorkflowStepSchema>
 export type StepTransition = z.infer<typeof schemas.StepTransitionSchema>
 export type ExecutionTarget = z.infer<typeof schemas.ExecutionTargetSchema>
+export type RetryPolicy = z.infer<typeof schemas.RetryPolicySchema>
+export type RetryErrorType = z.infer<typeof schemas.RetryErrorTypeSchema>
+export type RetryExhaustedAction = z.infer<typeof schemas.RetryExhaustedActionSchema>
 
 // Environments
 export type Environment = z.infer<typeof schemas.EnvironmentSchema>
