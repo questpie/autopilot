@@ -21,7 +21,7 @@ import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
 import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, DependencyBridge, SecretService, QueryService, SessionService, ScheduleService, SchedulerDaemon } from './services'
 import type { AuthoredConfig } from './services'
-import { NotificationBridge } from './providers'
+import { NotificationBridge, QueryResponseBridge } from './providers'
 import { eventBus } from './events/event-bus'
 import { hasMasterKey, MasterKeyError } from './crypto'
 
@@ -171,8 +171,18 @@ export async function startServer(options?: StartServerOptions) {
 		secretService,
 		sessionService,
 	)
+	const queryResponseBridge = new QueryResponseBridge(
+		eventBus,
+		authoredConfig,
+		queryService,
+		runService,
+		sessionService,
+		{ companyRoot, orchestratorUrl },
+		secretService,
+	)
 	if (authoredConfig.providers.size > 0) {
 		notificationBridge.start()
+		queryResponseBridge.start()
 	}
 
 	// ── 7b. Start parent join bridge ────────────────────────────────────

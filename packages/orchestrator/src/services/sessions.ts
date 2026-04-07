@@ -166,6 +166,21 @@ export class SessionService {
 		return normalizeRows(rows)
 	}
 
+	/** Find the active session whose last_query_id matches the given query. */
+	async findByLastQuery(queryId: string): Promise<SessionRow | undefined> {
+		const row = await this.db
+			.select()
+			.from(sessions)
+			.where(
+				and(
+					eq(sessions.last_query_id, queryId),
+					eq(sessions.status, 'active'),
+				),
+			)
+			.get()
+		return row ? normalizeRow(row) : undefined
+	}
+
 	async listForTask(taskId: string): Promise<SessionRow[]> {
 		const rows = await this.db
 			.select()

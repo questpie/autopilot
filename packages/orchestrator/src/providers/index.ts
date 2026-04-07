@@ -2,3 +2,5 @@ export { executeHandler, invokeProvider, resolveSecrets } from './handler-runtim
 export type { HandlerRuntimeConfig } from './handler-runtime'
 export { NotificationBridge } from './notification-bridge'
 export type { NotificationBridgeConfig } from './notification-bridge'
+export { QueryResponseBridge } from './query-response-bridge'
+export type { QueryResponseBridgeConfig } from './query-response-bridge'
