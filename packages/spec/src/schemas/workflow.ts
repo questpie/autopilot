@@ -117,6 +117,8 @@ export const WorkflowStepSchema = z.object({
 	actions: z.array(ExternalActionSchema).default([]),
 	/** Capability profile IDs active for this step. Extends agent-level profiles (deduplicated). */
 	capability_profiles: z.array(z.string()).default([]),
+	/** Context file names (from .autopilot/context/) injected for this step's runs. */
+	context: z.array(z.string()).default([]),
 })
 
 export const WorkflowSchema = z.object({

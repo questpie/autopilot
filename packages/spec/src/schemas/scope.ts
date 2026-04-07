@@ -44,6 +44,8 @@ export const CompanyScopeSchema = z.object({
 	context_hints: z.record(z.string(), z.string()).default({}),
 	/** Named task queues for concurrency control. Key = queue name. */
 	queues: z.record(z.string(), QueueConfigSchema).default({}),
+	/** Context file names (from .autopilot/context/) always injected into every run prompt. */
+	global_context: z.array(z.string()).default([]),
 })
 
 /**

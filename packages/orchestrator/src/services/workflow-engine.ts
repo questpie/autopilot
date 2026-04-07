@@ -806,7 +806,7 @@ export class WorkflowEngine {
 	private resolveTargeting(step: WorkflowStep, agentId?: string): string | undefined {
 		const hasStepTargeting = !!step.targeting
 		const hasActions = (step.actions?.length ?? 0) > 0
-		const capabilities = agentId ? this.resolveCapabilities(agentId, step) : undefined
+		const capabilities = this.resolveCapabilities(agentId, step)
 
 		if (!hasStepTargeting && !hasActions && !capabilities) return undefined
 
@@ -852,12 +852,17 @@ export class WorkflowEngine {
 	 * Merge rule: agent profiles first, step profiles extend. Deduplicated.
 	 * Returns undefined if no profiles are referenced.
 	 */
-	private resolveCapabilities(agentId: string, step: WorkflowStep): ResolvedCapabilities | undefined {
-		const agent = this.config.agents.get(agentId)
+	private resolveCapabilities(agentId: string | undefined, step: WorkflowStep): ResolvedCapabilities | undefined {
+		const agent = agentId ? this.config.agents.get(agentId) : undefined
 		const agentProfileIds = agent?.capability_profiles ?? []
 		const stepProfileIds = step.capability_profiles ?? []
 
-		if (agentProfileIds.length === 0 && stepProfileIds.length === 0) return undefined
+		// Global context from company config — always present
+		const globalContext = this.config.company.global_context ?? []
+		// Per-step context refs
+		const stepContext = step.context ?? []
+
+		if (agentProfileIds.length === 0 && stepProfileIds.length === 0 && globalContext.length === 0 && stepContext.length === 0) return undefined
 
 		// Deduplicate: agent first, step extends (preserves order, first wins)
 		const profileIds = [...new Set([...agentProfileIds, ...stepProfileIds])]
@@ -879,6 +884,12 @@ export class WorkflowEngine {
 			for (const c of profile.context) context.add(c)
 			for (const p of profile.prompts) prompts.push(p)
 		}
+
+		// Merge step context (higher priority than global, already deduped by Set)
+		for (const c of stepContext) context.add(c)
+
+		// Merge global context (lowest priority, deduped by Set)
+		for (const c of globalContext) context.add(c)
 
 		return {
 			skills: [...skills],
