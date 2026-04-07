@@ -8,5 +8,7 @@
     "@questpie/autopilot-spec": "1.0.0",
     "@questpie/autopilot-worker": "1.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "security-hardening"
+  ]
 }

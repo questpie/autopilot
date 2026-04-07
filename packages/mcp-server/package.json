@@ -1,6 +1,6 @@
 {
 	"name": "@questpie/autopilot-mcp",
-	"version": "1.0.0",
+	"version": "1.0.1-canary.0",
 	"type": "module",
 	"description": "MCP server for QUESTPIE Autopilot — expose tasks, agents, search, and sessions to Claude Code, Codex, OpenCode, and other agents",
 	"main": "src/index.ts",
