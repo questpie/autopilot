@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
 import type { AppEnv } from '../app'
+import { DependencyCycleError } from '../../services/task-relations'
 
 const childCandidateSchema = z.object({
 	title: z.string().min(1),
@@ -89,6 +90,86 @@ const taskGraph = new Hono<AppEnv>()
 			const { relation_type } = c.req.valid('query')
 			const rollup = await taskGraphService.childRollup(id, relation_type)
 			return c.json(rollup, 200)
+		},
+	)
+
+	// POST /tasks/:id/dependencies — add one or more dependencies
+	.post(
+		'/:id/dependencies',
+		zValidator('param', z.object({ id: z.string() })),
+		zValidator(
+			'json',
+			z.object({
+				depends_on: z.array(z.string().min(1)).min(1),
+			}),
+		),
+		async (c) => {
+			const { taskRelationService, taskService } = c.get('services')
+			const actor = c.get('actor')
+			const { id } = c.req.valid('param')
+			const { depends_on } = c.req.valid('json')
+
+			const task = await taskService.get(id)
+			if (!task) return c.json({ error: 'task not found' }, 404)
+
+			const results: Array<{ depends_on: string; status: string }> = []
+			for (const depId of depends_on) {
+				const depTask = await taskService.get(depId)
+				if (!depTask) {
+					results.push({ depends_on: depId, status: 'not_found' })
+					continue
+				}
+				try {
+					await taskRelationService.addDependency({
+						task_id: id,
+						depends_on_task_id: depId,
+						created_by: actor?.id ?? 'system',
+					})
+					results.push({ depends_on: depId, status: 'added' })
+				} catch (err) {
+					if (err instanceof DependencyCycleError) {
+						results.push({ depends_on: depId, status: 'cycle_detected' })
+					} else {
+						results.push({ depends_on: depId, status: 'error' })
+					}
+				}
+			}
+
+			return c.json({ task_id: id, dependencies: results }, 200)
+		},
+	)
+	// GET /tasks/:id/dependencies — list tasks this task depends on
+	.get(
+		'/:id/dependencies',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { taskRelationService, taskService } = c.get('services')
+			const { id } = c.req.valid('param')
+
+			const deps = await taskRelationService.listDependencies(id)
+			const tasks = []
+			for (const dep of deps) {
+				const task = await taskService.get(dep.target_task_id)
+				if (task) tasks.push(task)
+			}
+			return c.json(tasks, 200)
+		},
+	)
+	// GET /tasks/:id/dependents — list tasks that depend on this task
+	.get(
+		'/:id/dependents',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { taskRelationService, taskService } = c.get('services')
+			const { id } = c.req.valid('param')
+
+			const dependents = await taskRelationService.listDependents(id)
+			const tasks = []
+			for (const dep of dependents) {
+				const task = await taskService.get(dep.source_task_id)
+				if (task) tasks.push(task)
+			}
+			return c.json(tasks, 200)
 		},
 	)
 

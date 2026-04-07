@@ -259,6 +259,15 @@ const runs = new Hono<AppEnv>()
 				} else if (body.status === 'failed') {
 					await workflowEngine.handleRunFailure(run.task_id, id)
 				}
+
+				// Queue release: if the completed task belongs to a queue, trigger next
+				const { taskService } = c.get('services')
+				const completedTask = await taskService.get(run.task_id)
+				if (completedTask?.queue) {
+					workflowEngine.triggerNextInQueue(completedTask.queue).catch((err) => {
+						console.error('[runs] queue release error:', err instanceof Error ? err.message : String(err))
+					})
+				}
 			}
 
 			return c.json(result, 200)

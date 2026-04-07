@@ -31,6 +31,13 @@ export const tasks = sqliteTable(
 		context: text('context').default('{}'),
 		metadata: text('metadata').default('{}'),
 
+		/** Optional named queue for concurrency control. */
+		queue: text('queue'),
+		/** ISO datetime — task should not be executed before this time. */
+		start_after: text('start_after'),
+		/** Schedule ID that created this task (if any). */
+		scheduled_by: text('scheduled_by'),
+
 		created_by: text('created_by').notNull(),
 		created_at: text('created_at').notNull(),
 		updated_at: text('updated_at').notNull(),
@@ -41,6 +48,7 @@ export const tasks = sqliteTable(
 		index('idx_tasks_workflow').on(table.workflow_id, table.workflow_step),
 		index('idx_tasks_created').on(table.created_at),
 		index('idx_tasks_priority').on(table.priority, table.status),
+		index('idx_tasks_queue_status').on(table.queue, table.status),
 	],
 )
 

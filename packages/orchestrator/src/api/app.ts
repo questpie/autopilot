@@ -35,6 +35,7 @@ import { secrets } from './routes/secrets'
 import { queries } from './routes/queries'
 import { sessionsRoute } from './routes/sessions'
 import { schedules } from './routes/schedules'
+import { queues } from './routes/queues'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -210,6 +211,10 @@ export function createApp(config: AppConfig) {
 	app.use('/api/schedules/*', userAuth)
 	app.use('/api/schedules', userAuth)
 
+	// ── Queue routes (user auth — operator surface) ──────────────────
+	app.use('/api/queues/*', userAuth)
+	app.use('/api/queues', userAuth)
+
 	// ── Conversation routes ──────────────────────────────────────────────
 	// Binding management requires user auth; inbound /:providerId is self-authenticated via provider secret
 	app.use('/api/conversations/bindings', userAuth)
@@ -236,6 +241,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/queries', queries)
 		.route('/api/sessions', sessionsRoute)
 		.route('/api/schedules', schedules)
+		.route('/api/queues', queues)
 
 	return typedApp
 }

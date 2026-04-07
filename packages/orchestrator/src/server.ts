@@ -19,7 +19,7 @@ import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, SecretService, QueryService, SessionService, ScheduleService, SchedulerDaemon } from './services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, DependencyBridge, SecretService, QueryService, SessionService, ScheduleService, SchedulerDaemon } from './services'
 import type { AuthoredConfig } from './services'
 import { NotificationBridge } from './providers'
 import { eventBus } from './events/event-bus'
@@ -81,6 +81,7 @@ export async function startServer(options?: StartServerOptions) {
 		capabilityProfiles: resolved.capabilityProfiles,
 		context: resolved.context,
 		defaults: resolved.defaults,
+		queues: resolved.company.queues ?? {},
 	}
 	console.log(
 		`[server] config loaded: ${resolved.agents.size} agents, ${resolved.workflows.size} workflows, ${resolved.environments.size} environments, ${resolved.providers.size} providers, ${resolved.skills.size} skills, ${resolved.context.size} context files`,
@@ -177,6 +178,13 @@ export async function startServer(options?: StartServerOptions) {
 	// ── 7b. Start parent join bridge ────────────────────────────────────
 	const parentJoinBridge = new ParentJoinBridge(eventBus, taskRelationService, workflowEngine)
 	parentJoinBridge.start()
+
+	// ── 7b2. Start dependency bridge ────────────────────────────────────
+	const dependencyBridge = new DependencyBridge(eventBus, taskRelationService, taskService, workflowEngine)
+	dependencyBridge.start()
+
+	// Wire dependency check into workflow engine
+	workflowEngine.setCheckDependenciesFn((taskId) => dependencyBridge.checkDependencies(taskId))
 
 	// ── 7c. Start scheduler daemon ─────────────────────────────────────
 	const schedulerDaemon = new SchedulerDaemon(scheduleService, workflowEngine, queryService, activityService)

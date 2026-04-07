@@ -34,6 +34,9 @@ async function handleTaskCreate(args: {
 	description?: string
 	priority?: string
 	assigned_to?: string
+	queue?: string
+	start_after?: string
+	depends_on?: string[]
 }) {
 	return ok(await tasks.$post({ json: args }))
 }
@@ -105,6 +108,19 @@ async function handleTaskSpawnChildren(args: {
 	)
 }
 
+async function handleTaskDepend(args: { task_id: string; depends_on: string[] }) {
+	return ok(
+		await tasks[':id'].dependencies.$post({
+			param: { id: args.task_id },
+			json: { depends_on: args.depends_on },
+		}),
+	)
+}
+
+async function handleTaskDependencies(args: { id: string }) {
+	return ok(await tasks[':id'].dependencies.$get({ param: { id: args.id } }))
+}
+
 async function handleTaskChildren(args: { id: string; relation_type?: string }) {
 	return ok(await tasks[':id'].children.$get({ param: { id: args.id }, query: { relation_type: args.relation_type } }))
 }
@@ -171,6 +187,9 @@ export function registerTools(server: McpServer): void {
 		description: z.string().optional().describe('Task description'),
 		priority: z.string().optional().describe('Priority (critical, high, medium, low)'),
 		assigned_to: z.string().optional().describe('Agent ID to assign'),
+		queue: z.string().optional().describe('Named queue for concurrency control'),
+		start_after: z.string().optional().describe('ISO datetime — task will not start before this time'),
+		depends_on: z.array(z.string()).optional().describe('Task IDs this task depends on'),
 	}, handleTaskCreate)
 
 	server.tool('task_update', 'Update a task', {
@@ -228,6 +247,15 @@ export function registerTools(server: McpServer): void {
 		relation_type: z.string().optional().describe('Relation type (default: decomposes_to)'),
 		origin_run_id: z.string().optional().describe('Run ID that triggered this decomposition'),
 	}, handleTaskSpawnChildren)
+
+	server.tool('task_depend', 'Add dependencies to a task (task will not start until all dependencies are done)', {
+		task_id: z.string().describe('Task ID that should depend on others'),
+		depends_on: z.array(z.string()).describe('Task IDs that must complete first'),
+	}, handleTaskDepend)
+
+	server.tool('task_dependencies', 'List tasks that a task depends on', {
+		id: z.string().describe('Task ID'),
+	}, handleTaskDependencies)
 
 	server.tool('task_children', 'List child tasks of a parent task', {
 		id: z.string().describe('Parent task ID'),

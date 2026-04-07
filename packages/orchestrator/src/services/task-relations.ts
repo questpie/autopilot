@@ -97,4 +97,81 @@ export class TaskRelationService {
 	async delete(id: string): Promise<void> {
 		await this.db.delete(taskRelations).where(eq(taskRelations.id, id))
 	}
+
+	// ─── Dependency helpers ─────────────────────────────────────────────
+
+	/**
+	 * Add a depends_on relation: taskId depends on dependsOnTaskId.
+	 * Stored as source=taskId, target=dependsOnTaskId, relation_type=depends_on.
+	 * Performs cycle detection before insertion.
+	 */
+	async addDependency(input: {
+		task_id: string
+		depends_on_task_id: string
+		created_by: string
+	}): Promise<TaskRelationRow | undefined> {
+		// Cycle detection: check if dependsOn transitively depends on task
+		const hasCycle = await this.wouldCreateCycle(input.task_id, input.depends_on_task_id)
+		if (hasCycle) {
+			throw new DependencyCycleError(
+				`Adding dependency ${input.task_id} → ${input.depends_on_task_id} would create a cycle`,
+			)
+		}
+
+		const id = `rel-dep-${Date.now()}-${input.task_id.slice(0, 8)}-${input.depends_on_task_id.slice(0, 8)}`
+		return this.create({
+			id,
+			source_task_id: input.task_id,
+			target_task_id: input.depends_on_task_id,
+			relation_type: 'depends_on',
+			created_by: input.created_by,
+		})
+	}
+
+	/**
+	 * List tasks that taskId depends on (outgoing depends_on edges).
+	 */
+	async listDependencies(taskId: string): Promise<TaskRelationRow[]> {
+		return this.listBySource(taskId, 'depends_on')
+	}
+
+	/**
+	 * List tasks that depend on taskId (incoming depends_on edges).
+	 */
+	async listDependents(taskId: string): Promise<TaskRelationRow[]> {
+		return this.listByTarget(taskId, 'depends_on')
+	}
+
+	/**
+	 * DFS cycle detection: would adding source→target create a cycle?
+	 * Checks if target transitively reaches source via depends_on relations.
+	 */
+	private async wouldCreateCycle(source: string, target: string): Promise<boolean> {
+		if (source === target) return true
+
+		const visited = new Set<string>()
+		const stack = [target]
+
+		while (stack.length > 0) {
+			const current = stack.pop()!
+			if (current === source) return true
+			if (visited.has(current)) continue
+			visited.add(current)
+
+			// Follow depends_on edges from current
+			const deps = await this.listBySource(current, 'depends_on')
+			for (const dep of deps) {
+				stack.push(dep.target_task_id)
+			}
+		}
+
+		return false
+	}
+}
+
+export class DependencyCycleError extends Error {
+	constructor(message: string) {
+		super(message)
+		this.name = 'DependencyCycleError'
+	}
 }

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities, QueueConfig } from '@questpie/autopilot-spec'
 import { slugifyTaskId } from './tasks'
 import type { TaskService, TaskRow } from './tasks'
 import type { RunService } from './runs'
@@ -20,6 +20,8 @@ export interface AuthoredConfig {
 	/** Loaded context file content (name → content) from .autopilot/context/ */
 	context: Map<string, string>
 	defaults: { runtime: string; workflow?: string; task_assignee?: string }
+	/** Named queue configs from company scope. Empty record if unset. */
+	queues?: Record<string, QueueConfig>
 }
 
 export interface IntakeResult {
@@ -66,6 +68,9 @@ export class WorkflowEngine {
 	/** Injected rollup function — avoids circular dependency with TaskGraphService. */
 	private childRollupFn?: (taskId: string, relationType?: string) => Promise<ChildRollup>
 
+	/** Injected dependency check function — avoids circular dependency with TaskRelationService. */
+	private checkDependenciesFn?: (taskId: string) => Promise<'met' | 'failed' | 'pending'>
+
 	constructor(
 		private config: AuthoredConfig,
 		private taskService: TaskService,
@@ -81,6 +86,11 @@ export class WorkflowEngine {
 	/** Wire the child rollup function after construction to avoid circular init. */
 	setChildRollupFn(fn: (taskId: string, relationType?: string) => Promise<ChildRollup>): void {
 		this.childRollupFn = fn
+	}
+
+	/** Wire the dependency check function after construction to avoid circular init. */
+	setCheckDependenciesFn(fn: (taskId: string) => Promise<'met' | 'failed' | 'pending'>): void {
+		this.checkDependenciesFn = fn
 	}
 
 	// ─── Validation ─────────────────────────────────────────────────────
@@ -220,6 +230,9 @@ export class WorkflowEngine {
 		workflow_id?: string
 		context?: string
 		metadata?: string
+		queue?: string
+		start_after?: string
+		scheduled_by?: string
 		created_by: string
 		/** Optional deterministic ID. If omitted, a random ID is generated. */
 		id?: string
@@ -540,6 +553,45 @@ export class WorkflowEngine {
 					return null
 				}
 
+				// Dependency check: all depends_on tasks must be done
+				if (this.checkDependenciesFn) {
+					const depStatus = await this.checkDependenciesFn(task.id)
+					if (depStatus === 'failed') {
+						await this.taskService.update(task.id, { status: 'failed' })
+						actions.push('dependency_failed')
+						eventBus.emit({ type: 'task_changed', taskId: task.id, status: 'failed' })
+						console.log(`[workflow-engine] task ${task.id} failed — dependency failed`)
+						return null
+					}
+					if (depStatus === 'pending') {
+						await this.taskService.update(task.id, { status: 'blocked' })
+						actions.push('blocked_on_dependency')
+						eventBus.emit({ type: 'task_changed', taskId: task.id, status: 'blocked' })
+						console.log(`[workflow-engine] task ${task.id} blocked — waiting on dependencies`)
+						return null
+					}
+				}
+
+				// Queue concurrency check: if task belongs to a queue, verify capacity
+				if (task.queue) {
+					const blocked = await this.isQueueBlocked(task)
+					if (blocked) {
+						// Task must wait — don't create a run yet
+						await this.taskService.update(task.id, { status: 'active' })
+						actions.push('queued')
+						console.log(`[workflow-engine] task ${task.id} queued in "${task.queue}" — waiting for capacity`)
+						return null
+					}
+				}
+
+				// start_after check: if task has a future start_after, don't create run yet
+				if (task.start_after && task.start_after > new Date().toISOString()) {
+					await this.taskService.update(task.id, { status: 'active' })
+					actions.push('deferred_start_after')
+					console.log(`[workflow-engine] task ${task.id} deferred — start_after=${task.start_after}`)
+					return null
+				}
+
 				await this.taskService.update(task.id, { status: 'active' })
 
 				const targeting = this.resolveTargeting(step, agentId)
@@ -611,6 +663,55 @@ export class WorkflowEngine {
 			default:
 				return null
 		}
+	}
+
+	// ─── Queue Management ──────────────────────────────────────────────
+
+	/**
+	 * Check if a task's queue has reached its concurrency limit.
+	 * Returns true if the task must wait.
+	 */
+	private async isQueueBlocked(task: { queue: string | null }): Promise<boolean> {
+		if (!task.queue) return false
+
+		const queueConfig = (this.config.queues ?? {})[task.queue]
+		const maxConcurrent = queueConfig?.max_concurrent ?? 1
+
+		const activeCount = await this.taskService.countActiveInQueue(task.queue)
+		return activeCount >= maxConcurrent
+	}
+
+	/**
+	 * After a run completes for a queued task, check if the next task
+	 * in the same queue should be started.
+	 */
+	async triggerNextInQueue(queueName: string): Promise<void> {
+		const queueConfig = (this.config.queues ?? {})[queueName]
+		const priorityOrder = queueConfig?.priority_order ?? 'fifo'
+		const maxConcurrent = queueConfig?.max_concurrent ?? 1
+
+		const activeCount = await this.taskService.countActiveInQueue(queueName)
+		if (activeCount >= maxConcurrent) return
+
+		const next = await this.taskService.findNextInQueue(queueName, priorityOrder)
+		if (!next) return
+
+		console.log(`[workflow-engine] queue "${queueName}" has capacity — triggering task ${next.id}`)
+		await this.intake(next.id)
+	}
+
+	/**
+	 * Check all tasks with start_after that has now elapsed and trigger their intake.
+	 * Called periodically by a daemon or on-demand.
+	 */
+	async triggerDeferredTasks(): Promise<number> {
+		const deferred = await this.taskService.listDeferredReady()
+		let triggered = 0
+		for (const task of deferred) {
+			const result = await this.intake(task.id)
+			if (result?.runId) triggered++
+		}
+		return triggered
 	}
 
 	// ─── Instruction Builder ────────────────────────────────────────────

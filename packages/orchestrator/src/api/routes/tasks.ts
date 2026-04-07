@@ -51,18 +51,39 @@ const tasks = new Hono<AppEnv>()
 				workflow_step: z.string().optional(),
 				context: z.string().optional(),
 				metadata: z.string().optional(),
+				queue: z.string().optional(),
+				start_after: z.string().optional(),
+				scheduled_by: z.string().optional(),
+				depends_on: z.array(z.string()).optional(),
 				created_by: z.string().optional(),
 			}),
 		),
 		async (c) => {
-			const { workflowEngine } = c.get('services')
+			const { workflowEngine, taskRelationService } = c.get('services')
 			const actor = c.get('actor')
 			const body = c.req.valid('json')
+			const { depends_on, ...taskInput } = body
 			const result = await workflowEngine.materializeTask({
-				...body,
-				created_by: body.created_by ?? actor?.id ?? 'system',
+				...taskInput,
+				created_by: taskInput.created_by ?? actor?.id ?? 'system',
 			})
 			if (!result) return c.json({ error: 'failed to create task' }, 500)
+
+			// Add dependencies if specified
+			if (depends_on?.length) {
+				for (const depId of depends_on) {
+					try {
+						await taskRelationService.addDependency({
+							task_id: result.task.id,
+							depends_on_task_id: depId,
+							created_by: taskInput.created_by ?? actor?.id ?? 'system',
+						})
+					} catch (err) {
+						console.warn(`[tasks] failed to add dependency ${result.task.id} → ${depId}:`, err instanceof Error ? err.message : String(err))
+					}
+				}
+			}
+
 			return c.json(result.task, 201)
 		},
 	)

@@ -100,6 +100,7 @@ const DDL = [
 		type TEXT NOT NULL, status TEXT NOT NULL, priority TEXT DEFAULT 'medium',
 		assigned_to TEXT, workflow_id TEXT, workflow_step TEXT,
 		context TEXT DEFAULT '{}', metadata TEXT DEFAULT '{}',
+		queue TEXT, start_after TEXT, scheduled_by TEXT,
 		created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 	)`,
 	`CREATE TABLE runs (

@@ -21,13 +21,15 @@ export type { ArtifactRow } from './artifacts'
 export { ConversationBindingService } from './conversation-bindings'
 export type { ConversationBindingRow } from './conversation-bindings'
 
-export { TaskRelationService } from './task-relations'
+export { TaskRelationService, DependencyCycleError } from './task-relations'
 export type { TaskRelationRow } from './task-relations'
 
 export { TaskGraphService } from './task-graph'
 export type { SpawnChildrenInput, SpawnChildrenResult, SpawnedChild, ChildCandidate, ChildRollup } from './task-graph'
 
 export { ParentJoinBridge } from './parent-join-bridge'
+
+export { DependencyBridge } from './dependency-bridge'
 
 export { QueryService } from './queries'
 export type { QueryRow } from './queries'

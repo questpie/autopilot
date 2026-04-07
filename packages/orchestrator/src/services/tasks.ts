@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { eq, and, or } from 'drizzle-orm'
+import { eq, and, or, sql, inArray } from 'drizzle-orm'
 import { tasks, runs, runEvents, artifacts, taskRelations, conversationBindings, workerLeases } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
@@ -49,6 +49,9 @@ export class TaskService {
 		workflow_step?: string
 		context?: string
 		metadata?: string
+		queue?: string
+		start_after?: string
+		scheduled_by?: string
 		created_by: string
 	}) {
 		const now = new Date().toISOString()
@@ -103,6 +106,9 @@ export class TaskService {
 			workflow_step: string
 			context: string
 			metadata: string
+			queue: string
+			start_after: string
+			scheduled_by: string
 		}>,
 	) {
 		await this.db
@@ -110,6 +116,128 @@ export class TaskService {
 			.set({ ...updates, updated_at: new Date().toISOString() })
 			.where(eq(tasks.id, id))
 		return this.get(id)
+	}
+
+	/**
+	 * Count tasks in a named queue that currently have active runs (claimed or running).
+	 */
+	async countActiveInQueue(queue: string): Promise<number> {
+		const result = await this.db
+			.select({ count: sql<number>`count(distinct ${tasks.id})` })
+			.from(tasks)
+			.innerJoin(runs, eq(runs.task_id, tasks.id))
+			.where(
+				and(
+					eq(tasks.queue, queue),
+					inArray(runs.status, ['claimed', 'running']),
+				),
+			)
+			.get()
+		return result?.count ?? 0
+	}
+
+	/**
+	 * Find the next pending task in a named queue, ordered by priority_order.
+	 * 'fifo' = oldest created_at first. 'priority' = highest priority first, then oldest.
+	 * Only returns tasks whose start_after (if set) has elapsed.
+	 */
+	async findNextInQueue(queue: string, priorityOrder: 'fifo' | 'priority' = 'fifo'): Promise<TaskRow | undefined> {
+		const now = new Date().toISOString()
+		const conditions = [
+			eq(tasks.queue, queue),
+			// Tasks in backlog or active that have no running/claimed runs
+			inArray(tasks.status, ['backlog', 'active']),
+		]
+
+		// Get candidates
+		const candidates = await this.db
+			.select()
+			.from(tasks)
+			.where(and(...conditions))
+			.all()
+
+		// Filter: start_after must have elapsed (or be unset), and must not have active runs
+		const eligible: TaskRow[] = []
+		for (const task of candidates) {
+			if (task.start_after && task.start_after > now) continue
+
+			// Ensure no active runs for this task
+			const activeRuns = await this.db
+				.select({ id: runs.id })
+				.from(runs)
+				.where(
+					and(
+						eq(runs.task_id, task.id),
+						inArray(runs.status, ['pending', 'claimed', 'running']),
+					),
+				)
+				.all()
+			if (activeRuns.length > 0) continue
+
+			eligible.push(task)
+		}
+
+		if (eligible.length === 0) return undefined
+
+		if (priorityOrder === 'priority') {
+			const priorityMap: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+			eligible.sort((a, b) => {
+				const pa = priorityMap[a.priority ?? 'medium'] ?? 2
+				const pb = priorityMap[b.priority ?? 'medium'] ?? 2
+				if (pa !== pb) return pa - pb
+				return (a.created_at ?? '').localeCompare(b.created_at ?? '')
+			})
+		} else {
+			eligible.sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+		}
+
+		return eligible[0]
+	}
+
+	/**
+	 * List all tasks in a named queue with summary info.
+	 */
+	async listByQueue(queue: string): Promise<TaskRow[]> {
+		return await this.db
+			.select()
+			.from(tasks)
+			.where(eq(tasks.queue, queue))
+			.all()
+	}
+
+	/**
+	 * Find tasks whose start_after has elapsed and that are still in backlog/active
+	 * with no pending/claimed/running runs. These are ready for intake.
+	 */
+	async listDeferredReady(): Promise<TaskRow[]> {
+		const now = new Date().toISOString()
+		const candidates = await this.db
+			.select()
+			.from(tasks)
+			.where(
+				and(
+					sql`${tasks.start_after} IS NOT NULL`,
+					sql`${tasks.start_after} <= ${now}`,
+					inArray(tasks.status, ['backlog', 'active']),
+				),
+			)
+			.all()
+
+		const ready: TaskRow[] = []
+		for (const task of candidates) {
+			const activeRuns = await this.db
+				.select({ id: runs.id })
+				.from(runs)
+				.where(
+					and(
+						eq(runs.task_id, task.id),
+						inArray(runs.status, ['pending', 'claimed', 'running']),
+					),
+				)
+				.all()
+			if (activeRuns.length === 0) ready.push(task)
+		}
+		return ready
 	}
 
 	async delete(id: string): Promise<TaskRow | undefined> {

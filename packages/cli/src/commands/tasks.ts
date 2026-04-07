@@ -189,6 +189,9 @@ tasksCmd.addCommand(
 		.option('-d, --description <desc>', 'Task description')
 		.option('--priority <priority>', 'Priority (low, medium, high, critical)')
 		.option('--assign <agent>', 'Assign to agent ID')
+		.option('--queue <name>', 'Task queue for concurrency control')
+		.option('--start-after <datetime>', 'ISO datetime — task will not start before this time')
+		.option('--depends-on <ids...>', 'Task IDs this task depends on')
 		.action(
 			async (opts: {
 				title: string
@@ -196,6 +199,9 @@ tasksCmd.addCommand(
 				description?: string
 				priority?: string
 				assign?: string
+				queue?: string
+				startAfter?: string
+				dependsOn?: string[]
 			}) => {
 				try {
 					const client = createApiClient()
@@ -207,6 +213,9 @@ tasksCmd.addCommand(
 							description: opts.description,
 							priority: opts.priority,
 							assigned_to: opts.assign,
+							queue: opts.queue,
+							start_after: opts.startAfter,
+							depends_on: opts.dependsOn,
 						},
 					})
 
@@ -1333,5 +1342,97 @@ async function printLastRunSummary(
 		console.debug('[tasks] last run summary fetch failed:', err instanceof Error ? err.message : String(err))
 	}
 }
+
+// ─── Dependency Subcommands ──────────────────────────────────────────────
+
+tasksCmd.addCommand(
+	new Command('depend')
+		.description('Add dependencies to a task')
+		.argument('<id>', 'Task ID')
+		.requiredOption('--on <ids...>', 'Task IDs this task depends on')
+		.action(async (id: string, opts: { on: string[] }) => {
+			try {
+				const baseUrl = getBaseUrl()
+				const headers: Record<string, string> = {
+					'Content-Type': 'application/json',
+					...getAuthHeaders(),
+				}
+				if (Object.keys(getAuthHeaders()).length === 0) {
+					headers['X-Local-Dev'] = 'true'
+				}
+
+				const res = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(id)}/dependencies`, {
+					method: 'POST',
+					headers,
+					body: JSON.stringify({ depends_on: opts.on }),
+				})
+
+				if (!res.ok) {
+					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as { error?: string }
+					console.error(error(body.error ?? `Failed to add dependencies to task ${id}`))
+					process.exit(1)
+				}
+
+				const result = (await res.json()) as {
+					task_id: string
+					dependencies: Array<{ depends_on: string; status: string }>
+				}
+
+				console.log(section(`Dependencies for ${id}`))
+				for (const dep of result.dependencies) {
+					const icon = dep.status === 'added' ? success('+') : dep.status === 'cycle_detected' ? error('!') : dim('?')
+					console.log(`  ${icon} ${dep.depends_on} — ${dep.status}`)
+				}
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+tasksCmd.addCommand(
+	new Command('dependencies')
+		.description('List tasks this task depends on')
+		.argument('<id>', 'Task ID')
+		.action(async (id: string) => {
+			try {
+				const baseUrl = getBaseUrl()
+				const headers: Record<string, string> = { ...getAuthHeaders() }
+				if (Object.keys(headers).length === 0) {
+					headers['X-Local-Dev'] = 'true'
+				}
+
+				const res = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(id)}/dependencies`, {
+					headers,
+				})
+
+				if (!res.ok) {
+					console.error(error(`Failed to fetch dependencies for task ${id}`))
+					process.exit(1)
+				}
+
+				const deps = (await res.json()) as TaskSummary[]
+
+				console.log(section(`Dependencies of ${id}`))
+				if (deps.length === 0) {
+					console.log(dim('  No dependencies'))
+					return
+				}
+
+				console.log(
+					table(
+						deps.map((t) => [
+							dim(t.id),
+							badge(t.status, statusColor(t.status)),
+							t.title,
+						]),
+					),
+				)
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
 
 program.addCommand(tasksCmd)
