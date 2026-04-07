@@ -48,7 +48,8 @@ export const WorkerStatusSchema = z.object({
   repo_root: z.string().nullable(),
   default_branch: z.string().nullable(),
   runtimes: z.array(RuntimeStatusSchema),
-  active_run_id: z.string().nullable(),
+  active_run_ids: z.array(z.string()),
+  max_concurrent_runs: z.number().int(),
   enrolled: z.boolean(),
   tags: z.array(z.string()),
 })

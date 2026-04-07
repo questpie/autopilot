@@ -49,7 +49,8 @@ export interface WorkerApiDeps {
 	repoRoot: string | null
 	tags: string[]
 	isLocalDev: boolean
-	getActiveRunId: () => string | null
+	maxConcurrentRuns: number
+	getActiveRunIds: () => ReadonlySet<string>
 	getResolvedRuntimes: () => ReadonlyArray<ResolvedRuntime>
 	getWorkspace: () => WorkspaceManager | null
 }
@@ -213,7 +214,8 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 				repo_root: deps.repoRoot,
 				default_branch: defaultBranch,
 				runtimes,
-				active_run_id: deps.getActiveRunId(),
+				active_run_ids: [...deps.getActiveRunIds()],
+				max_concurrent_runs: deps.maxConcurrentRuns,
 				enrolled: !deps.isLocalDev,
 				tags: deps.tags,
 			}
@@ -227,7 +229,7 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 				return c.json([] as WorkspaceEntry[], 200)
 			}
 
-			const entries = listWorkspaces(workspace, deps.getActiveRunId())
+			const entries = listWorkspaces(workspace, deps.getActiveRunIds())
 			return c.json(entries, 200)
 		})
 
@@ -245,7 +247,7 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 
 			const wtPath = workspace.worktreePath(runId)
 			const branch = workspace.branchName(runId)
-			const activeRunId = deps.getActiveRunId()
+			const activeRunIds = deps.getActiveRunIds()
 			const baseBranch = deps.repoRoot ? (getDefaultBranch(deps.repoRoot) ?? 'main') : 'main'
 
 			const dirty = getDirtyFiles(wtPath)
@@ -257,7 +259,7 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 				branch,
 				created: false,
 				degraded: false,
-				status: activeRunId === runId ? 'active' : 'retained',
+				status: activeRunIds.has(runId) ? 'active' : 'retained',
 				drift,
 				dirty_files: dirty,
 			}
@@ -394,7 +396,7 @@ export type WorkerApiAppType = ReturnType<typeof createWorkerApi>['app']
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function listWorkspaces(workspace: WorkspaceManager, activeRunId: string | null): WorkspaceEntry[] {
+function listWorkspaces(workspace: WorkspaceManager, activeRunIds: ReadonlySet<string>): WorkspaceEntry[] {
 	const repoRoot = workspace.repoRoot
 	const result = git(['worktree', 'list', '--porcelain'], repoRoot)
 	if (!result.ok) return []
@@ -423,7 +425,7 @@ function listWorkspaces(workspace: WorkspaceManager, activeRunId: string | null)
 				branch,
 				created: false,
 				degraded: false,
-				status: activeRunId === runId ? 'active' : 'retained',
+				status: activeRunIds.has(runId) ? 'active' : 'retained',
 			})
 		}
 	}

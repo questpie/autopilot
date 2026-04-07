@@ -100,14 +100,15 @@ const workers = new Hono<AppEnv>()
 			}
 		})
 
-		// Concurrency guard: one active run per worker
-		const activeLease = await workerService.getActiveLeaseForWorker(workerId)
-		if (activeLease) {
+		// Concurrency guard: check active leases vs worker capacity
+		const workerRecord = await workerService.get(workerId)
+		const maxConcurrent = workerService.getMaxConcurrentFromCapabilities(workerRecord?.capabilities ?? null)
+		const activeLeaseCount = await workerService.getActiveLeaseCountForWorker(workerId)
+		if (activeLeaseCount >= maxConcurrent) {
 			return c.json({ run: null, lease_id: null }, 200)
 		}
 
-		// Look up worker capabilities for targeting-aware claim
-		const workerRecord = await workerService.get(workerId)
+		// Use already-fetched worker capabilities for targeting-aware claim
 		const workerCaps = workerRecord?.capabilities
 			? JSON.parse(workerRecord.capabilities)
 			: []

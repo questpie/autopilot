@@ -63,7 +63,7 @@ export class WorkerService {
 		return this.db.select().from(workers).all()
 	}
 
-	/** Update heartbeat timestamp and renew any active lease for this worker. */
+	/** Update heartbeat timestamp and renew all active leases for this worker. */
 	async heartbeat(workerId: string): Promise<void> {
 		const now = new Date().toISOString()
 		await this.db
@@ -71,14 +71,16 @@ export class WorkerService {
 			.set({ last_heartbeat: now })
 			.where(eq(workers.id, workerId))
 
-		// Renew active lease — extend by 30 min from now
-		const activeLease = await this.getActiveLeaseForWorker(workerId)
-		if (activeLease) {
+		// Renew all active leases — extend by 30 min from now
+		const activeLeases = await this.getActiveLeasesForWorker(workerId)
+		if (activeLeases.length > 0) {
 			const newExpiry = new Date(Date.now() + 30 * 60 * 1000).toISOString()
-			await this.db
-				.update(workerLeases)
-				.set({ expires_at: newExpiry })
-				.where(eq(workerLeases.id, activeLease.id))
+			for (const lease of activeLeases) {
+				await this.db
+					.update(workerLeases)
+					.set({ expires_at: newExpiry })
+					.where(eq(workerLeases.id, lease.id))
+			}
 		}
 	}
 
@@ -136,6 +138,49 @@ export class WorkerService {
 			.select()
 			.from(workerLeases)
 			.where(and(eq(workerLeases.worker_id, workerId), eq(workerLeases.status, 'active')))
+			.get()
+	}
+
+	/** Get all active leases for a worker (for concurrency-aware scheduling). */
+	async getActiveLeasesForWorker(workerId: string) {
+		return this.db
+			.select()
+			.from(workerLeases)
+			.where(and(eq(workerLeases.worker_id, workerId), eq(workerLeases.status, 'active')))
+			.all()
+	}
+
+	/** Count active leases for a worker. */
+	async getActiveLeaseCountForWorker(workerId: string): Promise<number> {
+		const leases = await this.getActiveLeasesForWorker(workerId)
+		return leases.length
+	}
+
+	/** Get the max concurrent runs a worker advertises (from capabilities JSON). */
+	getMaxConcurrentFromCapabilities(capabilitiesJson: string | null): number {
+		if (!capabilitiesJson) return 1
+		try {
+			const caps = JSON.parse(capabilitiesJson) as Array<{ maxConcurrent?: number }>
+			if (!Array.isArray(caps) || caps.length === 0) return 1
+			// Use the max across all runtime capabilities
+			return Math.max(...caps.map((c) => c.maxConcurrent ?? 1))
+		} catch {
+			return 1
+		}
+	}
+
+	/** Find the active lease for a specific run on a specific worker. */
+	async getActiveLeaseForRun(workerId: string, runId: string) {
+		return this.db
+			.select()
+			.from(workerLeases)
+			.where(
+				and(
+					eq(workerLeases.worker_id, workerId),
+					eq(workerLeases.run_id, runId),
+					eq(workerLeases.status, 'active'),
+				),
+			)
 			.get()
 	}
 

@@ -150,7 +150,12 @@ function resolveBinaryPath(config: RuntimeConfig, binaryName: string): string {
   return found
 }
 
-function createAdapter(config: RuntimeConfig, resolvedBinaryPath: string): RuntimeAdapter {
+/**
+ * Create a fresh adapter instance for a given runtime config.
+ * Each adapter instance is stateful (holds subprocess, event handler),
+ * so concurrent runs MUST each get their own adapter instance.
+ */
+export function createAdapter(config: RuntimeConfig, resolvedBinaryPath: string): RuntimeAdapter {
   switch (config.runtime) {
     case 'claude-code': {
       const adapterConfig: ClaudeCodeConfig = {

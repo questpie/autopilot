@@ -59,7 +59,8 @@ function makeDeps(overrides: Partial<WorkerApiDeps> = {}): WorkerApiDeps {
     repoRoot: null,
     tags: ['dev'],
     isLocalDev: true,
-    getActiveRunId: () => null,
+    maxConcurrentRuns: 1,
+    getActiveRunIds: () => new Set<string>(),
     getResolvedRuntimes: () => [makeFakeRuntime()],
     getWorkspace: () => null,
     ...overrides,
@@ -128,7 +129,8 @@ describe('GET /status', () => {
     expect(data.name).toBe('Test Worker')
     expect(data.tags).toEqual(['dev'])
     expect(data.enrolled).toBe(false) // isLocalDev=true → enrolled=false
-    expect(data.active_run_id).toBe(null)
+    expect(data.active_run_ids).toEqual([])
+    expect(data.max_concurrent_runs).toBe(1)
     expect(data.runtimes).toHaveLength(1)
     expect(data.runtimes[0].runtime).toBe('claude-code')
     expect(data.runtimes[0].models).toEqual(['claude-sonnet-4-20250514'])
@@ -143,13 +145,14 @@ describe('GET /status', () => {
     expect(data.default_branch).toBe('main')
   })
 
-  test('returns active_run_id when a run is active', async () => {
+  test('returns active_run_ids when runs are active', async () => {
     const { app } = createTestApi(makeDeps({
-      getActiveRunId: () => 'run-active-789',
+      getActiveRunIds: () => new Set(['run-active-789', 'run-active-abc']),
     }))
     const res = await fetchApi(app, '/status')
     const data = await res.json() as any
-    expect(data.active_run_id).toBe('run-active-789')
+    expect(data.active_run_ids).toEqual(expect.arrayContaining(['run-active-789', 'run-active-abc']))
+    expect(data.active_run_ids).toHaveLength(2)
   })
 })
 
@@ -172,7 +175,7 @@ describe('GET /workspaces', () => {
     const { app } = createTestApi(makeDeps({
       repoRoot,
       getWorkspace: () => workspace,
-      getActiveRunId: () => 'run-ws-test',
+      getActiveRunIds: () => new Set(['run-ws-test']),
     }))
 
     const res = await fetchApi(app, '/workspaces')
@@ -462,7 +465,7 @@ describe('Response schema conformance', () => {
     const { app } = createTestApi(makeDeps({
       repoRoot,
       getWorkspace: () => workspace,
-      getActiveRunId: () => 'run-schema-ws',
+      getActiveRunIds: () => new Set(['run-schema-ws']),
     }))
 
     const res = await fetchApi(app, '/workspaces')

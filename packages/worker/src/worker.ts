@@ -4,7 +4,7 @@ import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
 import { executeActions, mergeOutputs, type ActionsMergedResult } from './actions/webhook'
 import { collectPreviewFiles } from './preview'
 import { WorkspaceManager, type WorkspaceInfo } from './workspace'
-import { resolveRuntime, resolveModel, type RuntimeConfig, type ResolvedRuntime } from './runtime-config'
+import { resolveRuntime, resolveModel, createAdapter, type RuntimeConfig, type ResolvedRuntime } from './runtime-config'
 import { loadCredential, saveCredential, type StoredCredential } from './credentials'
 import { startWorkerApi, type WorkerApiConfig, type WorkerApiServer } from './api'
 
@@ -23,6 +23,12 @@ export interface WorkerConfig {
   heartbeatInterval?: number // ms, default 30_000
   pollInterval?: number // ms, default 5_000
   repoRoot?: string
+  /**
+   * Maximum number of concurrent runs this worker will execute.
+   * Each run gets its own worktree and runtime session.
+   * Default 1 (backward compatible).
+   */
+  maxConcurrentRuns?: number
   /**
    * Join token for initial enrollment. Used once, then durable credential takes over.
    * Not needed if worker already has a stored credential for this orchestrator.
@@ -45,7 +51,8 @@ export class AutopilotWorker {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private pollTimer: ReturnType<typeof setInterval> | null = null
   private running = false
-  private activeRunId: string | null = null
+  private activeRunIds = new Set<string>()
+  private maxConcurrentRuns: number
   private adapters = new Map<string, RuntimeAdapter>()
   private resolvedCapabilities: WorkerCapability[] = []
   private workspace: WorkspaceManager | null = null
@@ -55,6 +62,7 @@ export class AutopilotWorker {
 
   constructor(private config: WorkerConfig) {
     this.isLocalDev = config.localDev ?? false
+    this.maxConcurrentRuns = config.maxConcurrentRuns ?? 1
 
     if (config.repoRoot) {
       this.workspace = new WorkspaceManager({ repoRoot: config.repoRoot })
@@ -69,9 +77,10 @@ export class AutopilotWorker {
       const resolved = resolveRuntime(rtConfig)
       this.resolvedRuntimes.push(resolved)
       this.adapters.set(rtConfig.runtime, resolved.adapter)
-      // Merge worker-level tags into per-runtime capability
+      // Merge worker-level tags and concurrency into per-runtime capability
       const mergedCap: WorkerCapability = {
         ...resolved.capability,
+        maxConcurrent: this.maxConcurrentRuns,
         tags: [...new Set([...workerTags, ...resolved.capability.tags])],
       }
       this.resolvedCapabilities.push(mergedCap)
@@ -152,7 +161,8 @@ export class AutopilotWorker {
           repoRoot: this.config.repoRoot ?? null,
           tags: workerTags,
           isLocalDev: this.isLocalDev,
-          getActiveRunId: () => this.activeRunId,
+          maxConcurrentRuns: this.maxConcurrentRuns,
+          getActiveRunIds: () => this.activeRunIds,
           getResolvedRuntimes: () => this.resolvedRuntimes,
           getWorkspace: () => this.workspace,
         },
@@ -165,6 +175,19 @@ export class AutopilotWorker {
     this.running = false
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     if (this.pollTimer) clearInterval(this.pollTimer)
+
+    // Wait for all active runs to complete (with timeout)
+    if (this.activeRunIds.size > 0) {
+      console.log(`[worker] waiting for ${this.activeRunIds.size} active run(s) to finish...`)
+      const SHUTDOWN_TIMEOUT = 60_000 // 60 seconds
+      const deadline = Date.now() + SHUTDOWN_TIMEOUT
+      while (this.activeRunIds.size > 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      }
+      if (this.activeRunIds.size > 0) {
+        console.warn(`[worker] shutdown timeout — ${this.activeRunIds.size} run(s) still active`)
+      }
+    }
 
     if (this.apiServer) {
       this.apiServer.stop()
@@ -247,7 +270,7 @@ export class AutopilotWorker {
 
   private async poll(): Promise<void> {
     if (!this.running) return
-    if (this.activeRunId !== null) return
+    if (this.activeRunIds.size >= this.maxConcurrentRuns) return
 
     try {
       const res = (await this.api('/api/workers/claim', {
@@ -256,13 +279,13 @@ export class AutopilotWorker {
       })) as WorkerClaimResponse
 
       if (res.run) {
-        this.activeRunId = res.run.id
+        this.activeRunIds.add(res.run.id)
         this.executeRun(res.run)
           .catch((err) => {
-            console.error('[worker] run failed:', err)
+            console.error(`[worker] run ${res.run!.id} failed:`, err)
           })
           .finally(() => {
-            this.activeRunId = null
+            this.activeRunIds.delete(res.run!.id)
           })
       }
     } catch (err) {
@@ -271,8 +294,9 @@ export class AutopilotWorker {
   }
 
   private async executeRun(run: ClaimedRun): Promise<void> {
-    const adapter = this.adapters.get(run.runtime)
-    if (!adapter) {
+    // Find the resolved runtime config for this run's runtime type
+    const resolved = this.resolvedRuntimes.find((r) => r.config.runtime === run.runtime)
+    if (!resolved) {
       await this.postEvent(run.id, {
         type: 'error',
         summary: `No adapter for runtime: ${run.runtime}`,
@@ -283,6 +307,10 @@ export class AutopilotWorker {
       })
       return
     }
+
+    // Create a fresh adapter per run — adapters are stateful (subprocess, event handler)
+    // and cannot be shared across concurrent runs
+    const adapter = createAdapter(resolved.config, resolved.resolvedBinaryPath)
 
     let ws: WorkspaceInfo | null = null
     if (this.workspace) {
@@ -308,10 +336,7 @@ export class AutopilotWorker {
     }
 
     // Resolve canonical model through worker-local modelMap
-    const runtimeConfig = this.resolvedRuntimes.find((r) => r.config.runtime === run.runtime)?.config
-    const resolvedModel = runtimeConfig
-      ? resolveModel(runtimeConfig, run.model)
-      : (run.model ?? null)
+    const resolvedModel = resolveModel(resolved.config, run.model)
 
     // Verify workspace directory exists before launching runtime
     if (ws?.path && !existsSync(ws.path)) {

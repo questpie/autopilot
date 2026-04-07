@@ -221,13 +221,17 @@ const runs = new Hono<AppEnv>()
 				})
 			}
 
-			// Release worker lease + set worker back to online
+			// Release worker lease for this run + update worker status
 			if (run.worker_id) {
-				const lease = await workerService.getActiveLeaseForWorker(run.worker_id)
+				const lease = await workerService.getActiveLeaseForRun(run.worker_id, id)
 				if (lease) {
 					await workerService.completeLease(lease.id, body.status)
 				}
-				await workerService.setOnline(run.worker_id)
+				// Only set online if no remaining active leases
+				const remainingLeases = await workerService.getActiveLeaseCountForWorker(run.worker_id)
+				if (remainingLeases === 0) {
+					await workerService.setOnline(run.worker_id)
+				}
 			}
 
 			eventBus.emit({
@@ -291,13 +295,17 @@ const runs = new Hono<AppEnv>()
 				return c.json({ error: `run ${id} is already ${run.status} — cannot cancel` }, 400)
 			}
 
-			// Release worker lease if claimed/running
+			// Release worker lease for this run if claimed/running
 			if (run.worker_id) {
-				const lease = await workerService.getActiveLeaseForWorker(run.worker_id)
+				const lease = await workerService.getActiveLeaseForRun(run.worker_id, id)
 				if (lease) {
 					await workerService.completeLease(lease.id, 'failed')
 				}
-				await workerService.setOnline(run.worker_id)
+				// Only set online if no remaining active leases
+				const remainingLeases = await workerService.getActiveLeaseCountForWorker(run.worker_id)
+				if (remainingLeases === 0) {
+					await workerService.setOnline(run.worker_id)
+				}
 			}
 
 			// Normalize failure signal — same path as run completion with status: failed

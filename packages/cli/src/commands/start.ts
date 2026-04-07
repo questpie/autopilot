@@ -15,8 +15,9 @@ program.addCommand(
 	new Command('start')
 		.description('Start orchestrator + local worker (local dev/demo mode)')
 		.option('-p, --port <port>', 'Server port', '7778')
+		.option('-c, --concurrency <n>', 'Max concurrent runs for local worker', '1')
 		.option('--no-worker', 'Skip starting the local worker')
-		.action(async (opts: { port: string; worker: boolean }) => {
+		.action(async (opts: { port: string; concurrency: string; worker: boolean }) => {
 			let worker: AutopilotWorker | null = null
 
 			try {
@@ -31,7 +32,12 @@ program.addCommand(
 
 				// ── 2. Start local worker ─────────────────────────────────────
 				if (opts.worker) {
-					worker = createLocalWorker({ orchestratorUrl, workDir: workerDir })
+					const concurrency = Number.parseInt(opts.concurrency, 10)
+					worker = createLocalWorker({
+						orchestratorUrl,
+						workDir: workerDir,
+						concurrency: Number.isNaN(concurrency) ? 1 : concurrency,
+					})
 					await worker.start()
 				}
 

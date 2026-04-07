@@ -12,6 +12,7 @@ export function createLocalWorker(opts: {
 	runtime?: string
 	binaryPath?: string
 	sessionPersistence?: 'local' | 'off'
+	concurrency?: number
 }): AutopilotWorker {
 	const rtConfig: RuntimeConfig = {
 		runtime: (opts.runtime ?? 'claude-code') as RuntimeConfig['runtime'],
@@ -28,6 +29,7 @@ export function createLocalWorker(opts: {
 		pollInterval: 3_000,
 		heartbeatInterval: 15_000,
 		repoRoot: opts.workDir,
+		maxConcurrentRuns: opts.concurrency ?? 1,
 		localDev: true,
 	})
 }
@@ -69,6 +71,7 @@ workerCmd.addCommand(
 		.option('--runtime <runtime>', 'Runtime to host (claude-code)', 'claude-code')
 		.option('--binary <path>', 'Explicit path to runtime binary')
 		.option('--session-persistence <mode>', 'Session persistence: local or off', 'local')
+		.option('-c, --concurrency <n>', 'Max concurrent runs (default 1)', '1')
 		.action(
 			async (opts: {
 				url: string
@@ -77,6 +80,7 @@ workerCmd.addCommand(
 				runtime: string
 				binary?: string
 				sessionPersistence: string
+				concurrency: string
 			}) => {
 				let worker: AutopilotWorker | null = null
 
@@ -96,6 +100,11 @@ workerCmd.addCommand(
 						sessionPersistence: opts.sessionPersistence as 'local' | 'off',
 					}
 
+					const concurrency = Number.parseInt(opts.concurrency, 10)
+					if (Number.isNaN(concurrency) || concurrency < 1) {
+						throw new Error(`Invalid concurrency value: ${opts.concurrency} — must be a positive integer`)
+					}
+
 					worker = new AutopilotWorker({
 						orchestratorUrl: opts.url,
 						deviceId: `${opts.name}-${process.pid}`,
@@ -104,6 +113,7 @@ workerCmd.addCommand(
 						pollInterval: 3_000,
 						heartbeatInterval: 15_000,
 						repoRoot: workDir,
+						maxConcurrentRuns: concurrency,
 						joinToken: opts.token,
 					})
 
