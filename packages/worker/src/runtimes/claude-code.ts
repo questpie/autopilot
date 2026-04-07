@@ -1,6 +1,6 @@
 import { createMcpConfig } from '../mcp-config'
 import type { RuntimeAdapter, RunContext, RuntimeResult, WorkerEvent } from './adapter'
-import { buildPrompt, extractResult, streamLines, truncate, type Subprocess } from './shared'
+import { buildPrompt, extractResult, streamLines, truncate, summarizeToolInput, type Subprocess } from './shared'
 
 export interface ClaudeCodeConfig {
   /** Path to claude binary. Defaults to 'claude'. */
@@ -214,7 +214,8 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
             if (block.type === 'text' && block.text) {
               this.emit({ type: 'progress', summary: truncate(block.text) })
             } else if (block.type === 'tool_use' && block.name) {
-              this.emit({ type: 'tool_use', summary: block.name })
+              const detail = summarizeToolInput(block.name, block.input)
+              this.emit({ type: 'tool_use', summary: detail })
             }
           }
         }
@@ -260,6 +261,7 @@ interface ClaudeStreamEvent {
       type?: string
       text?: string
       name?: string
+      input?: Record<string, unknown>
     }>
   }
   result?: string
@@ -269,3 +271,4 @@ interface ClaudeStreamEvent {
     output_tokens?: number
   }
 }
+

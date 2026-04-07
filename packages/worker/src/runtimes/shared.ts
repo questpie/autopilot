@@ -117,3 +117,23 @@ export async function streamLines(
 export function truncate(text: string, maxLen = 200): string {
   return text.length > maxLen ? text.slice(0, maxLen) + '...' : text
 }
+
+/** Produce a short human-readable description of a tool call from its name and input args. */
+export function summarizeToolInput(name: string, input?: Record<string, unknown>): string {
+  if (!input) return name
+  switch (name) {
+    case 'Read': return `Read ${input.file_path ?? ''}`
+    case 'Write': return `Write ${input.file_path ?? ''}`
+    case 'Edit': return `Edit ${input.file_path ?? ''}`
+    case 'Glob': return `Glob ${input.pattern ?? ''}`
+    case 'Grep': return `Grep ${input.pattern ?? ''} ${input.path ? `in ${input.path}` : ''}`
+    case 'Bash': return `Bash: ${truncate(String(input.command ?? input.description ?? ''), 120)}`
+    case 'Agent': return `Agent: ${truncate(String(input.description ?? input.prompt ?? ''), 120)}`
+    case 'WebSearch': return `WebSearch: ${input.query ?? ''}`
+    case 'WebFetch': return `WebFetch: ${input.url ?? ''}`
+    default: {
+      const firstVal = Object.values(input).find((v) => typeof v === 'string')
+      return firstVal ? `${name}: ${truncate(String(firstVal), 100)}` : name
+    }
+  }
+}

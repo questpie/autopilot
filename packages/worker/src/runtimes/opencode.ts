@@ -19,7 +19,7 @@
 
 import { createOpenCodeMcpConfig } from '../mcp-config-opencode'
 import type { RuntimeAdapter, RunContext, RuntimeResult, WorkerEvent } from './adapter'
-import { buildPrompt, extractResult, streamLines, truncate, type Subprocess } from './shared'
+import { buildPrompt, extractResult, streamLines, truncate, summarizeToolInput, type Subprocess } from './shared'
 
 export interface OpenCodeConfig {
   /** Path to opencode binary. Defaults to 'opencode'. */
@@ -202,7 +202,8 @@ export class OpenCodeAdapter implements RuntimeAdapter {
           // Extract session ID from first step_start
         }
         if (event.part?.type === 'tool' && event.part.name) {
-          this.emit({ type: 'tool_use', summary: event.part.name })
+          const detail = summarizeToolInput(event.part.name, event.part.input)
+          this.emit({ type: 'tool_use', summary: detail })
         }
         return { sessionId: event.sessionID ?? undefined }
       }
@@ -261,6 +262,7 @@ interface OpenCodeStreamEvent {
   part?: {
     type?: string
     name?: string
+    input?: Record<string, unknown>
   }
   tokens?: {
     input?: number

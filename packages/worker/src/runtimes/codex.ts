@@ -17,7 +17,7 @@
 
 import { createCodexMcpConfig } from '../mcp-config-codex'
 import type { RuntimeAdapter, RunContext, RuntimeResult, WorkerEvent } from './adapter'
-import { buildPrompt, extractResult, streamLines, truncate, type Subprocess } from './shared'
+import { buildPrompt, extractResult, streamLines, truncate, summarizeToolInput, type Subprocess } from './shared'
 
 export interface CodexConfig {
   /** Path to codex binary. Defaults to 'codex'. */
@@ -209,9 +209,10 @@ export class CodexAdapter implements RuntimeAdapter {
       case 'item.started': {
         const itemType = event.item?.type
         if (itemType === 'mcp_tool_call') {
-          this.emit({ type: 'tool_use', summary: `MCP: ${event.item!.name ?? 'tool call'}` })
+          const detail = summarizeToolInput(event.item!.name ?? 'tool call', event.item!.arguments)
+          this.emit({ type: 'tool_use', summary: `MCP: ${detail}` })
         } else if (itemType === 'command_execution') {
-          this.emit({ type: 'tool_use', summary: `Command: ${event.item!.command ?? 'executing'}` })
+          this.emit({ type: 'tool_use', summary: `Command: ${truncate(String(event.item!.command ?? 'executing'), 150)}` })
         }
         return {}
       }
