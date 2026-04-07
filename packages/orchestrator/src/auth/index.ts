@@ -35,9 +35,13 @@ export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: Mai
 	if (!process.env.BETTER_AUTH_URL && !env.ORCHESTRATOR_URL && env.NODE_ENV === 'production') {
 		console.warn('[auth] ⚠ Neither BETTER_AUTH_URL nor ORCHESTRATOR_URL set in production — auth links (email verification) will point to localhost')
 	}
+	if (env.NODE_ENV === 'production' && !env.BETTER_AUTH_SECRET) {
+		throw new Error('BETTER_AUTH_SECRET is required in production. Generate one with: openssl rand -hex 32')
+	}
 
 	const auth = betterAuth({
 		baseURL: authBaseUrl,
+		secret: env.BETTER_AUTH_SECRET,
 		database: drizzleAdapter(db, {
 			provider: 'sqlite',
 			schema: authSchema,
@@ -78,7 +82,7 @@ export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: Mai
 			},
 		},
 
-		trustedOrigins: (env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3001')
+		trustedOrigins: (env.CORS_ORIGIN ?? authBaseUrl)
 			.split(',')
 			.map((o: string) => o.trim()),
 		advanced: {

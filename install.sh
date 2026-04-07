@@ -5,6 +5,10 @@ echo ""
 echo "  QUESTPIE Autopilot — Self-Hosted Setup"
 echo "  ======================================="
 echo ""
+echo "  This installs the ORCHESTRATOR (control plane)."
+echo "  Workers run separately on host machines with runtime binaries installed."
+echo "  Primary operator surfaces: CLI, API, MCP, Telegram."
+echo ""
 
 # Check Docker
 if ! command -v docker &> /dev/null; then
@@ -30,25 +34,28 @@ mkdir -p "$INSTALL_DIR" && cd "$INSTALL_DIR"
 REPO_RAW="https://raw.githubusercontent.com/questpie/autopilot/main"
 curl -fsSL "$REPO_RAW/docker-compose.yml" -o docker-compose.yml
 curl -fsSL "$REPO_RAW/.env.example" -o .env
-curl -fsSL "$REPO_RAW/Caddyfile.local" -o Caddyfile.local
 
-# Prompt for API key (optional — subscription login is recommended)
+# Prompt for API key
 echo ""
-echo "  Authentication options:"
-echo "    1. Subscription login (recommended): autopilot provider login claude"
-echo "       Works headless — prints a link to open on any device."
-echo "    2. API key: enter below"
+echo "  AI Provider setup:"
+echo "    OpenRouter is the default (one key for all models)."
+echo "    Get a key at: https://openrouter.ai/keys"
 echo ""
-read -rp "Anthropic API Key (leave empty for subscription login): " API_KEY
+read -rp "OpenRouter API Key (leave empty to configure later): " API_KEY
 if [ -n "$API_KEY" ]; then
-    sed -i "s|^# ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=$API_KEY|" .env
+    sed -i.bak "s|^OPENROUTER_API_KEY=.*|OPENROUTER_API_KEY=$API_KEY|" .env && rm -f .env.bak
 fi
 
-# Generate master key
-MASTER_KEY=$(openssl rand -base64 32)
-sed -i "s|^# AUTOPILOT_MASTER_KEY=.*|AUTOPILOT_MASTER_KEY=$MASTER_KEY|" .env
+# Generate master key (64-char hex as required by crypto.ts)
+MASTER_KEY=$(openssl rand -hex 32)
+sed -i.bak "s|^# AUTOPILOT_MASTER_KEY=.*|AUTOPILOT_MASTER_KEY=$MASTER_KEY|" .env && rm -f .env.bak
 
-# Create company directory
+# Generate Better Auth secret for cookies/tokens.
+AUTH_SECRET=$(openssl rand -hex 32)
+sed -i.bak "s|^# BETTER_AUTH_SECRET=.*|BETTER_AUTH_SECRET=$AUTH_SECRET|" .env && rm -f .env.bak
+
+# Create company directory — the Docker entrypoint auto-bootstraps
+# .autopilot/company.yaml on first start if missing.
 mkdir -p company
 
 # Start
@@ -59,12 +66,34 @@ docker compose up -d
 echo ""
 echo "  QUESTPIE Autopilot is running!"
 echo ""
-echo "  Dashboard: http://localhost:3000"
 echo "  API:       http://localhost:7778"
-echo "  Webhooks:  http://localhost:7777"
+echo "  Health:    http://localhost:7778/api/health"
 echo ""
 echo "  Logs:      docker compose logs -f"
 echo "  Stop:      docker compose down"
 echo ""
-echo "  Next: open http://localhost:3000 in your browser"
+echo "  ── What this runs ──"
+echo "  The Docker container runs the ORCHESTRATOR (control plane)."
+echo "  It does NOT include AI runtime adapters (Claude Code, Codex, OpenCode)."
+echo ""
+echo "  ── Next steps ──"
+echo "  1. Connect a worker from this or another machine:"
+echo ""
+echo "     # On the worker machine, install the CLI:"
+echo "     bun add -g @questpie/autopilot"
+echo ""
+echo "     # Create a join token (from orchestrator):"
+echo "     docker compose exec orchestrator autopilot worker token create --description 'My laptop'"
+echo ""
+echo "     # Start the worker:"
+echo "     autopilot worker start --url http://<orchestrator-ip>:7778 --token <token>"
+echo ""
+echo "  2. Workers need runtime binaries installed locally:"
+echo "     - Claude Code: npm install -g @anthropics/claude-code"
+echo "     - Codex:       npm install -g @openai/codex"
+echo "     - OpenCode:    go install github.com/opencode-ai/opencode@latest"
+echo ""
+echo "  ── Important ──"
+echo "  This is a LOCAL setup. For production, use deploy/ with Caddy + TLS."
+echo "  See: docs/guides/deployment-variants.md"
 echo ""

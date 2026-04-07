@@ -24,6 +24,8 @@ function resolveEnv(runtimeEnv: NodeJS.ProcessEnv) {
 			TURSO_SYNC_URL: z.string().optional(),
 			TURSO_AUTH_TOKEN: z.string().optional(),
 			AI_GATEWAY_API_KEY: z.string().optional(),
+			/** Secret used by Better Auth for cookies/tokens. Required in production. */
+			BETTER_AUTH_SECRET: z.string().min(32).optional(),
 			/** Public base URL for the orchestrator (used in notifications, preview links). */
 			ORCHESTRATOR_URL: z.string().url().optional(),
 		},

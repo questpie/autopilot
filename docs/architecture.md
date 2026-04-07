@@ -5,13 +5,13 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  HUMAN LAYER                                            │
-│  CLI · Dashboard · Telegram · Webhooks · WhatsApp       │
+│  CLI · API · MCP · Telegram · Webhooks · Query          │
 └──────────────────────┬──────────────────────────────────┘
                        │ intent / approvals / messages
 ┌──────────────────────▼──────────────────────────────────┐
 │  ORCHESTRATOR (single Bun process)                      │
 │                                                         │
-│  FS Watcher ──── watches team/, knowledge/, dashboard/  │
+│  FS Watcher ──── watches authored company config        │
 │  Workflow Engine ── compiles + evaluates workflow steps  │
 │  Agent Spawner ──── Claude Agent SDK sessions           │
 │  Context Builder ── role-scoped company snapshots       │
@@ -58,7 +58,7 @@
 | Auth | Better Auth |
 | FS Watch | chokidar |
 | CLI | Commander.js |
-| Dashboard | React 19 + TanStack Start + Tailwind |
+| Operator app | Deferred future surface, not part of the current deployable runtime |
 | Build | Turbo monorepo |
 
 ## How Agent Spawning Works

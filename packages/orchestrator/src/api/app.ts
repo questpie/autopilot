@@ -90,12 +90,13 @@ export interface AppConfig {
 export function createApp(config: AppConfig) {
 	const app = new Hono<AppEnv>()
 	const rawOrigin = config.corsOrigin ?? env.CORS_ORIGIN
+	const fallbackOrigin = config.orchestratorUrl ?? env.ORCHESTRATOR_URL ?? 'http://localhost:7778'
 	const corsOrigin = rawOrigin
 		? rawOrigin.split(',').map((o: string) => o.trim())
-		: ['http://localhost:3000', 'http://localhost:3001']
+		: [fallbackOrigin]
 
 	if (!rawOrigin && env.NODE_ENV === 'production') {
-		console.warn('[api] ⚠ CORS_ORIGIN not set in production — falling back to localhost defaults. Set CORS_ORIGIN to your dashboard URL(s).')
+		console.warn('[api] ⚠ CORS_ORIGIN not set in production — falling back to the orchestrator base URL. Set CORS_ORIGIN if operators use a separate origin.')
 	}
 
 	// ── Global middleware ─────────────────────────────────────────────────

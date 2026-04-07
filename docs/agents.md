@@ -42,7 +42,7 @@ All role configurations are built from these tool names:
 
 - `task` — create/update/approve/reject/block/unblock tasks
 - `message` — team channels, task channels, and direct messages
-- `pin` — dashboard visibility for key outcomes
+- `pin` — operator visibility for key outcomes
 - `search` — internal search across tasks/messages/knowledge/pins
 - `http` — external API calls (with secrets and allowlists)
 - `search_web` — web search for discovery/research
@@ -82,7 +82,7 @@ Create a new file in `team/agents/` (for example `team/agents/data-analyst.yaml`
 id: data-analyst
 name: Dana
 role: planner
-description: "Data analyst - dashboards, queries, reports"
+description: "Data analyst - queries, reports, and business analysis"
 model: anthropic/claude-sonnet-4
 tools:
   - task
@@ -94,7 +94,6 @@ fs_scope:
   read:
     - "projects/**"
     - "knowledge/**"
-    - "dashboard/**"
   write:
     - "projects/**"
 ```

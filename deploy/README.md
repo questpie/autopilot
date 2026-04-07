@@ -1,12 +1,12 @@
-# Production Deployment
+# VPS / Production Deployment
 
-One-command deployment with automatic TLS.
+Orchestrator-only. Workers connect from other machines.
+Operator surfaces: CLI, API, MCP, Telegram, query.
 
 ## Prerequisites
 
 - Docker + Docker Compose
-- A domain pointing to your server (A record)
-- Ports 80 and 443 open
+- An OpenRouter API key (https://openrouter.ai/keys) or direct provider keys
 
 ## Quick Start
 
@@ -18,69 +18,66 @@ cd ~/autopilot
 
 # 2. Configure
 cp .env.example .env
-nano .env  # Set DOMAIN and ANTHROPIC_API_KEY
+nano .env  # Set OPENROUTER_API_KEY
 
-# 3. Initialize company data
-docker compose run --rm autopilot autopilot init /data/company
+# Generate production secrets
+sed -i.bak "s|^AUTOPILOT_MASTER_KEY=.*|AUTOPILOT_MASTER_KEY=$(openssl rand -hex 32)|" .env
+sed -i.bak "s|^BETTER_AUTH_SECRET=.*|BETTER_AUTH_SECRET=$(openssl rand -hex 32)|" .env
+rm -f .env.bak
 
-# 4. Enable auth in company config
-# Edit company/company.yaml:
-#   settings:
-#     auth:
-#       enabled: true
-#       cors_origin: "https://autopilot.yourdomain.com"
-
-# 5. Launch
+# 3. Launch
 docker compose up -d
 
-# 6. Create owner account
-docker compose exec autopilot autopilot auth setup
-
-# 7. Generate master key for secrets
-echo "AUTOPILOT_MASTER_KEY=$(openssl rand -base64 32)" >> .env
-docker compose up -d  # restart to pick up key
+# 4. Create owner account
+docker compose exec orchestrator autopilot auth setup
 ```
 
-Your instance is live at `https://autopilot.yourdomain.com`.
+API: `http://SERVER_IP:7778`
+Webhooks: `http://SERVER_IP:7777`
 
-## What's Included
+## Connecting Workers
 
-| Service | Purpose |
-|---------|---------|
-| **caddy** | Reverse proxy + automatic TLS (Let's Encrypt) |
-| **autopilot** | Orchestrator API + Dashboard (no ports exposed directly) |
-| **watchtower** | Auto-update (optional, enable with `--profile auto-update`) |
+```bash
+# On the orchestrator (create a join token):
+docker compose exec orchestrator autopilot worker token create --description "Andrej laptop"
 
-## Routing
-
-All traffic goes through Caddy on ports 80/443:
-
-```
-https://autopilot.yourdomain.com
-  /api/*         → orchestrator (REST API, auth, SSE)
-  /artifacts/*   → artifact proxy (auto-start, preview)
-  /fs/*          → filesystem browser
-  /streams/*     → durable stream proxy
-  /*             → dashboard (React UI)
+# On the worker machine:
+autopilot worker start \
+  --url http://SERVER_IP:7778 \
+  --token <join-token> \
+  --name "andrej-laptop"
 ```
 
-## Webhooks
+Workers need runtime binaries installed locally:
+- Claude Code: `npm install -g @anthropics/claude-code && claude login`
+- Codex: `npm install -g @openai/codex`
+- OpenCode: `go install github.com/opencode-ai/opencode@latest`
 
-To receive webhooks from GitHub, Slack, etc., uncomment the webhooks section in `Caddyfile`:
+See [Deployment Variants](../docs/guides/deployment-variants.md) for full topology details.
 
+## Optional: TLS with Caddy
+
+If you want automatic TLS, enable the reverse-proxy profile:
+
+```bash
+# Set domain in .env
+echo "DOMAIN=autopilot.yourdomain.com" >> .env
+echo "ORCHESTRATOR_URL=https://autopilot.yourdomain.com" >> .env
+echo "CORS_ORIGIN=https://autopilot.yourdomain.com" >> .env
+
+# Ensure DNS A record points to this server, ports 80/443 open
+
+# Start with Caddy
+docker compose --profile reverse-proxy up -d
 ```
-webhooks.autopilot.yourdomain.com {
-    reverse_proxy autopilot:7777
-}
-```
 
-Then add a DNS record for `webhooks.autopilot.yourdomain.com`.
+Caddy auto-provisions TLS via Let's Encrypt. All traffic proxies to the orchestrator.
 
 ## Commands
 
 ```bash
 # View logs
-docker compose logs -f autopilot
+docker compose logs -f orchestrator
 
 # Restart
 docker compose restart
@@ -88,7 +85,7 @@ docker compose restart
 # Update to latest
 docker compose pull && docker compose up -d
 
-# Auto-update (pulls new images every 5 min)
+# Auto-update (pulls new images every 5 min — opt-in)
 docker compose --profile auto-update up -d
 
 # Backup
@@ -97,15 +94,28 @@ tar -czf backup-$(date +%Y%m%d).tar.gz company/
 docker compose start
 
 # Shell into container
-docker compose exec autopilot sh
+docker compose exec orchestrator sh
+
+# List connected workers
+docker compose exec orchestrator autopilot worker list
 ```
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `OPENROUTER_API_KEY` | Yes (or direct keys) | - | AI provider key |
+| `AUTOPILOT_MASTER_KEY` | Yes | - | Encryption key for shared secrets |
+| `BETTER_AUTH_SECRET` | Yes | - | Auth cookie/token secret |
+| `ORCHESTRATOR_URL` | Recommended | - | Public base URL for notifications/links |
+| `COMPANY_ROOT` | No | `./company` | Company data directory on host |
+| `CORS_ORIGIN` | If using proxy | - | Allowed CORS origin |
+| `DOMAIN` | If using Caddy | - | Domain for TLS (reverse-proxy profile) |
 
 ## Troubleshooting
 
-**Caddy won't start**: Port 80/443 in use. Stop nginx/apache first.
+**Container won't start**: Check `docker compose logs orchestrator`. Common: missing API key, port conflict.
 
-**TLS not working**: Check DNS points to server. Caddy needs port 80 for ACME challenge.
+**Workers not connecting**: Verify orchestrator is reachable from the worker machine at the URL you passed to `--url`.
 
-**Login fails**: Ensure `cors_origin` in company.yaml matches your domain exactly (including `https://`).
-
-**Webhooks not received**: Uncomment webhook section in Caddyfile, add DNS record, restart Caddy.
+**Webhooks not received**: Ensure port 7777 is reachable. If using Caddy, add a webhook route to the Caddyfile.

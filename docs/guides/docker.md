@@ -1,52 +1,45 @@
 # Docker Guide
 
+## What the Docker image contains
+
+The Docker image runs the **orchestrator** (control plane). It does **not** contain AI runtime adapters (Claude Code, Codex, OpenCode). Workers run on separate host machines with runtimes installed locally. The primary operator surfaces are CLI, API, MCP, and Telegram.
+
+See [Deployment Variants](./deployment-variants.md) for the full topology guide.
+
 ## Quick Start
 
 ```bash
 git clone https://github.com/questpie/autopilot
 cd autopilot
 cp .env.example .env
+# Edit .env — set at least OPENROUTER_API_KEY
 docker compose up
-
-# Authenticate (choose one):
-autopilot provider login claude   # Use Claude subscription (recommended, works headless)
-# OR set ANTHROPIC_API_KEY in .env  # Use API key
 ```
 
-Dashboard: http://localhost:3000
 API: http://localhost:7778
-
-The dashboard runs through a local Caddy proxy on `:3000`, so browser requests to `/api`, `/artifacts`, `/fs`, and `/streams` stay same-origin.
 
 ## docker-compose.yml Explained
 
 ```yaml
 services:
-  caddy:
-    image: caddy:2-alpine          # Same-origin proxy for browser traffic
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
-
   orchestrator:
-    build: .                          # Builds from Dockerfile
+    image: questpie/autopilot:latest
     ports:
-      - "7778:7778"                   # API server (direct/debug)
+      - "7778:7778"                   # API server
       - "7777:7777"                   # Webhook server
     volumes:
       - ./company:/data/company       # Company files (persisted)
     environment:
-      - COMPANY_ROOT=/data/company    # Path inside container
-      - API_INTERNAL_URL=http://localhost:7778
-      - ANTHROPIC_API_KEY=...         # From .env file
+      - COMPANY_ROOT=/data/company
+      - OPENROUTER_API_KEY=...        # From .env file
+      - ORCHESTRATOR_URL=...          # Public URL (for production)
 ```
 
 ## Volume Mounts
 
 | Mount | Purpose |
 |-------|---------|
-| `./company:/data/company` | Company filesystem — config, knowledge, skills, dashboard. SQLite DB at `.data/autopilot.db` inside this directory. |
+| `./company:/data/company` | Company filesystem — config, knowledge, skills. SQLite DB at `.data/autopilot.db` inside this directory. |
 
 The SQLite database lives inside the company directory at `.data/autopilot.db`. Since the company directory is mounted as a volume, the database persists across container restarts.
 
@@ -56,18 +49,34 @@ See `.env.example` for all options. Key ones:
 
 | Variable | Required | Description |
 |----------|----------|------------|
-| `ANTHROPIC_API_KEY` | No | Claude API key (alternative to `autopilot provider login claude`) |
-| `COMPANY_ROOT` | Docker only | Path inside container (default: `/data/company`) |
-| `API_INTERNAL_URL` | No | Dashboard server-side internal URL to the orchestrator API (default: `http://localhost:7778`) |
-| `AUTOPILOT_MASTER_KEY` | Production | Encryption key for secrets |
+| `OPENROUTER_API_KEY` | Yes (or direct keys) | AI provider — one key for all models via OpenRouter |
+| `ORCHESTRATOR_URL` | Production | Public base URL for notifications and preview links |
+| `COMPANY_ROOT` | Docker | Path inside container (default: `/data/company`) |
+| `AUTOPILOT_MASTER_KEY` | Production | Encryption key for shared secrets |
+| `BETTER_AUTH_SECRET` | Production | Auth cookie/token secret |
+| `CORS_ORIGIN` | Behind proxy | Allowed CORS origin (e.g. `https://autopilot.yourdomain.com`) |
+
+## Connecting Workers
+
+The Docker container is the orchestrator. Workers connect from host machines:
+
+```bash
+# On the orchestrator machine, create a join token:
+docker compose exec orchestrator autopilot worker token create --description "My laptop"
+
+# On the worker machine:
+autopilot worker start --url http://<orchestrator-ip>:7778 --token <token>
+```
+
+Workers need runtime binaries (Claude Code, Codex, OpenCode) installed locally. See [Deployment Variants](./deployment-variants.md#runtime-adapter-setup) for setup instructions.
 
 ## Profiles
 
 ```bash
-# Default: orchestrator + dashboard
+# Default: orchestrator only
 docker compose up
 
-# With auto-updates (Watchtower)
+# With auto-updates (Watchtower — opt-in, no silent self-mutation)
 docker compose --profile auto-update up
 
 # Development mode (hot reload, source mounted)
@@ -84,10 +93,12 @@ docker compose pull
 docker compose up -d
 ```
 
-Or enable auto-updates:
+Or enable auto-updates (opt-in):
 ```bash
 docker compose --profile auto-update up -d
 ```
+
+Release channels and version compatibility are not yet implemented (Pass 25.7).
 
 ## Backup
 
@@ -112,7 +123,7 @@ aws s3 sync ./company s3://my-bucket/autopilot-backup/
 docker compose logs orchestrator
 
 # Common issues:
-# - Missing authentication (run: autopilot provider login claude, or set ANTHROPIC_API_KEY)
+# - Missing API key (set OPENROUTER_API_KEY in .env)
 # - Port already in use (change in .env)
 # - Company directory permissions
 ```
@@ -127,6 +138,6 @@ docker compose up -d
 ### Reset everything
 ```bash
 docker compose down
-rm -rf ./company/.data  # Reset database (keeps files)
+rm -rf ./company/.data  # Reset database (keeps config files)
 docker compose up -d
 ```

@@ -10,9 +10,12 @@ serverCmd.addCommand(
 	new Command('start')
 		.description('Start the orchestrator server')
 		.option('-p, --port <port>', 'Server port', '7778')
-		.action(async (opts: { port: string }) => {
+		.option('--company-root <path>', 'Explicit company root path (overrides cwd walk-up discovery)')
+		.action(async (opts: { port: string; companyRoot?: string }) => {
 			try {
-				const root = await findCompanyRoot()
+				const root = opts.companyRoot
+					? (await import('node:path')).resolve(opts.companyRoot)
+					: await findCompanyRoot()
 				const port = Number.parseInt(opts.port, 10)
 
 				const { server } = await startServer({ companyRoot: root, port })
