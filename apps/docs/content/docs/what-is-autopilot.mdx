@@ -1,0 +1,77 @@
+---
+title: What is Autopilot
+description: Autopilot is a workflow-driven AI execution system for real project work.
+---
+
+Autopilot is a workflow-driven AI operator for real engineering work. It coordinates tasks, workflows, workers, approvals, and external actions across real repos and real environments.
+
+## What it is
+
+An AI-native execution system designed around:
+
+- **Durable tasks** — stable units of intent that progress through workflows
+- **Explicit workflows** — authored YAML that decides step progression, routing, and approvals
+- **Routable runs** — individual execution attempts claimed by workers
+- **Human approval loops** — gate risky steps before they execute
+- **Artifacts and previews** — durable, orchestrator-backed outputs that survive worker shutdown
+- **Machine execution through workers** — runs happen on real machines with real access
+
+## What it is not
+
+- **Not a chat product.** Chat surfaces are clients over the same primitives, not the product itself.
+- **Not a dashboard app.** There is no dashboard that invents the architecture. Primitives come first.
+- **Not a wrapper around one AI client.** The system supports runtime adapters. Claude Code is the first real adapter.
+- **Not an agent swarm.** Work moves through authored workflows with explicit steps, not autonomous agent coordination.
+
+## The operating model
+
+```
+Intent → Task → Workflow → Run → Worker → Result → Review → Continue
+```
+
+1. **Intent** arrives through CLI, intake provider, or conversation binding
+2. A **task** is created and assigned to a workflow
+3. The **workflow** determines the first step and creates a run
+4. A **worker** on a real machine claims and executes the run
+5. The worker produces a **result** — summary, outputs, artifacts
+6. The **orchestrator** stores results, creates durable previews
+7. If the step requires **review**, the task blocks until the operator approves, rejects, or replies
+8. The **workflow** advances to the next step
+
+## Data ownership
+
+Autopilot has three clear truth boundaries:
+
+| Boundary | What lives there | Owner |
+|---|---|---|
+| **Git / filesystem** | Agents, workflows, environments, providers, handlers, code, docs | Repository |
+| **Orchestrator DB** | Tasks, runs, workers, leases, events, artifacts, auth state | Orchestrator |
+| **Worker-local** | Raw sessions, transcripts, worktrees, credentials, MCP state | Worker machine |
+
+This separation is intentional. Authored policy is reviewable in git. Operational state is queryable from the orchestrator. Secrets and runtime state never leave the worker.
+
+## Current state
+
+The core system is operational:
+
+- Orchestrator as control plane
+- Worker with Claude Code runtime adapter
+- Full task → run → claim → execute → complete flow
+- Workflow-driven intake, step progression, approvals
+- Durable previews (orchestrator-backed, not worker-dependent)
+- Provider/handler extension runtime v1 (notifications, intent intake, conversations)
+- Surface packs (Telegram is the first real proof surface)
+- Pack distribution with git registries, lockfile, and `autopilot sync`
+- Notification bridge
+- CLI inbox/watch for async operation
+- Conversation bindings for task-scoped actions
+- Per-run git worktree isolation
+- Worker-local session persistence
+- Parent/child task graphs with wait/join
+
+**Not yet implemented:**
+- Worker App (planned, not the center of the current story)
+- Multi-runtime parity beyond Claude Code
+- Schedule/trigger runtime layer
+- Per-step runtime capability injection
+- Orchestrator-managed shared secret store

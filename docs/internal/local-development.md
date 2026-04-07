@@ -48,7 +48,9 @@ cd apps/dashboard-v2
 bun dev
 ```
 
-Opens at `http://localhost:3000`. Connects to the orchestrator API at `http://localhost:7778`.
+Opens at `http://localhost:3000`.
+The dashboard talks directly to the orchestrator at `http://localhost:7778` during source dev unless you override `VITE_API_URL`.
+SSR/server-side dashboard calls use `API_INTERNAL_URL` and default to `http://localhost:7778`.
 
 ## 5. Running the Docs Site
 
@@ -104,6 +106,14 @@ The tunnel stays open as long as the command runs. No account needed for quick t
 
 ## 9. Environment Setup
 
+Canonical rule: each runtime has one central env reader.
+
+- dashboard: `apps/dashboard-v2/src/lib/env.ts`
+- orchestrator: `packages/orchestrator/src/env.ts`
+- mcp: `packages/mcp-server/src/env.ts`
+
+Runtime application code should read env only through these modules.
+
 ### Required
 
 | Variable | Description |
@@ -118,8 +128,17 @@ The tunnel stays open as long as the command runs. No account needed for quick t
 | `WEBHOOK_PORT` | `7777` | Webhook server port |
 | `NODE_ENV` | `development` | Set `production` for secure cookies |
 | `AUTOPILOT_MASTER_KEY` | Auto-generated | Secrets encryption key |
+| `API_INTERNAL_URL` | `http://localhost:7778` | Dashboard server-side internal URL to the orchestrator API |
+| `VITE_API_URL` | unset | Optional browser API override. Source dev falls back to `http://localhost:7778` when unset. |
 
-For local dev, auth is always enabled by default.
+For local source dev, auth browser calls default to `http://localhost:7778`. For reverse-proxied deploys, leave `VITE_API_URL` unset so the browser uses the current origin.
+
+### Auth + Routing Notes
+
+- Local source dev is intentionally direct: dashboard browser calls go to `http://localhost:7778` by default.
+- Reverse-proxied Docker/self-hosted deployments should leave `VITE_API_URL` unset so browser calls stay same-origin.
+- SSR/server-side dashboard calls always use `API_INTERNAL_URL`.
+- Browser-visible env must use `VITE_`. Server-only env must not.
 
 ## 10. Monorepo Structure
 
@@ -162,7 +181,7 @@ questpie-autopilot/
 
 - The orchestrator watches `tasks/`, `comms/`, `dashboard/`, and `team/` directories
 - Changes to `company.yaml` require a restart
-- Changes to `schedules.yaml` are hot-reloaded
+- Changes to `team/schedules/*.yaml` are hot-reloaded
 - Changes to `roles.yaml` are hot-reloaded
 - Dashboard dev server (`bun dev`) has HMR
 
@@ -175,6 +194,25 @@ bun packages/cli/bin/autopilot.ts auth setup
 # Login
 bun packages/cli/bin/autopilot.ts auth login
 ```
+
+Important runtime details:
+
+- Dashboard browser requests authenticate via Better Auth session cookies, not only Bearer headers.
+- Email verification callbacks must point back to the dashboard origin, not the raw orchestrator origin.
+- The local master key file (`secrets/.master-key`) is created automatically if missing.
+
+### Common auth/setup gotchas
+
+- Blank setup pane with console error about `fs/promises`:
+  Browser code imported a server-only export chain. In particular, browser code must not depend on the root `@questpie/autopilot-spec` export if that re-exports Node-only modules. Use browser-safe subpath imports like `@questpie/autopilot-spec/schemas` and `@questpie/autopilot-spec/types`.
+- `401 Unauthorized` on authenticated dashboard API calls:
+  Check that the request is using the Better Auth session cookie and that orchestrator actor resolution accepts cookie-backed sessions.
+- Verify-email link redirects to `http://localhost:7778/`:
+  The auth call is missing an explicit dashboard `callbackURL`.
+- `ENOENT ... secrets/.master-key` on authenticated requests:
+  The local company root is missing the generated master key. Current behavior should auto-create it; if not, restart the orchestrator and inspect `packages/orchestrator/src/auth/crypto.ts`.
+- Setup wizard opens on the wrong step after reload:
+  Treat setup wizard state as ephemeral UI state. Do not persist step state across reloads unless hydration is explicitly handled.
 
 ## 12. Common Tasks
 

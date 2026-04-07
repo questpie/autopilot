@@ -1,0 +1,11 @@
+id: text-intake
+name: Text Intent Intake (Example)
+kind: intent_channel
+handler: handlers/text-intake.ts
+description: >
+  Generic text-to-task intake provider.
+  Accepts { text, type?, priority? } and creates a task.
+capabilities:
+  - op: intent.ingest
+config:
+  default_type: feature

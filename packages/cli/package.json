@@ -10,8 +10,7 @@
 	"main": "src/index.ts",
 	"files": [
 		"bin/",
-		"src/",
-		"templates/"
+		"src/"
 	],
 	"keywords": [
 		"ai",
@@ -38,14 +37,14 @@
 	"scripts": {
 		"build": "echo 'no build needed — runs as TypeScript via Bun'",
 		"test": "bun test",
-		"typecheck": "bunx tsc --noEmit",
-		"prepublishOnly": "rm -rf ./templates && cp -r ../../templates ./templates"
+		"typecheck": "bunx tsc --noEmit"
 	},
 	"dependencies": {
-		"@questpie/autopilot-orchestrator": "1.0.0",
+		"@questpie/autopilot-orchestrator": "2.0.0",
+		"@questpie/autopilot-worker": "1.0.0",
 		"@questpie/autopilot-spec": "1.0.0",
 		"commander": "^13.0.0",
-		"simple-git": "^3.27.0",
+		"hono": "^4.12.9",
 		"yaml": "^2.7.0"
 	},
 	"devDependencies": {

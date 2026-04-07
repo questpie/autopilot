@@ -1,5 +1,9 @@
 {
   "include": ["**/*.ts", "**/*.tsx", "eslint.config.js", "prettier.config.js", "vite.config.js"],
+  "exclude": [
+    "src/features/files/**",
+    "src/features/settings/**"
+  ],
 
   "compilerOptions": {
     "target": "ES2022",

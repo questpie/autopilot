@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   TreeStructureIcon,
   PencilSimpleIcon,
@@ -13,7 +13,6 @@ import { useTranslation } from "@/lib/i18n"
 import { queryKeys } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
@@ -90,7 +89,7 @@ export function WorkflowEditor() {
   const [newDialogOpen, setNewDialogOpen] = useState(false)
   const [newName, setNewName] = useState("")
 
-  const { data: workflowFiles, isLoading } = useQuery({
+  const { data: workflowFiles } = useSuspenseQuery({
     ...directoryQuery("workflows"),
     queryKey: [...queryKeys.workflows.list(), "directory"],
   })
@@ -185,16 +184,6 @@ export function WorkflowEditor() {
     saveMutation.mutate({ filename: selected, content: yamlContent })
   }, [selected, yamlContent, saveMutation, t])
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full" />
-        ))}
-      </div>
-    )
-  }
-
   const workflowList = summaries ?? []
 
   // Detail view
@@ -255,9 +244,9 @@ export function WorkflowEditor() {
         {editing ? (
           <div className="flex flex-col gap-3">
             {yamlError && (
-              <div className="flex items-center gap-2 border border-red-500/30 bg-red-500/5 p-2">
-                <WarningIcon size={14} className="text-red-500" />
-                <span className="text-xs text-red-400">{yamlError}</span>
+              <div className="flex items-center gap-2 border border-destructive/30 bg-destructive/5 p-2">
+                <WarningIcon size={14} className="text-destructive" />
+                <span className="text-xs text-destructive">{yamlError}</span>
               </div>
             )}
             <textarea

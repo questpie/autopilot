@@ -23,7 +23,7 @@ export function StatusView({ is2FAEnabled, onGoToPassword }: StatusViewProps) {
       <FormSection title={t("auth.two_factor_title")}>
         <div className="flex items-center gap-3">
           {is2FAEnabled ? (
-            <Badge variant="secondary" className="gap-1.5 rounded-none text-xs text-green-400">
+            <Badge variant="secondary" className="gap-1.5 rounded-none text-xs text-success">
               <ShieldCheckIcon size={14} />
               {t("settings.tfa_enabled")}
             </Badge>

@@ -23,17 +23,11 @@ autopilot ask "Draft a Q2 marketing plan"
 
 ## Configure
 
-Set your LLM provider via environment variable or `.env` file in your company directory:
+Set your OpenRouter API key via environment variable or `.env` file in your company directory:
 
 ```bash
-# Anthropic API key
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Or OpenAI API key (for Codex SDK provider)
-OPENAI_API_KEY=sk-...
+OPENROUTER_API_KEY=sk-or-...
 ```
-
-The Claude Agent SDK provider also works with a Claude Max subscription — no API key needed.
 
 ## CLI commands
 
@@ -61,8 +55,7 @@ The Claude Agent SDK provider also works with a Claude Max subscription — no A
 
 ## Agent providers
 
-- [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) — primary provider
-- [Codex SDK](https://github.com/openai/codex) — OpenAI provider
+- [TanStack AI](https://tanstack.com/ai) with [OpenRouter](https://openrouter.ai) — supports Anthropic, OpenAI, Google, and more
 
 ## Links
 

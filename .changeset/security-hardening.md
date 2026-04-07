@@ -2,16 +2,17 @@
 "@questpie/autopilot": minor
 "@questpie/autopilot-spec": minor
 "@questpie/autopilot-orchestrator": minor
+"@questpie/autopilot-worker": minor
 ---
 
-Security hardening: 22 fixes across auth, API, agents, secrets, and dashboard
+Canary alpha: deployment packaging, operator tooling, runtime selection pipeline
 
-**API Security:** CORS locked to configured origin (not `*`), security headers (X-Frame-Options, X-Content-Type-Options, HSTS, Referrer-Policy), X-Forwarded-For trusted proxy validation, request body size limits, reduced status endpoint payload for unauthenticated requests.
+**Deployment (Pass 25.3):** Docker orchestrator-only packaging, fresh-volume bootstrap, healthcheck, Watchtower opt-in auto-update, Caddy TLS profile, deploy directory with VPS quick-start.
 
-**Agent Sandbox:** SSRF protection blocks private IPs in `http_request` tool, optional domain allowlist via `agent_http_allowlist`, per-agent `tools` config controls Claude SDK built-in tools (`fs` → read-only, `fs_write` → read/write, `terminal` → Bash), `PreToolUse` hooks enforce `fs_scope` write globs on Write/Edit and deny patterns on Read, filesystem browser enforces role-based scope for viewers.
+**Operator Doctor (Pass 25.4):** `autopilot doctor` validates company root, secrets, URLs, Docker packaging, runtime binaries, and orchestrator health. Supports `--offline`, `--json`, `--require-runtime`.
 
-**Rate Limiting:** Agents now rate-limited (600/min general, 50/min search, 100/min chat), weighted sliding window algorithm, password reset rate limiter (3/15min), timing-safe HMAC and bearer token comparison.
+**Release/Update (Pass 25.7):** `autopilot version` shows local + remote orchestrator versions. `autopilot update check` queries npm registry with `--channel stable|canary`. `/api/health` now returns orchestrator version. Stable/canary channel model defined. Docker rollback via pinned image tags.
 
-**Secrets & Keys:** Agent keys persisted across restarts (encrypted with master key), encrypted YAML support, secret masking in logs, API key hashing utility.
+**Runtime Setup (Pass 25.8):** Per-runtime tutorials for Claude Code, Codex, and OpenCode covering install, auth, MCP config, and V1 caveats. VPS deployment runbook with end-to-end walkthrough.
 
-**Auth:** Mandatory 2FA for owner/admin roles, invite-only registration via `.auth/invites.yaml`, password complexity (min 12 chars, digit + special), banned user session blocking, dashboard uses cookie-based auth (no more token in query params).
+**Runtime Selection (Pass 26.1):** Agent config carries canonical `model`, `provider`, `variant`. Orchestrator propagates to runs and claimed run contracts. Worker resolves via `modelMap` and passes `--model` to adapters. No flag when no model is set — runtime defaults preserved.

@@ -1,63 +1,42 @@
 /**
- * Session management routes — list, revoke individual, and revoke all sessions.
+ * Session inspection routes.
+ *
+ * GET /api/sessions       — list sessions (filterable by provider, status, mode)
+ * GET /api/sessions/:id   — get single session
  */
 import { Hono } from 'hono'
+import { validator as zValidator } from 'hono-openapi'
+import { z } from 'zod'
 import type { AppEnv } from '../app'
 
-const sessions = new Hono<AppEnv>()
-	// GET /api/sessions — list active sessions for current user
-	.get('/', async (c) => {
-		const actor = c.get('actor')
-		if (!actor) return c.json([])
+const sessionsRoute = new Hono<AppEnv>()
+	.get(
+		'/',
+		zValidator(
+			'query',
+			z.object({
+				provider_id: z.string().optional(),
+				status: z.string().optional(),
+				mode: z.string().optional(),
+			}),
+		),
+		async (c) => {
+			const { sessionService } = c.get('services')
+			const filter = c.req.valid('query')
+			const result = await sessionService.list(filter)
+			return c.json(result, 200)
+		},
+	)
+	.get(
+		'/:id',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { sessionService } = c.get('services')
+			const { id } = c.req.valid('param')
+			const session = await sessionService.get(id)
+			if (!session) return c.json({ error: 'session not found' }, 404)
+			return c.json(session, 200)
+		},
+	)
 
-		const auth = c.get('auth')
-		try {
-			const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
-			const listFn = authApi.listSessions ?? authApi.listUserSessions
-			if (!listFn) return c.json([])
-
-			const result = (await listFn({ headers: c.req.raw.headers })) as unknown[]
-			return c.json(result ?? [])
-		} catch {
-			return c.json([])
-		}
-	})
-	// DELETE /api/sessions/:token — revoke a specific session by its token
-	.delete('/:token', async (c) => {
-		const actor = c.get('actor')
-		if (!actor) return c.json({ error: 'Unauthorized' }, 401)
-
-		const token = c.req.param('token')
-		const auth = c.get('auth')
-
-		try {
-			const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
-			const revokeFn = authApi.revokeSession
-			if (!revokeFn) return c.json({ error: 'Session revocation not available' }, 501)
-
-			await revokeFn({ headers: c.req.raw.headers, body: { token } })
-			return c.json({ ok: true })
-		} catch {
-			return c.json({ error: 'Failed to revoke session' }, 500)
-		}
-	})
-	// DELETE /api/sessions — revoke all sessions for current user
-	.delete('/', async (c) => {
-		const actor = c.get('actor')
-		if (!actor) return c.json({ error: 'Unauthorized' }, 401)
-
-		const auth = c.get('auth')
-
-		try {
-			const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
-			const revokeAllFn = authApi.revokeSessions ?? authApi.revokeAllUserSessions
-			if (!revokeAllFn) return c.json({ error: 'Session revocation not available' }, 501)
-
-			await revokeAllFn({ headers: c.req.raw.headers })
-			return c.json({ ok: true })
-		} catch {
-			return c.json({ error: 'Failed to revoke sessions' }, 500)
-		}
-	})
-
-export { sessions }
+export { sessionsRoute }

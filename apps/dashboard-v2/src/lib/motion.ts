@@ -74,6 +74,17 @@ export const staticVariants = {
   exit: { opacity: 1 },
 } as const
 
+// ── Stagger Variants (auth screens, lists) ──
+export const staggerContainer = {
+  initial: {},
+  animate: { transition: { staggerChildren: 0.04, delayChildren: 0.05 } },
+} as const
+
+export const staggerItem = {
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] } },
+} as const
+
 // ── Motion Preference Hook ──
 // Wraps useReducedMotion with typed helpers.
 export function useMotionPreference() {

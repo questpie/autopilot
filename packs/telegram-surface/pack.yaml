@@ -1,0 +1,24 @@
+id: telegram-surface
+name: Telegram Surface
+category: surface
+version: 1.0.0
+description: >
+  Telegram bot surface for QUESTPIE Autopilot.
+  Outbound: task notifications with inline approve/reject buttons.
+  Inbound: webhook-driven approve, reject, reply via Telegram.
+files:
+  - src: providers/telegram.yaml
+    dest: providers/telegram.yaml
+  - src: handlers/telegram.ts
+    dest: handlers/telegram.ts
+required_env:
+  - name: TELEGRAM_BOT_TOKEN
+    description: Telegram Bot API token from @BotFather
+  - name: TELEGRAM_CHAT_ID
+    description: Default Telegram chat ID for notifications
+  - name: TELEGRAM_WEBHOOK_SECRET
+    description: Shared secret for authenticating Telegram webhook callbacks
+manual_steps:
+  - description: "Create a Telegram bot via @BotFather and obtain the bot token"
+  - description: "Set the webhook URL: https://api.telegram.org/bot<TOKEN>/setWebhook?url=<ORCHESTRATOR_URL>/api/conversations/telegram&secret_token=<WEBHOOK_SECRET>"
+  - description: "Create a conversation binding for your task chat"

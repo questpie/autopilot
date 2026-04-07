@@ -1,34 +1,34 @@
 function createKeys<T extends string>(entity: T) {
-  return {
-    root: [entity] as const,
-    list: (filters?: Record<string, unknown>) =>
-      filters
-        ? ([entity, "list", filters] as const)
-        : ([entity, "list"] as const),
-    detail: (id: string) => [entity, "detail", id] as const,
-  }
+	return {
+		root: [entity] as const,
+		list: (filters?: Record<string, unknown>) =>
+			filters ? ([entity, 'list', filters] as const) : ([entity, 'list'] as const),
+		detail: (id: string) => [entity, 'detail', id] as const,
+	}
 }
 
 export const queryKeys = {
-  status: createKeys("status"),
-  tasks: createKeys("tasks"),
-  agents: createKeys("agents"),
-  channels: createKeys("channels"),
-  messages: createKeys("messages"),
-  activity: createKeys("activity"),
-  pins: createKeys("pins"),
-  inbox: createKeys("inbox"),
-  artifacts: createKeys("artifacts"),
-  skills: createKeys("skills"),
-  sessions: createKeys("sessions"),
-  search: createKeys("search"),
-  files: createKeys("files"),
-  dashboard: createKeys("dashboard"),
-  secrets: createKeys("secrets"),
-  team: createKeys("team"),
-  workflows: createKeys("workflows"),
-  providers: createKeys("providers"),
-  company: createKeys("company"),
-  userSessions: createKeys("userSessions"),
-  notifications: createKeys("notifications"),
+	status: createKeys('status'),
+	tasks: createKeys('tasks'),
+	agents: createKeys('agents'),
+	channels: createKeys('channels'),
+	messages: createKeys('messages'),
+	activity: createKeys('activity'),
+	pins: createKeys('pins'),
+	inbox: createKeys('inbox'),
+	artifacts: createKeys('artifacts'),
+	skills: createKeys('skills'),
+	sessions: createKeys('sessions'),
+	search: createKeys('search'),
+	files: createKeys('files'),
+	dashboard: createKeys('dashboard'),
+	secrets: createKeys('secrets'),
+	team: createKeys('team'),
+	workflows: createKeys('workflows'),
+	workflowRuns: createKeys('workflow-runs'),
+	providers: createKeys('providers'),
+	company: createKeys('company'),
+	userSessions: createKeys('userSessions'),
+	notifications: createKeys('notifications'),
+	reactions: createKeys('reactions'),
 } as const

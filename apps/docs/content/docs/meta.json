@@ -1,24 +1,16 @@
 {
+	"title": "Documentation",
 	"pages": [
-		"---Getting Started---",
 		"index",
-		"getting-started",
-		"---Core Concepts---",
-		"primitives",
+		"what-is-autopilot",
 		"architecture",
-		"agents",
-		"workflows",
-		"memory",
-		"---Key Features---",
-		"living-dashboard",
-		"skills",
-		"artifacts",
-		"features",
-		"---Reference---",
-		"cli",
-		"security",
-		"self-hosting",
-		"integrations",
-		"use-cases"
+		"quickstart",
+		"operator-guide",
+		"providers-and-handlers",
+		"packs-and-distribution",
+		"conversation-assisted-operation",
+		"telegram-surface",
+		"cloud-and-deployment",
+		"faq"
 	]
 }

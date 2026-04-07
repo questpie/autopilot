@@ -1,0 +1,23 @@
+id: owner
+name: "Owner"
+role: "owner"
+# email: "you@example.com"  # Set your email for notifications
+notification_routing:
+  urgent:
+    transports: ["email"]
+    throttle: null
+  high:
+    transports: ["email"]
+    throttle: "5m"
+  normal:
+    transports: ["email"]
+    throttle: "15m"
+  low:
+    transports: ["email"]
+    throttle: "1h"
+quiet_hours:
+  enabled: true
+  start: "22:00"
+  end: "07:00"
+  timezone: "UTC"
+  except: ["urgent"]

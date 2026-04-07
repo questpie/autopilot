@@ -1,168 +1,246 @@
 ---
 title: Architecture
-description: Single Bun process. One SQLite file. Zero external infrastructure. Six-layer stack, orchestrator internals, and filesystem-native state.
+description: Orchestrator, workers, truth boundaries, and the execution model.
 ---
 
-Single process. Zero infrastructure. Filesystem-native state. SDK-first.
+Autopilot splits into three layers:
 
-## Zero Infrastructure
+- **Orchestrator** — the control plane. Owns tasks, runs, workflow progression, events, artifacts, and durable previews.
+- **Workers** — execution nodes. Run on real machines with real repo access, toolchains, and credentials.
+- **`.autopilot/`** — repo-authored policy. Agents, workflows, environments, providers, and handlers — all versioned in git.
 
-What you need to run Autopilot:
+Every client (CLI, bound conversations, future Worker App) operates over the same primitives. The orchestrator is the system of record. Workers execute. The repo defines the rules.
 
-- **Bun runtime** -- the process
-- **Anthropic API key** -- the intelligence
+## At a glance
 
-That's it. No Docker. No Postgres. No Redis. No Pinecone. No Kubernetes. No message queue. The entire company runs as one Bun process with one SQLite file for the database. Install and run in 60 seconds.
+| Layer | Owns | Does not own |
+|---|---|---|
+| Orchestrator | Tasks, runs, workflow progression, events, artifacts, durable previews | Runtime sessions, worktrees, local credentials |
+| Worker | Runtime execution, repo access, per-run worktrees, raw local session state | Workflow truth, shared operational state |
+| Repo config | Agents, workflows, environments, providers, handlers | Mutable runtime state |
 
-What competitors require: Docker + Postgres + Redis + vector DB + message queue + monitoring stack + deployment pipeline. Autopilot's zero-infra story is a real adoption advantage.
+## Orchestrator
 
-## System Stack
+The orchestrator is the system of record for operational state. It:
 
-```text title="system overview"
-+-----------------------------------------------------------+
-|  LAYER 1 -- HUMAN                                          |
-|  CLI . Dashboard . Telegram . External APIs                |
-|  Thin consumers. No business logic.                        |
-+-----------------------------------------------------------+
-                           | calls SDK functions
-                           v
-+-----------------------------------------------------------+
-|  LAYER 2 -- ORCHESTRATOR                                   |
-|  Single Bun process per company                            |
-|                                                            |
-|  Watcher -> detects FS changes (new tasks, status moves)   |
-|  Workflow -> state machine routing (YAML-defined steps)    |
-|  Context -> 6-layer prompt assembly (identity+state+mem)   |
-|  Spawner -> creates Claude Agent SDK sessions              |
-|  Scheduler -> cron-based recurring agent jobs              |
-|  Webhook -> HTTP event receiver (port 7777)                |
-|  API -> REST + SSE realtime streaming (port 7778)          |
-|  Notifier -> transport dispatcher (Telegram built-in)      |
-|  Artifact -> lazy cold-start preview server                |
-|  Skills -> reusable knowledge packages                     |
-+-----------------------------------------------------------+
-                           | spawns
-                           v
-+-----------------------------------------------------------+
-|  LAYER 3 -- AGENTS                                         |
-|  Claude Agent SDK sessions with 7 tools + MCP              |
-|  Role-scoped FS access, sandboxed shell, deny patterns     |
-|  Human gates at explicit workflow steps                     |
-+-----------------------------------------------------------+
-                           | reads/writes
-                           v
-+-----------------------------------------------------------+
-|  LAYER 4 -- STORAGE                                        |
-|  Hybrid: YAML/Markdown/JSON files + SQLite (Drizzle ORM)  |
-|  FTS5 full-text search + sqlite-vec embeddings             |
-|  Better Auth for security . Git auto-commit audit trail    |
-|  Write queue (file-level async mutex)                      |
-+-----------------------------------------------------------+
+- Stores tasks, runs, workers, leases, events, and artifacts
+- Advances workflows based on explicit step outputs
+- Serves durable preview URLs from stored artifacts
+- Exposes the API used by the CLI and future clients
+- Dispatches notification and conversation-provider flows when configured
+
+It does **not** execute AI sessions itself.
+
+Start it with:
+
+```bash
+autopilot server start
 ```
 
-## SDK-First Architecture
+## Worker
 
-All business logic lives in the orchestrator SDK. CLI, dashboard, and API are thin consumers that call the same functions. No logic is duplicated across consumers.
+A worker is a long-running execution node on a host machine. It:
 
-```ts title="consumer pattern"
-// CLI -- thin shell over SDK
-import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
+- Claims pending runs from the orchestrator
+- Executes through a runtime adapter
+- Uses real repo access, toolchain access, and machine-local credentials
+- Creates isolated git worktrees per run
+- Stores raw transcript/session state locally
+- Reports summaries, outputs, and artifacts back to the orchestrator
 
-// Dashboard -- same SDK, different UI
-import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
+Start it with:
 
-// External API -- same SDK, HTTP wrapper
-import { createTask, listTasks, loadAgents } from '@questpie/autopilot-orchestrator'
+```bash
+autopilot worker start
 ```
 
-## Hybrid Storage
+For local development, `autopilot start` still exists as a convenience shortcut that boots both processes.
 
-YAML and Markdown files remain the source of truth -- human-readable, git-versioned, and portable. SQLite provides speed:
+## Repo-authored config
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| Config | YAML files | Agent definitions, workflows, schedules, webhooks, policies |
-| Knowledge | Markdown files | Company brain, brand guidelines, technical docs |
-| Tasks | YAML files | Task state, history, assignments, dependencies |
-| Indexes | SQLite + Drizzle ORM | Fast queries, status counts, agent lookups |
-| Search | FTS5 | Full-text keyword search across all content |
-| Embeddings | sqlite-vec | Vector similarity search, semantic queries |
-| Auth | Better Auth | Dashboard and API authentication |
-| Audit | Git auto-commit | 5-second batch, every agent action is a commit |
+Autopilot policy lives in `.autopilot/` and stays reviewable in git:
 
-Files for config and state (human-readable, git-versioned). SQLite for speed (queries, search, embeddings). If you delete the SQLite database, it is fully rebuilt from files.
-
-## Provider Abstraction
-
-Three agent providers are available. Configure per-agent or company-wide:
-
-| Provider | Config Value | Features |
-|----------|-------------|----------|
-| Claude Agent SDK | `claude-agent-sdk` | Primary. File tools, MCP, sandboxing, hooks, sub-agents. Works with Claude Max. |
-| Anthropic SDK | `anthropic` | Raw `@anthropic-ai/sdk` with agentic tool-use loop. Requires `ANTHROPIC_API_KEY`. |
-| Codex SDK | `codex-sdk` | OpenAI Codex runtime for GPT models. Requires `OPENAI_API_KEY`. |
-
-The Claude Agent SDK provider gives agents built-in infrastructure -- file I/O, shell access, sub-agents, MCP support, and lifecycle hooks. Role-based filesystem scoping and deny patterns are enforced on top.
-
-## Orchestrator Module Map
-
-| Module | Responsibility |
-|--------|----------------|
-| fs/ | YAML CRUD with write queue. File-level async mutex prevents concurrent write corruption. |
-| workflow/ | State machine engine. Reads YAML workflows, checks transitions, handles reviews and human gates. |
-| context/ | Builds role-scoped system prompts from 6 layers: identity, company state, memory, task context, skills discovery, and tool list. |
-| agent/ | Creates Claude Agent SDK sessions. Injects context, configures tools/MCP, streams output. |
-| scheduler/ | Cron-based recurring agent tasks from schedules.yaml. |
-| watcher/ | Monitors company filesystem via chokidar. Detects new tasks, status changes, messages. |
-| webhook/ | HTTP event receiver on port 7777. HMAC-SHA256 verification. |
-| session/ | In-memory session stream management. Powers `autopilot attach` for real-time observation. |
-| api/ | REST API + SSE event stream on port 7778. Dashboard and CLI consumer endpoint. |
-| artifact/ | Lazy cold-start server for agent-created previews. Port pool management, idle timeout. |
-| skills/ | Reusable knowledge packages. Loaded into context assembly Layer 2. |
-| notifier/ | Notification dispatch. Telegram transport built-in, Slack/email planned. |
-
-## Data Flow: Intent to Completion
-
-```text title="data flow"
-Human: "Build a pricing page"
-  |
-  v
-CLI: autopilot chat ceo "Build a pricing page"
-  | Router decides which agent responds
-  v
-Watcher: detects new task file
-  |
-  v
-Orchestrator: routes to CEO agent
-  | Context assembler builds 6-layer prompt:
-  |   Layer 1: Agent identity (role, personality, tools)
-  |   Layer 2: Company state (knowledge, team, projects)
-  |   Layer 3: Agent memory (facts, decisions, past sessions)
-  |   Layer 4: Task context (description, dependencies, history)
-  |   Layer 5: Skills discovery (role-matched skills)
-  |   Layer 6: Tool list (available tool definitions)
-  v
-CEO Agent Session:
-  | Reads company knowledge, evaluates scope
-  | Calls: task({ action: "create", title: "Scope requirements", assigned_to: "sam" })
-  | Calls: task({ action: "create", title: "Plan implementation", assigned_to: "alex" })
-  | Calls: task({ action: "create", title: "Implement + Stripe", assigned_to: "max" })
-  | Sets dependencies: implement -> plan -> scope
-  v
-Watcher: detects new tasks
-  |
-  v
-Sam (strategist): writes spec -> task({ action: "update", status: "done" })
-  v
-Workflow Engine: scope -> plan transition -> activates Alex's task
-  v
-Alex (planner): writes plan -> task({ action: "update", status: "done" })
-  v
-Max (developer): implements, creates PR -> task({ action: "update", status: "done" })
-  v
-Riley (reviewer): reviews PR -> approves
-  v
-Workflow Engine: human_gate -> task moves to review, appears in inbox
-  v
-Human: autopilot approve TASK-003 -> workflow continues to deploy
+```text
+.autopilot/
+├── company.yaml
+├── project.yaml
+├── agents/
+├── workflows/
+├── environments/
+├── providers/
+└── handlers/
 ```
+
+That keeps workflows and operator policy:
+
+- versioned
+- diffable
+- branchable
+- editable without a separate admin UI
+
+## Truth boundaries
+
+Use this mental model when deciding where something belongs:
+
+| Place | Put here |
+|---|---|
+| Repo filesystem | Authored config and reviewable policy |
+| Orchestrator DB/API | Shared operational state and durable artifact metadata/content |
+| Worker-local state | Raw transcripts, local sessions, worktrees, resolved secrets |
+
+This is the key architectural boundary: the orchestrator owns shared truth, while workers own machine-local runtime reality.
+
+## Execution flow
+
+The normal path is:
+
+1. A task is created
+2. A workflow attaches and selects the current step
+3. The orchestrator creates a run
+4. A worker claims the run
+5. The worker executes through its runtime adapter
+6. The worker reports summary, outputs, and artifacts
+7. The orchestrator stores results and advances the workflow
+8. If the next step is `human_approval`, the task blocks until an operator acts
+
+This is intentionally explicit. Autopilot is not hiding a giant chat loop behind the scenes.
+
+## Workflow I/O
+
+Workflows declare step outputs directly in YAML. The engine adds the machine-readable output suffix automatically, then routes using named output fields.
+
+Current capabilities:
+
+- explicit `next`
+- ordered `transitions`
+- `on_approve`, `on_reply`, `on_reject`
+- source-run summary forwarding
+- explicit `input.artifacts`
+
+That is enough for plan/review/implement loops without turning the workflow engine into a rules platform.
+
+## Runtime adapters
+
+Autopilot does not ship its own AI runtime. Workers execute runs through **adapters** that wrap existing AI tools you already have installed and subscribed to.
+
+The adapter model works like this:
+
+1. The worker resolves a binary on the host machine (e.g. `claude`, `codex`, `opencode`)
+2. The adapter spawns that binary as a subprocess with the run's prompt and instructions
+3. The adapter feeds the run context (task, instructions, MCP config) to the subprocess
+4. The subprocess does the actual AI work using **your existing subscription**
+5. The adapter parses the result back into Autopilot's structured format (summary, outputs, artifacts)
+
+This means:
+
+- **No new AI vendor.** Autopilot reuses the AI tools and subscriptions you already pay for.
+- **No API key management for models.** The adapter delegates to the CLI tool, which handles its own auth.
+- **New runtimes are just new adapters.** Adding Codex or OpenCode support means implementing the same `start → parse → return` contract against a different binary.
+
+### Today: Claude Code
+
+The shipping adapter spawns the `claude` CLI. It supports:
+
+- One run per worker at a time
+- Per-run git worktrees for isolation
+- Structured outputs and artifacts
+- Session resumption via local session refs (for same-worker continuation)
+- MCP integration — the worker injects Autopilot's task/run tools so the AI can inspect and create tasks during execution
+
+Works with any Claude plan that includes CLI access (Pro, Team, Enterprise).
+
+### Codex, OpenCode
+
+The same adapter model applies to Codex and OpenCode. The worker spawns `codex` or `opencode` instead of `claude`, feeds the same `RunContext`, and parses the result back into the same structured format.
+
+The adapter interface is intentionally minimal — `start(context)`, `onEvent(handler)`, `stop()`. Adding a new runtime means:
+
+1. Map the runtime kind to a binary name
+2. Build the CLI arguments from the `RunContext`
+3. Parse the output into `RuntimeResult`
+
+Worker routing, capability advertisement, and run targeting already support multiple runtimes per worker. You can run a Claude Code worker and a Codex worker side by side, and the orchestrator routes runs based on the `required_runtime` field in workflow steps.
+
+## Durable previews
+
+Preview URLs are orchestrator-backed, not worker-hosted.
+
+Current flow:
+
+1. The worker collects previewable files from the run worktree
+2. Those files are sent back as `preview_file` artifacts
+3. The orchestrator stores them durably
+4. The orchestrator serves them via `/api/previews/:runId/*path`
+5. A `preview_url` artifact points to the entry page
+
+That means previews survive worker shutdown. If the worker laptop goes offline, the orchestrator can still serve the preview.
+
+Important: preview URLs are **not automatically public**. They are served through the orchestrator's normal access model.
+
+## Pack distribution
+
+Reusable integration material — providers, handlers, workflows, skills, context — is distributed through **packs**.
+
+- Desired packs are declared in `.autopilot/company.yaml`
+- Packs are resolved from git-backed registries
+- `autopilot sync` materializes pack files into `.autopilot/` and writes a lockfile
+- Installed files are normal repo config — editable, reviewable, version-controlled
+
+This keeps integrations installable without hardcoding them into the core. See [Packs and Distribution](/docs/packs-and-distribution) for the full model.
+
+## Providers, handlers, and surfaces
+
+Autopilot extends through a provider/handler model:
+
+- **Providers** are authored YAML under `.autopilot/providers/` — integration instances that declare capabilities and secret refs
+- **Handlers** are Bun scripts under `.autopilot/handlers/` — executable adapters that do protocol-specific work
+- **Surfaces** are human-facing channels (Telegram, Slack, email) built over providers, handlers, and conversation bindings
+- The orchestrator invokes handlers with typed envelopes, validates results, and executes the real primitives
+
+Current operations:
+
+| Operation | Purpose |
+|---|---|
+| `notify.send` | Send an outbound notification |
+| `intent.ingest` | Turn inbound payload into task creation |
+| `conversation.ingest` | Turn inbound conversation payload into task actions |
+
+Surface integrations arrive as packs, not hardcoded features. See [Providers and Handlers](/docs/providers-and-handlers) for the extension model and [Telegram Surface](/docs/telegram-surface) for the first real example.
+
+## Security model
+
+Auth and verification live at the orchestrator boundary:
+
+- **Inbound webhooks** are verified by provider-declared `auth_secret` refs
+- **Surface-specific headers** (e.g., Telegram's `X-Telegram-Bot-Api-Secret-Token`) are recognized natively
+- **Generic providers** use `X-Provider-Secret` for webhook auth
+- **Workers** authenticate via join tokens during enrollment
+- **Better Auth** capabilities are reused for session management and OAuth flows where they fit
+
+Handlers normalize provider-specific details but do not invent private auth subsystems. Webhook signatures, headers, and verification steps are always explicit and inspectable in the provider config and handler code.
+
+Provider secrets are declared as references, not values. The orchestrator resolves them at handler invocation time and passes only the scoped subset needed for that operation.
+
+## Async operator model
+
+The current product is still **CLI-first**.
+
+The intended async loop is:
+
+1. A task or run reaches an actionable state
+2. An operator is notified out of band
+3. The operator inspects via CLI or a bound external conversation
+4. The operator replies, approves, or rejects
+5. The workflow continues
+
+Current operator surfaces:
+
+- `autopilot inbox` and `autopilot inbox --watch`
+- `autopilot tasks approve|reject|reply`
+- `autopilot runs show`
+- durable `preview_url` artifacts
+- optional provider-driven notifications and conversation bindings
+
+That is the current architecture in practice: control plane on the orchestrator, execution on workers, and a CLI-first async loop over explicit workflow primitives.
+
+For deployment topology, multi-worker patterns, and the cloud-first model, see [Cloud and Deployment](/docs/cloud-and-deployment).

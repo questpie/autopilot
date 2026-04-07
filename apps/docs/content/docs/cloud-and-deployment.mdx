@@ -1,0 +1,204 @@
+---
+title: Cloud and Deployment
+description: Truth layers, multi-worker topology, and deployment patterns.
+---
+
+Autopilot is designed cloud-first. Local development and cloud deployment are the same architecture with a different URL.
+
+## Three truth layers
+
+Every piece of state in Autopilot belongs to exactly one of three layers:
+
+| Layer | What lives there | Owner | Durability |
+|---|---|---|---|
+| **Git / filesystem** | Agents, workflows, environments, providers, handlers, packs, docs | Repository | Versioned, branchable |
+| **Orchestrator DB** | Tasks, runs, workers, leases, events, artifacts, auth, conversation bindings | Orchestrator | Durable, queryable |
+| **Worker-local** | Raw sessions, transcripts, worktrees, resolved secrets, machine credentials | Worker machine | Ephemeral, machine-bound |
+
+### Why not everything in git
+
+Git holds authored desired state — policy, config, and rules. But operational state (which tasks exist, which runs completed, which workers are online) changes constantly and does not belong in version control.
+
+### Why not everything on one worker
+
+Workers are execution nodes with machine-local access. Different workers may have different repos, credentials, environments, or physical locations. A worker going offline should not take shared state with it.
+
+### Why not everything in the orchestrator
+
+The orchestrator does not need raw AI transcripts, local worktrees, or machine-bound credentials. Keeping runtime secrets worker-local is a security boundary, not a limitation.
+
+## Local and cloud are the same model
+
+The only difference between local development and cloud deployment is the orchestrator URL:
+
+```bash
+# Local
+autopilot start  # boots orchestrator + worker on localhost
+
+# Remote orchestrator
+ORCHESTRATOR_URL=https://your-vps.example.com autopilot worker start
+```
+
+Same config. Same primitives. Same worker behavior. The repo defines the rules, the orchestrator coordinates, workers execute. Where those processes run is a deployment choice, not an architectural one.
+
+## URL-based connectivity
+
+Workers connect to the orchestrator over HTTP. Any URL that resolves and is reachable works:
+
+| Topology | Example URL | When to use |
+|---|---|---|
+| **Localhost** | `http://localhost:7778` | Solo development |
+| **LAN** | `http://192.168.1.100:7778` | Team on same network |
+| **Public DNS** | `https://autopilot.example.com` | VPS/cloud deployment |
+| **Reverse proxy** | `https://autopilot.example.com` (behind nginx/caddy) | Production with TLS |
+| **Private overlay** | `https://autopilot.your-tailnet.ts.net` | Tailscale/WireGuard/ZeroTier |
+
+The system does not assume same-filesystem access. Workers and the orchestrator communicate entirely over HTTP APIs. This means:
+
+- Workers can run on laptops, VPS instances, CI runners, or any machine with network access
+- The orchestrator can move between hosts without changing worker config (just update the URL)
+- Multiple workers on different networks can connect to the same orchestrator
+
+## Multi-worker deployment
+
+Multiple workers connect to one orchestrator and claim runs independently.
+
+<Mermaid chart="graph TD
+  O[Orchestrator\ntasks, runs, events, state]
+  A[Worker A\nlaptop]
+  B[Worker B\nVPS]
+  C[Worker C\nCI]
+  O --- A
+  O --- B
+  O --- C" />
+
+Use this when:
+
+- Multiple developers collaborate on the same project, each running a worker on their own machine with their own AI subscription and credentials
+- Different workers have access to different repos or environments
+- Different workers have different credentials or toolchains
+- You want one durable control plane with distributed execution
+- You need workers in different physical locations or networks
+
+Workers advertise their capabilities. The orchestrator routes runs based on `required_runtime` and agent assignment.
+
+## Secret distribution
+
+Secrets follow a scoped delivery model:
+
+| Secret type | Where it lives | Who delivers it |
+|---|---|---|
+| **Provider secrets** (API tokens, webhook secrets) | Orchestrator environment | Resolved at handler invocation time |
+| **Machine credentials** (SSH keys, git tokens) | Worker machine | Never leaves the worker |
+| **Runtime auth** (AI provider API keys) | Worker machine | Used by the runtime adapter directly |
+
+Provider configs declare secret **references**, not values:
+
+```yaml
+secret_refs:
+  - name: bot_token
+    source: env
+    key: TELEGRAM_BOT_TOKEN
+```
+
+The orchestrator resolves these refs at handler invocation time. Only the specific secrets needed for a given provider operation are passed to the handler.
+
+**Direction:** Shared company secrets will be orchestrator-manageable — stored encrypted centrally and delivered scoped to the handler/worker that needs them. This prevents manually re-entering secrets on every worker.
+
+## Security at the orchestrator boundary
+
+Service-to-service auth and webhook verification live at the orchestrator:
+
+- **Inbound webhooks** are verified by provider-declared `auth_secret` refs
+- **Telegram** sends `X-Telegram-Bot-Api-Secret-Token` natively; the orchestrator recognizes this header
+- **Generic providers** use `X-Provider-Secret` for webhook auth
+- **OAuth installs** and session management reuse Better Auth capabilities where they fit
+- **Workers** authenticate via join tokens during enrollment
+
+Handlers normalize provider-specific details but do not invent private auth subsystems. Surface-specific webhook signatures, headers, and verification steps are always explicit and inspectable in the provider config and handler code.
+
+## Portable company setup
+
+A new worker can be productive from:
+
+1. **Git clone** — gets all authored config (`.autopilot/`, agents, workflows, providers, handlers)
+2. **`autopilot sync`** — installs any declared packs
+3. **Orchestrator connection** — receives operational context at run claim time
+4. **Local secrets** — machine-bound credentials configured once on the worker
+
+The orchestrator delivers resolved execution context when a worker claims a run — including task context, agent identity, instructions, and scoped secret refs. Workers never walk company/project config trees at execution time.
+
+## Deployment patterns
+
+### Solo local (development)
+
+```bash
+autopilot start
+```
+
+One process boots both orchestrator and worker. Good for proving the full loop.
+
+### VPS orchestrator + local workers
+
+```bash
+# On VPS
+autopilot server start
+
+# On your laptop
+ORCHESTRATOR_URL=https://your-vps.example.com autopilot worker start
+```
+
+Durable control plane on a server. Workers run where access and credentials exist. Previews survive worker shutdown.
+
+### Multi-worker distributed
+
+```bash
+# On VPS (orchestrator)
+autopilot server start
+
+# On machine A (has repo X access)
+ORCHESTRATOR_URL=https://your-vps.example.com autopilot worker start
+
+# On machine B (has repo Y access)
+ORCHESTRATOR_URL=https://your-vps.example.com autopilot worker start
+```
+
+Each worker claims runs it can handle. The orchestrator coordinates.
+
+### Private overlay (Tailscale/WireGuard)
+
+No public exposure required. The orchestrator and workers communicate over a private mesh:
+
+```bash
+# On the orchestrator machine
+autopilot server start --host 0.0.0.0
+
+# On worker machines
+ORCHESTRATOR_URL=https://autopilot.your-tailnet.ts.net autopilot worker start
+```
+
+Same architecture, private network. No port forwarding, no public DNS.
+
+## Current state
+
+The multi-worker architecture is real and operational:
+
+- Orchestrator as control plane with durable state
+- Workers claim and execute runs independently
+- URL-based connectivity works across topologies
+- Durable previews are orchestrator-backed
+- Provider secret resolution is scoped
+
+**Not yet implemented:**
+
+- Orchestrator-managed encrypted shared secret store
+- Local-to-VPS migration assistant
+- Multi-worker deployment validation tooling
+- MCP auth hardening for remote/cloud scenarios
+- Managed cloud packaging
+
+## Related docs
+
+- [Architecture](/docs/architecture) — orchestrator, worker, and truth boundaries
+- [Operator Guide](/docs/operator-guide) — deployment patterns in practice
+- [Providers and Handlers](/docs/providers-and-handlers) — how providers use secrets

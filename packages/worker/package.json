@@ -1,0 +1,22 @@
+{
+  "name": "@questpie/autopilot-worker",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "@questpie/autopilot-spec": "1.0.0",
+    "hono": "^4.12.10",
+    "hono-openapi": "^1.3.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "typescript": "^5.9.3"
+  }
+}

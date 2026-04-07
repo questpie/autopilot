@@ -1,0 +1,26 @@
+# Dogfood workflow — used for developing Autopilot with Autopilot.
+#
+# Flow: implement → human review → deploy/merge
+#
+# This is intentionally small. The human_approval gate ensures
+# a human reviews before any code lands. The agent does the work,
+# the human approves or steers via reply.
+
+id: dogfood
+name: "Dogfood Development"
+description: "Implement → human review → done. The standard flow for developing Autopilot itself."
+steps:
+  - id: implement
+    type: agent
+    agent_id: sam
+    instructions: >
+      Implement the task. Read the task description carefully.
+      Write clean, tested code. Run relevant tests before completing.
+      Follow existing patterns in the codebase.
+
+  - id: review
+    type: human_approval
+    approvers: [owner]
+
+  - id: done
+    type: done

@@ -1,0 +1,179 @@
+---
+title: Conversation-Assisted Operation
+description: Bind an external thread to a task for scoped inbound actions and outbound updates.
+---
+
+Autopilot can bind an external conversation thread to a task. The thread becomes a transport surface — the task stays the unit of truth.
+
+- Inbound messages in the bound thread become real task actions (approve, reject, reply).
+- Outbound updates flow back to the same thread when the task changes state.
+- The orchestrator owns the state. The thread is just how the operator interacts with it.
+
+This is how Autopilot supports async operation from chat-like surfaces without turning into a chat product.
+
+## What a binding does
+
+A conversation binding connects:
+
+- a provider instance
+- an external conversation identity
+- an optional external thread identity
+- a task
+
+In practice that means a message in one external thread can map back to one task-scoped workflow loop.
+
+## The loop
+
+The normal conversation-assisted loop is:
+
+1. A task exists and reaches an actionable state
+2. A bound thread receives an update
+3. An operator replies or issues a command in that same thread
+4. The provider normalizes that inbound payload
+5. The orchestrator executes the real task primitive
+6. The workflow continues
+7. The same thread receives the next outbound update
+
+The important point is that the thread is only a transport and interaction surface. It is not the system of record.
+
+## Creating a binding
+
+Bindings are created through the API.
+
+> `X-Local-Dev` is only for local proving with `autopilot start`. In production, use your normal authenticated operator path.
+
+```bash title="Local development only"
+curl -X POST http://localhost:7778/api/conversations/bindings \
+  -H "Content-Type: application/json" \
+  -H "X-Local-Dev: true" \
+  -d '{
+    "provider_id": "text-conversation",
+    "external_conversation_id": "chat-123",
+    "external_thread_id": "thread-456",
+    "mode": "task_thread",
+    "task_id": "task-xxx"
+  }'
+```
+
+```bash title="Production shape"
+curl -X POST https://your-orchestrator.example.com/api/conversations/bindings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{ ... }'
+```
+
+The stored binding records:
+
+- which provider owns the thread
+- the external conversation and thread IDs
+- which task is bound
+- the binding mode
+
+## Inbound actions
+
+When a message arrives on a bound thread, the provider handler normalizes it into a task action.
+
+Current supported outcomes:
+
+| Incoming message | Normalized action |
+|---|---|
+| `/approve` | `task.approve` |
+| `/reject ...` | `task.reject` |
+| any other text | `task.reply` |
+| empty/ignored payload | `noop` |
+
+The orchestrator then executes the real workflow primitive. The provider does not mutate task state directly.
+
+## Outbound updates
+
+When the bound task changes state, the orchestrator can deliver the update back to the same thread.
+
+Current useful cases:
+
+- task blocked and waiting on approval
+- run failed
+- run completed
+
+Outbound payloads can include:
+
+- task link
+- run link
+- preview URL
+- bound conversation context (`conversation_id`, `thread_id`)
+
+That is what closes the async loop.
+
+## Auth model
+
+Inbound provider callbacks are protected by provider-secret auth.
+
+A conversation provider should declare an `auth_secret`:
+
+```yaml title=".autopilot/providers/my-conversation.yaml"
+id: my-conversation
+kind: conversation_channel
+handler: handlers/my-conversation.ts
+capabilities:
+  - op: conversation.ingest
+  - op: notify.send
+secret_refs:
+  - name: auth_secret
+    source: env
+    key: MY_CONVERSATION_SECRET
+```
+
+The provider callback then supplies that secret via `X-Provider-Secret`.
+
+## What this is not
+
+Conversation bindings are intentionally narrow.
+
+They are **not**:
+
+- an internal message history product
+- a company chat workspace
+- a general inbox database
+- a replacement for task state
+
+They are a task-scoped operational bridge between an external thread and the workflow engine.
+
+## Why this matters
+
+Without bindings, chat integrations usually collapse back into one of two bad models:
+
+- everything important lives in a transcript
+- operators are forced back into a custom UI for every action
+
+Autopilot avoids both:
+
+- the task remains the durable unit of truth
+- the chat surface stays useful for async replies and approvals
+- the workflow engine still decides what happens next
+
+## Today’s practical use
+
+You can already use conversation-assisted operation for:
+
+- receiving “needs attention” updates in a bound thread
+- replying with implementation feedback
+- approving or rejecting from that same thread
+- opening the durable preview from another device
+
+That is enough to prove the async operator loop without building a Worker App first.
+
+## Real example: Telegram
+
+The [Telegram surface pack](/docs/telegram-surface) is the first real implementation of conversation-assisted operation. It demonstrates:
+
+- Inbound webhook normalization (Telegram callback queries and text messages → task actions)
+- Outbound notifications with inline approve/reject buttons
+- Chat-level bindings with automatic thread fallback
+- Orchestrator-boundary webhook auth via Telegram's native secret token header
+
+The same binding model works for any surface — Telegram is just the first proof.
+
+## Related docs
+
+- [Operator Guide](/docs/operator-guide)
+- [Providers and Handlers](/docs/providers-and-handlers)
+- [Telegram Surface](/docs/telegram-surface)

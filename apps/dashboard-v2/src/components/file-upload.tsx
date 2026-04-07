@@ -1,7 +1,9 @@
 import { useState, useRef, useCallback } from "react"
+import { m } from "framer-motion"
 import { useTranslation } from "@/lib/i18n"
 import { useUpload } from "@/hooks/use-upload"
 import { cn } from "@/lib/utils"
+import { SPRING } from "@/lib/motion"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -146,9 +148,11 @@ export function FileUpload({
       onPaste={handlePaste}
     >
       {/* Drop zone */}
-      <div
+      <m.div
+        animate={isDragActive ? { scale: 1.01 } : { scale: 1 }}
+        transition={SPRING.snappy}
         className={cn(
-          "flex flex-col items-center justify-center gap-2 border-2 border-dashed p-6 transition-colors",
+          "flex flex-col items-center justify-center gap-2 border-2 border-dashed p-6 transition-colors duration-150 ease-out motion-reduce:transform-none",
           compact && "p-3",
           isDragActive
             ? "border-primary bg-primary/5"
@@ -172,7 +176,7 @@ export function FileUpload({
         <p className="text-center text-xs text-muted-foreground">
           {isDragActive ? t("upload.drag_active") : t("upload.drag_drop")}
         </p>
-      </div>
+      </m.div>
 
       {/* Action buttons */}
       <div className="flex gap-2">
@@ -240,7 +244,7 @@ export function FileUpload({
           {fileProgress.map((fp, i) => (
             <div key={`${fp.fileName}-${i}`} className="flex items-center gap-2 text-xs">
               {fp.status === "complete" ? (
-                <CheckCircleIcon className="size-3.5 text-green-500" />
+                <CheckCircleIcon className="size-3.5 text-success" />
               ) : fp.status === "error" ? (
                 <XCircleIcon className="size-3.5 text-destructive" />
               ) : fp.status === "extracting" ? (
@@ -258,7 +262,7 @@ export function FileUpload({
                 <span className="text-primary">{t("upload.extracting")}</span>
               )}
               {fp.status === "complete" && (
-                <span className="text-green-500">{t("upload.upload_complete")}</span>
+                <span className="text-success">{t("upload.upload_complete")}</span>
               )}
               {fp.status === "error" && (
                 <span className="text-destructive">{fp.error ?? t("upload.upload_failed")}</span>

@@ -8,7 +8,7 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
 	server: {
-		port: 3200,
+		port: 3100,
 	},
 	plugins: [
 		mdx(await import('./source.config')),

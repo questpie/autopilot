@@ -1,0 +1,28 @@
+id: telegram
+name: Telegram
+kind: conversation_channel
+handler: handlers/telegram.ts
+description: >
+  Telegram bot surface — outbound notifications with inline buttons,
+  inbound approve/reject/reply via webhook.
+capabilities:
+  - op: conversation.ingest
+  - op: notify.send
+events:
+  - types: [run_completed]
+    statuses: [failed, completed]
+  - types: [task_changed]
+    statuses: [blocked]
+config:
+  # Default chat for notifications when no conversation binding exists.
+  # Can be overridden per-binding.
+  default_chat_id: ${TELEGRAM_CHAT_ID}
+secret_refs:
+  - name: bot_token
+    source: env
+    key: TELEGRAM_BOT_TOKEN
+    description: Telegram Bot API token
+  - name: auth_secret
+    source: env
+    key: TELEGRAM_WEBHOOK_SECRET
+    description: Shared secret for Telegram webhook verification

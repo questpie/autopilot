@@ -1,12 +1,7 @@
 import { useFumadocsLoader } from 'fumadocs-core/source/client'
 import browserCollections from 'fumadocs-mdx:collections/browser'
 import { DocsLayout } from 'fumadocs-ui/layouts/docs'
-import {
-	DocsBody,
-	DocsDescription,
-	DocsPage,
-	DocsTitle,
-} from 'fumadocs-ui/layouts/docs/page'
+import { DocsBody, DocsDescription, DocsPage, DocsTitle } from 'fumadocs-ui/layouts/docs/page'
 
 import { components } from '@/components/mdx'
 import { baseOptions } from '@/lib/layout.shared'

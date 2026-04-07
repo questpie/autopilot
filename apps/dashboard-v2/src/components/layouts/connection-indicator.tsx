@@ -12,10 +12,10 @@ export function ConnectionIndicatorDot() {
 
   const colorClass =
     sseStatus === "connected"
-      ? "text-green-500"
+      ? "text-success"
       : sseStatus === "reconnecting"
-        ? "text-yellow-500 animate-pulse motion-reduce:animate-none"
-        : "text-red-500"
+        ? "text-warning animate-pulse motion-reduce:animate-none"
+        : "text-destructive"
 
   return (
     <CircleIcon
@@ -53,7 +53,7 @@ export function ConnectionStatus({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: shouldReduce ? 0 : 0.2 }}
-          className="flex items-center gap-1.5 text-green-500"
+          className="flex items-center gap-1.5 text-success"
         >
           <WifiHighIcon size={12} aria-hidden="true" />
           {t("status_bar.connected")}
@@ -67,7 +67,7 @@ export function ConnectionStatus({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: shouldReduce ? 0 : 0.2 }}
-          className="flex items-center gap-1.5 text-yellow-500"
+          className="flex items-center gap-1.5 text-warning"
         >
           <ArrowsClockwiseIcon
             size={12}
@@ -85,7 +85,7 @@ export function ConnectionStatus({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: shouldReduce ? 0 : 0.2 }}
-          className="flex items-center gap-1.5 text-red-500"
+          className="flex items-center gap-1.5 text-destructive"
         >
           <WifiSlashIcon size={12} aria-hidden="true" />
           {t("status_bar.offline")}
@@ -93,7 +93,7 @@ export function ConnectionStatus({
             <button
               type="button"
               onClick={onRetry}
-              className="ml-1 underline underline-offset-2 hover:text-red-400"
+              className="ml-1 underline underline-offset-2 hover:text-destructive"
             >
               {t("common.retry")}
             </button>

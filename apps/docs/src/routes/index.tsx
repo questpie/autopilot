@@ -1,893 +1,550 @@
 import { createFileRoute } from '@tanstack/react-router'
+import {
+	ArrowRight,
+	BookOpen,
+	CheckCircle,
+	FileCode2,
+	GitBranch,
+	Layers,
+	Monitor,
+	Search,
+	Shield,
+	Terminal,
+	Workflow,
+} from 'lucide-react'
+import { type ReactNode, useEffect, useState } from 'react'
 
-import { AgentCard } from '@/components/landing/AgentCard'
-import { CodeBlock } from '@/components/landing/CodeBlock'
-import { DashboardMock } from '@/components/landing/DashboardMock'
-import { Header } from '@/components/landing/Header'
-import { LiveStream } from '@/components/landing/LiveStream'
-import { QSymbol } from '@/components/landing/QSymbol'
-import { Section, SectionHeader } from '@/components/landing/Section'
-import { ArchitectureDiagram } from '@/components/landing/ArchitectureDiagram'
-import { Tag } from '@/components/landing/Tag'
-import { UseCaseCard } from '@/components/landing/UseCaseCard'
+import { cn } from '@/lib/utils'
 
 export const Route = createFileRoute('/')({
-	head: () => ({
-		meta: [
-			{ title: 'QUESTPIE Autopilot — Agents That Act, Not Chat' },
-			{
-				name: 'description',
-				content:
-					'Filesystem-native operating system where AI agents run your company through unified tools, human approval gates, and a self-evolving dashboard. Zero infrastructure. Open source.',
-			},
-			{ property: 'og:title', content: 'QUESTPIE Autopilot — Agents That Act, Not Chat' },
-			{
-				property: 'og:description',
-				content:
-					'Filesystem-native operating system where AI agents run your company through unified tools, human approval gates, and a self-evolving dashboard. Zero infrastructure. Open source.',
-			},
-			{ property: 'og:type', content: 'website' },
-			{ property: 'og:url', content: 'https://autopilot.questpie.com' },
-			{ property: 'og:site_name', content: 'QUESTPIE Autopilot' },
-			{ name: 'twitter:card', content: 'summary_large_image' },
-			{ name: 'twitter:title', content: 'QUESTPIE Autopilot — Agents That Act, Not Chat' },
-		],
-		links: [{ rel: 'canonical', href: 'https://autopilot.questpie.com' }],
-	}),
 	component: LandingPage,
 })
 
-function LandingPage() {
+/* ─── Helpers ─── */
+
+function QuestpieLogo({ className }: { className?: string }) {
 	return (
-		<div className="landing-page">
-			<Header />
-			<main className="border-lp-border mx-auto max-w-[1200px] border-x lp-grid-bg">
-				{/* ========== 1. HERO ========== */}
-				<section className="px-4 py-24 md:px-8">
-					<div className="flex justify-center mb-8">
-						<QSymbol size={48} />
-					</div>
-					<h1 className="font-mono text-[40px] sm:text-[64px] font-bold text-white m-0 leading-tight tracking-[-0.03em] text-center">
-						Your AI-native
-						<br />
-						company operating system
-					</h1>
-					<p className="font-sans text-base sm:text-[20px] text-lp-muted mt-5 font-light leading-relaxed max-w-[640px] mx-auto text-center">
-						AI agents that don't chat -- they act. Unified tools create tasks,
-						write code, deploy services, and build dashboards.
-						You approve the results.
-					</p>
-					<div className="mt-8 flex gap-2 flex-wrap justify-center">
-						<Tag>OPEN SOURCE</Tag>
-						<Tag>CLI-FIRST</Tag>
-						<Tag>ZERO INFRA</Tag>
-						<Tag>MIT LICENSE</Tag>
-					</div>
-					<div className="mt-10 flex gap-3 flex-wrap justify-center">
-						<a
-							href="/docs/getting-started"
-							className="font-mono text-xs text-white bg-lp-purple px-6 py-2.5 no-underline hover:bg-lp-purple-light transition-colors"
-						>
-							Install
+		<svg
+			width="20"
+			height="20"
+			viewBox="0 0 24 24"
+			fill="none"
+			xmlns="http://www.w3.org/2000/svg"
+			className={className}
+		>
+			<path
+				d="M22 10V2H2V22H10"
+				stroke="currentColor"
+				strokeWidth="2"
+				strokeLinecap="square"
+			/>
+			<path d="M23 13H13V23H23V13Z" fill="#B700FF" />
+		</svg>
+	)
+}
+
+function Badge({ children }: { children: ReactNode }) {
+	return (
+		<span className="bg-secondary text-primary px-2 py-0.5 font-mono text-[11px] font-semibold tracking-[0.04em] uppercase">
+			{children}
+		</span>
+	)
+}
+
+function BrutalistGrid({
+	children,
+	className,
+}: {
+	children: ReactNode
+	className?: string
+}) {
+	return (
+		<div
+			className={cn(
+				'bg-border border-border grid grid-cols-1 gap-[1px] border md:grid-cols-2',
+				className,
+			)}
+		>
+			{children}
+		</div>
+	)
+}
+
+function FeatureCell({
+	num,
+	title,
+	desc,
+	icon: Icon,
+}: {
+	num: string
+	title: string
+	desc: string
+	icon: React.ComponentType<{ className?: string }>
+}) {
+	return (
+		<div className="bg-background hover:outline-primary flex h-full flex-col p-6 transition-colors hover:outline hover:outline-1 hover:-outline-offset-1">
+			<div className="text-primary mb-4 flex items-center gap-2 font-mono text-[10px] tracking-[3px]">
+				<Icon className="h-4 w-4" />
+				{num}
+			</div>
+			<h3 className="text-foreground mb-2 font-mono text-[14px] font-bold">{title}</h3>
+			<p className="text-muted-foreground text-[13px] leading-[1.5]">{desc}</p>
+		</div>
+	)
+}
+
+function SectionHeader({
+	num,
+	title,
+	subtitle,
+}: {
+	num: string
+	title: string
+	subtitle: string
+}) {
+	return (
+		<div className="mb-12">
+			<div className="text-primary mb-4 font-mono text-sm tracking-[3px]">{num}</div>
+			<h2 className="text-foreground mb-4 font-mono text-3xl font-bold md:text-4xl">{title}</h2>
+			<p className="text-muted-foreground max-w-2xl text-lg">{subtitle}</p>
+		</div>
+	)
+}
+
+function Reveal({ children, className }: { children: ReactNode; className?: string }) {
+	return (
+		<div
+			data-reveal
+			className={cn(
+				'translate-y-3 opacity-0 transition-all duration-500 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[visible]:translate-y-0 data-[visible]:opacity-100',
+				className,
+			)}
+		>
+			{children}
+		</div>
+	)
+}
+
+function HeroProofPanel() {
+	const proofPoints = [
+		{
+			title: 'Task becomes workflow state',
+			desc: 'Runs, artifacts, and previews stay durable — not trapped in a session.',
+		},
+		{
+			title: 'Worker executes on the right machine',
+			desc: 'The host already has the repo, the toolchain, and the credentials.',
+		},
+		{
+			title: 'Human decides what ships',
+			desc: 'Approve the result, or reply with feedback for another pass.',
+		},
+	]
+
+	return (
+		<div className="border-border bg-border grid gap-[1px] border">
+			<div className="bg-background p-5 md:p-6">
+				<div className="text-primary mb-3 font-mono text-[11px] font-semibold tracking-[0.2em] uppercase">
+					Proof loop
+				</div>
+				<h3 className="text-foreground mb-2 font-mono text-xl leading-tight font-bold">
+					Task in, reviewable result out.
+				</h3>
+				<p className="text-muted-foreground text-sm leading-6">
+					No transcript archaeology.
+				</p>
+			</div>
+
+			<div className="bg-background p-5 md:p-6">
+				<div className="space-y-3">
+					{proofPoints.map(({ title, desc }, index) => (
+						<div key={title} className="border-border flex gap-3 border p-3">
+							<div className="text-primary font-mono text-[11px] tracking-[0.18em] uppercase">
+								0{index + 1}
+							</div>
+							<div>
+								<div className="font-mono text-sm font-semibold">{title}</div>
+								<div className="text-muted-foreground mt-1 text-sm leading-5">{desc}</div>
+							</div>
+						</div>
+					))}
+				</div>
+			</div>
+		</div>
+	)
+}
+
+/* ─── Nav ─── */
+
+function Nav() {
+	const [mobileOpen, setMobileOpen] = useState(false)
+
+	return (
+		<header className="bg-background border-border fixed inset-x-0 top-0 z-50 h-14 border-b transition-colors duration-200">
+
+			<div className="border-border bg-background mx-auto flex h-full max-w-[1200px] items-center justify-between border-x px-4 md:px-8">
+				<div className="flex items-center gap-8">
+					<a href="/" className="flex items-center gap-2">
+						<QuestpieLogo />
+						<span className="font-mono text-sm font-bold tracking-tight">Autopilot</span>
+					</a>
+
+					<div className="text-muted-foreground hidden items-center gap-6 font-mono text-[12px] font-medium md:flex">
+						<a href="/docs" className="hover:text-foreground transition-colors">
+							Docs
 						</a>
 						<a
 							href="https://github.com/questpie/autopilot"
 							target="_blank"
-							rel="noopener noreferrer"
-							className="font-mono text-xs text-lp-purple border border-lp-border px-6 py-2.5 no-underline hover:border-lp-purple transition-colors"
+							rel="noreferrer"
+							className="hover:text-foreground transition-colors"
 						>
 							GitHub
 						</a>
 					</div>
-				</section>
+				</div>
 
-				{/* ========== 2. THE 60-SECOND DEMO ========== */}
-				<Section id="quickstart">
-					<SectionHeader num="01" sub="Install globally, scaffold a company, and give your first intent. One Bun process. One SQLite file. Zero infrastructure.">
-						Get Started in 60 Seconds
-					</SectionHeader>
-					<CodeBlock title="install">
-						{`# Docker (recommended for self-hosting)
-curl -fsSL https://raw.githubusercontent.com/questpie/autopilot/main/install.sh | bash
+				<div className="flex items-center gap-4">
+					<a
+						href="/docs/quickstart"
+						className="bg-primary text-primary-foreground hover:bg-primary/80 hidden items-center px-4 py-2 font-mono text-[13px] font-semibold tracking-[0.04em] uppercase transition-colors sm:inline-flex"
+					>
+						Quickstart
+					</a>
+					<button
+						type="button"
+						className="text-muted-foreground hover:text-foreground p-1.5 transition-colors md:hidden"
+						onClick={() => setMobileOpen((v) => !v)}
+						aria-label="Toggle navigation"
+					>
+						<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+							{mobileOpen ? (
+								<path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+							) : (
+								<path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+							)}
+						</svg>
+					</button>
+				</div>
+			</div>
 
-# Or with Bun
-bun add -g @questpie/autopilot
-autopilot init my-company
-cd my-company
-
-# Authenticate (choose one)
-autopilot provider login claude    # Use Claude subscription (recommended)
-# OR
-export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
-
-# Start the orchestrator + dashboard
-autopilot start
-
-# Open dashboard
-open http://localhost:3000
-
-# Send your first task
-autopilot chat ceo "Build me a landing page"
-
-# Watch agents work in real-time
-autopilot attach max`}
-					</CodeBlock>
-					<div className="mt-4 bg-lp-card border border-lp-border p-6">
-						<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-							<strong className="text-lp-fg">What you need:</strong>{' '}
-							Bun runtime + <code className="font-mono text-[11px] text-lp-purple">autopilot provider login claude</code> (subscription) or an API key. That's it.
-							No Docker. No Postgres. No Redis. No vector DB. No Kubernetes.
-							Subscription login works on headless VPS — prints a URL to open on any device.
-						</div>
+			{mobileOpen && (
+				<div className="border-border bg-background absolute inset-x-0 top-full border-b p-4 md:hidden">
+					<div className="mx-auto flex max-w-[1200px] flex-col gap-3">
+						<a href="/docs" className="text-muted-foreground font-mono text-sm" onClick={() => setMobileOpen(false)}>
+							Docs
+						</a>
+						<a href="https://github.com/questpie/autopilot" target="_blank" rel="noreferrer" className="text-muted-foreground font-mono text-sm" onClick={() => setMobileOpen(false)}>
+							GitHub
+						</a>
+						<div className="bg-border my-1 h-px" />
+						<a
+							href="/docs/quickstart"
+							className="bg-primary text-primary-foreground inline-flex h-7 items-center px-3 font-mono text-[10px] tracking-wider uppercase"
+							onClick={() => setMobileOpen(false)}
+						>
+							Quickstart
+						</a>
 					</div>
-					<div className="mt-4 bg-lp-card border border-lp-border p-6">
-						<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-3">
-							SUBSCRIPTION LOGIN OR API KEY
-						</div>
-						<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-1.5">
+				</div>
+			)}
+		</header>
+	)
+}
+
+/* ─── Landing Page ─── */
+
+function LandingPage() {
+	useEffect(() => {
+		const obs = new IntersectionObserver(
+			(entries) => {
+				for (const e of entries) {
+					if (e.isIntersecting) e.target.setAttribute('data-visible', '')
+				}
+			},
+			{ threshold: 0.1 },
+		)
+		document.querySelectorAll('[data-reveal]').forEach((el) => obs.observe(el))
+		return () => obs.disconnect()
+	}, [])
+
+	return (
+		<div className="bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
+			<Nav />
+
+			<main className="bg-grid-quest">
+				<div className="border-border mx-auto max-w-[1200px] border-x">
+					{/* ─── HERO ─── */}
+					<section className="landing-hero mt-14 px-4 py-18 md:px-8 md:py-20">
+						<div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16">
 							<div>
-								<strong className="text-lp-fg">Claude:</strong>{' '}
-								<code className="font-mono text-[11px] text-lp-purple">autopilot provider login claude</code> (subscription) or <code className="font-mono text-[11px] text-lp-purple">ANTHROPIC_API_KEY</code>
-							</div>
-							<div>
-								<strong className="text-lp-fg">GPT:</strong>{' '}
-								<code className="font-mono text-[11px] text-lp-purple">autopilot provider login codex</code> (subscription) or <code className="font-mono text-[11px] text-lp-purple">OPENAI_API_KEY</code>
-							</div>
-							<div>
-								<strong className="text-lp-fg">Embeddings:</strong>{' '}
-								Gemini API key (optional, free tier available)
-							</div>
-						</div>
-					</div>
-				</Section>
-
-				{/* ========== 3. WHAT IS AUTOPILOT ========== */}
-				<Section id="what">
-					<SectionHeader num="02" sub="You give a high-level intent. Your AI team decomposes it, plans it, implements it, reviews it, and deploys it. You approve at gates. The agent builds a pricing page and you see it running before it ships.">
-						What is Autopilot?
-					</SectionHeader>
-					<CodeBlock title="terminal -- giving intent">
-						{`$ autopilot chat ceo "Build a pricing page for QUESTPIE Studio
-  with monthly/annual toggle, 3 tiers, and Stripe integration"
-
-CEO Agent decomposing intent...
-
-Created 4 tasks:
-
-  task-050: Scope pricing page requirements
-   -> Assigned to: sam (strategist)
-   -> Workflow: development/scope
-
-  task-051: Design pricing page UI
-   -> Waiting for: task-050
-   -> Will assign to: jordan (designer)
-
-  task-052: Implement pricing page with Stripe
-   -> Waiting for: task-050, task-051
-   -> Will assign to: max (developer)
-
-  task-053: Write pricing page copy and announce
-   -> Waiting for: task-050
-   -> Workflow: marketing
-
-Sam is starting on task-050 now.
-You'll be notified when approvals are needed.`}
-					</CodeBlock>
-					<p className="font-sans text-sm text-lp-ghost mt-6 leading-relaxed">
-						This isn't a chatbot. It's a company. Sam writes the spec. Alex plans
-						the implementation. Max codes it. Riley reviews it. You merge. Ops
-						deploys. Morgan announces. Each agent has persistent memory, scoped
-						filesystem access, and communicates through unified tools -- not
-						natural language.
-					</p>
-				</Section>
-
-				{/* ========== 4. PRIMITIVES, NOT CHAT ========== */}
-				<Section id="tools">
-					<SectionHeader num="03" sub="Agent thinking is private. Only effects are visible. Every agent action is a typed function call with clear targets and effects -- not a text response for you to parse.">
-						Tools, Not Chat
-					</SectionHeader>
-					<CodeBlock title="what agents actually do">
-						{`// Max tells Riley PR is ready
-message({
-  channel: "dm-riley",
-  content: "PR #47 ready for review. Landing page implementation."
-})
-
-// Ops pins health status to dashboard
-pin({
-  action: "create",
-  group: "overview",
-  title: "Cluster Health",
-  content: "12/12 pods OK | CPU 23% | Memory 41% | Disk 55%",
-  type: "success"
-})
-
-// Riley approves task
-task({
-  action: "approve",
-  task_id: "task-040",
-  note: "PR #47 looks good. Ready for merge."
-})
-
-// Search across all entity types
-search({
-  query: "pricing page",
-  type: "task",
-  scope: "active"
-})`}
-					</CodeBlock>
-					<div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-						<div className="bg-lp-card border border-lp-border p-6">
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
-								AUTOPILOT AGENTS
-							</div>
-							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-								Call 7 unified tools: <code className="font-mono text-[11px] text-lp-purple">task</code>, <code className="font-mono text-[11px] text-lp-purple">message</code>, <code className="font-mono text-[11px] text-lp-purple">pin</code>, <code className="font-mono text-[11px] text-lp-purple">search</code>, <code className="font-mono text-[11px] text-lp-purple">http</code>, <code className="font-mono text-[11px] text-lp-purple">search_web</code>, <code className="font-mono text-[11px] text-lp-purple">browse</code>.
-								Every call produces a visible, auditable effect.
-							</div>
-						</div>
-						<div className="bg-lp-card border border-lp-border p-6">
-							<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
-								CHATBOT AGENTS
-							</div>
-							<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-								Generate text for you to read. You copy-paste it somewhere. No audit trail.
-								No structured effects. No workflow integration. You are the middleware.
-							</div>
-						</div>
-					</div>
-				</Section>
-
-				{/* ========== 5. LIVING DASHBOARD ========== */}
-				<Section id="dashboard">
-					<SectionHeader num="04" sub="Your agents build your internal tools. In real time. No deploy. The dashboard is a React app in the company filesystem that agents edit -- changes appear in seconds via HMR.">
-						Living Dashboard
-					</SectionHeader>
-					<DashboardMock />
-					<div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-						<CodeBlock title="company/dashboard/widgets/sprint-progress/widget.tsx">
-							{`export default function SprintProgress() {
-  const { data } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () =>
-      fetch('/api/tasks').then(r => r.json()),
-    refetchInterval: 30000,
-  })
-
-  const done = data?.filter(
-    t => t.status === 'done'
-  ).length ?? 0
-  const total = data?.length ?? 0
-
-  return (
-    <div className="p-4 border border-border">
-      <h3>Sprint Progress</h3>
-      <div className="text-3xl font-bold">
-        {done}/{total}
-      </div>
-    </div>
-  )
-}`}
-						</CodeBlock>
-						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									ARCHITECTURE
+								<div className="text-primary mb-6 font-mono text-[12px] font-semibold tracking-[0.04em] uppercase">
+									Workflow-driven AI operator
 								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed space-y-2">
-									<div>
-										<strong className="text-lp-fg">Immutable core</strong> -- npm package. Base
-										components, hooks, API client, router. Agents cannot break it.
-									</div>
-									<div>
-										<strong className="text-lp-fg">Company layer</strong> -- in your filesystem.
-										Custom widgets, pages, theme overrides, layout config. Agents edit this.
-									</div>
-								</div>
-							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-									<strong className="text-lp-fg">"Add a revenue chart to the dashboard."</strong>{' '}
-									Agent writes <code className="font-mono text-[11px] text-lp-purple">widget.tsx</code>,
-									registers it in <code className="font-mono text-[11px] text-lp-purple">layout.yaml</code>,
-									and it appears. No Retool. No deployment. No drag-and-drop.
-								</div>
-							</div>
-						</div>
-					</div>
-				</Section>
-
-				{/* ========== 6. TRUST & SAFETY ========== */}
-				<Section id="trust">
-					<SectionHeader num="05" sub="The #1 objection to autonomous AI agents is trust. Autopilot has answers: explicit approval gates, hardcoded deny patterns, live session observation, and a full git audit trail.">
-						Trust & Safety
-					</SectionHeader>
-					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-						<CodeBlock title="human gates in workflow YAML">
-							{`# Agents work autonomously until they hit a gate.
-# You approve. They continue.
-
-steps:
-  - id: code_review
-    assigned_role: reviewer
-    transitions:
-      approved: human_merge
-      rejected: implement
-
-  - id: human_merge
-    type: human_gate        # YOU approve here
-    gate: merge
-    transitions:
-      approved: deploy
-
-  - id: human_deploy_prod
-    type: human_gate        # YOU approve here
-    gate: deploy
-    transitions:
-      approved: deploy_prod
-
-# Gates: merge, deploy, spend, publish
-# Everything else: agents handle it.`}
-						</CodeBlock>
-						<div className="flex flex-col gap-3">
-							{[
-								{
-									label: 'HUMAN GATES',
-									desc: 'Explicit approval points for merge, deploy, spend, and publish. Defined in workflow YAML, not bolted-on permissions.',
-								},
-								{
-									label: 'DENY PATTERNS',
-									desc: 'Agents cannot touch .auth/, .master-key, .data/, or .git/. Hardcoded. Per-agent filesystem scoping on top.',
-								},
-								{
-									label: 'SESSION ATTACH',
-									desc: 'Watch any agent work in real-time. autopilot attach max streams the live session. Like kubectl logs -f for AI agents.',
-								},
-								{
-									label: 'GIT AUDIT TRAIL',
-									desc: 'Every agent action is a git commit (5s batch). Your company has version control. git diff to see what changed. git revert to undo.',
-								},
-							].map((item) => (
-								<div
-									key={item.label}
-									className="bg-lp-card border border-lp-border p-6"
-								>
-									<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-1">
-										{item.label}
-									</div>
-									<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-										{item.desc}
-									</div>
-								</div>
-							))}
-						</div>
-					</div>
-				</Section>
-
-				{/* ========== 7. SESSION ATTACH ========== */}
-				<Section id="attach">
-					<SectionHeader num="06" sub="Connect to any running agent and watch them work in real-time. Ctrl+C to detach -- agent keeps working. Replay past sessions for review.">
-						Session Attach
-					</SectionHeader>
-					<LiveStream />
-					<div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-						<CodeBlock title="CLI commands">
-							{`autopilot agents              # See who's working
-autopilot attach max          # Watch max work live
-autopilot replay max          # Review past work
-autopilot agents show max     # Agent details & memory
-autopilot status              # Company overview`}
-						</CodeBlock>
-						<CodeBlock title="filter options">
-							{`# Only tool calls (skip thinking)
-$ autopilot attach max --tools-only
-
-# Compact one-liner mode
-$ autopilot attach max --compact
-
-# Replay a past session
-$ autopilot replay max`}
-						</CodeBlock>
-					</div>
-				</Section>
-
-				{/* ========== 8. USE CASES ========== */}
-				<Section id="usecases">
-					<SectionHeader num="07" sub="Same Autopilot kernel. Different skills. Different company. Three flagship use cases, validated in production.">
-						Use Cases
-					</SectionHeader>
-
-					<UseCaseCard
-						number="01"
-						title="SOLO DEV SHOP"
-						fields={[
-							{ label: 'INPUT', value: '"Build a pricing page with Stripe"' },
-							{ label: 'WHAT HAPPENS', value: 'CEO decomposes, strategist scopes, planner plans, developer implements, reviewer reviews' },
-							{ label: 'WHAT YOU SEE', value: 'Task progress on dashboard, PR for merge, live preview via artifact router' },
-						]}
-						outcome="Feature shipped without micromanaging a single step"
-						codeTitle="terminal -- solo dev flow"
-						code={`$ autopilot chat ceo "Build a pricing page with Stripe"
-
-CEO Agent decomposing...
-  task-050: Scope requirements    -> sam
-  task-051: Design UI             -> jordan
-  task-052: Implement + Stripe    -> max
-  task-053: Write copy            -> morgan
-
-$ autopilot attach max
-[max] Reading spec from task-050...
-[max] Creating branch: feat/pricing-page
-[max] Writing src/pages/pricing.tsx
-[max] Adding Stripe checkout...
-[max] Running tests... 14/14 passed
-[max] PR #47 created -> riley for review`}
-					/>
-
-					<UseCaseCard
-						number="02"
-						title="SELF-BUILDING INTERNAL TOOLS"
-						fields={[
-							{ label: 'INPUT', value: '"Add a revenue chart to the dashboard"' },
-							{ label: 'WHAT HAPPENS', value: 'Developer agent writes widget.tsx, registers it in layout.yaml' },
-							{ label: 'WHAT YOU SEE', value: 'New widget appears on dashboard within seconds via HMR' },
-						]}
-						outcome="Internal tools built without Retool, without deployment, evolved by agents"
-						codeTitle="dashboard/widgets/revenue/widget.tsx"
-						code={`export default function RevenueChart() {
-  const { data } = useQuery({
-    queryKey: ['revenue'],
-    queryFn: () => sdk.metrics.revenue()
-  })
-
-  return (
-    <div className="p-4 border border-border">
-      <h3>Monthly Revenue</h3>
-      <BarChart data={data?.monthly ?? []} />
-      <div className="text-sm text-muted">
-        MRR: {data?.mrr ?? '...'}
-      </div>
-    </div>
-  )
-}`}
-					/>
-
-					<UseCaseCard
-						number="03"
-						title="INFRASTRUCTURE MANAGEMENT"
-						fields={[
-							{ label: 'INPUT', value: '"Deploy the billing service to billing.company.com"' },
-							{ label: 'WHAT HAPPENS', value: 'DevOps agent reads infra skills, builds Docker image, creates k8s manifests, applies them, sets up DNS' },
-							{ label: 'WHAT YOU SEE', value: 'Service deployed and verified, URL pinned to dashboard' },
-						]}
-						outcome="Infrastructure managed by an agent who knows your stack via skills"
-						codeTitle="terminal -- ops deploying"
-						code={`$ autopilot attach ops
-[ops] Reading skill: deploy-k8s
-[ops] Building Docker image...
-[ops] Image: registry/billing:v2.1.0
-[ops] Generating k8s manifests...
-[ops] Applying to cluster...
-[ops] Waiting for rollout...
-[ops] 3/3 pods ready
-[ops] Setting DNS: billing.company.com
-[ops] Health check: 200 OK
-
-pin({
-  action: "create",
-  group: "overview",
-  title: "billing.company.com LIVE",
-  type: "success"
-})`}
-					/>
-				</Section>
-
-{/* ========== 9. DEFINE YOUR TEAM ========== */}
-				<Section id="team">
-					<SectionHeader num="08" sub="Define agents in YAML. Give them names, roles, tools, and filesystem scope. Start from a template or build your own team.">
-						Define Your Team
-					</SectionHeader>
-					<div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-						<AgentCard
-							name="Sam"
-							role="STRATEGIST"
-							desc="Scopes features, writes specs"
-							color="purple"
-							status="idle"
-						/>
-						<AgentCard
-							name="Alex"
-							role="PLANNER"
-							desc="Implementation plans"
-							color="cyan"
-							status="idle"
-						/>
-						<AgentCard
-							name="Max"
-							role="DEVELOPER"
-							desc="Writes code, creates PRs"
-							color="green"
-							status="run"
-						/>
-						<AgentCard
-							name="Riley"
-							role="REVIEWER"
-							desc="Reviews code quality"
-							color="green"
-							status="idle"
-						/>
-						<AgentCard
-							name="Ops"
-							role="DEVOPS"
-							desc="Deploys, monitors infra"
-							color="orange"
-							status="schd"
-						/>
-						<AgentCard
-							name="Jordan"
-							role="DESIGN"
-							desc="UI/UX, design system"
-							color="purple-light"
-							status="idle"
-						/>
-						<AgentCard
-							name="Morgan"
-							role="MARKETING"
-							desc="Copy, social, campaigns"
-							color="red"
-							status="idle"
-						/>
-						<AgentCard
-							name="CEO"
-							role="META"
-							desc="Decomposes intent, manages"
-							color="white"
-							status="schd"
-						/>
-					</div>
-					<div className="bg-lp-card border border-lp-border p-6">
-						<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-							<strong className="text-lp-fg">Example above:</strong>{' '}
-							The <strong className="text-lp-fg">Solo Dev Shop</strong> template.
-							Start with 2-3 agents, add as you need. You choose the names, the roles, and
-							the tools. Same kernel, different distribution.
-						</div>
-					</div>
-				</Section>
-
-				{/* ========== 10. ARCHITECTURE ========== */}
-				<Section id="arch">
-					<SectionHeader num="09" sub="Single Bun process. One SQLite file. No Docker, no Postgres, no Redis. The entire company runs as files you can ls, grep, back up with cp, and fork with git clone.">
-						Architecture
-					</SectionHeader>
-					<ArchitectureDiagram />
-					<div className="mt-6 bg-lp-card border border-lp-border p-6">
-						<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
-							ZERO INFRASTRUCTURE
-						</div>
-						<div className="font-sans text-[13px] text-lp-muted leading-relaxed">
-							No Docker, no Postgres, no Redis, no vector DB. Just Bun + <code className="font-mono text-[11px] text-lp-purple">autopilot provider login claude</code> or an API key.
-						</div>
-					</div>
-				</Section>
-
-				{/* ========== 11. FILESYSTEM + SEARCH ========== */}
-				<Section id="fs">
-					<SectionHeader num="10" sub="YAML for config and knowledge. SQLite for tasks, messages, sessions, and search. FTS5 + sqlite-vec for unified search. Everything git-tracked except the database.">
-						Filesystem + SQLite Hybrid
-					</SectionHeader>
-					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-						<CodeBlock title="/company/">
-							{`company.yaml                 # Company config
-team/
-  agents.yaml                # Agent definitions
-  humans.yaml                # Human team members
-  roles.yaml                 # Permission roles
-  schedules.yaml             # Cron triggers
-  webhooks.yaml              # HTTP event handlers
-  workflows/                 # YAML state machines
-    development.yaml
-    incident.yaml
-    marketing.yaml
-  policies/
-    approval-gates.yaml
-knowledge/                   # RAG knowledge base
-  brand/
-  business/
-  technical/
-  onboarding/
-  integrations/
-skills/                      # 20 SKILL.md templates
-  git-workflow/
-  code-review/
-  deployment/
-  ...
-context/memory/              # Per-agent memories
-projects/                    # Code, docs, assets
-secrets/                     # Encrypted API keys
-dashboard/                   # Living dashboard
-  groups.yaml
-  widgets/
-  pages/
-  pins/
-.data/autopilot.db           # SQLite database
-# DB tables: tasks, messages, activity,
-# agent_sessions, search_index
-# FTS5 + sqlite-vec for unified search`}
-						</CodeBlock>
-						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									HYBRID STORAGE
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
-									YAML for config and knowledge. SQLite for tasks,
-									messages, activity, sessions, and search.
-								</div>
-								{[
-									{
-										label: 'YAML',
-										desc: 'Config, knowledge, memory, skills',
-									},
-									{
-										label: 'SQLite',
-										desc: 'Tasks, messages, activity, sessions, search',
-									},
-								].map((s) => (
-									<div
-										key={s.label}
-										className="flex items-center gap-2 py-1.5"
+								<h1 className="text-foreground mb-6 font-mono text-4xl leading-[1.1] font-extrabold tracking-[-0.03em] text-balance md:text-5xl">
+									Run AI work where your tools, access, and context already live
+								</h1>
+								<p className="text-muted-foreground mb-8 max-w-xl text-lg leading-[1.6] md:text-xl">
+									Autopilot runs work on the right machine, sends back a reviewable result,
+									and waits for a human to decide what happens next. Code, research, content,
+									ops — same loop.
+								</p>
+								<div className="mb-8 flex flex-wrap items-center gap-4">
+									<a
+										href="/docs/quickstart"
+										className="bg-primary text-primary-foreground hover:bg-primary/80 inline-flex items-center gap-2 px-4 py-2 font-mono text-[13px] font-semibold tracking-[0.04em] uppercase transition-colors"
 									>
-										<span className="font-mono text-[11px] text-lp-fg min-w-[70px]">
-											{s.label}
-										</span>
-										<span className="font-sans text-[11px] text-lp-ghost">
-											{s.desc}
-										</span>
+										Quickstart <ArrowRight className="h-4 w-4" />
+									</a>
+									<a
+										href="#proof-loop"
+										className="border-border text-foreground hover:bg-secondary inline-flex items-center gap-2 border px-4 py-2 font-mono text-[13px] font-semibold tracking-[0.04em] uppercase transition-colors"
+									>
+										How it works
+									</a>
+								</div>
+								<p className="text-muted-foreground mb-5 max-w-2xl text-sm leading-[1.7]">
+									Works with your existing Claude, Codex, or OpenCode subscription.
+									No new AI vendor — Autopilot reuses the tools you already pay for.
+								</p>
+								<div className="flex flex-wrap gap-2">
+									{['CLI-first', 'Repo-native', 'Durable previews', 'Approval-aware', 'Bring your own subscription'].map((t) => (
+										<Badge key={t}>{t}</Badge>
+									))}
+								</div>
+							</div>
+
+							<HeroProofPanel />
+						</div>
+					</section>
+
+					{/* ─── §01 THE OPERATING LOOP ─── */}
+					<Reveal>
+						<section id="proof-loop" className="border-border border-t px-4 py-16 md:px-8 md:py-24">
+							<SectionHeader
+								num="01"
+								title="The loop is the product"
+								subtitle="Work moves through a controlled, inspectable loop — not a conversation you have to scroll back through."
+							/>
+							<div className="bg-border border-border grid grid-cols-1 gap-[1px] border md:grid-cols-5">
+								<FeatureCell
+									num="01"
+									icon={Terminal}
+									title="Start with a task"
+									desc="Create work from the CLI. Intake attaches the right workflow — no ad hoc prompt choreography."
+								/>
+								<FeatureCell
+									num="02"
+									icon={Workflow}
+									title="Workflow decides the next step"
+									desc="Repo-authored policy picks the agent, the instructions, and what runs next."
+								/>
+								<FeatureCell
+									num="03"
+									icon={Monitor}
+									title="Worker executes where access exists"
+									desc="The right worker claims the run on a host that already has the repo, toolchain, and credentials."
+								/>
+								<FeatureCell
+									num="04"
+									icon={FileCode2}
+									title="Result comes back reviewable"
+									desc="The run finishes with a summary, artifacts, and a durable preview URL — available after the worker is gone."
+								/>
+								<FeatureCell
+									num="05"
+									icon={Shield}
+									title="Human decides what moves forward"
+									desc="Approve to continue, or reply with feedback that becomes the next implementation pass."
+								/>
+							</div>
+						</section>
+					</Reveal>
+
+					{/* ─── §02 WHO IT'S FOR ─── */}
+					<Reveal>
+						<section className="border-border border-t px-4 py-16 md:px-8 md:py-24">
+							<SectionHeader
+								num="02"
+								title="Who this is for"
+								subtitle="Any team whose work needs real machine access, reviewable outputs, and human approval — from engineering to marketing to ops."
+							/>
+							<BrutalistGrid className="md:grid-cols-2">
+								<FeatureCell
+									num="01"
+									icon={GitBranch}
+									title="Small engineering teams"
+									desc="Multiple repos, client environments, limited bandwidth. You need durable runs and review loops, not more prompt wrangling."
+								/>
+								<FeatureCell
+									num="02"
+									icon={Monitor}
+									title="Machine-bound access"
+									desc="The work depends on a VPN, staging host, local toolchain, or private network. Where execution happens matters."
+								/>
+								<FeatureCell
+									num="03"
+									icon={Shield}
+									title="Review before merge or deploy"
+									desc="Risky work needs a human gate. Autopilot stops, surfaces the result, and waits for an explicit decision."
+								/>
+								<FeatureCell
+									num="04"
+									icon={Layers}
+									title="Teams producing recurring research or reports"
+									desc="Weekly summaries, competitor briefs, docs audits — through a controlled loop with durable outputs, not one-off prompts."
+								/>
+							</BrutalistGrid>
+						</section>
+					</Reveal>
+
+					{/* ─── §03 WHY NOT CHAT-FIRST ─── */}
+					<Reveal>
+						<section className="border-border border-t px-4 py-16 md:px-8 md:py-24">
+							<SectionHeader
+								num="03"
+								title="Why workflow-first beats chat-first"
+								subtitle="A conversation is the wrong primitive for routing, policy, previews, and approvals."
+							/>
+							<BrutalistGrid className="md:grid-cols-2">
+								<FeatureCell
+									num="01"
+									icon={Terminal}
+									title="A transcript is not a control plane"
+									desc="Task state, run history, event logs, artifacts, and human decisions need to survive beyond the current session."
+								/>
+								<FeatureCell
+									num="02"
+									icon={Monitor}
+									title="Execution surface matters"
+									desc="When work depends on the repo, the toolchain, local credentials, or a private network, you can't abstract the machine away."
+								/>
+								<FeatureCell
+									num="03"
+									icon={FileCode2}
+									title="Policy belongs in the repo"
+									desc="Workflows and execution rules live in `.autopilot/`, next to the code — diffable, reviewable, changeable like any other config."
+								/>
+								<FeatureCell
+									num="04"
+									icon={Layers}
+									title="Review needs real surfaces"
+									desc="A durable preview URL and explicit approve/reject/reply actions are stronger than asking someone to scroll through generated text."
+								/>
+							</BrutalistGrid>
+						</section>
+					</Reveal>
+
+					{/* ─── §04 WHAT IS REAL TODAY ─── */}
+					<Reveal>
+						<section className="border-border border-t px-4 py-16 md:px-8 md:py-24">
+							<SectionHeader
+								num="04"
+								title="What you can run today"
+								subtitle="No Worker App needed. The CLI and API already expose the full operator loop."
+							/>
+							<div className="bg-border border-border grid grid-cols-1 gap-[1px] border sm:grid-cols-2">
+								{[
+									'Implement a feature end-to-end: spec, plan, code, review, deploy.',
+									'Respond to an incident: triage, investigate, hotfix, deploy, verify.',
+									'Monitor competitors: scrape changelogs, analyze changes, produce a brief.',
+									'Draft and publish a blog post with human review and CMS webhook.',
+									'Draft and publish social posts with human review via provider handlers.',
+									'Generate a weekly executive report and deliver via Slack.',
+								].map((text) => (
+									<div key={text} className="bg-background flex items-start gap-3 p-5">
+										<CheckCircle className="text-primary mt-0.5 h-4 w-4 shrink-0" />
+										<span className="text-[13px]">{text}</span>
 									</div>
 								))}
 							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									UNIFIED SEARCH
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
-									Two search engines run in parallel. Results merged via
-									Reciprocal Rank Fusion.
-								</div>
-								{[
-									{
-										label: 'FTS5',
-										desc: 'Exact keywords, task IDs, file paths',
-									},
-									{
-										label: 'sqlite-vec',
-										desc: 'Semantic similarity, natural language',
-									},
-								].map((s) => (
-									<div
-										key={s.label}
-										className="flex items-center gap-2 py-1.5"
-									>
-										<span className="font-mono text-[11px] text-lp-fg min-w-[70px]">
-											{s.label}
-										</span>
-										<span className="font-sans text-[11px] text-lp-ghost">
-											{s.desc}
-										</span>
-									</div>
-								))}
+						</section>
+					</Reveal>
+
+					{/* ─── §05 SAME LOOP, BEYOND CODE ─── */}
+					<Reveal>
+						<section className="border-border border-t px-4 py-16 md:px-8 md:py-24">
+							<SectionHeader
+								num="05"
+								title="The same loop, beyond code"
+								subtitle="The operator loop is domain-agnostic. The same primitives that implement a feature also produce a research brief or publish a blog post."
+							/>
+							<div className="bg-border border-border grid grid-cols-1 gap-[1px] border md:grid-cols-3">
+								<FeatureCell
+									num="01"
+									icon={GitBranch}
+									title="Engineering"
+									desc={'"Implement dark mode" \u2192 plan \u2192 code \u2192 preview \u2192 approve \u2192 deploy'}
+								/>
+								<FeatureCell
+									num="02"
+									icon={Search}
+									title="Research"
+									desc={'"Monitor competitor pricing" \u2192 scrape \u2192 analyze \u2192 brief \u2192 human review'}
+								/>
+								<FeatureCell
+									num="03"
+									icon={BookOpen}
+									title="Content"
+									desc={'"Write launch blog post" \u2192 research \u2192 draft \u2192 preview \u2192 approve \u2192 publish via API'}
+								/>
 							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2">
-									GIT-VERSIONED COMPANY
-								</div>
-								<div className="font-sans text-[12px] text-lp-muted leading-relaxed">
-									Every agent action is a git commit. <code className="font-mono text-[11px] text-lp-purple">git diff</code> to see what changed. <code className="font-mono text-[11px] text-lp-purple">git revert</code> to undo.
-									Fork a company with <code className="font-mono text-[11px] text-lp-purple">git clone</code>. Back it up with <code className="font-mono text-[11px] text-lp-purple">cp</code>.
-								</div>
-							</div>
+						</section>
+					</Reveal>
+
+					{/* ─── CTA ─── */}
+					<section className="border-border border-t px-4 py-24 text-center md:px-8 md:py-32">
+						<div className="mb-8">
+							<QuestpieLogo className="mx-auto h-12 w-12" />
 						</div>
-					</div>
-				</Section>
-
-				{/* ========== 12. CONTEXT & MEMORY ========== */}
-				<Section id="memory">
-					<SectionHeader num="11" sub="Each agent has persistent memory scoped to their role. Facts, decisions, mistakes, learnings. Extracted after every session. Private -- no agent reads another's memory.">
-						Per-Agent Memory
-					</SectionHeader>
-					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-						<CodeBlock title="context/memory/max/memory.yaml">
-							{`facts:
-  codebase:
-    - "QUESTPIE v3 uses file-convention codegen"
-    - "Auth: Better Auth library, not custom"
-    - "ORM: Drizzle with bun-sql driver"
-    - "Block system: JSONB _tree/_values cols"
-
-  conventions:
-    - "Always write QUESTPIE in all caps"
-    - "Biome for formatting, not ESLint"
-    - "Conventional commits: feat: fix: docs:"
-
-decisions:
-  - date: "2026-03-21"
-    decision: "Webhook-based Stripe integration"
-    reason: "Better UX, Dominik approved"
-    task: task-039
-
-mistakes:
-  - date: "2026-03-15"
-    what: "Used ESLint config instead of Biome"
-    fix: "Always use Biome. Config at repo root"
-
-patterns:
-  - "Riley requests extracting shared logic
-     in first review round"
-  - "Break PRs into <200 lines for faster
-     reviews"`}
-						</CodeBlock>
-						<div className="flex flex-col gap-4">
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-mono text-[10px] text-lp-purple tracking-[0.15em] mb-2.5">
-									CONTEXT ASSEMBLY
-								</div>
-								<div className="font-sans text-[13px] text-lp-muted leading-relaxed mb-3">
-									Before every session, 4 layers are assembled into the
-									agent&apos;s context window:
-								</div>
-								{[
-									{
-										label: 'Identity',
-										desc: 'Role, rules, team',
-										tokens: '~2K',
-									},
-									{
-										label: 'Company State',
-										desc: 'Role-scoped snapshot',
-										tokens: '~5K',
-									},
-									{
-										label: 'Memory',
-										desc: 'Facts, decisions, learnings',
-										tokens: '~20K',
-									},
-									{
-										label: 'Task Context',
-										desc: 'Spec, plan, code, history',
-										tokens: '~15K',
-									},
-								].map((l, i) => (
-									<div
-										key={l.label}
-										className={`flex justify-between items-center py-1.5 ${i < 3 ? 'border-b border-lp-border' : ''}`}
-									>
-										<div className="flex items-center gap-2">
-											<span className="font-sans text-xs text-lp-fg font-semibold">
-												{l.label}
-											</span>
-											<span className="font-sans text-[11px] text-lp-ghost">
-												-- {l.desc}
-											</span>
-										</div>
-										<span className="font-mono text-[10px] text-lp-muted">
-											{l.tokens}
-										</span>
-									</div>
-								))}
-							</div>
-							<div className="bg-lp-card border border-lp-border p-6">
-								<div className="font-sans text-[13px] text-lp-fg leading-relaxed">
-									<strong className="text-white">Isolation rule:</strong> No
-									agent reads another agent's memory. Cross-agent info sharing
-									only through channels and task history. If you need info
-									outside your scope, use{' '}
-									<code className="font-mono text-[11px] text-lp-purple">
-										message
-									</code>{' '}
-									-- the owning agent decides to share or escalate.
-								</div>
-							</div>
+						<h2 className="text-foreground mb-6 font-mono text-4xl font-extrabold md:text-5xl">
+							Run the loop on a real repo
+						</h2>
+						<p className="text-muted-foreground mx-auto mb-8 max-w-2xl text-lg leading-8">
+							Create a task. Inspect the run. Open the preview. Decide what ships.
+						</p>
+						<div className="bg-secondary border-border mb-8 inline-flex items-center gap-4 border px-6 py-3">
+							<span className="text-primary font-mono">$</span>
+							<span className="font-mono text-[14px]">bun add -g @questpie/autopilot</span>
 						</div>
-					</div>
-				</Section>
-
-				{/* ========== 13. WORKFLOWS ========== */}
-				<Section id="workflows">
-					<SectionHeader num="12" sub="YAML files in the filesystem. CEO agent owns them. Anyone can propose changes. They evolve based on metrics.">
-						Workflows as Files
-					</SectionHeader>
-					<CodeBlock title="team/workflows/development.yaml (abbreviated)">
-						{`id: development
-version: 3
-
-steps:
-  - id: scope
-    assigned_role: strategist
-    transitions: { done: plan }
-
-  - id: plan
-    assigned_role: planner
-    review: { reviewers_roles: [developer, reviewer], min_approvals: 2 }
-    transitions: { approved: implement, rejected: plan }
-
-  - id: implement
-    assigned_role: developer
-    outputs: [{ type: git_branch }, { type: git_pr }]
-    transitions: { done: code_review }
-
-  - id: code_review
-    assigned_role: reviewer
-    review: { min_approvals: 1 }
-    transitions: { approved: human_merge, rejected: implement }
-
-  - id: human_merge
-    type: human_gate              # YOU approve here
-    gate: merge
-    transitions: { approved: deploy, rejected: implement }
-
-  - id: deploy
-    assigned_role: devops
-    auto_execute: true
-    transitions: { success: verify, failure: rollback }
-
-  - id: human_deploy_prod
-    type: human_gate              # YOU approve here
-    gate: deploy
-    transitions: { approved: deploy_prod }
-
-  - id: complete
-    type: terminal`}
-					</CodeBlock>
-				</Section>
-
-				{/* ========== FOOTER ========== */}
-				<section className="border-t border-lp-border px-4 py-24 text-center md:px-8 md:py-32">
-					<div className="flex justify-center">
-						<QSymbol size={36} />
-					</div>
-					<h2 className="font-mono text-2xl sm:text-[32px] font-bold text-white mt-6 tracking-[-0.03em]">
-						Your AI-native company OS.
-					</h2>
-					<p className="font-sans text-[15px] text-lp-muted mt-2">
-						Open Source. CLI-first. Zero infra. MIT License.
-					</p>
-					<div className="flex flex-col sm:flex-row justify-center gap-3 mt-8">
-						<a
-							href="https://github.com/questpie/autopilot"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="font-mono text-xs text-white bg-lp-purple px-6 py-2.5 no-underline hover:bg-lp-purple-light transition-colors"
-						>
-							github.com/questpie/autopilot
-						</a>
-						<a
-							href="/docs"
-							className="font-mono text-xs text-lp-purple border border-lp-border px-6 py-2.5 no-underline hover:border-lp-purple transition-colors"
-						>
-							Documentation
-						</a>
-						<a
-							href="/playground"
-							className="font-mono text-xs text-lp-muted border border-lp-border px-6 py-2.5 no-underline hover:border-lp-purple hover:text-lp-purple transition-colors"
-						>
-							Construct Generator
-						</a>
-					</div>
-					<div className="font-mono text-[11px] text-lp-dim mt-12">
-						Built by{' '}
-						<a
-							href="https://questpie.com"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="text-lp-ghost hover:text-lp-fg transition-colors"
-						>
-							QUESTPIE s.r.o.
-						</a>
-					</div>
-				</section>
+						<div className="flex flex-wrap items-center justify-center gap-4">
+							<a
+								href="/docs/quickstart"
+								className="bg-primary text-primary-foreground hover:bg-primary/80 inline-flex items-center gap-2 px-4 py-2 font-mono text-[13px] font-semibold tracking-[0.04em] uppercase transition-colors"
+							>
+								Quickstart <ArrowRight className="h-4 w-4" />
+							</a>
+							<a
+								href="/docs/architecture"
+								className="border-border text-foreground hover:bg-secondary inline-flex items-center gap-2 border px-4 py-2 font-mono text-[13px] font-semibold tracking-[0.04em] uppercase transition-colors"
+							>
+								How it works
+							</a>
+							<a
+								href="https://github.com/questpie/autopilot"
+								target="_blank"
+								rel="noreferrer"
+								className="text-primary inline-flex items-center gap-2 bg-transparent font-mono text-[13px] font-semibold tracking-[0.04em] uppercase hover:underline"
+							>
+								GitHub
+							</a>
+						</div>
+					</section>
+				</div>
 			</main>
+
+			{/* ─── Footer ─── */}
+			<footer className="border-border border-t">
+				<div className="border-border mx-auto max-w-[1200px] border-x px-4 py-12 md:px-8">
+					<div className="flex items-center justify-between">
+						<div className="flex items-center gap-2">
+							<QuestpieLogo className="h-4 w-4" />
+							<span className="font-mono text-xs font-bold">QUESTPIE Autopilot</span>
+						</div>
+						<span className="text-muted-foreground text-xs">Open source. MIT license.</span>
+					</div>
+				</div>
+			</footer>
 		</div>
 	)
 }

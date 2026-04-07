@@ -98,12 +98,12 @@ function getStepIcon(type: string) {
 function getStepColor(type: string): string {
   switch (type) {
     case "end":
-      return "border-green-500/30 bg-green-500/5"
+      return "border-success/30 bg-success/5"
     case "gate":
     case "review":
-      return "border-yellow-500/30 bg-yellow-500/5"
+      return "border-warning/30 bg-warning/5"
     case "start":
-      return "border-blue-500/30 bg-blue-500/5"
+      return "border-info/30 bg-info/5"
     default:
       return "border-border bg-card"
   }

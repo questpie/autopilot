@@ -1,0 +1,245 @@
+---
+title: Providers and Handlers
+description: "Providers, handlers, surfaces, and packs — Autopilot's extension model."
+---
+
+Autopilot extends through four related concepts:
+
+- A **provider** is an authored integration instance — YAML config in `.autopilot/providers/` that declares what it connects to and what operations it supports.
+- A **handler** is an executable adapter — a Bun script in `.autopilot/handlers/` that does the actual protocol-specific work (API calls, payload normalization, message formatting).
+- A **surface** is a human-facing channel pattern — like Telegram, Slack, or email — built over one or more providers and handlers. Surfaces are not a separate primitive; they are the user-visible result of combining providers, handlers, and conversation bindings.
+- A **pack** is a distribution unit — an installable bundle that delivers providers, handlers, workflows, skills, and other material into your `.autopilot/` directory via `autopilot sync`.
+
+Handlers do not become the system of record. They normalize or deliver. The orchestrator still owns tasks, workflow actions, and durable state.
+
+## How these relate
+
+<Mermaid chart="graph TD
+  Pack[Pack — distribution unit] --> Provider[Provider — authored config]
+  Provider --> Handler[Handler — executable adapter]
+  Handler --> Surface[Surface — user-facing result]" />
+
+A pack like `questpie/telegram-surface` installs a provider config and a handler script. Together they create a Telegram surface — but the orchestrator primitives (tasks, bindings, workflow actions) are the same regardless of which surface delivered the interaction.
+
+## Current scope
+
+Today providers support outbound notifications, intent intake, and conversation-assisted task actions. This is not a generic plugin platform — providers integrate Autopilot with the outside world while keeping the orchestrator in charge of the core model.
+
+## How it works
+
+1. You define a provider instance in YAML
+2. You point it at a Bun handler script
+3. The orchestrator decides when to invoke it
+4. The handler reads JSON from `stdin`
+5. The handler writes JSON to `stdout`
+6. The orchestrator validates the result and executes the real action
+
+## Provider config
+
+Example:
+
+```yaml
+# .autopilot/providers/webhook-ops.yaml
+id: webhook-ops
+name: Webhook Notifications
+kind: notification_channel
+handler: handlers/webhook-notify.ts
+capabilities:
+  - op: notify.send
+events:
+  - types: [run_completed]
+    statuses: [failed]
+  - types: [task_changed]
+    statuses: [blocked]
+config:
+  channel: "#ops"
+secret_refs:
+  - name: webhook_url
+    source: env
+    key: WEBHOOK_URL
+```
+
+## Provider kinds
+
+| Kind | Use it for |
+|---|---|
+| `notification_channel` | Send outbound alerts to email, Slack, webhooks, or similar |
+| `intent_channel` | Turn inbound payloads into task creation |
+| `conversation_channel` | Bind an external thread to task-scoped replies and updates |
+
+## Key fields
+
+| Field | Meaning |
+|---|---|
+| `id` | Unique provider ID |
+| `kind` | Provider class (`notification_channel`, `intent_channel`, `conversation_channel`) |
+| `handler` | Bun script under `handlers/` |
+| `capabilities` | Operations the provider supports |
+| `events` | Optional event filters for outbound delivery |
+| `config` | Non-secret static values passed to the handler |
+| `secret_refs` | Secrets resolved on the orchestrator host |
+
+## Handler contract
+
+Handlers are small Bun programs with one job: accept a typed envelope, do the external work or normalization, and return a typed result.
+
+### Envelope example
+
+```json
+{
+  "op": "notify.send",
+  "provider_id": "webhook-ops",
+  "provider_kind": "notification_channel",
+  "config": { "channel": "#ops" },
+  "secrets": { "webhook_url": "https://..." },
+  "payload": { "event_type": "run_completed", "title": "..." }
+}
+```
+
+### Result example
+
+```json
+{
+  "ok": true,
+  "external_id": "msg-123",
+  "metadata": { "status": 200 }
+}
+```
+
+On failure:
+
+```json
+{
+  "ok": false,
+  "error": "Connection refused"
+}
+```
+
+### Minimal handler
+
+```typescript
+// .autopilot/handlers/webhook-notify.ts
+const input = await Bun.stdin.text()
+const envelope = JSON.parse(input)
+
+const response = await fetch(envelope.secrets.webhook_url, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(envelope.payload),
+})
+
+console.log(JSON.stringify({
+  ok: response.ok,
+  error: response.ok ? undefined : `HTTP ${response.status}`,
+}))
+```
+
+## Supported operations
+
+| Operation | What the handler does | What the orchestrator does |
+|---|---|---|
+| `notify.send` | Delivers a notification outward | Keeps tasks/runs/artifacts as source of truth |
+| `intent.ingest` | Normalizes inbound payload into a task-create decision | Creates the real task through normal task flow |
+| `conversation.ingest` | Normalizes inbound thread activity into approve/reject/reply actions | Applies the action through workflow primitives |
+
+## Notification providers
+
+Notification providers are the most useful current integration point.
+
+They receive actionable events such as:
+
+- task blocked
+- approval needed
+- run completed
+- run failed
+
+When available, payloads can include task links, run links, and durable preview URLs.
+
+Current caveat: there is **no retry queue yet**. Failed deliveries are logged, not retried automatically.
+
+## Intent providers
+
+Intent providers let you accept inbound requests from another surface and normalize them into real tasks.
+
+Typical result shapes:
+
+- `{ action: "task.create", input: { ... } }`
+- `{ action: "noop", reason: "..." }`
+
+The task still goes through the same intake path as `autopilot tasks create`.
+
+## Conversation providers
+
+Conversation providers let an external thread act as a task-scoped operator surface.
+
+Typical inbound mapping:
+
+- `/approve` -> `task.approve`
+- `/reject reason` -> `task.reject`
+- ordinary text -> `task.reply`
+
+Typical outbound usage:
+
+- notify the same bound thread when a task blocks
+- send completion/failure updates
+- include preview URLs where relevant
+
+See [Conversation-Assisted Operation](/docs/conversation-assisted-operation) for the binding model.
+
+## Secret references
+
+Secrets do not live in provider YAML. Providers declare `secret_refs`, and the orchestrator resolves them locally.
+
+```yaml
+secret_refs:
+  - name: webhook_url
+    source: env
+    key: WEBHOOK_URL
+  - name: token
+    source: file
+    key: /path/to/token
+  - name: dynamic
+    source: exec
+    key: "vault read secret/key"
+```
+
+This keeps provider config reviewable without hardcoding credentials into the repo.
+
+## Surfaces
+
+A surface is not a separate config object. It is the user-visible result of combining a provider, a handler, and conversation bindings into a coherent human-facing channel.
+
+The Telegram surface, for example, is:
+
+- A `conversation_channel` provider with `notify.send` and `conversation.ingest` capabilities
+- A handler that speaks the Telegram Bot API
+- Conversation bindings that map Telegram chats to tasks
+- Orchestrator-boundary webhook auth
+
+The same pattern applies to Slack, Discord, email, or any future surface. Different handler code, same orchestrator primitives.
+
+See [Telegram Surface](/docs/telegram-surface) for the first real example.
+
+## Installed skills vs runtime capability injection
+
+There is an important distinction between:
+
+- **Installed skills** — repo-resident skill definitions, prompts, and context under `.autopilot/`. These exist on disk and are available to any agent that references them.
+- **Runtime capability injection** — per-step or per-agent selection of which skills, tools, and context are active during a run. This would allow workflows to scope what an agent can access at each step.
+
+Today, installed skills are real. Runtime capability injection per workflow step is planned but not yet implemented. When it arrives, it will work through the workflow engine — steps will declare capability profiles that control what tools and context the runtime adapter provides.
+
+## Providers and packs
+
+Providers and handlers often arrive as packs — installable bundles distributed through git registries. When you run `autopilot sync`, pack contents materialize into `.autopilot/` as normal files.
+
+See [Packs and Distribution](/docs/packs-and-distribution) for the full distribution model.
+
+## What providers are not
+
+- not a replacement for workflows
+- not a second state machine
+- not the source of truth for tasks or runs
+- not a generic long-running extension host
+
+Use them to integrate Autopilot with the outside world while keeping the orchestrator in charge of the core model.

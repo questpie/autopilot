@@ -5,43 +5,50 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1774343323722,
-      "tag": "0000_initial_tables",
+      "when": 1775210440260,
+      "tag": "0000_slim_krista_starr",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "6",
-      "when": 1774929600000,
-      "tag": "0001_rate_limit",
+      "when": 1775242896334,
+      "tag": "0001_early_grandmaster",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "6",
-      "when": 1774934400000,
-      "tag": "0002_auth_tables",
+      "when": 1775332550896,
+      "tag": "0002_harsh_rage",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "6",
-      "when": 1774566089970,
-      "tag": "0003_flippant_mimic",
+      "when": 1775389291411,
+      "tag": "0003_rapid_morlocks",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "6",
-      "when": 1774940000000,
-      "tag": "0004_file_locks_and_pins",
+      "when": 1775399910607,
+      "tag": "0004_crazy_shiver_man",
       "breakpoints": true
     },
     {
       "idx": 5,
       "version": "6",
-      "when": 1774950000000,
-      "tag": "0005_notifications",
+      "when": 1775500655818,
+      "tag": "0005_chilly_mockingbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1775555000000,
+      "tag": "0006_runtime_selection",
       "breakpoints": true
     }
   ]

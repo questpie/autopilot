@@ -1,164 +1,197 @@
+/**
+ * `autopilot secrets` — manage orchestrator-managed shared secrets.
+ *
+ * Commands:
+ *   set <name>    — create or update a shared secret
+ *   list          — list all shared secrets (metadata only)
+ *   delete <name> — delete a shared secret
+ */
 import { Command } from 'commander'
-import { readdir, rm } from 'node:fs/promises'
-import { join } from 'node:path'
-import { readYamlUnsafe, writeYaml } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
-import { findCompanyRoot } from '../utils/find-root'
-import { section, dim, table, success, error, badge, separator } from '../utils/format'
+import { getBaseUrl } from '../utils/client'
+import { header, dim, success, error, badge, table, dot } from '../utils/format'
+import { getAuthHeaders } from './auth'
 
-const secretsCmd = new Command('secrets')
-	.description('Manage secrets (API keys, tokens, credentials)')
-	.action(async () => {
-		try {
-			const root = await findCompanyRoot()
-			const dir = join(root, 'secrets')
-			let files: string[]
-			try {
-				files = await readdir(dir)
-			} catch {
-				files = []
-			}
+const secretsCmd = new Command('secrets').description('Manage orchestrator-managed shared secrets')
 
-			const secrets = files.filter((f) => f.endsWith('.yaml')).map((f) => f.replace(/\.yaml$/, ''))
-
-			console.log(section('Secrets'))
-			if (secrets.length === 0) {
-				console.log(dim('  No secrets found'))
-				return
-			}
-
-			console.log(
-				table(
-					secrets.map((name) => [
-						badge(name, 'cyan'),
-						dim('********'),
-					]),
-				),
-			)
-			console.log('')
-			console.log(separator())
-			console.log(dim(`${secrets.length} secret(s)`))
-		} catch (err) {
-			console.error(error(err instanceof Error ? err.message : String(err)))
-			console.error(dim('Run "autopilot --help" for usage information.'))
-			process.exit(1)
-		}
-	})
+// ─── set ─────────────────────────────────────────────────────────────────
 
 secretsCmd.addCommand(
-	new Command('list')
-		.description('List all secrets with metadata (names only, not values)')
-		.action(async () => {
+	new Command('set')
+		.description('Create or update a shared secret')
+		.argument('<name>', 'Secret name (e.g. TELEGRAM_BOT_TOKEN)')
+		.option('--scope <scope>', 'Delivery scope: worker, provider, or orchestrator_only', 'provider')
+		.option('--value <value>', 'Secret value (plaintext)')
+		.option('--from-env <var>', 'Read value from an environment variable')
+		.option('--stdin', 'Read value from stdin')
+		.option('--description <desc>', 'Human-readable description')
+		.action(async (name: string, opts: {
+			scope: string
+			value?: string
+			fromEnv?: string
+			stdin?: boolean
+			description?: string
+		}) => {
 			try {
-				const root = await findCompanyRoot()
-				const dir = join(root, 'secrets')
-				let files: string[]
-				try {
-					files = await readdir(dir)
-				} catch {
-					files = []
-				}
+				// Resolve value
+				let value: string | undefined = opts.value
 
-				const secrets: Array<{ name: string; data: Record<string, unknown> }> = []
-				for (const file of files) {
-					if (!file.endsWith('.yaml')) continue
-					try {
-						const data = await readYamlUnsafe(join(dir, file)) as Record<string, unknown>
-						secrets.push({ name: file.replace(/\.yaml$/, ''), data })
-					} catch {
-						// skip invalid
+				if (opts.fromEnv) {
+					value = process.env[opts.fromEnv]
+					if (value === undefined) {
+						console.error(error(`Environment variable "${opts.fromEnv}" is not set`))
+						process.exit(1)
 					}
 				}
 
-				console.log(section('Secrets'))
+				if (opts.stdin) {
+					value = await readStdin()
+				}
+
+				if (!value) {
+					// Interactive prompt
+					value = prompt('Secret value: ') ?? undefined
+					if (!value) {
+						console.error(error('No value provided'))
+						process.exit(1)
+					}
+				}
+
+				const scope = opts.scope
+				if (!['worker', 'provider', 'orchestrator_only'].includes(scope)) {
+					console.error(error(`Invalid scope "${scope}". Must be: worker, provider, or orchestrator_only`))
+					process.exit(1)
+				}
+
+				const baseUrl = getBaseUrl()
+				const headers = {
+					...getAuthHeaders(),
+					'Content-Type': 'application/json',
+				}
+
+				const res = await fetch(`${baseUrl}/api/secrets`, {
+					method: 'POST',
+					headers,
+					body: JSON.stringify({
+						name,
+						scope,
+						value,
+						description: opts.description,
+					}),
+				})
+
+				if (!res.ok) {
+					const body = await res.json().catch(() => ({ error: 'Unknown error' })) as { error: string }
+					console.error(error(`Failed to set secret: ${body.error}`))
+					process.exit(1)
+				}
+
+				const meta = await res.json() as { name: string; scope: string }
+				console.log(success(`Secret "${meta.name}" set (scope: ${meta.scope})`))
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+// ─── list ────────────────────────────────────────────────────────────────
+
+secretsCmd.addCommand(
+	new Command('list')
+		.description('List all shared secrets (metadata only — no values)')
+		.action(async () => {
+			try {
+				const baseUrl = getBaseUrl()
+				const headers = getAuthHeaders()
+
+				const res = await fetch(`${baseUrl}/api/secrets`, { headers })
+
+				if (!res.ok) {
+					const body = await res.json().catch(() => ({ error: 'Unknown error' })) as { error: string }
+					console.error(error(`Failed to list secrets: ${body.error}`))
+					process.exit(1)
+				}
+
+				const secrets = await res.json() as Array<{
+					name: string
+					scope: string
+					description: string | null
+					created_at: string
+					updated_at: string
+				}>
+
 				if (secrets.length === 0) {
-					console.log(dim('  No secrets found'))
+					console.log(dim('  No shared secrets configured.'))
 					return
 				}
 
-				console.log(
-					table(
-						secrets.map((s) => [
-							badge(s.name, 'cyan'),
-							dim(String(s.data.type ?? 'api_token')),
-							s.data.allowed_agents
-								? dim(`agents: ${(s.data.allowed_agents as string[]).join(', ')}`)
-								: dim('agents: all'),
-						]),
-					),
-				)
+				console.log(header('Shared Secrets'))
 				console.log('')
-				console.log(separator())
-				console.log(dim(`${secrets.length} secret(s)`))
+
+				const rows: string[][] = [
+					[badge('Name', 'cyan'), badge('Scope', 'cyan'), badge('Description', 'cyan'), badge('Updated', 'cyan')],
+				]
+
+				for (const s of secrets) {
+					const scopeColor = s.scope === 'orchestrator_only' ? 'yellow' : 'green'
+					rows.push([
+						s.name,
+						`${dot(scopeColor)} ${s.scope}`,
+						s.description ?? dim('—'),
+						s.updated_at.slice(0, 10),
+					])
+				}
+
+				console.log(table(rows))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
-				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),
 )
 
-secretsCmd.addCommand(
-	new Command('add')
-		.description('Add a new secret')
-		.argument('<name>', 'Secret name (used as filename)')
-		.option('--value <value>', 'Secret value (API key, token)')
-		.option('--agents <agents>', 'Comma-separated list of allowed agent IDs')
-		.option('--type <type>', 'Secret type (e.g. api_token, oauth, ssh_key)', 'api_token')
-		.action(async (name: string, opts: { value?: string; agents?: string; type: string }) => {
-			try {
-				if (!opts.value) {
-					console.error(error('--value is required'))
-					console.error(dim('Run "autopilot secrets add --help" for usage information.'))
-					process.exit(1)
-				}
-
-				const root = await findCompanyRoot()
-				const filePath = join(root, 'secrets', `${name}.yaml`)
-
-				const secret = {
-					service: name,
-					type: opts.type,
-					value: opts.value,
-					allowed_agents: opts.agents ? opts.agents.split(',').map((a) => a.trim()) : [],
-					created_at: new Date().toISOString(),
-					created_by: 'human:owner',
-					usage: {},
-				}
-
-				await writeYaml(filePath, secret)
-				console.log(success(`Secret '${name}' added.`))
-			} catch (err) {
-				console.error(error(err instanceof Error ? err.message : String(err)))
-				console.error(dim('Run "autopilot --help" for usage information.'))
-				process.exit(1)
-			}
-		}),
-)
+// ─── delete ──────────────────────────────────────────────────────────────
 
 secretsCmd.addCommand(
-	new Command('remove')
-		.description('Remove a secret by name')
-		.argument('<name>', 'Secret name to remove')
+	new Command('delete')
+		.description('Delete a shared secret')
+		.argument('<name>', 'Secret name to delete')
 		.action(async (name: string) => {
 			try {
-				const root = await findCompanyRoot()
-				const filePath = join(root, 'secrets', `${name}.yaml`)
+				const baseUrl = getBaseUrl()
+				const headers = getAuthHeaders()
 
-				try {
-					await rm(filePath)
-					console.log(success(`Secret '${name}' removed.`))
-				} catch {
-					console.error(error(`Secret not found: ${name}`))
-					console.error(dim('Use "autopilot secrets list" to see available secrets.'))
+				const res = await fetch(`${baseUrl}/api/secrets/${encodeURIComponent(name)}`, {
+					method: 'DELETE',
+					headers,
+				})
+
+				if (!res.ok) {
+					const body = await res.json().catch(() => ({ error: 'Unknown error' })) as { error: string }
+					console.error(error(`Failed to delete secret: ${body.error}`))
 					process.exit(1)
 				}
+
+				console.log(success(`Secret "${name}" deleted`))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
-				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)
 			}
 		}),
 )
 
 program.addCommand(secretsCmd)
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+
+async function readStdin(): Promise<string> {
+	const chunks: Buffer[] = []
+	const reader = Bun.stdin.stream().getReader()
+	while (true) {
+		const { done, value } = await reader.read()
+		if (done) break
+		chunks.push(Buffer.from(value))
+	}
+	return Buffer.concat(chunks).toString('utf-8').trim()
+}

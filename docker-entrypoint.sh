@@ -1,22 +1,17 @@
 #!/bin/sh
 set -e
 
-# Start the orchestrator (API + webhooks) in background
-bun packages/cli/bin/autopilot.ts start &
-ORCHESTRATOR_PID=$!
+COMPANY="${COMPANY_ROOT:-/data/company}"
 
-# Start the dashboard in background (Nitro server)
-node /app/apps/dashboard-v2/.output/server/index.mjs &
-DASHBOARD_PID=$!
+# ── Bootstrap: ensure .autopilot/company.yaml exists ──────────────────────
+# A fresh volume mount has no config. Scaffold the minimum viable company
+# so the orchestrator can start without manual intervention.
+if [ ! -f "$COMPANY/.autopilot/company.yaml" ]; then
+  echo "[entrypoint] No .autopilot/company.yaml found in $COMPANY — bootstrapping..."
+  bun packages/cli/bin/autopilot.ts bootstrap --yes --cwd "$COMPANY"
+fi
 
-# Shutdown handler — forward signals to child processes
-shutdown() {
-  kill $ORCHESTRATOR_PID $DASHBOARD_PID 2>/dev/null || true
-  wait $ORCHESTRATOR_PID $DASHBOARD_PID 2>/dev/null || true
-  exit 0
-}
-trap shutdown SIGTERM SIGINT
-
-# Wait for both processes (if either exits, shut down the other)
-wait $ORCHESTRATOR_PID $DASHBOARD_PID 2>/dev/null || true
-shutdown
+# Start the orchestrator (API + webhooks).
+# Uses --company-root to point at the mounted volume directly.
+# Operator surfaces: CLI, API, MCP, Telegram, query.
+exec bun packages/cli/bin/autopilot.ts server start --company-root "$COMPANY"

@@ -58,11 +58,11 @@ function parseSimpleYaml(content: string): YamlNode[] {
 }
 
 function getValueColor(value: string): string {
-  if (value === "true" || value === "false") return "text-blue-400"
+  if (value === "true" || value === "false") return "text-info"
   if (value === "null" || value === "~") return "text-muted-foreground/50"
-  if (/^-?\d+(\.\d+)?$/.test(value)) return "text-green-400"
-  if (value.startsWith('"') || value.startsWith("'")) return "text-yellow-400"
-  return "text-yellow-400"
+  if (/^-?\d+(\.\d+)?$/.test(value)) return "text-success"
+  if (value.startsWith('"') || value.startsWith("'")) return "text-warning"
+  return "text-warning"
 }
 
 interface TreeNodeProps {
@@ -103,7 +103,7 @@ function TreeNode({ nodeKey, value, depth }: TreeNodeProps) {
             )}
           />
           {nodeKey && (
-            <span className="font-mono text-xs text-purple-400">{nodeKey}:</span>
+            <span className="font-mono text-xs text-primary">{nodeKey}:</span>
           )}
           {!expanded && (
             <span className="font-mono text-[10px] text-muted-foreground">
@@ -127,7 +127,7 @@ function TreeNode({ nodeKey, value, depth }: TreeNodeProps) {
       style={{ paddingLeft: `${depth * 16 + 14}px` }}
     >
       {nodeKey && (
-        <span className="font-mono text-xs text-purple-400">{nodeKey}:</span>
+        <span className="font-mono text-xs text-primary">{nodeKey}:</span>
       )}
       <span className={cn("font-mono text-xs", getValueColor(strValue))}>
         {strValue}
@@ -167,7 +167,7 @@ function StructuredDataView({ path, content }: FileViewProps) {
             style={{ paddingLeft: `${(node.indent / 2) * 16}px` }}
           >
             {node.key && (
-              <span className="font-mono text-xs text-purple-400">{node.key}:</span>
+              <span className="font-mono text-xs text-primary">{node.key}:</span>
             )}
             {typeof node.value === "string" && node.value && (
               <span className={cn("font-mono text-xs", getValueColor(node.value))}>

@@ -25,19 +25,3 @@ export function agentDetailQuery(id: string) {
   })
 }
 
-export function agentActivityQuery(agentId: string, limit = 50) {
-  return queryOptions({
-    queryKey: queryKeys.activity.list({ agent: agentId, limit }),
-    queryFn: async () => {
-      const res = await api.api.activity.$get({
-        query: {
-          agent: agentId,
-          limit: limit.toString(),
-        },
-      })
-      if (!res.ok) throw new Error("Failed to fetch agent activity")
-      return res.json()
-    },
-    enabled: !!agentId,
-  })
-}

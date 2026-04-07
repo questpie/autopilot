@@ -1,582 +1,510 @@
-import { describe, expect, it } from 'bun:test'
-import type { Agent, Task, Workflow } from '@questpie/autopilot-spec'
-import {
-	advanceWorkflow,
-	evaluateTransition,
-	getAssignee,
-	getAvailableTransitions,
-	getNextStep,
-	isHumanGate,
-	isReviewSatisfied,
-	isTerminal,
-	resolveWorkflowStep,
-	validateWorkflowGraph,
-} from '../src/workflow/engine'
+/**
+ * Tests for workflow-driven intake and linear progression.
+ *
+ * Covers:
+ * - Default assignee resolution from authored config
+ * - Workflow attachment on task creation
+ * - Agent step creates a pending run
+ * - Run completion advances workflow to next step
+ * - Human approval step blocks progression
+ * - Approval advances past human_approval step
+ * - Done step closes the task
+ * - Explicit assignment override
+ * - No workflow = no intake side-effects
+ */
+import { test, expect, describe, beforeAll, afterAll } from 'bun:test'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { createCompanyDb, type CompanyDbResult } from '../src/db'
+import { TaskService, RunService, WorkflowEngine } from '../src/services'
+import type { AuthoredConfig } from '../src/services'
+import type { Agent, Workflow, CompanyScope } from '@questpie/autopilot-spec'
 
-// ─── Test fixtures ──────────────────────────────────────────────────────────
+// ─── Test Fixtures ──────────────────────────────────────────────────────────
 
-const testWorkflow: Workflow = {
-	id: 'development',
-	name: 'Development',
-	version: 1,
-	description: '',
-	change_policy: {
-		propose: ['any_agent'],
-		evaluate: ['ceo'],
-		apply: ['ceo'],
-		human_approval_required_for: [],
-	},
-	changelog: [],
+const TEST_AGENTS: Agent[] = [
+	{ id: 'ceo', name: 'CEO', role: 'meta', description: 'Intake agent', triggers: [] },
+	{ id: 'dev', name: 'Developer', role: 'developer', description: 'Dev agent', triggers: [] },
+	{ id: 'reviewer', name: 'Reviewer', role: 'reviewer', description: 'Review agent', triggers: [] },
+]
+
+const TEST_WORKFLOW: Workflow = {
+	id: 'default',
+	name: 'Default Workflow',
+	description: 'Standard intake → dev → review → approve → done',
 	steps: [
-		{
-			id: 'scope',
-			type: 'agent',
-			assigned_role: 'strategist',
-			description: '',
-			auto_execute: false,
-			transitions: { done: 'plan' },
-		},
-		{
-			id: 'plan',
-			type: 'agent',
-			assigned_role: 'planner',
-			description: '',
-			auto_execute: false,
-			transitions: { done: 'implement' },
-		},
-		{
-			id: 'implement',
-			type: 'agent',
-			assigned_role: 'developer',
-			description: '',
-			auto_execute: false,
-			transitions: { done: 'code_review' },
-		},
-		{
-			id: 'code_review',
-			type: 'agent',
-			assigned_role: 'reviewer',
-			description: '',
-			auto_execute: false,
-			transitions: { approved: 'human_merge', rejected: 'implement' },
-		},
-		{
-			id: 'human_merge',
-			type: 'human_gate',
-			gate: 'merge',
-			description: '',
-			auto_execute: false,
-			transitions: { approved: 'deploy', rejected: 'implement' },
-		},
-		{
-			id: 'deploy',
-			type: 'agent',
-			assigned_role: 'devops',
-			description: '',
-			auto_execute: true,
-			transitions: { success: 'complete' },
-		},
-		{
-			id: 'complete',
-			type: 'terminal',
-			description: '',
-			auto_execute: false,
-			transitions: {},
-		},
+		{ id: 'intake', type: 'agent', agent_id: 'ceo', instructions: 'Analyze and plan' },
+		{ id: 'develop', type: 'agent', agent_id: 'dev', instructions: 'Implement the plan' },
+		{ id: 'review', type: 'agent', agent_id: 'reviewer', instructions: 'Review the implementation' },
+		{ id: 'approve', type: 'human_approval' },
+		{ id: 'finish', type: 'done' },
 	],
 }
 
-const testAgents: Agent[] = [
-	{
-		id: 'agent-strategist',
-		name: 'Strategist',
-		role: 'strategist',
-		description: 'Strategic planning',
-		model: 'claude-sonnet-4-20250514',
-		fs_scope: { read: ['**'], write: ['company/tasks/**'] },
-		tools: ['fs'],
-		mcps: [],
-		triggers: [],
-	},
-	{
-		id: 'agent-planner',
-		name: 'Planner',
-		role: 'planner',
-		description: 'Task planning',
-		model: 'claude-sonnet-4-20250514',
-		fs_scope: { read: ['**'], write: ['company/tasks/**'] },
-		tools: ['fs'],
-		mcps: [],
-		triggers: [],
-	},
-	{
-		id: 'agent-developer',
-		name: 'Developer',
-		role: 'developer',
-		description: 'Implementation',
-		model: 'claude-sonnet-4-20250514',
-		fs_scope: { read: ['**'], write: ['**'] },
-		tools: ['fs', 'terminal'],
-		mcps: [],
-		triggers: [],
-	},
-	{
-		id: 'agent-reviewer',
-		name: 'Reviewer',
-		role: 'reviewer',
-		description: 'Code review',
-		model: 'claude-sonnet-4-20250514',
-		fs_scope: { read: ['**'], write: ['company/tasks/**'] },
-		tools: ['fs'],
-		mcps: [],
-		triggers: [],
-	},
-	{
-		id: 'agent-devops',
-		name: 'DevOps',
-		role: 'devops',
-		description: 'Deployment',
-		model: 'claude-sonnet-4-20250514',
-		fs_scope: { read: ['**'], write: ['company/infra/**'] },
-		tools: ['fs', 'terminal'],
-		mcps: [],
-		triggers: [],
-	},
-]
+const TEST_COMPANY: CompanyScope = {
+	name: 'Test Co',
+	slug: 'test-co',
+	description: '',
+	timezone: 'UTC',
+	language: 'en',
+	owner: { name: 'Test', email: 'test@test.com' },
+	defaults: { runtime: 'claude-code', workflow: 'default', task_assignee: 'ceo' },
+}
 
-function makeTask(overrides: Partial<Task> = {}): Task {
+function makeConfig(overrides?: Partial<AuthoredConfig>): AuthoredConfig {
 	return {
-		id: 'task-001',
-		title: 'Test task',
-		description: '',
-		type: 'implementation',
-		status: 'in_progress',
-		priority: 'medium',
-		created_by: 'human-ceo',
-		workflow: 'development',
-		workflow_step: 'scope',
-		context: {},
-		blockers: [],
-		depends_on: [],
-		blocks: [],
-		related: [],
-		reviewers: [],
-		parent: null,
-		created_at: '2026-01-01T00:00:00Z',
-		updated_at: '2026-01-01T00:00:00Z',
-		history: [],
-		...overrides,
+		company: overrides?.company ?? TEST_COMPANY,
+		agents: overrides?.agents ?? new Map(TEST_AGENTS.map((a) => [a.id, a])),
+		workflows: overrides?.workflows ?? new Map([[TEST_WORKFLOW.id, TEST_WORKFLOW]]),
+		environments: overrides?.environments ?? new Map(),
+		providers: overrides?.providers ?? new Map(),
+		defaults: overrides?.defaults ?? { runtime: 'claude-code', workflow: 'default', task_assignee: 'ceo' },
 	}
 }
 
+// ─── Test DDL ───────────────────────────────────────────────────────────────
+
+// Drop and recreate tables to match current Drizzle schema
+// (migrations may have drifted column names)
+const DDL = [
+	`DROP TABLE IF EXISTS tasks`,
+	`DROP TABLE IF EXISTS runs`,
+	`DROP TABLE IF EXISTS run_events`,
+	`CREATE TABLE tasks (
+		id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT DEFAULT '',
+		type TEXT NOT NULL, status TEXT NOT NULL, priority TEXT DEFAULT 'medium',
+		assigned_to TEXT, workflow_id TEXT, workflow_step TEXT,
+		context TEXT DEFAULT '{}', metadata TEXT DEFAULT '{}',
+		created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+	)`,
+	`CREATE TABLE runs (
+		id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, task_id TEXT, worker_id TEXT,
+		runtime TEXT NOT NULL, model TEXT, provider TEXT, variant TEXT, status TEXT NOT NULL DEFAULT 'pending',
+		initiated_by TEXT, instructions TEXT, summary TEXT,
+		tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0,
+		error TEXT, started_at TEXT, ended_at TEXT, created_at TEXT NOT NULL,
+		runtime_session_ref TEXT, resumed_from_run_id TEXT,
+		preferred_worker_id TEXT, resumable INTEGER DEFAULT 0,
+		targeting TEXT
+	)`,
+	`CREATE TABLE run_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
+		type TEXT NOT NULL, summary TEXT, metadata TEXT DEFAULT '{}',
+		created_at TEXT NOT NULL
+	)`,
+]
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-describe('resolveWorkflowStep', () => {
-	it('finds an existing step by id', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'scope')
-		expect(step).toBeDefined()
-		expect(step?.id).toBe('scope')
-		expect(step?.assigned_role).toBe('strategist')
-	})
+describe('WorkflowEngine', () => {
+	const companyRoot = join(tmpdir(), `qp-wf-test-${Date.now()}`)
+	let dbResult: CompanyDbResult
+	let taskService: TaskService
+	let runService: RunService
 
-	it('returns undefined for unknown step id', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'nonexistent')
-		expect(step).toBeUndefined()
-	})
-})
-
-describe('isHumanGate', () => {
-	it('returns true for human_gate steps', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'human_merge')!
-		expect(isHumanGate(step)).toBe(true)
-	})
-
-	it('returns false for agent steps', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'scope')!
-		expect(isHumanGate(step)).toBe(false)
-	})
-
-	it('returns false for terminal steps', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'complete')!
-		expect(isHumanGate(step)).toBe(false)
-	})
-})
-
-describe('isTerminal', () => {
-	it('returns true for terminal steps', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'complete')!
-		expect(isTerminal(step)).toBe(true)
-	})
-
-	it('returns false for agent steps', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'implement')!
-		expect(isTerminal(step)).toBe(false)
-	})
-
-	it('returns true when terminal flag is set', () => {
-		expect(isTerminal({ id: 'x', type: 'agent', terminal: true, description: '', auto_execute: false, transitions: {} })).toBe(true)
-	})
-})
-
-describe('getNextStep', () => {
-	it('resolves "done" transition', () => {
-		expect(getNextStep(testWorkflow, 'scope', 'done')).toBe('plan')
-	})
-
-	it('resolves "approved" transition', () => {
-		expect(getNextStep(testWorkflow, 'code_review', 'approved')).toBe('human_merge')
-	})
-
-	it('resolves "rejected" transition', () => {
-		expect(getNextStep(testWorkflow, 'code_review', 'rejected')).toBe('implement')
-	})
-
-	it('returns undefined for unknown transition key', () => {
-		expect(getNextStep(testWorkflow, 'scope', 'rejected')).toBeUndefined()
-	})
-
-	it('returns undefined for unknown step', () => {
-		expect(getNextStep(testWorkflow, 'nonexistent', 'done')).toBeUndefined()
-	})
-
-	it('resolves "success" transition on deploy', () => {
-		expect(getNextStep(testWorkflow, 'deploy', 'success')).toBe('complete')
-	})
-})
-
-describe('getAssignee', () => {
-	it('matches agent by role', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'scope')!
-		const assignee = getAssignee(step, testAgents)
-		expect(assignee).toBe('agent-strategist')
-	})
-
-	it('matches developer role', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'implement')!
-		expect(getAssignee(step, testAgents)).toBe('agent-developer')
-	})
-
-	it('matches reviewer role', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'code_review')!
-		expect(getAssignee(step, testAgents)).toBe('agent-reviewer')
-	})
-
-	it('matches devops role', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'deploy')!
-		expect(getAssignee(step, testAgents)).toBe('agent-devops')
-	})
-
-	it('returns undefined when no agents match', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'scope')!
-		expect(getAssignee(step, [])).toBeUndefined()
-	})
-
-	it('prefers assigned_to over assigned_role', () => {
-		const step = { ...resolveWorkflowStep(testWorkflow, 'scope')!, assigned_to: 'agent-developer' }
-		expect(getAssignee(step, testAgents)).toBe('agent-developer')
-	})
-})
-
-describe('evaluateTransition', () => {
-	it('returns assign_agent for agent steps', () => {
-		const task = makeTask({ workflow_step: 'scope' })
-		const result = evaluateTransition(testWorkflow, task, testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.assignRole).toBe('strategist')
-		expect(result.assignTo).toBe('agent-strategist')
-	})
-
-	it('returns notify_human for human_gate steps', () => {
-		const task = makeTask({ workflow_step: 'human_merge' })
-		const result = evaluateTransition(testWorkflow, task, testAgents)
-		expect(result.action).toBe('notify_human')
-		expect(result.gate).toBe('merge')
-	})
-
-	it('returns complete for terminal steps', () => {
-		const task = makeTask({ workflow_step: 'complete' })
-		const result = evaluateTransition(testWorkflow, task, testAgents)
-		expect(result.action).toBe('complete')
-	})
-
-	it('returns assign_agent with auto_execute for deploy step', () => {
-		const task = makeTask({ workflow_step: 'deploy' })
-		const result = evaluateTransition(testWorkflow, task, testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.assignRole).toBe('devops')
-		expect(result.assignTo).toBe('agent-devops')
-	})
-
-	it('returns error when task has no workflow_step', () => {
-		const task = makeTask({ workflow_step: undefined })
-		const result = evaluateTransition(testWorkflow, task, testAgents)
-		expect(result.action).toBe('error')
-		expect(result.error).toContain('no workflow_step')
-	})
-
-	it('returns error when step not found', () => {
-		const task = makeTask({ workflow_step: 'nonexistent' })
-		const result = evaluateTransition(testWorkflow, task, testAgents)
-		expect(result.action).toBe('error')
-		expect(result.error).toContain('not found')
-	})
-
-	it('returns no_action when review requirements not met', () => {
-		const workflowWithReview: Workflow = {
-			...testWorkflow,
-			steps: testWorkflow.steps.map((s) =>
-				s.id === 'implement'
-					? {
-							...s,
-							review: {
-								reviewers_roles: ['reviewer'],
-								min_approvals: 1,
-								on_reject: 'revise',
-							},
-						}
-					: s,
-			),
+	beforeAll(async () => {
+		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
+		await writeFile(
+			join(companyRoot, '.autopilot', 'company.yaml'),
+			'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n',
+		)
+		dbResult = await createCompanyDb(companyRoot)
+		for (const sql of DDL) {
+			await dbResult.raw.execute(sql)
 		}
-		const task = makeTask({ workflow_step: 'implement' })
-		const result = evaluateTransition(workflowWithReview, task, testAgents)
-		expect(result.action).toBe('no_action')
-	})
-})
-
-describe('advanceWorkflow', () => {
-	it('advances from scope to plan with "done"', () => {
-		const task = makeTask({ workflow_step: 'scope' })
-		const result = advanceWorkflow(testWorkflow, task, 'done', testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.nextStep).toBe('plan')
-		expect(result.assignRole).toBe('planner')
+		taskService = new TaskService(dbResult.db)
+		runService = new RunService(dbResult.db)
 	})
 
-	it('advances from code_review to human_merge with "approved"', () => {
-		const task = makeTask({ workflow_step: 'code_review' })
-		const result = advanceWorkflow(testWorkflow, task, 'approved', testAgents)
-		expect(result.action).toBe('notify_human')
-		expect(result.nextStep).toBe('human_merge')
-		expect(result.gate).toBe('merge')
+	afterAll(async () => {
+		dbResult.raw.close()
+		await rm(companyRoot, { recursive: true, force: true })
 	})
 
-	it('sends back from code_review to implement with "rejected"', () => {
-		const task = makeTask({ workflow_step: 'code_review' })
-		const result = advanceWorkflow(testWorkflow, task, 'rejected', testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.nextStep).toBe('implement')
-		expect(result.assignRole).toBe('developer')
+	test('validate() detects missing agent references', () => {
+		const engine = new WorkflowEngine(
+			makeConfig({
+				defaults: { runtime: 'claude-code', workflow: 'default', task_assignee: 'nonexistent' },
+			}),
+			taskService,
+			runService,
+		)
+		const issues = engine.validate()
+		expect(issues.length).toBeGreaterThan(0)
+		expect(issues[0]).toContain('nonexistent')
 	})
 
-	it('advances from human_merge to deploy with "approved"', () => {
-		const task = makeTask({ workflow_step: 'human_merge' })
-		const result = advanceWorkflow(testWorkflow, task, 'approved', testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.nextStep).toBe('deploy')
-		expect(result.assignRole).toBe('devops')
+	test('validate() passes with valid config', () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const issues = engine.validate()
+		expect(issues).toEqual([])
 	})
 
-	it('advances from deploy to complete with "success"', () => {
-		const task = makeTask({ workflow_step: 'deploy' })
-		const result = advanceWorkflow(testWorkflow, task, 'success', testAgents)
-		expect(result.action).toBe('complete')
-		expect(result.nextStep).toBe('complete')
-	})
-
-	it('returns error for invalid transition key', () => {
-		const task = makeTask({ workflow_step: 'scope' })
-		const result = advanceWorkflow(testWorkflow, task, 'rejected', testAgents)
-		expect(result.action).toBe('error')
-		expect(result.error).toContain("No transition 'rejected'")
-	})
-
-	it('returns error when task has no workflow_step', () => {
-		const task = makeTask({ workflow_step: undefined })
-		const result = advanceWorkflow(testWorkflow, task, 'done', testAgents)
-		expect(result.action).toBe('error')
-	})
-
-	it('blocks advancement when review not satisfied', () => {
-		const workflowWithReview: Workflow = {
-			...testWorkflow,
-			steps: testWorkflow.steps.map((s) =>
-				s.id === 'code_review'
-					? {
-							...s,
-							review: {
-								reviewers_roles: ['reviewer'],
-								min_approvals: 1,
-								on_reject: 'revise',
-							},
-						}
-					: s,
-			),
-		}
-		const task = makeTask({ workflow_step: 'code_review' })
-		const result = advanceWorkflow(workflowWithReview, task, 'approved', testAgents)
-		expect(result.action).toBe('no_action')
-		expect(result.error).toContain('Review requirements not met')
-	})
-})
-
-describe('isReviewSatisfied', () => {
-	it('returns true when no review block', () => {
-		const step = resolveWorkflowStep(testWorkflow, 'scope')!
-		const task = makeTask()
-		expect(isReviewSatisfied(step, task)).toBe(true)
-	})
-
-	it('returns false when review block present but no approvals', () => {
-		const step = {
-			...resolveWorkflowStep(testWorkflow, 'code_review')!,
-			review: { reviewers_roles: ['reviewer'], min_approvals: 1, on_reject: 'revise' },
-		}
-		const task = makeTask({ workflow_step: 'code_review' })
-		expect(isReviewSatisfied(step, task, testAgents)).toBe(false)
-	})
-
-	it('returns true when enough approvals in history', () => {
-		const step = {
-			...resolveWorkflowStep(testWorkflow, 'code_review')!,
-			review: { reviewers_roles: ['reviewer'], min_approvals: 1, on_reject: 'revise' },
-		}
-		const task = makeTask({
-			workflow_step: 'code_review',
-			history: [
-				{
-					at: '2026-01-01T01:00:00Z',
-					by: 'agent-reviewer',
-					action: 'approved',
-					step: 'code_review',
-				},
-			],
+	test('intake resolves default assignee from config', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const task = await taskService.create({
+			id: `task-assign-${Date.now()}`,
+			title: 'Test assignment',
+			type: 'feature',
+			created_by: 'test',
 		})
-		expect(isReviewSatisfied(step, task, testAgents)).toBe(true)
-	})
-})
 
-describe('getAvailableTransitions', () => {
-	it('returns transition keys for a step', () => {
-		const transitions = getAvailableTransitions(testWorkflow, 'code_review')
-		expect(transitions).toContain('approved')
-		expect(transitions).toContain('rejected')
-		expect(transitions).toHaveLength(2)
+		const result = await engine.intake(task!.id)
+		expect(result).not.toBeNull()
+		expect(result!.task.assigned_to).toBe('ceo')
+		expect(result!.actions).toContain('assigned')
 	})
 
-	it('returns empty array for terminal steps', () => {
-		const transitions = getAvailableTransitions(testWorkflow, 'complete')
-		expect(transitions).toHaveLength(0)
+	test('intake attaches workflow and sets initial step', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const task = await taskService.create({
+			id: `task-wf-${Date.now()}`,
+			title: 'Test workflow',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		const result = await engine.intake(task!.id)
+		expect(result).not.toBeNull()
+		expect(result!.task.workflow_id).toBe('default')
+		expect(result!.task.workflow_step).toBe('intake')
+		expect(result!.actions).toContain('workflow_attached')
 	})
 
-	it('returns empty array for unknown steps', () => {
-		const transitions = getAvailableTransitions(testWorkflow, 'nonexistent')
-		expect(transitions).toHaveLength(0)
-	})
-})
+	test('intake creates run for first agent step', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const task = await taskService.create({
+			id: `task-run-${Date.now()}`,
+			title: 'Test run creation',
+			type: 'feature',
+			created_by: 'test',
+		})
 
-describe('validateWorkflowGraph', () => {
-	it('validates the test workflow as correct', () => {
-		const result = validateWorkflowGraph(testWorkflow)
-		expect(result.valid).toBe(true)
-		expect(result.errors).toHaveLength(0)
+		const result = await engine.intake(task!.id)
+		expect(result).not.toBeNull()
+		expect(result!.runId).not.toBeNull()
+		expect(result!.actions).toContain('run_created')
+		expect(result!.task.status).toBe('active')
+
+		// Verify the run exists and is configured correctly
+		const run = await runService.get(result!.runId!)
+		expect(run).toBeDefined()
+		expect(run!.agent_id).toBe('ceo')
+		expect(run!.task_id).toBe(task!.id)
+		expect(run!.runtime).toBe('claude-code')
+		expect(run!.status).toBe('pending')
+		expect(run!.instructions).toBe('Analyze and plan')
 	})
 
-	it('detects missing terminal step', () => {
-		const noTerminal: Workflow = {
-			...testWorkflow,
-			steps: testWorkflow.steps.filter((s) => s.type !== 'terminal'),
+	test('intake propagates agent model/provider/variant to run', async () => {
+		const agentsWithModel: Agent[] = [
+			{ id: 'ceo', name: 'CEO', role: 'meta', description: 'Intake', model: 'claude-sonnet-4', provider: 'anthropic', variant: 'extended-thinking', triggers: [] },
+			{ id: 'dev', name: 'Dev', role: 'developer', description: 'Dev', triggers: [] },
+			{ id: 'reviewer', name: 'Reviewer', role: 'reviewer', description: 'Review', triggers: [] },
+		]
+		const engine = new WorkflowEngine(
+			makeConfig({ agents: new Map(agentsWithModel.map((a) => [a.id, a])) }),
+			taskService,
+			runService,
+		)
+		const task = await taskService.create({
+			id: `task-model-${Date.now()}`,
+			title: 'Test model propagation',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		const result = await engine.intake(task!.id)
+		expect(result!.runId).not.toBeNull()
+
+		const run = await runService.get(result!.runId!)
+		expect(run!.model).toBe('claude-sonnet-4')
+		expect(run!.provider).toBe('anthropic')
+		expect(run!.variant).toBe('extended-thinking')
+	})
+
+	test('intake creates run with null model when agent has no model', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const task = await taskService.create({
+			id: `task-nomodel-${Date.now()}`,
+			title: 'Test no model',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		const result = await engine.intake(task!.id)
+		const run = await runService.get(result!.runId!)
+		expect(run!.model).toBeNull()
+		expect(run!.provider).toBeNull()
+		expect(run!.variant).toBeNull()
+	})
+
+	test('run completion advances to next workflow step', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const taskId = `task-adv-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Test advance',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		// Intake → first step (intake/ceo)
+		const intake = await engine.intake(taskId)
+		expect(intake!.runId).not.toBeNull()
+
+		// Complete the run
+		await runService.complete(intake!.runId!, { status: 'completed', summary: 'Done' })
+
+		// Advance → next step (develop/dev)
+		const advanced = await engine.advance(taskId)
+		expect(advanced).not.toBeNull()
+		expect(advanced!.task.workflow_step).toBe('develop')
+		expect(advanced!.task.assigned_to).toBe('dev')
+		expect(advanced!.runId).not.toBeNull()
+		expect(advanced!.actions).toContain('advanced')
+		expect(advanced!.actions).toContain('reassigned')
+		expect(advanced!.actions).toContain('run_created')
+
+		// Verify new run targets the dev agent
+		const run = await runService.get(advanced!.runId!)
+		expect(run!.agent_id).toBe('dev')
+		expect(run!.instructions).toBe('Implement the plan')
+	})
+
+	test('human_approval step blocks progression', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const taskId = `task-block-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Test blocking',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		// Intake → first step
+		const intake = await engine.intake(taskId)
+		await runService.complete(intake!.runId!, { status: 'completed' })
+
+		// Advance through develop
+		const step2 = await engine.advance(taskId)
+		await runService.complete(step2!.runId!, { status: 'completed' })
+
+		// Advance through review
+		const step3 = await engine.advance(taskId)
+		await runService.complete(step3!.runId!, { status: 'completed' })
+
+		// Advance → should hit human_approval step
+		const step4 = await engine.advance(taskId)
+		expect(step4).not.toBeNull()
+		expect(step4!.task.workflow_step).toBe('approve')
+		expect(step4!.task.status).toBe('blocked')
+		expect(step4!.runId).toBeNull() // No run created
+		expect(step4!.actions).toContain('approval_needed')
+	})
+
+	test('approve advances past human_approval step to done', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const taskId = `task-approve-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Test approval',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		// Fast-forward: set task directly to the approve step
+		await taskService.update(taskId, {
+			workflow_id: 'default',
+			workflow_step: 'approve',
+			status: 'blocked',
+		})
+
+		const result = await engine.approve(taskId)
+		expect(result).not.toBeNull()
+		expect(result!.task.status).toBe('done')
+		expect(result!.task.workflow_step).toBe('finish')
+		expect(result!.actions).toContain('done')
+	})
+
+	test('done step marks task done', async () => {
+		// Workflow with only a done step
+		const doneOnlyWorkflow: Workflow = {
+			id: 'done-only',
+			name: 'Instant Done',
+			description: '',
+			steps: [{ id: 'finish', type: 'done' }],
 		}
-		const result = validateWorkflowGraph(noTerminal)
-		expect(result.valid).toBe(false)
-		expect(result.errors.some((e) => e.includes('no terminal'))).toBe(true)
+		const config = makeConfig({
+			workflows: new Map([['done-only', doneOnlyWorkflow]]),
+			defaults: { runtime: 'claude-code', workflow: 'done-only', task_assignee: 'ceo' },
+		})
+		const engine = new WorkflowEngine(config, taskService, runService)
+
+		const task = await taskService.create({
+			id: `task-done-${Date.now()}`,
+			title: 'Test done',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		const result = await engine.intake(task!.id)
+		expect(result).not.toBeNull()
+		expect(result!.task.status).toBe('done')
+		expect(result!.actions).toContain('done')
+		expect(result!.runId).toBeNull()
 	})
 
-	it('detects transitions to nonexistent steps', () => {
-		const badTransition: Workflow = {
-			...testWorkflow,
+	test('explicit assignment overrides default', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const task = await taskService.create({
+			id: `task-override-${Date.now()}`,
+			title: 'Test override',
+			type: 'feature',
+			assigned_to: 'dev', // Explicit assignment
+			created_by: 'test',
+		})
+
+		const result = await engine.intake(task!.id)
+		expect(result).not.toBeNull()
+		// Should keep the explicit assignment, not override to 'ceo'
+		expect(result!.task.assigned_to).toBe('dev')
+		expect(result!.actions).not.toContain('assigned')
+	})
+
+	test('no config = no side effects', async () => {
+		const emptyConfig = makeConfig({
+			defaults: { runtime: 'claude-code', workflow: undefined, task_assignee: undefined },
+			workflows: new Map(),
+		})
+		const engine = new WorkflowEngine(emptyConfig, taskService, runService)
+
+		const task = await taskService.create({
+			id: `task-noop-${Date.now()}`,
+			title: 'Test no-op',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		const result = await engine.intake(task!.id)
+		expect(result).not.toBeNull()
+		expect(result!.task.assigned_to).toBeNull()
+		expect(result!.task.workflow_id).toBeNull()
+		expect(result!.task.workflow_step).toBeNull()
+		expect(result!.actions).toEqual([])
+		expect(result!.runId).toBeNull()
+	})
+
+	test('full linear progression: intake → dev → review → approval → done', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const taskId = `task-full-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Full flow test',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		// Step 1: Intake (ceo agent)
+		const s1 = await engine.intake(taskId)
+		expect(s1!.task.workflow_step).toBe('intake')
+		expect(s1!.task.assigned_to).toBe('ceo')
+		expect(s1!.runId).not.toBeNull()
+		await runService.complete(s1!.runId!, { status: 'completed' })
+
+		// Step 2: Develop (dev agent)
+		const s2 = await engine.advance(taskId)
+		expect(s2!.task.workflow_step).toBe('develop')
+		expect(s2!.task.assigned_to).toBe('dev')
+		expect(s2!.runId).not.toBeNull()
+		await runService.complete(s2!.runId!, { status: 'completed' })
+
+		// Step 3: Review (reviewer agent)
+		const s3 = await engine.advance(taskId)
+		expect(s3!.task.workflow_step).toBe('review')
+		expect(s3!.task.assigned_to).toBe('reviewer')
+		expect(s3!.runId).not.toBeNull()
+		await runService.complete(s3!.runId!, { status: 'completed' })
+
+		// Step 4: Human approval (blocks)
+		const s4 = await engine.advance(taskId)
+		expect(s4!.task.workflow_step).toBe('approve')
+		expect(s4!.task.status).toBe('blocked')
+		expect(s4!.runId).toBeNull()
+
+		// Step 5: Approve → done
+		const s5 = await engine.approve(taskId)
+		expect(s5!.task.workflow_step).toBe('finish')
+		expect(s5!.task.status).toBe('done')
+
+		// Verify final task state
+		const final = await taskService.get(taskId)
+		expect(final!.status).toBe('done')
+	})
+
+	test('advance returns null when no workflow is attached', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const task = await taskService.create({
+			id: `task-nowf-${Date.now()}`,
+			title: 'No workflow',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		const result = await engine.advance(task!.id)
+		expect(result).toBeNull()
+	})
+
+	test('approve returns null when not on human_approval step', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const taskId = `task-noapprove-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Not approvable',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		// Set to an agent step
+		await taskService.update(taskId, {
+			workflow_id: 'default',
+			workflow_step: 'intake',
+		})
+
+		const result = await engine.approve(taskId)
+		expect(result).toBeNull()
+	})
+
+	test('workflow end without done step marks task done', async () => {
+		// Workflow that ends on agent step (no explicit done)
+		const shortWorkflow: Workflow = {
+			id: 'short',
+			name: 'Short Workflow',
+			description: '',
 			steps: [
-				{ id: 'start', type: 'agent', description: '', auto_execute: false, transitions: { done: 'nowhere' } },
-				{ id: 'end', type: 'terminal', description: '', auto_execute: false, transitions: {} },
+				{ id: 'work', type: 'agent', agent_id: 'dev', instructions: 'Do it' },
 			],
 		}
-		const result = validateWorkflowGraph(badTransition)
-		expect(result.valid).toBe(false)
-		expect(result.errors.some((e) => e.includes("unknown step 'nowhere'"))).toBe(true)
-	})
+		const config = makeConfig({
+			workflows: new Map([['short', shortWorkflow]]),
+			defaults: { runtime: 'claude-code', workflow: 'short', task_assignee: 'ceo' },
+		})
+		const engine = new WorkflowEngine(config, taskService, runService)
+		const taskId = `task-short-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Short flow',
+			type: 'feature',
+			created_by: 'test',
+		})
 
-	it('detects unreachable steps', () => {
-		const unreachable: Workflow = {
-			...testWorkflow,
-			steps: [
-				{ id: 'start', type: 'agent', description: '', auto_execute: false, transitions: { done: 'end' } },
-				{ id: 'orphan', type: 'agent', description: '', auto_execute: false, transitions: { done: 'end' } },
-				{ id: 'end', type: 'terminal', description: '', auto_execute: false, transitions: {} },
-			],
-		}
-		const result = validateWorkflowGraph(unreachable)
-		expect(result.valid).toBe(false)
-		expect(result.errors.some((e) => e.includes("'orphan' is unreachable"))).toBe(true)
-	})
-})
+		const intake = await engine.intake(taskId)
+		await runService.complete(intake!.runId!, { status: 'completed' })
 
-describe('full development workflow walkthrough', () => {
-	it('can walk the entire happy path', () => {
-		let task = makeTask({ workflow_step: 'scope' })
-
-		// scope → plan
-		let result = advanceWorkflow(testWorkflow, task, 'done', testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.nextStep).toBe('plan')
-		expect(result.assignTo).toBe('agent-planner')
-
-		// plan → implement
-		task = makeTask({ workflow_step: 'plan' })
-		result = advanceWorkflow(testWorkflow, task, 'done', testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.nextStep).toBe('implement')
-		expect(result.assignTo).toBe('agent-developer')
-
-		// implement → code_review
-		task = makeTask({ workflow_step: 'implement' })
-		result = advanceWorkflow(testWorkflow, task, 'done', testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.nextStep).toBe('code_review')
-		expect(result.assignTo).toBe('agent-reviewer')
-
-		// code_review → human_merge (approved)
-		task = makeTask({ workflow_step: 'code_review' })
-		result = advanceWorkflow(testWorkflow, task, 'approved', testAgents)
-		expect(result.action).toBe('notify_human')
-		expect(result.nextStep).toBe('human_merge')
-		expect(result.gate).toBe('merge')
-
-		// human_merge → deploy (approved)
-		task = makeTask({ workflow_step: 'human_merge' })
-		result = advanceWorkflow(testWorkflow, task, 'approved', testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.nextStep).toBe('deploy')
-		expect(result.assignTo).toBe('agent-devops')
-
-		// deploy → complete (success)
-		task = makeTask({ workflow_step: 'deploy' })
-		result = advanceWorkflow(testWorkflow, task, 'success', testAgents)
-		expect(result.action).toBe('complete')
-		expect(result.nextStep).toBe('complete')
-	})
-
-	it('handles rejection loop: code_review → implement → code_review', () => {
-		// code_review rejects → back to implement
-		let task = makeTask({ workflow_step: 'code_review' })
-		let result = advanceWorkflow(testWorkflow, task, 'rejected', testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.nextStep).toBe('implement')
-		expect(result.assignTo).toBe('agent-developer')
-
-		// implement done → back to code_review
-		task = makeTask({ workflow_step: 'implement' })
-		result = advanceWorkflow(testWorkflow, task, 'done', testAgents)
-		expect(result.action).toBe('assign_agent')
-		expect(result.nextStep).toBe('code_review')
-		expect(result.assignTo).toBe('agent-reviewer')
+		// Advance past the only step → no more steps → task done
+		const result = await engine.advance(taskId)
+		expect(result).not.toBeNull()
+		expect(result!.task.status).toBe('done')
 	})
 })

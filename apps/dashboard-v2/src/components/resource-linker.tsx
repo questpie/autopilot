@@ -1,12 +1,10 @@
 import { Link } from "@tanstack/react-router"
-import { useTranslation } from "@/lib/i18n"
 import {
   ListChecksIcon,
   UserIcon,
   FileIcon,
   HashIcon,
-  GitPullRequestIcon,
-  PaintBrushIcon,
+  LightningIcon,
 } from "@phosphor-icons/react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { resolveReferences, type ResourceType, type LinkedReference } from "@/lib/resource-resolver"
@@ -18,39 +16,22 @@ const RESOURCE_ICONS: Record<ResourceType, Icon> = {
   agent: UserIcon,
   file: FileIcon,
   channel: HashIcon,
-  pr: GitPullRequestIcon,
-  artifact: PaintBrushIcon,
+  human: UserIcon,
+  skill: LightningIcon,
 }
 
 const RESOURCE_COLORS: Record<ResourceType, string> = {
   task: "bg-primary/10 text-primary border-primary/20",
-  agent: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  agent: "bg-info/10 text-info border-info/20",
   file: "bg-muted text-muted-foreground border-border",
-  channel: "bg-green-500/10 text-green-500 border-green-500/20",
-  pr: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-  artifact: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+  channel: "bg-success/10 text-success border-success/20",
+  human: "bg-info/10 text-info border-info/20",
+  skill: "bg-primary/10 text-primary border-primary/20",
 }
 
 function ResourceChip({ linkedRef }: { linkedRef: LinkedReference }) {
-  const { t } = useTranslation()
   const IconComponent = RESOURCE_ICONS[linkedRef.type]
   const colorClass = RESOURCE_COLORS[linkedRef.type]
-
-  // Unresolved links (PRs without URL) show as strikethrough
-  if (linkedRef.type === "pr" && linkedRef.url === "#") {
-    return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-1 rounded-none border px-1.5 py-0.5 text-xs font-heading line-through",
-          "text-muted-foreground border-border",
-        )}
-        title={t("a11y.unresolved_reference")}
-      >
-        <IconComponent size={12} />
-        {linkedRef.displayLabel}
-      </span>
-    )
-  }
 
   return (
     <TooltipProvider delay={300}>

@@ -45,8 +45,6 @@ cron: "0 9 * * *"
 
 		const result = await loadAndValidate(filePath, ScheduleSchema)
 		expect(result.id).toBe('daily-check')
-		expect(result.timeout).toBe('5m')
-		expect(result.on_failure).toBe('alert_human')
 		expect(result.enabled).toBe(true)
 		expect(result.create_task).toBe(false)
 
@@ -78,7 +76,7 @@ owner:
 		).rejects.toThrow()
 	})
 
-	test('throws ZodError when required fields are missing', async () => {
+	test('recovers gracefully when fields are missing (defaults apply)', async () => {
 		await mkdir(testDir, { recursive: true })
 		const filePath = join(testDir, 'missing-fields.yaml')
 		await writeFile(
@@ -87,7 +85,9 @@ owner:
 `,
 		)
 
-		await expect(loadAndValidate(filePath, CompanySchema)).rejects.toThrow(ZodError)
+		const result = await loadAndValidate(filePath, CompanySchema)
+		expect(result.name).toBe('Test')
+		expect(result.slug).toBe('my-company')
 
 		await rm(testDir, { recursive: true, force: true })
 	})

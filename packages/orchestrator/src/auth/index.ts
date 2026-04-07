@@ -1,64 +1,70 @@
-/**
- * Better Auth instance for QUESTPIE Autopilot.
- *
- * Uses the Drizzle adapter so that all tables are managed by Drizzle
- * migrations — no more Kysely internal migrations.
- */
-import { betterAuth } from 'better-auth'
-import { bearer, admin, openAPI, twoFactor } from 'better-auth/plugins'
 import { apiKey } from '@better-auth/api-key'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
-import type { AutopilotDb } from '../db'
-import * as authSchema from '../db/auth-schema'
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { betterAuth } from 'better-auth'
 import { hashPassword, verifyPassword } from 'better-auth/crypto'
-import { eq } from 'drizzle-orm'
+import { bearer } from 'better-auth/plugins'
+import { eq, sql } from 'drizzle-orm'
+import type { CompanyDb } from '../db'
+import * as authSchema from '../db/auth-schema'
+import { env } from '../env'
 
-const PASSWORD_COMPLEXITY_RE = /^(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/
+/** Minimal mail service interface for email verification. */
+interface MailService {
+	send(opts: { to: string; subject: string; html: string }): Promise<void>
+}
 
-function validatePasswordComplexity(password: string): void {
-	if (!PASSWORD_COMPLEXITY_RE.test(password)) {
-		throw new Error(
-			'Password must be at least 12 characters and include at least one digit and one special character.',
-		)
+/** No-op mail service — logs emails to console in dev. */
+function createMailService(): MailService {
+	return {
+		async send(opts) {
+			console.log(`[mail] would send to ${opts.to}: ${opts.subject}`)
+		},
 	}
 }
 
-async function loadInviteEmails(companyRoot: string): Promise<string[] | null> {
-	try {
-		const raw = await readFile(join(companyRoot, '.auth', 'invites.yaml'), 'utf-8')
-		// Simple YAML parse: look for lines like "  - email@example.com"
-		const emails: string[] = []
-		for (const line of raw.split('\n')) {
-			const trimmed = line.trim()
-			if (trimmed.startsWith('- ')) {
-				const email = trimmed.slice(2).trim().replace(/^['"]|['"]$/g, '')
-				if (email) emails.push(email)
-			}
-		}
-		return emails
-	} catch {
-		// File doesn't exist — allow all signups (fresh install)
-		return null
-	}
+async function getUserCount(db: CompanyDb): Promise<number> {
+	const row = await db.select({ count: sql<number>`count(*)` }).from(authSchema.user).get()
+	return Number(row?.count ?? 0)
 }
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export async function createAuth(db: AutopilotDb, companyRoot: string) {
+export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: MailService) {
+	const mailService = mail ?? createMailService()
+
+	const authBaseUrl = process.env.BETTER_AUTH_URL ?? env.ORCHESTRATOR_URL ?? 'http://localhost:7778'
+	if (!process.env.BETTER_AUTH_URL && !env.ORCHESTRATOR_URL && env.NODE_ENV === 'production') {
+		console.warn('[auth] ⚠ Neither BETTER_AUTH_URL nor ORCHESTRATOR_URL set in production — auth links (email verification) will point to localhost')
+	}
+	if (env.NODE_ENV === 'production' && !env.BETTER_AUTH_SECRET) {
+		throw new Error('BETTER_AUTH_SECRET is required in production. Generate one with: openssl rand -hex 32')
+	}
+
 	const auth = betterAuth({
+		baseURL: authBaseUrl,
+		secret: env.BETTER_AUTH_SECRET,
 		database: drizzleAdapter(db, {
 			provider: 'sqlite',
 			schema: authSchema,
 		}),
 		basePath: '/api/auth',
 
+		emailVerification: {
+			sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+				void mailService.send({
+					to: user.email,
+					subject: 'Verify your email — QUESTPIE Autopilot',
+					html: `<p>Click the link below to verify your email:</p><p><a href="${url}">${url}</a></p>`,
+				})
+			},
+			sendOnSignUp: true,
+		},
+
 		emailAndPassword: {
 			enabled: true,
 			minPasswordLength: 12,
+			requireEmailVerification: true,
 			password: {
 				hash: async (password: string) => {
-					validatePasswordComplexity(password)
 					return hashPassword(password)
 				},
 				verify: ({ hash, password }: { hash: string; password: string }) => {
@@ -76,13 +82,13 @@ export async function createAuth(db: AutopilotDb, companyRoot: string) {
 			},
 		},
 
-		trustedOrigins: (process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://localhost:3001')
+		trustedOrigins: (env.CORS_ORIGIN ?? authBaseUrl)
 			.split(',')
-			.map((o) => o.trim()),
+			.map((o: string) => o.trim()),
 		advanced: {
 			defaultCookieAttributes: {
 				sameSite: 'lax',
-				secure: process.env.NODE_ENV === 'production',
+				secure: env.NODE_ENV === 'production',
 				httpOnly: true,
 			},
 		},
@@ -101,66 +107,37 @@ export async function createAuth(db: AutopilotDb, companyRoot: string) {
 			user: {
 				create: {
 					before: async (user: { email: string; [key: string]: unknown }) => {
-						// Invite-only: check .auth/invites.yaml
-						const allowedEmails = await loadInviteEmails(companyRoot)
-						if (allowedEmails !== null) {
-							const emailLower = user.email.toLowerCase()
-							const isInvited = allowedEmails.some((e) => e.toLowerCase() === emailLower)
-							if (!isInvited) {
-								throw new Error('Registration is invite-only. Your email is not on the invite list.')
+						const emailLower = user.email.toLowerCase()
+						const userCount = await getUserCount(db)
+
+						// First user is always owner
+						if (userCount === 0) {
+							return {
+								data: {
+									...user,
+									email: emailLower,
+									role: 'owner',
+								},
 							}
 						}
-						return { data: user }
-					},
-				},
-			},
-			session: {
-				create: {
-					after: async (session: { userId: string; [key: string]: unknown }) => {
-						// Banned user logout: reject session creation for banned users
-						try {
-							const row = db.select({ banned: authSchema.user.banned }).from(authSchema.user).where(eq(authSchema.user.id, session.userId)).get()
-							if (row?.banned === true) {
-								const authApi = auth.api as Record<string, ((args: unknown) => Promise<unknown>) | undefined>
-								const revokeSessionFn = authApi.revokeSession
-								if (revokeSessionFn) {
-									await revokeSessionFn({ body: { token: (session as { token?: string }).token } }).catch(() => {})
-								}
-								throw new Error('Your account has been banned.')
-							}
-						} catch (err) {
-							// Re-throw ban errors, swallow lookup failures
-							if ((err as Error).message === 'Your account has been banned.') throw err
+
+						// Subsequent users default to member
+						return {
+							data: {
+								...user,
+								email: emailLower,
+								role: 'member',
+							},
 						}
 					},
 				},
 			},
 		},
 
-		plugins: [
-			bearer(),
-			apiKey(),
-			admin(),
-			openAPI(),
-			twoFactor({
-				issuer: 'QuestPie Autopilot',
-				backupCodeOptions: { amount: 10 },
-				trustDeviceMaxAge: 60 * 60 * 24 * 30, // 30 days
-			}),
-		],
+		plugins: [bearer(), apiKey()],
 	})
-
-	// No runMigrations() — Drizzle migrations handle all table creation now.
 
 	return auth
 }
 
 export type Auth = Awaited<ReturnType<typeof createAuth>>
-
-import { container, companyRootFactory } from '../container'
-import { dbFactory } from '../db'
-
-export const authFactory = container.registerAsync('auth', async (c) => {
-	const { db: dbResult, companyRoot } = await c.resolveAsync([dbFactory, companyRootFactory])
-	return createAuth(dbResult.db, companyRoot)
-})

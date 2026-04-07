@@ -154,7 +154,7 @@ function RoleEditorView({ content, path }: FileViewProps) {
             <div className="flex flex-col gap-1">
               {frontmatter.default_fs_scope.read && (
                 <div className="flex items-start gap-1">
-                  <span className="font-mono text-[10px] text-green-500">R</span>
+                  <span className="font-mono text-[10px] text-success">R</span>
                   <span className="font-mono text-[10px] text-muted-foreground">
                     {frontmatter.default_fs_scope.read.join(", ")}
                   </span>

@@ -1,22 +1,13 @@
 export type AutopilotEvent =
-	| { type: 'task_changed'; taskId: string; status: string; assignedTo?: string }
-	| { type: 'message'; channel: string; from: string; content: string }
-	| { type: 'activity'; agent: string; toolName: string; summary: string }
-	| { type: 'pin_changed'; pinId: string; action: 'created' | 'removed' | 'updated' }
-	| { type: 'agent_session'; agentId: string; status: 'started' | 'ended'; sessionId: string }
-	| { type: 'workflow_advanced'; taskId: string; from: string; to: string }
-	| { type: 'channel_created'; channelId: string; name: string }
-	| { type: 'channel_deleted'; channelId: string }
-	| { type: 'channel_member_changed'; channelId: string; actorId: string; action: 'added' | 'removed' }
+	| { type: 'task_changed'; taskId: string; status: string }
+	| { type: 'run_started'; runId: string; agentId: string }
+	| { type: 'run_event'; runId: string; eventType: string; summary: string }
+	| { type: 'run_completed'; runId: string; status: string }
+	| { type: 'worker_registered'; workerId: string }
+	| { type: 'worker_offline'; workerId: string }
+	| { type: 'message'; channelId: string; fromId: string }
+	| { type: 'task_relation_created'; sourceTaskId: string; targetTaskId: string; relationType: string }
 	| { type: 'settings_changed' }
-	| { type: 'file_locked'; path: string; lockedBy: string }
-	| { type: 'file_unlocked'; path: string }
-	| { type: 'knowledge_changed'; path: string; action: 'created' | 'updated' }
-	| { type: 'artifact_changed'; artifactId: string; action: 'registered' | 'updated' }
-	| { type: 'validation_error'; file: string; error: string }
-	| { type: 'notification_new'; notificationId: string; userId: string; notificationType: string; priority: string; title: string; message: string; url?: string }
-
-import { logger } from '../logger'
 
 export class EventBus {
 	private listeners = new Set<(event: AutopilotEvent) => void>()
@@ -33,7 +24,7 @@ export class EventBus {
 			try {
 				listener(event)
 			} catch (err) {
-				logger.error('event-bus', 'listener error', { error: err instanceof Error ? err.message : String(err) })
+				console.error('[event-bus] listener error:', err instanceof Error ? err.message : String(err))
 			}
 		}
 	}

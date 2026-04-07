@@ -1,9 +1,8 @@
 import { z } from 'zod'
-import { AGENT_ROLES } from '../constants'
 
 export const FsScopeSchema = z.object({
-	read: z.array(z.string()),
-	write: z.array(z.string()),
+	read: z.array(z.string()).default([]),
+	write: z.array(z.string()).default([]),
 })
 
 export const AgentTriggerSchema = z.object({
@@ -12,22 +11,18 @@ export const AgentTriggerSchema = z.object({
 	cron: z.string().optional(),
 })
 
-/** Supported agent provider backends. */
-export const AGENT_PROVIDERS = ['claude-agent-sdk', 'codex-sdk'] as const
-
 export const AgentSchema = z.object({
 	id: z.string().regex(/^[a-z0-9-]+$/),
 	name: z.string(),
-	role: z.enum(AGENT_ROLES),
-	description: z.string(),
-	provider: z.enum(AGENT_PROVIDERS).default('claude-agent-sdk'),
-	model: z.string().default('claude-sonnet-4-20250514'),
-	fs_scope: FsScopeSchema,
-	tools: z.array(z.string()).default(['fs', 'terminal']),
-	mcps: z.array(z.string()).default([]),
+	role: z.string(),
+	description: z.string().default(''),
+	model: z.string().optional(),
+	/** Canonical provider hint (e.g. 'anthropic', 'openai'). Carried as intent; not yet used for claim routing. */
+	provider: z.string().optional(),
+	/** Behavioral variant hint (e.g. 'extended-thinking'). Carried as canonical intent; variant-specific adapter behavior is deferred. */
+	variant: z.string().optional(),
+	fs_scope: FsScopeSchema.optional(),
 	triggers: z.array(AgentTriggerSchema).default([]),
-})
-
-export const AgentsFileSchema = z.object({
-	agents: z.array(AgentSchema),
+	/** Capability profile IDs active for all runs by this agent. Step-level profiles extend these. */
+	capability_profiles: z.array(z.string()).default([]),
 })

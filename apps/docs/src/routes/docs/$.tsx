@@ -1,4 +1,4 @@
-import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
 import { DocsRouteContent } from '@/components/docs/DocsRouteContent'
@@ -11,27 +11,14 @@ export const Route = createFileRoute('/docs/$')({
 	},
 	head: ({ loaderData }) => {
 		if (!loaderData) return {}
-
-		const { title, description, url } = loaderData
-
+		const { title, description } = loaderData
 		return {
 			meta: [
-				{ title: `${title} | QUESTPIE Autopilot Docs` },
+				{ title: `${title} — Autopilot Docs` },
 				{ name: 'description', content: description },
-				{ property: 'og:title', content: title },
-				{ property: 'og:description', content: description },
-				{ property: 'og:url', content: `https://autopilot.questpie.com${url}` },
-				{ property: 'og:type', content: 'article' },
-				{ name: 'twitter:card', content: 'summary_large_image' },
-				{ name: 'twitter:title', content: title },
-				{ name: 'twitter:description', content: description },
 			],
 		}
 	},
-	headers: () => ({
-		'Cache-Control':
-			'public, max-age=3600, s-maxage=3600, stale-while-revalidate=604800',
-	}),
 	staleTime: 5 * 60_000,
 	gcTime: 10 * 60_000,
 })
@@ -44,9 +31,7 @@ const serverLoader = createServerFn({ method: 'GET' })
 		if (!page) throw notFound()
 
 		const title = page.data.title ?? 'Documentation'
-		const description =
-			page.data.description ??
-			'QUESTPIE Autopilot documentation — AI-native company operating system.'
+		const description = page.data.description ?? ''
 
 		return {
 			path: page.path,
@@ -60,6 +45,5 @@ const serverLoader = createServerFn({ method: 'GET' })
 
 function Page() {
 	const data = Route.useLoaderData()
-
 	return <DocsRouteContent data={data} />
 }

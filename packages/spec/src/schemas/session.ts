@@ -1,33 +1,20 @@
 import { z } from 'zod'
-import { SESSION_STATUSES } from '../constants'
 
-export const SessionMetaSchema = z.object({
+export const SessionModeSchema = z.enum(['query', 'task_thread'])
+
+export const SessionStatusSchema = z.enum(['active', 'closed'])
+
+/** Orchestrator-owned session record — lightweight conversation-mode tracking. */
+export const SessionRowSchema = z.object({
 	id: z.string(),
-	agent: z.string(),
-	trigger: z.object({
-		type: z.string(),
-		task_id: z.string().optional(),
-		schedule_id: z.string().optional(),
-		webhook_id: z.string().optional(),
-	}),
-	status: z.enum(SESSION_STATUSES),
-	started_at: z.string().datetime(),
-	ended_at: z.string().datetime().optional(),
-	token_usage: z
-		.object({
-			input: z.number().int().default(0),
-			output: z.number().int().default(0),
-		})
-		.default({}),
-	cost_estimate: z.string().optional(),
-	tool_calls: z.number().int().default(0),
-	errors: z.number().int().default(0),
-})
-
-export const StreamChunkSchema = z.object({
-	at: z.number(),
-	type: z.enum(['thinking', 'text', 'tool_call', 'tool_result', 'error', 'status']),
-	content: z.string().optional(),
-	tool: z.string().optional(),
-	params: z.record(z.unknown()).optional(),
+	provider_id: z.string(),
+	external_conversation_id: z.string(),
+	external_thread_id: z.string().nullable(),
+	mode: SessionModeSchema,
+	task_id: z.string().nullable(),
+	last_query_id: z.string().nullable(),
+	status: SessionStatusSchema,
+	created_at: z.string(),
+	updated_at: z.string(),
+	metadata: z.string(),
 })

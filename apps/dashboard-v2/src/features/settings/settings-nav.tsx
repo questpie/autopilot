@@ -2,16 +2,8 @@ import { Link, useMatches } from "@tanstack/react-router"
 import {
   GearIcon,
   UserCircleIcon,
-  UsersThreeIcon,
-  RobotIcon,
-  LightningIcon,
-  TreeStructureIcon,
   ShieldIcon,
-  PaintBrushIcon,
-  GitBranchIcon,
-  CurrencyDollarIcon,
   WarningIcon,
-  KeyIcon,
   LockKeyIcon,
   BellIcon,
 } from "@phosphor-icons/react"
@@ -30,17 +22,9 @@ interface SettingsNavItem {
 const settingsItems: SettingsNavItem[] = [
   { icon: GearIcon, labelKey: "settings.general", to: "/settings/general" },
   { icon: UserCircleIcon, labelKey: "settings.profile", to: "/settings/profile" },
-  { icon: UsersThreeIcon, labelKey: "settings.team", to: "/settings/team" },
-  { icon: RobotIcon, labelKey: "settings.agents", to: "/settings/agents" },
-  { icon: LightningIcon, labelKey: "settings.providers", to: "/settings/providers" },
-  { icon: TreeStructureIcon, labelKey: "settings.workflows", to: "/settings/workflows" },
   { icon: ShieldIcon, labelKey: "settings.security", to: "/settings/security" },
   { icon: LockKeyIcon, labelKey: "settings.two_factor", to: "/settings/security/2fa", indent: true },
-  { icon: KeyIcon, labelKey: "settings.secrets", to: "/settings/security/secrets", indent: true },
   { icon: BellIcon, labelKey: "settings.notifications", to: "/settings/notifications" },
-  { icon: PaintBrushIcon, labelKey: "settings.appearance", to: "/settings/appearance" },
-  { icon: GitBranchIcon, labelKey: "settings.git", to: "/settings/git" },
-  { icon: CurrencyDollarIcon, labelKey: "settings.budget", to: "/settings/budget" },
   { icon: WarningIcon, labelKey: "settings.danger", to: "/settings/danger" },
 ]
 

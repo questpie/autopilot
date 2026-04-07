@@ -1,0 +1,207 @@
+---
+title: "Telegram Surface"
+description: The first real surface pack — Telegram bot integration for task notifications and conversation-assisted operation.
+---
+
+The Telegram surface pack is the first real example of a surface integration distributed as a pack. It installs a provider and handler that connect Telegram to Autopilot's task and workflow primitives.
+
+This is a proof surface, not the only supported one. The same provider/handler/pack model applies to Slack, Discord, email, and any future surface.
+
+## What the pack installs
+
+| File | Purpose |
+|---|---|
+| `.autopilot/providers/telegram.yaml` | Provider config — declares capabilities, events, and secret refs |
+| `.autopilot/handlers/telegram.ts` | Bun handler script — normalizes inbound webhooks, delivers outbound notifications |
+
+That is it. Two files materialized into your `.autopilot/` directory. No hidden runtime, no background services, no core modifications.
+
+## Installation
+
+### 1. Declare the pack
+
+Add to `.autopilot/company.yaml`:
+
+```yaml
+packs:
+  - ref: questpie/telegram-surface
+```
+
+### 2. Run sync
+
+```bash
+autopilot sync
+```
+
+This resolves the pack from your configured registry, materializes the files into `.autopilot/`, and writes the lockfile.
+
+### 3. Set environment variables
+
+```bash
+# .env
+TELEGRAM_BOT_TOKEN=<your-bot-token>
+TELEGRAM_CHAT_ID=<your-default-chat-id>
+TELEGRAM_WEBHOOK_SECRET=<random-secret>
+```
+
+Generate a webhook secret:
+
+```bash
+openssl rand -hex 32
+```
+
+### 4. Create a Telegram bot
+
+1. Talk to [@BotFather](https://t.me/BotFather) on Telegram
+2. Create a new bot with `/newbot`
+3. Copy the bot token into `TELEGRAM_BOT_TOKEN`
+
+### 5. Set the webhook
+
+Point Telegram at your orchestrator's conversation endpoint:
+
+```bash
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "<ORCHESTRATOR_URL>/api/conversations/telegram",
+    "secret_token": "<TELEGRAM_WEBHOOK_SECRET>"
+  }'
+```
+
+Telegram requires HTTPS. For local development, use a tunnel:
+
+```bash
+ngrok http 7778
+# Then use the ngrok HTTPS URL as ORCHESTRATOR_URL
+```
+
+## Config and secrets
+
+The provider config (`telegram.yaml`) declares:
+
+```yaml
+id: telegram
+name: Telegram
+kind: conversation_channel
+handler: handlers/telegram.ts
+capabilities:
+  - op: conversation.ingest
+  - op: notify.send
+events:
+  - types: [run_completed]
+    statuses: [failed, completed]
+  - types: [task_changed]
+    statuses: [blocked]
+config:
+  default_chat_id: ${TELEGRAM_CHAT_ID}
+secret_refs:
+  - name: bot_token
+    source: env
+    key: TELEGRAM_BOT_TOKEN
+  - name: auth_secret
+    source: env
+    key: TELEGRAM_WEBHOOK_SECRET
+```
+
+Secrets are **references**, not values. The orchestrator resolves them at handler invocation time. The provider config is safe to commit.
+
+## Inbound flow
+
+When a message arrives from Telegram:
+
+<Mermaid chart="flowchart TD
+  A[Telegram Bot API] -->|webhook| B[POST /api/conversations/telegram]
+  B -->|X-Telegram-Bot-Api-Secret-Token| C[Orchestrator verifies secret]
+  C --> D[Invoke handler: conversation.ingest]
+  D --> E[Handler normalizes payload]
+  E --> F[Resolve binding + execute action]" />
+
+The handler normalizes Telegram-specific payloads into standard actions:
+
+| Telegram input | Normalized action |
+|---|---|
+| Inline button: "Approve" | `task.approve` |
+| Inline button: "Reject" | `task.reject` |
+| Text: `/approve` | `task.approve` |
+| Text: `/reject <reason>` | `task.reject` with message |
+| Any other text | `task.reply` (becomes instructions for next step) |
+| Empty or unrecognized | `noop` |
+
+## Outbound flow
+
+When a subscribed event occurs:
+
+<Mermaid chart="flowchart TD
+  A[Orchestrator event bus] --> B[Notification bridge matches subscriptions]
+  B --> C[Invoke handler: notify.send]
+  C --> D[Handler calls Telegram Bot API]
+  D --> E[Message appears in Telegram chat]" />
+
+Outbound messages include:
+
+- Status icon (error/warning/success)
+- Task title and summary
+- Preview link (if available)
+- Task details link
+- **Inline approve/reject buttons** for blocked tasks
+
+## Conversation binding
+
+A binding connects a Telegram chat to a task. Create one via the API:
+
+```bash
+curl -X POST "<ORCHESTRATOR_URL>/api/conversations/bindings" \
+  -H "Content-Type: application/json" \
+  -H "X-Local-Dev: true" \
+  -d '{
+    "provider_id": "telegram",
+    "external_conversation_id": "<TELEGRAM_CHAT_ID>",
+    "mode": "task_thread",
+    "task_id": "<TASK_ID>"
+  }'
+```
+
+This is a **chat-level binding** (no `external_thread_id`). The orchestrator's binding resolution:
+
+1. Tries exact thread match first (conversation + thread ID)
+2. Falls back to chat-level binding (conversation ID only)
+
+This means inline button callbacks (which carry per-message IDs) automatically resolve to the chat-level binding. You do not need per-message bindings.
+
+## Webhook authentication
+
+Telegram natively sends a `X-Telegram-Bot-Api-Secret-Token` header on every webhook delivery. The orchestrator recognizes this header directly — no proxy header rewrite needed.
+
+The provider declares an `auth_secret` ref. The orchestrator verifies inbound webhooks by comparing the header value against the resolved secret. Requests with missing or invalid secrets are rejected.
+
+This is orchestrator-boundary auth — the handler does not implement its own auth subsystem.
+
+## What is deferred
+
+The Telegram pack demonstrates the current surface model. Some capabilities are not yet implemented:
+
+- **Automatic binding creation** — bindings are currently created via API call, not auto-provisioned
+- **Per-task thread isolation** — current model uses chat-level bindings; Telegram topic/thread support is future work
+- **Rich media** — notifications are text/HTML with inline buttons; file attachments and images are not yet handled
+- **Group management** — no multi-chat or channel management
+- **Bot commands menu** — Telegram's command menu integration is not configured automatically
+
+## The surface model
+
+The Telegram pack illustrates how surfaces work in Autopilot:
+
+1. A **provider** declares what the surface connects to and what it can do
+2. A **handler** normalizes the surface's protocol into standard orchestrator actions
+3. A **pack** distributes the provider + handler as an installable unit
+4. `autopilot sync` materializes the files into `.autopilot/`
+5. The **orchestrator** handles auth, binding resolution, and action execution
+6. The **handler** handles protocol-specific details (Telegram API format, inline keyboards, callback queries)
+
+This same pattern applies to any future surface — Slack, Discord, email, WhatsApp. The orchestrator primitives and binding model stay the same. Only the handler changes.
+
+## Related docs
+
+- [Providers and Handlers](/docs/providers-and-handlers) — the provider/handler extension model
+- [Conversation-Assisted Operation](/docs/conversation-assisted-operation) — the binding model in detail
+- [Packs and Distribution](/docs/packs-and-distribution) — how packs are installed

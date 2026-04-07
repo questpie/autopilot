@@ -1,3 +1,17 @@
+# =============================================================================
+# QUESTPIE Autopilot — Docker Compose
+# =============================================================================
+#
+# Orchestrator-only. Workers run on host machines.
+# Operator surfaces: CLI, API, MCP, Telegram, query.
+#
+# Usage:
+#   cp .env.example .env   # set at least OPENROUTER_API_KEY
+#   docker compose up -d
+#
+# API:      http://localhost:7778
+# Webhooks: http://localhost:7777
+
 services:
   orchestrator:
     image: questpie/autopilot:latest
@@ -7,25 +21,32 @@ services:
     ports:
       - "${PORT:-7778}:7778"
       - "${WEBHOOK_PORT:-7777}:7777"
-      - "${DASHBOARD_PORT:-3000}:3000"
     volumes:
       - ${COMPANY_ROOT:-./company}:/data/company
     environment:
       - COMPANY_ROOT=/data/company
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - AUTOPILOT_MASTER_KEY=${AUTOPILOT_MASTER_KEY:-}
-      - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
-      - CORS_ORIGIN=${CORS_ORIGIN:-}
       - NODE_ENV=production
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
+      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-}
+      - AUTOPILOT_MASTER_KEY=${AUTOPILOT_MASTER_KEY:-}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
+      - CORS_ORIGIN=${CORS_ORIGIN:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-autopilot@localhost}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "bun", "-e", "fetch('http://localhost:7778/api/status').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:7778/api/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
 
-  # Auto-update profile — enable with: docker compose --profile auto-update up
+  # ── Optional: auto-update — docker compose --profile auto-update up -d ───
   watchtower:
     image: containrrr/watchtower
     profiles: ["auto-update"]
@@ -36,7 +57,16 @@ services:
       - WATCHTOWER_POLL_INTERVAL=300
     restart: unless-stopped
 
-  # Dev mode — enable with: docker compose --profile dev up
+  # ── Optional: local mail — docker compose --profile mail up ──────────────
+  mailpit:
+    image: axllent/mailpit
+    profiles: ["mail"]
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+    restart: unless-stopped
+
+  # ── Optional: dev mode — docker compose --profile dev up orchestrator-dev ─
   orchestrator-dev:
     build:
       context: .
@@ -45,16 +75,20 @@ services:
     ports:
       - "${PORT:-7778}:7778"
       - "${WEBHOOK_PORT:-7777}:7777"
-      - "${DASHBOARD_PORT:-3000}:3000"
     volumes:
       - .:/app
       - /app/node_modules
       - ${COMPANY_ROOT:-./company}:/data/company
     environment:
       - COMPANY_ROOT=/data/company
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - AUTOPILOT_MASTER_KEY=${AUTOPILOT_MASTER_KEY:-}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
       - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY:-}
+      - SMTP_HOST=${SMTP_HOST:-mailpit}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_FROM=${SMTP_FROM:-autopilot@localhost}
       - NODE_ENV=development
     command: ["bun", "run", "dev"]

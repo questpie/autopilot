@@ -1,6 +1,5 @@
 import { CircleIcon } from "@phosphor-icons/react"
 import { m } from "framer-motion"
-import { Link } from "@tanstack/react-router"
 import { Badge } from "@/components/ui/badge"
 import { useTranslation } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -11,16 +10,16 @@ import { EASING, DURATION, clampedDelay, useMotionPreference } from "@/lib/motio
  * Uses a simple hash to pick from a palette — no hardcoded role→color mapping.
  */
 const AVATAR_PALETTE = [
-  "bg-purple-600",
-  "bg-blue-600",
+  "bg-primary",
+  "bg-info",
   "bg-cyan-600",
   "bg-emerald-600",
   "bg-amber-600",
-  "bg-red-600",
+  "bg-destructive",
   "bg-pink-600",
   "bg-violet-600",
   "bg-teal-600",
-  "bg-orange-600",
+  "bg-warning",
   "bg-indigo-600",
   "bg-rose-600",
 ]
@@ -65,11 +64,7 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
         delay: shouldReduce ? 0 : clampedDelay(index, 50, 300),
       }}
     >
-      <Link
-        to="/team/$id"
-        params={{ id: agent.id }}
-        className="group flex flex-col items-center gap-2 border border-border p-4 transition-all duration-200 hover:-translate-y-0.5 hover:bg-muted/30 hover:shadow-sm"
-      >
+      <div className="group flex flex-col items-center gap-2 border border-border p-4 transition-all duration-150 ease-out">
         {/* Square avatar */}
         <div
           className={cn(
@@ -81,7 +76,7 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
         </div>
 
         {/* Name */}
-        <span className="font-heading text-sm font-medium text-foreground group-hover:text-primary">
+        <span className="font-heading text-sm font-medium text-foreground">
           {agent.name}
         </span>
 
@@ -96,7 +91,7 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
             size={8}
             weight={isWorking ? "fill" : "regular"}
             className={cn(
-              isWorking ? "text-green-500" : "text-muted-foreground",
+              isWorking ? "text-success" : "text-muted-foreground",
               isWorking && "animate-status-pulse motion-reduce:animate-none",
             )}
             aria-hidden="true"
@@ -110,7 +105,7 @@ export function AgentCard({ agent, isWorking = false, taskCount = 0, index = 0 }
         <span className="font-heading text-[10px] text-muted-foreground">
           {t("team.tasks_count", { count: taskCount })}
         </span>
-      </Link>
+      </div>
     </m.div>
   )
 }

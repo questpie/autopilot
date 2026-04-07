@@ -1,18 +1,21 @@
 import { authClient } from "@/lib/auth"
 
+/**
+ * Client-side session hook.
+ *
+ * Note: 2FA redirect is handled globally by twoFactorClient plugin
+ * (onTwoFactorRedirect in auth.ts). Server-side 2FA checks use
+ * checkAuthServer() which has access to raw session data.
+ */
 export function useSession() {
   const session = authClient.useSession()
+  const user = session.data?.user
 
   return {
-    user: session.data?.user ?? null,
+    user: user ?? null,
     session: session.data?.session ?? null,
     isPending: session.isPending,
-    isAuthenticated: !!session.data?.user,
+    isAuthenticated: !!user,
     refetch: session.refetch,
-    needs2FA:
-      !!(session.data?.user as { twoFactorEnabled?: boolean } | null)
-        ?.twoFactorEnabled &&
-      !(session.data?.session as { twoFactorVerified?: boolean } | null)
-        ?.twoFactorVerified,
   }
 }

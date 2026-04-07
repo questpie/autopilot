@@ -1,56 +1,38 @@
-# Dockerfile for QuestPie Autopilot (orchestrator + dashboard)
+# Dockerfile for QUESTPIE Autopilot — orchestrator-only
 # Build: docker build -t questpie/autopilot .
-# Run:   docker run -p 7778:7778 -p 7777:7777 -p 3000:3000 questpie/autopilot
+# Run:   docker run -p 7778:7778 -p 7777:7777 -v ./company:/data/company questpie/autopilot
+#
+# Orchestrator (control plane) only. Workers run on host machines.
+# Operator surfaces: CLI, API, MCP, Telegram, query.
 
-# ── Stage 1: Install dependencies ────────────────────────────────────────────
+# ── Stage 1: Install all dependencies ────────────────────────────────────────
 FROM oven/bun:1.3-alpine AS deps
 WORKDIR /app
 
-# Copy workspace root manifests
 COPY package.json bun.lock ./
-
-# Copy all workspace package manifests for dependency resolution
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/orchestrator/package.json packages/orchestrator/package.json
+COPY packages/worker/package.json packages/worker/package.json
 COPY packages/spec/package.json packages/spec/package.json
-COPY packages/agents/package.json packages/agents/package.json
-COPY packages/avatar/package.json packages/avatar/package.json
+COPY packages/mcp-server/package.json packages/mcp-server/package.json
 COPY apps/dashboard-v2/package.json apps/dashboard-v2/package.json
 COPY apps/docs/package.json apps/docs/package.json
 
-# Install deps — skip postinstall scripts (fumadocs-mdx from docs app fails in Docker)
 RUN bun install --frozen-lockfile --ignore-scripts
 
-# ── Stage 2: Build dashboard ─────────────────────────────────────────────────
-FROM deps AS dashboard-build
-WORKDIR /app
-
-# Copy config files needed for build
-COPY tsconfig.base.json biome.json turbo.json ./
-
-# Copy all source (dashboard imports types from other workspace packages)
-COPY packages packages
-COPY apps/dashboard-v2 apps/dashboard-v2
-
-# Build dashboard — output goes to apps/dashboard-v2/.output/
-RUN cd apps/dashboard-v2 && bun run build
-
-# ── Stage 3: Production dependencies only ───────────────────────────────────
+# ── Stage 2: Production dependencies only ───────────────────────────────────
 FROM oven/bun:1.3-alpine AS prod-deps
 WORKDIR /app
 
-# Copy manifests for production install
 COPY package.json bun.lock ./
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/orchestrator/package.json packages/orchestrator/package.json
+COPY packages/worker/package.json packages/worker/package.json
 COPY packages/spec/package.json packages/spec/package.json
-COPY packages/agents/package.json packages/agents/package.json
-COPY packages/avatar/package.json packages/avatar/package.json
+COPY packages/mcp-server/package.json packages/mcp-server/package.json
 COPY apps/dashboard-v2/package.json apps/dashboard-v2/package.json
 COPY apps/docs/package.json apps/docs/package.json
 
-# Install production deps only, then prune large packages not needed at runtime
-# (dashboard is pre-built, docs not included, onnxruntime for optional embeddings)
 RUN bun install --frozen-lockfile --ignore-scripts --production && \
     rm -rf node_modules/onnxruntime-node \
            node_modules/onnxruntime-web \
@@ -68,44 +50,34 @@ RUN bun install --frozen-lockfile --ignore-scripts --production && \
            node_modules/drizzle-kit \
            node_modules/@huggingface
 
-# ── Stage 4: Production runtime ──────────────────────────────────────────────
+# ── Stage 3: Production runtime ──────────────────────────────────────────────
 FROM oven/bun:1.3-alpine AS runtime
 WORKDIR /app
 
-# Copy production node_modules only
 COPY --from=prod-deps /app/node_modules ./node_modules
-
-# Copy root package.json (needed for workspace resolution)
 COPY package.json ./
 
-# Copy runtime packages (source — Bun runs TS directly)
+# Runtime packages (source — Bun runs TS directly)
 COPY packages/spec packages/spec
-COPY packages/agents packages/agents
-COPY packages/avatar packages/avatar
 COPY packages/orchestrator packages/orchestrator
+COPY packages/worker packages/worker
 COPY packages/cli packages/cli
+COPY packages/mcp-server packages/mcp-server
 
-# Copy built dashboard (.output/ has Nitro server bundle)
-COPY --from=dashboard-build /app/apps/dashboard-v2/.output apps/dashboard-v2/.output
-COPY --from=dashboard-build /app/apps/dashboard-v2/package.json apps/dashboard-v2/package.json
+# The copied workspace packages may contain host-local node_modules symlinks.
+# Remove them so Bun resolves dependencies from /app/node_modules in the image.
+RUN find packages -name node_modules -type d -prune -exec rm -rf {} +
 
-# Copy company templates (used by `autopilot init`)
-COPY templates templates
-
-# Copy entrypoint
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Environment defaults
 ENV NODE_ENV=production
 ENV PORT=7778
 ENV WEBHOOK_PORT=7777
 
-# Expose API, webhook, and dashboard ports
-EXPOSE 7778 7777 3000
+EXPOSE 7778 7777
 
-# Health check against the API status endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD bun -e "fetch('http://localhost:7778/api/status').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+  CMD bun -e "fetch('http://localhost:7778/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

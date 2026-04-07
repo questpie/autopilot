@@ -98,7 +98,7 @@ export function SwipeAction({
       {onSwipeRight && (
         <m.div
           style={{ opacity: rightBgOpacity }}
-          className="absolute inset-0 flex items-center justify-start bg-green-600 px-6"
+          className="absolute inset-0 flex items-center justify-start bg-success px-6"
         >
           <CheckCircleIcon size={24} className="text-white" aria-hidden="true" />
           <span className="ml-2 font-heading text-sm font-semibold text-white">
@@ -111,7 +111,7 @@ export function SwipeAction({
       {onSwipeLeft && (
         <m.div
           style={{ opacity: leftBgOpacity }}
-          className="absolute inset-0 flex items-center justify-end bg-red-600 px-6"
+          className="absolute inset-0 flex items-center justify-end bg-destructive px-6"
         >
           <span className="mr-2 font-heading text-sm font-semibold text-white">
             {leftLabel ?? t("inbox.reject")}

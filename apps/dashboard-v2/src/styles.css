@@ -13,21 +13,19 @@
 
 /* ── Dark Theme (DEFAULT) ── */
 :root {
-    --background: oklch(0.145 0 0);           /* #0A0A0A */
+    --background: oklch(14.479% 0.00002 271.152);           /* #0A0A0A */
     --foreground: oklch(0.922 0 0);           /* #E5E5E5 */
-    --card: oklch(0.205 0 0);                 /* #111111 */
+    --card: oklch(17.764% 0.00002 271.152);                 /* #111111 */
     --card-foreground: oklch(0.922 0 0);      /* #E5E5E5 */
-    --popover: oklch(0.205 0 0);              /* #111111 */
+    --popover: oklch(17.764% 0.00002 271.152);        /* #111111 */
     --popover-foreground: oklch(0.922 0 0);   /* #E5E5E5 */
-    --primary: oklch(0.541 0.281 303.5);      /* #B700FF */
+    --primary: oklch(59.843% 0.30159 310.739);      /* #B700FF */
     --primary-foreground: oklch(1 0 0);       /* #FFFFFF */
-    --primary-dark: oklch(0.45 0.24 303.5);   /* #9200CC — hover/pressed */
-    --primary-light: oklch(0.68 0.22 303.5);  /* #D44FFF — highlights */
-    --secondary: oklch(0.269 0 0);            /* #1A1A1A */
+    --secondary: oklab(21.779% 0 -0.00002);            /* #1A1A1A */
     --secondary-foreground: oklch(0.922 0 0); /* #E5E5E5 */
-    --muted: oklch(0.269 0 0);                /* #1A1A1A */
-    --muted-foreground: oklch(0.637 0 0);     /* #999999 */
-    --accent: oklch(0.269 0 0);               /* #1A1A1A */
+    --muted:oklab(21.779% 0 -0.00002);      /* #1A1A1A */
+    --muted-foreground: oklch(68.295% 0.00008 271.152);     /* #999999 */
+    --accent: oklab(21.779% 0 -0.00002);           /* #1A1A1A */
     --accent-foreground: oklch(1 0 0);        /* #FFFFFF */
     --destructive: oklch(0.637 0.237 25);     /* #FF3D57 */
     --destructive-foreground: oklch(1 0 0);   /* #FFFFFF */
@@ -37,16 +35,16 @@
     --warning-foreground: oklch(0.145 0 0);   /* #0A0A0A */
     --info: oklch(0.72 0.12 230);             /* #40C4FF */
     --info-foreground: oklch(0.145 0 0);      /* #0A0A0A */
-    --border: oklch(0.371 0 0);               /* #333333 */
-    --input: oklch(0.371 0 0);                /* #333333 */
-    --ring: oklch(0.541 0.281 303.5);         /* #B700FF — matches primary */
+    --border: oklch(32.109% 0.00004 271.152);               /* #333333 */
+    --input:  oklch(32.109% 0.00004 271.152);           /* #333333 */
+    --ring:oklch(59.843% 0.30159 310.739);        /* #B700FF — matches primary */
     --chart-1: oklch(0.827 0.119 306.383);
     --chart-2: oklch(0.627 0.265 303.9);
     --chart-3: oklch(0.558 0.288 302.321);
     --chart-4: oklch(0.496 0.265 301.924);
     --chart-5: oklch(0.438 0.218 303.724);
     --radius: 0rem;
-    --sidebar: oklch(0.17 0 0);              /* slightly lighter than bg */
+    --sidebar: oklch(17.764% 0.00002 271.152);
     --sidebar-foreground: oklch(0.922 0 0);
     --sidebar-primary: oklch(0.541 0.281 303.5);
     --sidebar-primary-foreground: oklch(1 0 0);
@@ -66,8 +64,6 @@
     --popover-foreground: oklch(0.269 0 0);   /* #1A1A1A */
     --primary: oklch(0.541 0.281 303.5);      /* #B700FF */
     --primary-foreground: oklch(1 0 0);       /* #FFFFFF */
-    --primary-dark: oklch(0.45 0.24 303.5);   /* #9200CC */
-    --primary-light: oklch(0.68 0.22 303.5);  /* #D44FFF */
     --secondary: oklch(0.955 0 0);            /* #F0F0F0 */
     --secondary-foreground: oklch(0.269 0 0); /* #1A1A1A */
     --muted: oklch(0.955 0 0);                /* #F0F0F0 */
@@ -135,8 +131,6 @@
     --color-secondary: var(--secondary);
     --color-primary-foreground: var(--primary-foreground);
     --color-primary: var(--primary);
-    --color-primary-dark: var(--primary-dark);
-    --color-primary-light: var(--primary-light);
     --color-popover-foreground: var(--popover-foreground);
     --color-popover: var(--popover);
     --color-card-foreground: var(--card-foreground);
@@ -162,6 +156,18 @@
   html {
     @apply font-sans;
     }
+  /* Interactive elements get pointer cursor globally */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  select:not(:disabled),
+  summary,
+  [tabindex]:not([tabindex="-1"]),
+  a[href] {
+    cursor: pointer;
+  }
 }
 
 /* ── Safe area insets for notched / punch-hole devices ── */
@@ -257,11 +263,60 @@
 }
 
 /* Respect prefers-reduced-motion globally */
+/* ── Reply highlight flash ── */
+@keyframes reply-flash {
+  0%   { background-color: oklch(0.541 0.281 303.5 / 0.15); }
+  100% { background-color: transparent; }
+}
+
+.reply-highlight {
+  animation: reply-flash 1.5s ease-out;
+}
+
+/* Blinking cursor for streaming text */
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-blink-cursor {
+  animation: blink-cursor 530ms step-end infinite;
+}
+
+/* Typing indicator bounce dots */
+@keyframes bounce-dot {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-4px); }
+}
+
+.animate-bounce-dot {
+  animation: bounce-dot 1.2s ease-in-out infinite;
+}
+
+/* Select check icon scale-in */
+@keyframes check-scale-in {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+
+.animate-check-scale-in {
+  animation: check-scale-in 150ms ease-out;
+}
+
+@keyframes auth-grid-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 40px 40px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-shimmer,
   .animate-new-item,
   .animate-status-pulse,
-  .animate-connected-flash {
+  .animate-connected-flash,
+  .reply-highlight,
+  .animate-blink-cursor,
+  .animate-bounce-dot,
+  .animate-check-scale-in {
     animation: none;
   }
 }

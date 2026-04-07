@@ -1,84 +1,102 @@
-import { z } from 'zod'
-import * as schemas from '../schemas'
+import type { z } from 'zod'
+import type * as schemas from '../schemas'
 
 // Company
 export type Company = z.infer<typeof schemas.CompanySchema>
 export type CompanyOwner = z.infer<typeof schemas.CompanyOwnerSchema>
 export type CompanySettings = z.infer<typeof schemas.CompanySettingsSchema>
-export type IntegrationConfig = z.infer<typeof schemas.IntegrationConfigSchema>
-export type NotificationChannel = z.infer<typeof schemas.NotificationChannelSchema>
 
 // Agents
 export type Agent = z.infer<typeof schemas.AgentSchema>
-export type AgentsFile = z.infer<typeof schemas.AgentsFileSchema>
 export type FsScope = z.infer<typeof schemas.FsScopeSchema>
 export type AgentTrigger = z.infer<typeof schemas.AgentTriggerSchema>
-
-// Humans
-export type Human = z.infer<typeof schemas.HumanSchema>
-export type HumansFile = z.infer<typeof schemas.HumansFileSchema>
-export type NotificationRouting = z.infer<typeof schemas.NotificationRoutingSchema>
-export type QuietHours = z.infer<typeof schemas.QuietHoursSchema>
-
-// Tasks
-export type Task = z.infer<typeof schemas.TaskSchema>
-export type TaskHistoryEntry = z.infer<typeof schemas.TaskHistoryEntrySchema>
-export type TaskContext = z.infer<typeof schemas.TaskContextSchema>
-export type Blocker = z.infer<typeof schemas.BlockerSchema>
-
-// Messages
-export type Message = z.infer<typeof schemas.MessageSchema>
 
 // Workflows
 export type Workflow = z.infer<typeof schemas.WorkflowSchema>
 export type WorkflowStep = z.infer<typeof schemas.WorkflowStepSchema>
-export type WorkflowOutput = z.infer<typeof schemas.WorkflowOutputSchema>
-export type WorkflowReview = z.infer<typeof schemas.WorkflowReviewSchema>
-export type WorkflowTransitions = z.infer<typeof schemas.WorkflowTransitionsSchema>
-export type WorkflowChangelogEntry = z.infer<typeof schemas.WorkflowChangelogEntrySchema>
-export type WorkflowChangePolicy = z.infer<typeof schemas.WorkflowChangePolicySchema>
+export type StepTransition = z.infer<typeof schemas.StepTransitionSchema>
+export type ExecutionTarget = z.infer<typeof schemas.ExecutionTargetSchema>
+
+// Environments
+export type Environment = z.infer<typeof schemas.EnvironmentSchema>
+
+// Secret Refs
+export type SecretRef = z.infer<typeof schemas.SecretRefSchema>
+export type LocalSecretRef = z.infer<typeof schemas.LocalSecretRefSchema>
+export type SharedSecretRef = z.infer<typeof schemas.SharedSecretRefSchema>
+export type SharedSecretScope = z.infer<typeof schemas.SharedSecretScopeSchema>
+export type SharedSecretInput = z.infer<typeof schemas.SharedSecretInputSchema>
+export type SharedSecretMetadata = z.infer<typeof schemas.SharedSecretMetadataSchema>
+
+// Capability Profiles
+export type CapabilityProfile = z.infer<typeof schemas.CapabilityProfileSchema>
+export type ResolvedCapabilities = z.infer<typeof schemas.ResolvedCapabilitiesSchema>
+
+// Artifacts
+export type Artifact = z.infer<typeof schemas.ArtifactSchema>
+export type RunArtifact = z.infer<typeof schemas.RunArtifactSchema>
+
+// External Actions
+export type ExternalAction = z.infer<typeof schemas.ExternalActionSchema>
+export type WebhookAction = z.infer<typeof schemas.WebhookActionSchema>
+export type ScriptAction = z.infer<typeof schemas.ScriptActionSchema>
+export type ScriptResult = z.infer<typeof schemas.ScriptResultSchema>
+
+// Worker Events
+export type WorkerEventType = z.infer<typeof schemas.WorkerEventTypeSchema>
+export type WorkerEvent = z.infer<typeof schemas.WorkerEventSchema>
+export type RunCompletion = z.infer<typeof schemas.RunCompletionSchema>
+
+// Worker API Contracts
+export type WorkerCapability = z.infer<typeof schemas.WorkerCapabilitySchema>
+export type ClaimedRun = z.infer<typeof schemas.ClaimedRunSchema>
+export type WorkerClaimResponse = z.infer<typeof schemas.WorkerClaimResponseSchema>
+export type WorkerRegisterResponse = z.infer<typeof schemas.WorkerRegisterResponseSchema>
+export type ContinueRunRequest = z.infer<typeof schemas.ContinueRunRequestSchema>
+export type WorkerEnrollRequest = z.infer<typeof schemas.WorkerEnrollRequestSchema>
+export type WorkerEnrollResponse = z.infer<typeof schemas.WorkerEnrollResponseSchema>
 
 // Schedules
 export type Schedule = z.infer<typeof schemas.ScheduleSchema>
-export type SchedulesFile = z.infer<typeof schemas.SchedulesFileSchema>
 
-// Webhooks
-export type Webhook = z.infer<typeof schemas.WebhookSchema>
-export type WebhooksFile = z.infer<typeof schemas.WebhooksFileSchema>
-export type WebhookFilter = z.infer<typeof schemas.WebhookFilterSchema>
-export type WebhookAction = z.infer<typeof schemas.WebhookActionSchema>
-export type WebhookTaskCondition = z.infer<typeof schemas.WebhookTaskConditionSchema>
+// Humans
+export type Human = z.infer<typeof schemas.HumanSchema>
+export type NotificationRouting = z.infer<typeof schemas.NotificationRoutingSchema>
+export type QuietHours = z.infer<typeof schemas.QuietHoursSchema>
 
-// Watchers
-export type Watcher = z.infer<typeof schemas.WatcherSchema>
+// Scope
+export type CompanyScope = z.infer<typeof schemas.CompanyScopeSchema>
+export type ProjectScope = z.infer<typeof schemas.ProjectScopeSchema>
+export type ScopeDefaults = z.infer<typeof schemas.ScopeDefaultsSchema>
 
-// Thresholds
-export type Threshold = z.infer<typeof schemas.ThresholdSchema>
+// Packs
+export type PackDependency = z.infer<typeof schemas.PackDependencySchema>
+export type Registry = z.infer<typeof schemas.RegistrySchema>
+export type PackCategory = z.infer<typeof schemas.PackCategorySchema>
+export type PackFile = z.infer<typeof schemas.PackFileSchema>
+export type PackManifest = z.infer<typeof schemas.PackManifestSchema>
+export type PackLockEntry = z.infer<typeof schemas.PackLockEntrySchema>
+export type PackLockfile = z.infer<typeof schemas.PackLockfileSchema>
 
-// Memory
-export type AgentMemory = z.infer<typeof schemas.AgentMemorySchema>
-export type MemoryDecision = z.infer<typeof schemas.MemoryDecisionSchema>
-export type MemoryMistake = z.infer<typeof schemas.MemoryMistakeSchema>
-export type MemoryFacts = z.infer<typeof schemas.MemoryFactsSchema>
-
-// Dashboard / Pins
-export type Pin = z.infer<typeof schemas.PinSchema>
-export type PinAction = z.infer<typeof schemas.PinActionSchema>
-export type PinMetadata = z.infer<typeof schemas.PinMetadataSchema>
-export type DashboardGroup = z.infer<typeof schemas.DashboardGroupSchema>
-export type DashboardGroupsFile = z.infer<typeof schemas.DashboardGroupsFileSchema>
+// Queries
+export type QueryRequest = z.infer<typeof schemas.QueryRequestSchema>
+export type QueryResult = z.infer<typeof schemas.QueryResultSchema>
+export type QueryRow = z.infer<typeof schemas.QueryRowSchema>
 
 // Sessions
-export type SessionMeta = z.infer<typeof schemas.SessionMetaSchema>
-export type StreamChunk = z.infer<typeof schemas.StreamChunkSchema>
+export type SessionMode = z.infer<typeof schemas.SessionModeSchema>
+export type SessionStatus = z.infer<typeof schemas.SessionStatusSchema>
+export type SessionRow = z.infer<typeof schemas.SessionRowSchema>
 
-// Secrets
-export type Secret = z.infer<typeof schemas.SecretSchema>
-
-// Transports
-export type TransportConfig = z.infer<typeof schemas.TransportConfigSchema>
-export type TransportsFile = z.infer<typeof schemas.TransportsFileSchema>
-
-// Policies
-export type ApprovalGate = z.infer<typeof schemas.ApprovalGateSchema>
-export type ApprovalGatesFile = z.infer<typeof schemas.ApprovalGatesFileSchema>
+// Providers
+export type Provider = z.infer<typeof schemas.ProviderSchema>
+export type ProviderKind = z.infer<typeof schemas.ProviderKindSchema>
+export type ProviderCapability = z.infer<typeof schemas.ProviderCapabilitySchema>
+export type ProviderEventFilter = z.infer<typeof schemas.ProviderEventFilterSchema>
+export type HandlerEnvelope = z.infer<typeof schemas.HandlerEnvelopeSchema>
+export type HandlerResult = z.infer<typeof schemas.HandlerResultSchema>
+export type IntakeTaskInput = z.infer<typeof schemas.IntakeTaskInputSchema>
+export type IntakeResult = z.infer<typeof schemas.IntakeResultSchema>
+export type ConversationResult = z.infer<typeof schemas.ConversationResultSchema>
+export type NotificationPayload = z.infer<typeof schemas.NotificationPayloadSchema>
+export type NotificationAction = z.infer<typeof schemas.NotificationActionSchema>

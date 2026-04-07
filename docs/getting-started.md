@@ -1,101 +1,68 @@
 # Getting Started
 
-## Prerequisites
+## Current V1 Shape
 
-- **Bun 1.3+** ([install](https://bun.sh)) or **Docker**
-- **Authentication** (choose one per provider):
-  - **Subscription login** (recommended): `autopilot provider login claude` or `autopilot provider login codex`
-  - **API key** (alternative): set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
+Autopilot is currently operated through CLI, API, MCP, Telegram, and the query plane. The future operator app is deferred.
 
-## Install & Run
-
-### Option A: bunx (quickest)
-
-```bash
-bunx @questpie/autopilot init my-company
-cd my-company
-
-# Authenticate (choose one)
-autopilot provider login claude    # Use Claude subscription (recommended)
-# OR
-export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
-
-bunx @questpie/autopilot start
-```
-
-### Option B: Global install
+## Local Bootstrap
 
 ```bash
 bun add -g @questpie/autopilot
-autopilot init my-company
-cd my-company
-
-# Authenticate (choose one)
-autopilot provider login claude    # Use Claude subscription (recommended)
-# OR
-export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
-
+mkdir my-company && cd my-company
+autopilot bootstrap --yes
+autopilot sync
 autopilot start
 ```
 
-### Option C: Docker
+`autopilot start` is a local convenience mode. It starts the orchestrator API plus a local worker with local-dev auth bypass. Do not expose it as a production topology.
+
+Local endpoints:
+
+```text
+API:      http://localhost:7778
+Webhooks: http://localhost:7777
+Health:   http://localhost:7778/api/health
+```
+
+## Docker Bootstrap
 
 ```bash
 git clone https://github.com/questpie/autopilot
 cd autopilot
 cp .env.example .env
-docker compose up
-
-# Then authenticate:
-# autopilot provider login claude   (subscription — works headless, prints a link)
-# OR set ANTHROPIC_API_KEY in .env  (API key)
+# Set OPENROUTER_API_KEY or direct provider keys.
+docker compose up -d
 ```
 
-## Your First Intent
+Docker runs the orchestrator only. Workers run separately on host machines with runtime binaries installed.
+
+## Query Plane
 
 ```bash
-autopilot ask "Create a simple landing page for my SaaS product"
+autopilot query "Summarize the current workflows"
+autopilot query "Suggest a safer deploy approval step" --allow-mutation
 ```
 
-What happens:
-1. **CEO agent** receives your intent and decomposes it into tasks
-2. **Strategist** scopes the requirements
-3. **Planner** creates an implementation plan
-4. **Developer** writes the code
-5. **Reviewer** checks quality
-6. You get notified at approval gates (merge, deploy)
-
-## Watch Agents Work
+## Validate Setup
 
 ```bash
-# See what agents are doing
-autopilot agents
-
-# Stream a live session (like kubectl logs -f)
-autopilot attach peter
-
-# Check pending approvals
-autopilot inbox
-
-# View the dashboard
-open http://localhost:3000
+autopilot doctor --offline
+autopilot doctor --url http://localhost:7778
 ```
 
-## What Just Happened?
+Use `--offline` for filesystem/env/runtime checks without probing a running orchestrator.
 
-When you ran `autopilot start`, the orchestrator:
-1. Loaded your company config from `company.yaml`
-2. Started watching the filesystem for changes
-3. Started the API server on port 7778
-4. Started the webhook server on port 7777
-5. Started the dashboard on port 3000
-6. Initialized the SQLite database with FTS5 + vector search
+## Worker Setup
 
-When you ran `autopilot ask`, it:
-1. Created a task in SQLite (`.data/autopilot.db`)
-2. The CEO agent picked it up and decomposed it
-3. Sub-tasks were created and assigned to agents
-4. Each agent worked in sequence following the workflow
-5. Every file change was auto-committed to git
+```bash
+# On orchestrator machine
+autopilot worker token create --description "my laptop"
 
-Your company config lives in the `my-company/` directory, and runtime data (tasks, messages, activity) lives in SQLite. Back it up with `cp -r`, fork it with `git clone`.
+# On worker machine
+bun add -g @questpie/autopilot
+npm install -g @anthropic-ai/claude-code
+claude login
+autopilot worker start --url http://ORCHESTRATOR_HOST:7778 --token <join-token>
+```
+
+For deployment variants, use [Deployment Variants](./guides/deployment-variants.md).

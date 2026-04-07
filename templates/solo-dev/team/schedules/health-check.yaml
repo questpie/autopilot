@@ -1,0 +1,4 @@
+id: health-check
+agent: ops
+cron: "*/5 * * * *"
+description: "Check infrastructure health"

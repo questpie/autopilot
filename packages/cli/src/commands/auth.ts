@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { program } from '../program'
 import { header, dim, success, error, badge } from '../utils/format'
-import { getClient, getBaseUrl } from '../utils/client'
+import { getBaseUrl } from '../utils/client'
 
 interface Credentials {
 	type: 'bearer' | 'api-key'
@@ -27,7 +27,8 @@ export function loadCredentials(): Credentials | null {
 	if (!existsSync(CREDS_PATH)) return null
 	try {
 		return JSON.parse(readFileSync(CREDS_PATH, 'utf-8')) as Credentials
-	} catch {
+	} catch (err) {
+		console.warn(`[auth] failed to parse credentials at ${CREDS_PATH}:`, (err as Error).message)
 		return null
 	}
 }
@@ -44,8 +45,7 @@ export function getAuthHeaders(): Record<string, string> {
 	return {}
 }
 
-const authCmd = new Command('auth')
-	.description('Authentication and authorization management')
+const authCmd = new Command('auth').description('Authentication and credential management')
 
 authCmd.addCommand(
 	new Command('login')
@@ -64,7 +64,6 @@ authCmd.addCommand(
 				return
 			}
 
-			// For email/password login, prompt inline
 			const email = prompt('Email: ')
 			const password = prompt('Password: ')
 
@@ -81,12 +80,14 @@ authCmd.addCommand(
 				})
 
 				if (!res.ok) {
-					const body = await res.json().catch(() => ({ error: 'Unknown error' })) as { error: string }
+					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
+						error: string
+					}
 					console.error(error(`Login failed: ${body.error}`))
 					process.exit(1)
 				}
 
-				const data = await res.json() as { token?: string }
+				const data = (await res.json()) as { token?: string }
 				if (data.token) {
 					saveCredentials({ type: 'bearer', token: data.token, ...credBase })
 					console.log(success('Logged in successfully'))
@@ -94,7 +95,7 @@ authCmd.addCommand(
 					console.error(error('Login response did not contain a token'))
 					process.exit(1)
 				}
-			} catch (err) {
+			} catch {
 				console.error(error('Could not connect to orchestrator. Is it running?'))
 				console.error(dim(`Tried ${baseUrl}`))
 				process.exit(1)
@@ -106,7 +107,7 @@ authCmd.addCommand(
 	new Command('setup')
 		.description('Create the initial owner account (first run)')
 		.option('--port <port>', 'Orchestrator port', '7778')
-		.option('--url <url>', 'Remote orchestrator URL (e.g. https://autopilot.mycompany.com)')
+		.option('--url <url>', 'Remote orchestrator URL')
 		.action(async (opts: { port: string; url?: string }) => {
 			const port = parseInt(opts.port, 10)
 			const baseUrl = opts.url ?? getBaseUrl(port)
@@ -132,18 +133,20 @@ authCmd.addCommand(
 				})
 
 				if (!res.ok) {
-					const body = await res.json().catch(() => ({ error: 'Unknown error' })) as { error: string }
+					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
+						error: string
+					}
 					console.error(error(`Setup failed: ${body.error}`))
 					process.exit(1)
 				}
 
-				const data = await res.json() as { token?: string }
+				const data = (await res.json()) as { token?: string }
 				if (data.token) {
 					saveCredentials({ type: 'bearer', token: data.token, ...credBase })
 				}
 				console.log(success('Owner account created'))
 				console.log(dim('  You can now use all autopilot commands.'))
-			} catch (err) {
+			} catch {
 				console.error(error('Could not connect to orchestrator. Is it running?'))
 				process.exit(1)
 			}
@@ -184,210 +187,6 @@ authCmd.addCommand(
 				console.log(success('Logged out'))
 			} catch {
 				console.log(dim('  Not logged in'))
-			}
-		}),
-)
-
-// ── 2FA commands ─────────────────────────────────────────────────────────
-
-const twoFactorCmd = new Command('2fa')
-	.description('Two-factor authentication management')
-
-twoFactorCmd.addCommand(
-	new Command('enable')
-		.description('Enable 2FA (TOTP)')
-		.action(async () => {
-			const baseUrl = getBaseUrl()
-			const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' }
-
-			try {
-				const res = await fetch(`${baseUrl}/api/auth/two-factor/enable`, {
-					method: 'POST',
-					headers,
-				})
-
-				if (!res.ok) {
-					const body = await res.json().catch(() => ({ error: 'Unknown error' })) as { error: string }
-					console.error(error(`Failed: ${body.error}`))
-					process.exit(1)
-				}
-
-				const data = await res.json() as { totpURI?: string; backupCodes?: string[] }
-				console.log(header('2FA Enabled'))
-
-				if (data.totpURI) {
-					console.log('\n  Copy this URI into your authenticator app:\n')
-					console.log(`  ${data.totpURI}\n`)
-				}
-
-				if (data.backupCodes?.length) {
-					console.log(dim('  Backup codes (save these securely):'))
-					for (const code of data.backupCodes) {
-						console.log(`    ${code}`)
-					}
-					console.log()
-				}
-
-				// Prompt for verification
-				const code = prompt('Enter verification code: ')
-				if (code) {
-					const verifyRes = await fetch(`${baseUrl}/api/auth/two-factor/verify`, {
-						method: 'POST',
-						headers,
-						body: JSON.stringify({ code }),
-					})
-					if (verifyRes.ok) {
-						console.log(success('2FA verified and active'))
-					} else {
-						console.error(error('Verification failed — 2FA not activated'))
-					}
-				}
-			} catch {
-				console.error(error('Could not connect to orchestrator'))
-				process.exit(1)
-			}
-		}),
-)
-
-twoFactorCmd.addCommand(
-	new Command('disable')
-		.description('Disable 2FA')
-		.action(async () => {
-			const code = prompt('Enter TOTP code: ')
-			if (!code) {
-				console.error(error('Code required'))
-				process.exit(1)
-			}
-
-			try {
-				const baseUrl = getBaseUrl()
-				const res = await fetch(`${baseUrl}/api/auth/two-factor/disable`, {
-					method: 'POST',
-					headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-					body: JSON.stringify({ code }),
-				})
-
-				if (res.ok) {
-					console.log(success('2FA disabled'))
-				} else {
-					const body = await res.json().catch(() => ({ error: 'Unknown error' })) as { error: string }
-					console.error(error(`Failed: ${body.error}`))
-				}
-			} catch {
-				console.error(error('Could not connect to orchestrator'))
-				process.exit(1)
-			}
-		}),
-)
-
-twoFactorCmd.addCommand(
-	new Command('verify')
-		.description('Verify a TOTP code')
-		.action(async () => {
-			const code = prompt('Enter TOTP code: ')
-			if (!code) {
-				console.error(error('Code required'))
-				process.exit(1)
-			}
-
-			try {
-				const baseUrl = getBaseUrl()
-				const res = await fetch(`${baseUrl}/api/auth/two-factor/verify`, {
-					method: 'POST',
-					headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-					body: JSON.stringify({ code }),
-				})
-
-				if (res.ok) {
-					console.log(success('2FA verified'))
-				} else {
-					const body = await res.json().catch(() => ({ error: 'Unknown error' })) as { error: string }
-					console.error(error(`Verification failed: ${body.error}`))
-				}
-			} catch {
-				console.error(error('Could not connect to orchestrator'))
-				process.exit(1)
-			}
-		}),
-)
-
-authCmd.addCommand(twoFactorCmd)
-
-// ── Session commands ─────────────────────────────────────────────────────
-
-authCmd.addCommand(
-	new Command('sessions')
-		.description('List active sessions')
-		.action(async () => {
-			try {
-				const client = getClient()
-				const res = await client.api.sessions.$get()
-
-				if (!res.ok) {
-					console.error(error('Failed to list sessions'))
-					process.exit(1)
-				}
-
-				const sessions = await res.json() as Array<{ id: string; createdAt?: string; userAgent?: string; ipAddress?: string }>
-				console.log(header('Active Sessions'))
-
-				if (sessions.length === 0) {
-					console.log(dim('  No active sessions'))
-					return
-				}
-
-				console.log(dim('  ID                 Created              User-Agent           IP'))
-				for (const s of sessions) {
-					const id = (s.id ?? '').slice(0, 17).padEnd(17)
-					const created = (s.createdAt ?? '').slice(0, 19).padEnd(19)
-					const ua = (s.userAgent ?? '').slice(0, 19).padEnd(19)
-					const ip = s.ipAddress ?? ''
-					console.log(`  ${id}  ${created}  ${ua}  ${ip}`)
-				}
-			} catch {
-				console.error(error('Could not connect to orchestrator'))
-				process.exit(1)
-			}
-		}),
-)
-
-authCmd.addCommand(
-	new Command('revoke')
-		.description('Revoke a session by ID')
-		.argument('<id>', 'Session ID to revoke')
-		.action(async (id: string) => {
-			try {
-				const client = getClient()
-				const res = await client.api.sessions[':id'].$delete({ param: { id } })
-
-				if (res.ok) {
-					console.log(success(`Session ${id} revoked`))
-				} else {
-					console.error(error('Failed to revoke session'))
-				}
-			} catch {
-				console.error(error('Could not connect to orchestrator'))
-				process.exit(1)
-			}
-		}),
-)
-
-authCmd.addCommand(
-	new Command('revoke-all')
-		.description('Revoke all sessions')
-		.action(async () => {
-			try {
-				const client = getClient()
-				const res = await client.api.sessions.$delete()
-
-				if (res.ok) {
-					console.log(success('All sessions revoked'))
-				} else {
-					console.error(error('Failed to revoke sessions'))
-				}
-			} catch {
-				console.error(error('Could not connect to orchestrator'))
-				process.exit(1)
 			}
 		}),
 )

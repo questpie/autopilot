@@ -28,20 +28,20 @@ cp .env.example .env
 docker compose up
 ```
 
-> **Authentication** (choose one per provider):
-> - **Subscription login** (recommended): `autopilot provider login claude` / `autopilot provider login codex`
->   Works on VPS too — prints a link to open on any device (phone/laptop).
-> - **API key** (alternative): set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `.env`
+Open `http://localhost:3000` for the dashboard. The local Caddy proxy keeps browser auth and API calls same-origin.
+
+> **Authentication:**
+> Set your OpenRouter API key in `.env` (`OPENROUTER_API_KEY=sk-or-...`)
+> or run `autopilot provider set openrouter --api-key <key>`.
+> One key gives you access to all models (Anthropic, OpenAI, Google, etc.).
 
 ### bunx (local dev)
 ```bash
 bunx @questpie/autopilot init my-company
 cd my-company
 
-# Authenticate (choose one)
-autopilot provider login claude    # Use Claude subscription (recommended)
-# OR
-export ANTHROPIC_API_KEY=sk-ant-...  # Use API key
+# Set your OpenRouter API key
+autopilot provider set openrouter --api-key sk-or-...
 
 bunx @questpie/autopilot start
 ```
@@ -67,26 +67,39 @@ Sam is starting now. You'll be notified when approvals are needed.
 2. CEO agent decomposes into tasks
 3. Agents execute: strategist → planner → developer → reviewer → devops
 4. You approve at gates (merge, deploy, spend)
-5. Everything is files. Every action is a git commit.
+5. Workflow execution is tracked durably in SQLite
+6. Files remain the authored source of truth. Every action is still git-auditable.
+
+---
+
+## Workflow Runtime Model
+
+Autopilot treats workflows as the primary execution primitive.
+
+- `team/workflows/*.yaml` defines the authored workflow structure
+- the orchestrator compiles workflows into explicit step contracts
+- SQLite stores runtime execution in `workflow_runs` and `step_runs`
+- Durable Streams stores append-only replay timelines for sessions and workflow events
+
+Agents execute the current step. The app owns validation, transition state, deduplication, and replayability.
 
 ---
 
 ## Your Team, Your Rules
 
-Autopilot ships with 8 default agents across 8 roles — meta, strategist, planner, developer, reviewer, devops, marketing, design. Customize them or create your own in `team/agents.yaml`.
+Autopilot ships with 8 default agents across 8 roles — meta, strategist, planner, developer, reviewer, devops, marketing, design. Customize them or create your own in `team/agents/*.yaml`.
 
 ```yaml
-# team/agents.yaml
-agents:
-  - name: CEO
-    role: meta
-    description: Decomposes intent, delegates, unblocks
-
-  - name: Max
-    role: developer
-    description: Implementation, tests, debugging
-
-  # Add your own roles, rename agents, change responsibilities
+# team/agents/max.yaml
+id: max
+name: Max
+role: developer
+description: Implementation, tests, debugging
+model: anthropic/claude-sonnet-4
+tools: [fs, terminal]
+fs_scope:
+  read: ["**"]
+  write: ["**"]
 ```
 
 ---
@@ -96,17 +109,21 @@ agents:
 ```
 Human         CLI · Dashboard · Telegram · Webhooks
   │
-Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · SSE
+Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · Durable Streams
   │
-Agents        Claude Agent SDK · 7 Tools · Sandboxed FS · Memory
+Agents        TanStack AI + OpenRouter · Per-Agent Model Picker · 7 Tools · Sandboxed FS · Memory
   │
 Storage       SQLite + Drizzle · YAML/MD/JSON · FTS5 + sqlite-vec · Git
 ```
 
 - **Config is files** — YAML, Markdown, JSON. `ls` your company config.
-- **Runtime is SQLite** — tasks, messages, sessions, search. Zero external deps.
+- **Runtime is SQLite** — tasks, messages, sessions, workflow runs, step runs, search. Zero external deps.
 - **Git is the audit trail** — every agent action = commit.
+- **MCP server** — expose Autopilot to Claude Desktop/Code via tasks, agents, search, sessions.
+- **Durable Streams** — append-only session and workflow timelines with live tailing and replay.
+- **Per-agent model picker** — assign different models to different agents via OpenRouter.
 - **One Bun process** — orchestrator + API + dashboard. ~100MB RAM.
+- **Same-origin browser auth** — dashboard traffic stays on one origin; API proxying is handled by Vite in dev and Caddy in Docker/self-hosted setups.
 
 ---
 
@@ -142,7 +159,7 @@ autopilot chat <agent>       # Direct chat with agent
 autopilot dashboard          # Open web dashboard
 autopilot secrets            # Manage API keys
 autopilot auth               # Manage authentication
-autopilot provider login <p> # Authenticate with subscription (claude/codex)
+autopilot provider set <p>   # Configure AI provider (openrouter)
 ```
 
 ---
@@ -153,11 +170,11 @@ autopilot provider login <p> # Authenticate with subscription (claude/codex)
 my-company/
 ├── company.yaml              # Company configuration
 ├── team/
-│   ├── agents.yaml           # AI agent definitions (8 default agents)
-│   ├── humans.yaml           # Human team members
+│   ├── agents/               # AI agent definitions (one file per agent)
+│   ├── humans/               # Human team members (one file per human)
 │   ├── roles.yaml            # RBAC role definitions
-│   ├── schedules.yaml        # Cron-triggered agent jobs
-│   ├── webhooks.yaml         # External webhook integrations
+│   ├── schedules/            # Cron-triggered jobs (one file per schedule)
+│   ├── webhooks/             # External webhook integrations (one file per webhook)
 │   ├── workflows/            # development (12), marketing (7), incident (8)
 │   └── policies/             # Human approval requirements
 ├── knowledge/                # Searchable knowledge base (markdown)
@@ -170,10 +187,12 @@ my-company/
 ├── secrets/                  # Encrypted secrets (runtime)
 ├── projects/                 # Project workspaces (runtime)
 ├── artifacts/                # Generated apps & content (runtime)
-└── .data/autopilot.db        # SQLite (tasks, messages, FTS5, embeddings)
+└── .data/autopilot.db        # SQLite (tasks, messages, workflow_runs, step_runs, FTS5, embeddings)
 ```
 
-> **Note:** Tasks, messages, and activity are stored in SQLite (`.data/autopilot.db`), not as YAML files. Runtime directories are created by `autopilot init`, not from the template.
+> **Note:** Tasks, messages, activity, workflow runs, and step runs are stored in SQLite (`.data/autopilot.db`), not as YAML files. Runtime directories are created by `autopilot init`, not from the template.
+
+> **Config format:** Legacy monolithic files (`team/agents.yaml`, `team/humans.yaml`, `team/webhooks.yaml`, `team/schedules.yaml`) are no longer supported. Use folder-based config only.
 
 ---
 
@@ -197,6 +216,8 @@ curl -fsSL https://raw.githubusercontent.com/questpie/autopilot/main/install.sh 
 - [Getting Started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
 - [Agents & Roles](docs/agents.md)
+- [Internal Workflow Memo](docs/internal/workflow-operating-memo.md)
+- [Config Folder Migration](docs/guides/config-folder-migration.md)
 - [CLI Reference](docs/cli.md)
 - [VPS Deployment](docs/guides/vps-deployment.md)
 - [Docker Guide](docs/guides/docker.md)

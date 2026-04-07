@@ -1,160 +1,91 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { api } from "@/lib/api"
-import { queryKeys } from "@/lib/query-keys"
-import { toast } from "sonner"
-import { useTranslation } from "@/lib/i18n"
+import { api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import type { InferResponseType } from 'hono/client'
+import type { ChatSessionDetail } from './chat.queries'
+import type { MessageAttachment } from './chat.types'
 
-interface MessageData {
-  id: string
-  from: string
-  channel: string
-  at: string
-  content: string
-  mentions: string[]
-  references: string[]
-  reactions: string[]
-  thread: string | null
-  external: boolean
+export interface CreateChatSessionInput {
+	agentId: string
+	message: string
+	attachments?: MessageAttachment[]
+	channelId?: string
 }
 
-export function useSendMessage(channelId: string) {
-  const queryClient = useQueryClient()
-  const { t } = useTranslation()
-
-  return useMutation({
-    mutationFn: async (data: {
-      content: string
-      thread?: string
-      mentions?: string[]
-      references?: string[]
-    }) => {
-      const res = await api.api.channels[":id"].messages.$post({
-        param: { id: channelId },
-        json: {
-          content: data.content,
-          thread: data.thread,
-          mentions: data.mentions,
-          references: data.references,
-        },
-      })
-      if (!res.ok) throw new Error("Failed to send message")
-      return res.json()
-    },
-    onMutate: async (data) => {
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.messages.list({ channel: channelId }),
-      })
-
-      const previousMessages = queryClient.getQueryData(
-        queryKeys.messages.list({ channel: channelId, limit: 50 }),
-      )
-
-      // Optimistic message
-      const optimisticMessage: MessageData = {
-        id: `temp-${Date.now()}`,
-        from: "human",
-        channel: channelId,
-        at: new Date().toISOString(),
-        content: data.content,
-        mentions: data.mentions ?? [],
-        references: data.references ?? [],
-        reactions: [],
-        thread: data.thread ?? null,
-        external: true,
-      }
-
-      queryClient.setQueryData(
-        queryKeys.messages.list({ channel: channelId, limit: 50 }),
-        (old: MessageData[] | undefined) => {
-          if (!old) return [optimisticMessage]
-          return [...old, optimisticMessage]
-        },
-      )
-
-      return { previousMessages }
-    },
-    onError: (_err, _vars, context) => {
-      if (context?.previousMessages) {
-        queryClient.setQueryData(
-          queryKeys.messages.list({ channel: channelId, limit: 50 }),
-          context.previousMessages,
-        )
-      }
-      toast.error(t("chat.send_failed"))
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.messages.list({ channel: channelId }),
-      })
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.channels.root,
-      })
-    },
-  })
+export interface ContinueChatSessionInput {
+	sessionId: string
+	message: string
+	attachments?: MessageAttachment[]
 }
 
-export function useCreateChannel() {
-  const queryClient = useQueryClient()
-  const { t } = useTranslation()
+type CreateChatSessionResult = InferResponseType<(typeof api.api)['chat-sessions']['$post'], 200>
+type ContinueChatSessionResult = InferResponseType<
+	(typeof api.api)['chat-sessions'][':id']['messages']['$post'],
+	200
+>
 
-  return useMutation({
-    mutationFn: async (data: {
-      name: string
-      type?: "group" | "direct" | "broadcast"
-      description?: string
-      members?: Array<{ actor_id: string; actor_type: "human" | "agent" }>
-    }) => {
-      const res = await api.api.channels.$post({
-        json: {
-          name: data.name,
-          type: data.type ?? "group",
-          description: data.description,
-          members: data.members,
-        },
-      })
-      if (!res.ok) throw new Error("Failed to create channel")
-      return res.json()
-    },
-    onSuccess: () => {
-      toast.success(t("chat.channel_created"))
-      void queryClient.invalidateQueries({ queryKey: queryKeys.channels.root })
-    },
-    onError: () => {
-      toast.error(t("common.error"))
-    },
-  })
+function getErrorMessage(body: unknown, fallback: string): string {
+	if (typeof body !== 'object' || body === null || !('error' in body)) {
+		return fallback
+	}
+
+	return typeof body.error === 'string' ? body.error : fallback
 }
 
-export function useManageMembers(channelId: string) {
-  const queryClient = useQueryClient()
-  const { t } = useTranslation()
+export function useCreateChatSession() {
+	const queryClient = useQueryClient()
 
-  return useMutation({
-    mutationFn: async (data: {
-      add?: Array<{
-        actor_id: string
-        actor_type: "human" | "agent"
-        role?: "owner" | "member" | "readonly"
-      }>
-      remove?: string[]
-    }) => {
-      const res = await api.api.channels[":id"].members.$put({
-        param: { id: channelId },
-        json: data,
-      })
-      if (!res.ok) throw new Error("Failed to manage members")
-      return res.json()
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.channels.detail(channelId),
-      })
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.channels.detail(`${channelId}-members`),
-      })
-    },
-    onError: () => {
-      toast.error(t("common.error"))
-    },
-  })
+	return useMutation({
+		mutationFn: async (data: CreateChatSessionInput): Promise<CreateChatSessionResult> => {
+			const res = await api.api['chat-sessions'].$post({
+				json: data,
+			})
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({}))
+				throw new Error(getErrorMessage(body, 'Failed to create session'))
+			}
+			return res.json()
+		},
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.root })
+			void queryClient.invalidateQueries({ queryKey: queryKeys.status.root })
+		},
+	})
+}
+
+export function useContinueChatSession() {
+	const queryClient = useQueryClient()
+
+	return useMutation({
+		mutationFn: async (
+			data: ContinueChatSessionInput,
+		): Promise<ContinueChatSessionResult> => {
+			const res = await api.api['chat-sessions'][':id'].messages.$post({
+				param: { id: data.sessionId },
+				json: { message: data.message, attachments: data.attachments },
+			})
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({}))
+				throw new Error(getErrorMessage(body, 'Failed to continue session'))
+			}
+			return res.json()
+		},
+		onSuccess: (data, variables) => {
+			queryClient.setQueryData(
+				queryKeys.sessions.detail(variables.sessionId),
+				(previous: ChatSessionDetail | undefined) =>
+					previous
+						? {
+								...previous,
+								status: 'running',
+								endedAt: null,
+								streamUrl: data.streamUrl,
+								streamOffset: data.streamOffset,
+							}
+						: previous,
+			)
+			void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.root })
+			void queryClient.invalidateQueries({ queryKey: queryKeys.messages.root })
+		},
+	})
 }

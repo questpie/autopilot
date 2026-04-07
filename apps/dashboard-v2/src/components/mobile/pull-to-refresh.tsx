@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react"
 import { m, useReducedMotion } from "framer-motion"
 import { useDrag } from "@use-gesture/react"
-import { QuestPieSpinner } from "@/components/brand/questpie-spinner"
+import { QUESTPIESpinner } from "@/components/brand/questpie-spinner"
 
 interface PullToRefreshProps {
   children: ReactNode
@@ -79,7 +79,7 @@ export function PullToRefresh({
           transition={{ duration: shouldReduce ? 0 : 0.15 }}
           className="flex items-center justify-center overflow-hidden"
         >
-          <QuestPieSpinner size={24} />
+          <QUESTPIESpinner size={24} />
         </m.div>
       )}
 

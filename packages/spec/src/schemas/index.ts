@@ -1,20 +1,75 @@
-export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema, IntegrationConfigSchema, NotificationChannelSchema } from './company'
-export { AgentSchema, AgentsFileSchema, FsScopeSchema, AgentTriggerSchema, AGENT_PROVIDERS } from './agent'
-export { TaskSchema, TaskHistoryEntrySchema, BlockerSchema, TaskContextSchema } from './task'
-export { MessageSchema } from './message'
-export { ChannelSchema, ChannelMemberSchema, CreateChannelRequestSchema, ChannelMessagesQuerySchema, SendChannelMessageRequestSchema, ManageMembersRequestSchema } from './channel'
-export { WorkflowSchema, WorkflowStepSchema, WorkflowOutputSchema, WorkflowReviewSchema, WorkflowTransitionsSchema, WorkflowChangelogEntrySchema, WorkflowChangePolicySchema } from './workflow'
+export { AgentSchema, FsScopeSchema, AgentTriggerSchema } from './agent'
+export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema, StepOutputSchema, StepInputSchema, StepTransitionSchema } from './workflow'
+export { EnvironmentSchema } from './environment'
+export {
+	SecretRefSchema,
+	LocalSecretRefSchema,
+	SharedSecretRefSchema,
+	SharedSecretScopeSchema,
+	SharedSecretInputSchema,
+	SharedSecretMetadataSchema,
+} from './secret-ref'
+export { CapabilityProfileSchema, ResolvedCapabilitiesSchema } from './capability-profile'
+export { ExternalActionSchema, WebhookActionSchema, ScriptActionSchema, ScriptRunnerSchema, ScriptResultSchema } from './external-action'
+export { ArtifactSchema, ArtifactKindSchema, ArtifactRefKindSchema, RunArtifactSchema } from './artifact'
+export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema } from './company'
+export { CompanyScopeSchema, ProjectScopeSchema, ScopeDefaultsSchema } from './scope'
+export {
+	PackDependencySchema,
+	RegistrySchema,
+	RegistriesFileSchema,
+	PackCategorySchema,
+	PackRequiredEnvSchema,
+	PackManualStepSchema,
+	PackFileSchema,
+	PackManifestSchema,
+	PackLockEntrySchema,
+	PackLockfileSchema,
+} from './pack'
+export { WorkerEventTypeSchema, WorkerEventSchema, RunCompletionSchema } from './worker-event'
 export { ScheduleSchema, SchedulesFileSchema } from './schedule'
-export { WebhookSchema, WebhooksFileSchema, WebhookFilterSchema, WebhookActionSchema, WebhookTaskConditionSchema } from './webhook'
-export { WatcherSchema } from './watcher'
-export { ThresholdSchema } from './threshold'
-export { AgentMemorySchema, MemoryDecisionSchema, MemoryMistakeSchema, MemoryFactsSchema } from './memory'
-export { PinSchema, PinActionSchema, PinMetadataSchema, DashboardGroupSchema, DashboardGroupsFileSchema } from './pin'
-export { SessionMetaSchema, StreamChunkSchema } from './session'
-export { SecretSchema } from './secret'
-export { HumanSchema, HumansFileSchema, NotificationRoutingSchema, QuietHoursSchema } from './human'
-export { TransportConfigSchema, TransportsFileSchema } from './transport'
-export { ApprovalGateSchema, ApprovalGatesFileSchema } from './policy'
-export { RolesFileSchema, RoleDefinitionSchema } from './roles'
-export type { RolesFile } from './roles'
-export { StatusResponseSchema, InboxResponseSchema, ChatRequestSchema, SearchResultSchema, SearchResponseSchema, FsEntrySchema, TaskQuerySchema, ActivityQuerySchema, SearchQuerySchema, TaskRejectRequestSchema, FileWriteRequestSchema, OkResponseSchema } from './api'
+export {
+	HumanSchema,
+	HumansFileSchema,
+	NotificationRoutingSchema,
+	QuietHoursSchema,
+} from './human'
+export {
+	ProviderSchema,
+	ProviderKindSchema,
+	ProviderCapabilitySchema,
+	ProviderEventFilterSchema,
+	HandlerEnvelopeSchema,
+	HandlerResultSchema,
+	IntakeTaskInputSchema,
+	IntakeResultSchema,
+	ConversationResultSchema,
+	NotificationPayloadSchema,
+	NotificationActionSchema,
+} from './provider'
+export {
+	QueryRequestSchema,
+	QueryResultSchema,
+	QueryRowSchema,
+} from './query'
+export {
+	SessionModeSchema,
+	SessionStatusSchema,
+	SessionRowSchema,
+} from './session'
+export {
+	WorkerRegisterRequestSchema,
+	WorkerCapabilitySchema,
+	WorkerRegisterResponseSchema,
+	WorkerHeartbeatRequestSchema,
+	WorkerClaimRequestSchema,
+	ClaimedRunSchema,
+	WorkerClaimResponseSchema,
+	WorkerDeregisterRequestSchema,
+	CreateRunRequestSchema,
+	ContinueRunRequestSchema,
+	CreateJoinTokenRequestSchema,
+	CreateJoinTokenResponseSchema,
+	WorkerEnrollRequestSchema,
+	WorkerEnrollResponseSchema,
+} from './api-contracts'

@@ -18,7 +18,7 @@ export OPENAI_API_KEY=sk-...
 
 ## Authentication
 
-Authentication is always enabled. Dashboard and API access require Better Auth session or API key credentials.
+Authentication is always enabled. API and operator-surface access require Better Auth session or API key credentials.
 
 ## Configure Auth (optional)
 

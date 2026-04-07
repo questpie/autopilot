@@ -56,10 +56,10 @@ function SecretLockedView({ content }: FileViewProps) {
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* LockIcon banner */}
-      <div className="flex items-center gap-3 border border-yellow-500/30 bg-yellow-500/5 p-4">
-        <LockIcon size={20} className="shrink-0 text-yellow-500" />
+      <div className="flex items-center gap-3 border border-warning/30 bg-warning/5 p-4">
+        <LockIcon size={20} className="shrink-0 text-warning" />
         <div className="flex flex-col gap-0.5">
-          <span className="font-heading text-xs font-medium text-yellow-500">
+          <span className="font-heading text-xs font-medium text-warning">
             {t("files.secret_locked_title")}
           </span>
           <span className="text-[10px] text-muted-foreground">
@@ -79,7 +79,7 @@ function SecretLockedView({ content }: FileViewProps) {
             key={secret.key}
             className="flex items-center gap-3 border border-border p-3"
           >
-            <ShieldCheckIcon size={16} className="shrink-0 text-green-500" />
+            <ShieldCheckIcon size={16} className="shrink-0 text-success" />
             <div className="flex flex-1 flex-col gap-0.5">
               <span className="font-mono text-xs font-medium text-foreground">
                 {secret.key}

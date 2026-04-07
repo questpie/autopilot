@@ -11,13 +11,9 @@ async function getSearchServer() {
 				import('@/lib/source'),
 				import('fumadocs-core/search/server'),
 			])
-
-			return createFromSource(source, {
-				language: 'english',
-			})
+			return createFromSource(source, { language: 'english' })
 		})()
 	}
-
 	return searchServerPromise
 }
 
@@ -26,17 +22,7 @@ export const Route = createFileRoute('/api/search')({
 		handlers: {
 			GET: async ({ request }) => {
 				const server = await getSearchServer()
-				const response = await server.GET(request)
-				const headers = new Headers(response.headers)
-				headers.set(
-					'Cache-Control',
-					'public, max-age=300, s-maxage=300, stale-while-revalidate=3600',
-				)
-				return new Response(response.body, {
-					status: response.status,
-					statusText: response.statusText,
-					headers,
-				})
+				return server.GET(request)
 			},
 		},
 	},

@@ -1,95 +1,127 @@
 import { z } from 'zod'
+import { ExternalActionSchema } from './external-action'
 
-export const WorkflowOutputSchema = z.object({
-	type: z.string(),
-	path_template: z.string().optional(),
-	name_template: z.string().optional(),
-	description: z.string().optional(),
-	target: z.string().optional(),
-	labels: z.array(z.string()).optional(),
+/** Execution targeting constraints — where a run should execute. */
+export const ExecutionTargetSchema = z.object({
+	/** Hard pin: only this worker may claim the run. */
+	required_worker_id: z.string().optional(),
+	/** Runtime the run must execute on (e.g. 'claude-code'). */
+	required_runtime: z.string().optional(),
+	/** Tags (runtime names, model names, explicit tags) the claiming worker must advertise. */
+	required_worker_tags: z.array(z.string()).default([]),
+	/** If true, relax runtime/tag matching when no exact match is available. Default true. */
+	allow_fallback: z.boolean().default(true),
+	/** Environment to resolve tags and secrets from. */
 	environment: z.string().optional(),
 })
 
-export const WorkflowReviewSchema = z.object({
-	reviewers_roles: z.array(z.string()).optional(),
-	min_approvals: z.number().int().min(1).default(1),
-	on_reject: z.string().default('revise'),
-	on_reject_max_rounds: z.number().int().optional(),
+// ─── Step Output Declaration ──────────────────────────────────────────────
+
+/**
+ * A tag declaration — describes a named field the agent should produce.
+ * All tags have the same shape. `outcome` and `artifacts` are just special names
+ * that the engine interprets (routing + registration).
+ */
+const StepOutputTagSchema = z.object({
+	/** What this tag represents (shown to AI as placeholder/description). */
+	description: z.string(),
+	/** Optional enumerated values. If set, the AI must pick one. */
+	values: z.record(z.string()).optional(),
 })
 
-export const WorkflowTransitionsSchema = z.union([
-	z.string(),
-	z.record(z.string(), z.string()),
-])
+/** Artifact declaration — engine registers these through the artifact system. */
+const StepOutputArtifactSchema = z.object({
+	kind: z.string(),
+	title: z.string(),
+	description: z.string(),
+})
+
+/**
+ * Declarative output contract for a workflow step.
+ * Engine auto-generates structured-output suffix from this.
+ *
+ * Everything is a tag inside <AUTOPILOT_RESULT>.
+ * - `artifacts` is special: engine registers them through the artifact system
+ * - All other tags are generic named fields matched by transition rules
+ *
+ * Any tag can have `values` (constrained enum) or just `description` (freeform).
+ */
+export const StepOutputSchema = z
+	.object({
+		artifacts: z.array(StepOutputArtifactSchema).optional(),
+	})
+	.catchall(StepOutputTagSchema)
+
+// ─── Step Input Declaration ───────────────────────────────────────────────
+
+/** Declarative input for a workflow step — what context should be forwarded from prior steps. */
+export const StepInputSchema = z.object({
+	/** Artifact kinds to look up from the task's artifact history and include as input context. */
+	artifacts: z.array(z.string()).optional(),
+})
+
+// ─── Step Transitions ────────────────────────────────────────────────────
+
+/**
+ * A single transition rule. Evaluated in order — first match wins.
+ * All fields in `when` must match the run's structured output for the transition to fire.
+ */
+export const StepTransitionSchema = z.object({
+	/** Field-value pairs to match against structured output. All must match. */
+	when: z.record(z.string()),
+	/** Target step ID to jump to. */
+	goto: z.string(),
+})
+
+// ─── Workflow Step ────────────────────────────────────────────────────────
 
 export const WorkflowStepSchema = z.object({
 	id: z.string(),
 	name: z.string().optional(),
-	type: z.enum(['agent', 'human_gate', 'terminal', 'sub_workflow']).default('agent'),
-	assigned_role: z.string().optional(),
-	assigned_to: z.string().optional(),
-	gate: z.string().optional(),
-	description: z.string().default(''),
+	type: z.enum(['agent', 'human_approval', 'wait_for_children', 'done']),
+	/** The agent that executes this step. Required for 'agent' steps. */
+	agent_id: z.string().optional(),
+	/** Instructions passed to the agent run. */
+	instructions: z.string().optional(),
+	/** Who can approve. Only meaningful for 'human_approval' steps. */
+	approvers: z.array(z.string()).optional(),
+	/** Default next step ID. Falls back to array order if omitted. */
+	next: z.string().optional(),
 
-	inputs: z
-		.array(
-			z.object({
-				from_step: z.string(),
-				type: z.string().optional(),
-			}),
-		)
-		.optional(),
+	// ─── Control flow ─────────────────────────────────────────────────
+	/** Ordered transition rules. First match wins. Falls back to `next` → array order. */
+	transitions: z.array(StepTransitionSchema).optional(),
+	on_approve: z.string().optional(),
+	on_reply: z.string().optional(),
+	on_reject: z.string().optional(),
 
-	outputs: z.array(WorkflowOutputSchema).optional(),
-	review: WorkflowReviewSchema.optional(),
-	auto_execute: z.boolean().default(false),
-	can_skip_if: z.string().optional(),
-	can_request_help_from: z.array(z.string()).optional(),
+	// ─── Wait-for-children join policy ────────────────────────────────
+	/** Relation type to evaluate. Defaults to 'decomposes_to'. Only for wait_for_children. */
+	join_relation_type: z.string().default('decomposes_to'),
+	/** Join condition. Only for wait_for_children. */
+	join_policy: z.enum(['all_done', 'any_failed']).default('all_done'),
+	/** Step to route to when join condition is met. Only for wait_for_children. */
+	on_met: z.string().optional(),
+	/** Step to route to when a child fails (before all_done). Only for wait_for_children. */
+	on_failed: z.string().optional(),
 
-	expected_duration: z.string().optional(),
-	timeout: z.string().optional(),
-	timeout_action: z.string().optional(),
+	// ─── Step I/O declarations ────────────────────────────────────────
+	/** Declarative output contract. Engine auto-generates structured-output suffix. */
+	output: StepOutputSchema.optional(),
+	/** Declarative input. Engine forwards specified artifacts as context. */
+	input: StepInputSchema.optional(),
 
-	transitions: z.record(z.string(), z.union([z.string(), z.record(z.string())])).default({}),
-
-	surface: z.record(z.string(), z.boolean()).optional(),
-
-	actions: z
-		.array(
-			z.union([
-				z.object({ move_task_to: z.string() }),
-				z.object({ notify: z.array(z.string()) }),
-				z.object({ pin_to_board: z.record(z.string()) }),
-				z.object({ trigger_index_rebuild: z.string() }),
-			]),
-		)
-		.optional(),
-
-	terminal: z.boolean().optional(),
-})
-
-export const WorkflowChangelogEntrySchema = z.object({
-	version: z.number().int(),
-	date: z.string(),
-	by: z.string(),
-	change: z.string(),
-	proposed_by: z.string().optional(),
-	human_approved: z.boolean().optional(),
-})
-
-export const WorkflowChangePolicySchema = z.object({
-	propose: z.array(z.string()).default(['any_agent']),
-	evaluate: z.array(z.string()).default(['ceo']),
-	apply: z.array(z.string()).default(['ceo']),
-	human_approval_required_for: z.array(z.string()).default([]),
+	/** Execution targeting hints for the run created by this step. */
+	targeting: ExecutionTargetSchema.optional(),
+	/** External actions to execute after the step's run completes. */
+	actions: z.array(ExternalActionSchema).default([]),
+	/** Capability profile IDs active for this step. Extends agent-level profiles (deduplicated). */
+	capability_profiles: z.array(z.string()).default([]),
 })
 
 export const WorkflowSchema = z.object({
 	id: z.string(),
 	name: z.string(),
-	version: z.number().int().default(1),
 	description: z.string().default(''),
-	change_policy: WorkflowChangePolicySchema.default({}),
-	changelog: z.array(WorkflowChangelogEntrySchema).default([]),
 	steps: z.array(WorkflowStepSchema),
 })

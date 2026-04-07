@@ -7,11 +7,10 @@ export const ScheduleSchema = z.object({
 	description: z.string().default(''),
 	create_task: z.boolean().default(false),
 	task_template: z.record(z.string()).optional(),
-	timeout: z.string().default('5m'),
-	on_failure: z.enum(['alert_human', 'retry', 'ignore']).default('alert_human'),
+	workflow: z.string().optional(),
+	workflow_inputs: z.record(z.string(), z.unknown()).optional(),
 	enabled: z.boolean().default(true),
 })
 
-export const SchedulesFileSchema = z.object({
-	schedules: z.array(ScheduleSchema),
-})
+/** @deprecated Each file is now a single schedule. Use ScheduleSchema directly. */
+export const SchedulesFileSchema = ScheduleSchema

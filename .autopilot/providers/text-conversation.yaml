@@ -1,0 +1,22 @@
+id: text-conversation
+name: Text Conversation (Example)
+kind: conversation_channel
+handler: handlers/text-conversation.ts
+description: >
+  Generic text conversation provider with inbound + outbound support.
+  Inbound: accepts { conversation_id, thread_id?, text } — /approve, /reject, text→reply.
+  Outbound: receives notify.send with bound conversation context.
+capabilities:
+  - op: conversation.ingest
+  - op: notify.send
+events:
+  - types: [run_completed]
+    statuses: [failed, completed]
+  - types: [task_changed]
+    statuses: [blocked, needs_approval]
+config: {}
+secret_refs:
+  - name: auth_secret
+    source: env
+    key: AUTOPILOT_CONVERSATION_SECRET
+    description: Shared secret for authenticating inbound conversation webhooks
