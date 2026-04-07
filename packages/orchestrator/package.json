@@ -1,6 +1,6 @@
 {
 	"name": "@questpie/autopilot-orchestrator",
-	"version": "2.1.0-canary.0",
+	"version": "2.1.0-canary.1",
 	"private": false,
 	"type": "module",
 	"description": "QUESTPIE Autopilot orchestrator — state machine + API + MCP + observability",
@@ -23,7 +23,7 @@
 		"@better-auth/drizzle-adapter": "^1.5.6",
 		"@hono/standard-validator": "^0.2.2",
 		"@libsql/client": "^0.17.2",
-		"@questpie/autopilot-spec": "1.1.0-canary.0",
+		"@questpie/autopilot-spec": "1.1.0-canary.1",
 		"@t3-oss/env-core": "^0.13.8",
 		"ai": "^4.0.0",
 		"better-auth": "^1.5.6",
