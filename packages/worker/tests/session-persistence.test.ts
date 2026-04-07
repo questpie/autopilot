@@ -49,6 +49,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)
@@ -88,6 +89,7 @@ exit 1
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)
@@ -142,6 +144,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: 'sess-original-456',
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)
@@ -175,6 +178,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: 'sess-evt-test',
       workDir: null,
+      model: null,
     }
 
     await adapter.start(context)
@@ -208,6 +212,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)

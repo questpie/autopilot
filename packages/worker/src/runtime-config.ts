@@ -36,6 +36,13 @@ export interface RuntimeConfig {
   maxTurns?: number
   /** Explicit tags for this runtime (e.g. 'gpu', 'staging'). Merged with worker-level tags. */
   tags?: string[]
+  /**
+   * Maps canonical model names to runtime-specific model strings.
+   * E.g. { 'claude-sonnet-4': 'claude-sonnet-4-20250514' } for claude-code,
+   * or { 'claude-sonnet-4': 'anthropic/claude-sonnet-4-5' } for opencode.
+   * If a model is not in the map, the canonical name is passed through as-is.
+   */
+  modelMap?: Record<string, string>
 }
 
 /** Result of resolving a RuntimeConfig — validated and ready to use. */
@@ -189,6 +196,17 @@ function createAdapter(config: RuntimeConfig, resolvedBinaryPath: string): Runti
           `Supported runtimes: claude-code, codex, opencode`,
       )
   }
+}
+
+/**
+ * Resolve a canonical model name to the runtime-specific model string.
+ * If the modelMap contains the canonical model, returns the mapped value.
+ * Otherwise passes the canonical model through as-is.
+ * Returns null if no model is provided.
+ */
+export function resolveModel(config: RuntimeConfig, canonicalModel: string | null | undefined): string | null {
+  if (!canonicalModel) return null
+  return config.modelMap?.[canonicalModel] ?? canonicalModel
 }
 
 function deriveCapability(config: RuntimeConfig): WorkerCapability {

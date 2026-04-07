@@ -78,6 +78,11 @@ export class CodexAdapter implements RuntimeAdapter {
     args.push('--ask-for-approval', 'never')
     args.push('--sandbox', sandbox)
 
+    // Model override (canonical model resolved by worker modelMap)
+    if (context.model) {
+      args.push('--model', context.model)
+    }
+
     // Resume vs fresh
     if (isResume) {
       args.push('resume', context.runtimeSessionRef!)

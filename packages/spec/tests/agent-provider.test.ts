@@ -41,14 +41,14 @@ describe('AgentSchema current runtime-independent shape', () => {
 		expect(() => AgentSchema.parse({ ...validAgent, id: 'Peter' })).toThrow(ZodError)
 	})
 
-	test('strips legacy provider-style fields', () => {
+	test('accepts provider as canonical field, strips other legacy fields', () => {
 		const result = AgentSchema.parse({
 			...validAgent,
-			provider: 'tanstack-ai',
+			provider: 'anthropic',
 			web_search: true,
 		})
 
-		expect((result as Record<string, unknown>).provider).toBeUndefined()
+		expect(result.provider).toBe('anthropic')
 		expect((result as Record<string, unknown>).web_search).toBeUndefined()
 	})
 })

@@ -43,6 +43,13 @@
       "when": 1775500655818,
       "tag": "0005_chilly_mockingbird",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1775555000000,
+      "tag": "0006_runtime_selection",
+      "breakpoints": true
     }
   ]
 }

@@ -130,7 +130,7 @@ AUTOPILOT_API_KEY = "worker-secret"
 - No `--max-turns` flag exists — runs continue until the model decides to stop
 - JSONL event types differ from Claude Code's JSON output format
 - Token usage is reported via `turn.completed` events, not a single summary
-- Model override (`--model`) is available but not wired through the orchestrator yet (deferred to Pass 26.1)
+- Model override is wired: set `model` in agent YAML and the worker passes `--model` to Codex
 
 ---
 
@@ -212,7 +212,7 @@ Key differences from Claude Code MCP format:
 - V1 event streaming is start + completion only (no per-tool granularity)
 - Token usage reporting may not be available from all providers
 - Session persistence behavior may vary — verify with upstream docs
-- Model override (`--model provider/model`) is available but not wired through the orchestrator yet (deferred to Pass 26.1)
+- Model override is wired: set `model` in agent YAML and the worker passes `--model` to OpenCode (use `modelMap` for provider/model format conversion)
 
 ---
 
@@ -229,12 +229,43 @@ autopilot worker start --url http://orchestrator:7778 --token <token> --runtime 
 autopilot worker start --url http://orchestrator:7778 --token <token> --runtime opencode
 ```
 
+### Model selection (Pass 26.1)
+
+Agent YAML can specify a canonical model, provider, and variant:
+
+```yaml
+# .autopilot/agents/dev.yaml
+id: dev
+name: Developer
+role: developer
+model: claude-sonnet-4          # canonical model name
+provider: anthropic              # optional — carried as intent, not yet used for claim routing
+variant: extended-thinking       # optional — behavioral hint
+```
+
+The orchestrator carries these through to the run. The worker resolves the canonical model to a runtime-specific model string via `modelMap` in runtime config.
+
+If no model is set on the agent, the runtime default is used (no `--model` flag passed). If a model is set but no `modelMap` entry exists, the canonical model name is passed through as-is.
+
+**V1 note:** `modelMap` is a programmatic config field on `RuntimeConfig`. The `autopilot worker start` CLI does not expose it as a flag — CLI-started workers pass canonical model names through directly. `modelMap` is available when constructing `WorkerConfig` programmatically (e.g. in custom worker scripts or tests). A CLI/config-file surface may be added in a future pass.
+
+```typescript
+// Programmatic worker config example
+const config: RuntimeConfig = {
+  runtime: 'opencode',
+  modelMap: {
+    'claude-sonnet-4': 'anthropic/claude-sonnet-4-5',
+    'gpt-4o': 'openai/gpt-4o',
+  }
+}
+```
+
 ### What is not implemented yet
 
-- **Runtime selection pipeline** (Pass 26.1): Workflow targeting constraints can already require a specific runtime on a run, but the full agent-level model/provider/variant routing pipeline is deferred. Workers advertise their runtime at enrollment; targeting tags can restrict which workers claim a run.
-- **Model override from agent config**: Agent YAML `model` field is parsed but not forwarded to the runtime adapter CLI flags.
 - **Per-runtime capability sandboxing**: Beyond prompt-level hints, there is no strict capability subsetting per runtime.
 - **Cross-runtime parity**: Claude Code has richer event streaming and MCP injection than Codex/OpenCode.
+- **Managed model catalog**: No central model registry or automatic model availability checks.
+- **Variant-specific adapter behavior**: `variant` is carried through the contract but does not yet change adapter flags.
 
 ---
 
@@ -276,7 +307,7 @@ Doctor does **not** check:
 | MCP injection | CLI flag (`--mcp-config`) | Backup/replace `.codex/config.toml` | Backup/replace `opencode.jsonc` |
 | Session resume | `--resume <id>` | `codex exec resume <id>` | `--continue --session <id>` |
 | Event granularity | Full JSON | JSONL stream | Start + completion |
-| Model override | Not wired yet | Available (`--model`) | Available (`-m provider/model`) |
+| Model override | `--model` via agent config | `--model` via agent config | `--model` via agent config + modelMap |
 | Maturity | Production-tested | V1 functional | V1 functional |
 
 See also:

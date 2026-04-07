@@ -3,7 +3,7 @@ import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
 import { executeActions, mergeOutputs, type ActionsMergedResult } from './actions/webhook'
 import { collectPreviewFiles } from './preview'
 import { WorkspaceManager, type WorkspaceInfo } from './workspace'
-import { resolveRuntime, type RuntimeConfig, type ResolvedRuntime } from './runtime-config'
+import { resolveRuntime, resolveModel, type RuntimeConfig, type ResolvedRuntime } from './runtime-config'
 import { loadCredential, saveCredential, type StoredCredential } from './credentials'
 import { startWorkerApi, type WorkerApiConfig, type WorkerApiServer } from './api'
 
@@ -288,6 +288,12 @@ export class AutopilotWorker {
       }
     }
 
+    // Resolve canonical model through worker-local modelMap
+    const runtimeConfig = this.resolvedRuntimes.find((r) => r.config.runtime === run.runtime)?.config
+    const resolvedModel = runtimeConfig
+      ? resolveModel(runtimeConfig, run.model)
+      : (run.model ?? null)
+
     const context: RunContext = {
       runId: run.id,
       agentId: run.agent_id,
@@ -302,6 +308,7 @@ export class AutopilotWorker {
       runtimeSessionRef: run.runtime_session_ref ?? null,
       workDir: ws?.path ?? null,
       capabilities: run.resolved_capabilities ?? null,
+      model: resolvedModel,
     }
 
     const isResume = !!run.resumed_from_run_id

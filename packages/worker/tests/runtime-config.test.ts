@@ -166,6 +166,7 @@ exit 0
       apiKey: '',
       runtimeSessionRef: null,
       workDir: tmpDir,
+      model: null,
     })
 
     expect(result!.summary).toContain('persistence-off')

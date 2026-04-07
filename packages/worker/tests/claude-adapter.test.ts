@@ -47,6 +47,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)
@@ -89,6 +90,7 @@ exit 0
       apiKey: 'bad-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     await expect(adapter.start(context)).rejects.toThrow('API key invalid')
@@ -131,6 +133,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)
@@ -161,6 +164,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)
@@ -192,6 +196,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     // Start in background and then stop
@@ -233,6 +238,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)
@@ -266,6 +272,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)
@@ -294,6 +301,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)

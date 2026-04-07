@@ -80,7 +80,7 @@ const DDL = [
 	)`,
 	`CREATE TABLE runs (
 		id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, task_id TEXT, worker_id TEXT,
-		runtime TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+		runtime TEXT NOT NULL, model TEXT, provider TEXT, variant TEXT, status TEXT NOT NULL DEFAULT 'pending',
 		initiated_by TEXT, instructions TEXT, summary TEXT,
 		tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0,
 		error TEXT, started_at TEXT, ended_at TEXT, created_at TEXT NOT NULL,
@@ -195,6 +195,49 @@ describe('WorkflowEngine', () => {
 		expect(run!.runtime).toBe('claude-code')
 		expect(run!.status).toBe('pending')
 		expect(run!.instructions).toBe('Analyze and plan')
+	})
+
+	test('intake propagates agent model/provider/variant to run', async () => {
+		const agentsWithModel: Agent[] = [
+			{ id: 'ceo', name: 'CEO', role: 'meta', description: 'Intake', model: 'claude-sonnet-4', provider: 'anthropic', variant: 'extended-thinking', triggers: [] },
+			{ id: 'dev', name: 'Dev', role: 'developer', description: 'Dev', triggers: [] },
+			{ id: 'reviewer', name: 'Reviewer', role: 'reviewer', description: 'Review', triggers: [] },
+		]
+		const engine = new WorkflowEngine(
+			makeConfig({ agents: new Map(agentsWithModel.map((a) => [a.id, a])) }),
+			taskService,
+			runService,
+		)
+		const task = await taskService.create({
+			id: `task-model-${Date.now()}`,
+			title: 'Test model propagation',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		const result = await engine.intake(task!.id)
+		expect(result!.runId).not.toBeNull()
+
+		const run = await runService.get(result!.runId!)
+		expect(run!.model).toBe('claude-sonnet-4')
+		expect(run!.provider).toBe('anthropic')
+		expect(run!.variant).toBe('extended-thinking')
+	})
+
+	test('intake creates run with null model when agent has no model', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const task = await taskService.create({
+			id: `task-nomodel-${Date.now()}`,
+			title: 'Test no model',
+			type: 'feature',
+			created_by: 'test',
+		})
+
+		const result = await engine.intake(task!.id)
+		const run = await runService.get(result!.runId!)
+		expect(run!.model).toBeNull()
+		expect(run!.provider).toBeNull()
+		expect(run!.variant).toBeNull()
 	})
 
 	test('run completion advances to next workflow step', async () => {

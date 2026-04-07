@@ -72,6 +72,11 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
 
     args.push('-p', prompt, '--output-format', 'json')
 
+    // Model override (canonical model resolved by worker modelMap)
+    if (context.model) {
+      args.push('--model', context.model)
+    }
+
     // Session persistence
     if (persistence === 'off') {
       args.push('--no-session-persistence')

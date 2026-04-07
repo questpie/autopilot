@@ -66,11 +66,17 @@ const queries = new Hono<AppEnv>()
 				carryoverSummary,
 			)
 
+			// Resolve agent model/provider/variant from authored config
+			const agentConfig = authoredConfig.agents.get(agentId)
+
 			const runId = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
 			await runService.create({
 				id: runId,
 				agent_id: agentId,
 				runtime: body.runtime ?? authoredConfig.defaults.runtime,
+				model: agentConfig?.model,
+				provider: agentConfig?.provider,
+				variant: agentConfig?.variant,
 				initiated_by: initiator,
 				instructions,
 				runtime_session_ref: runtimeSessionRef,

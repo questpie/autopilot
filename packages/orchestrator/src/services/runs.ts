@@ -24,6 +24,9 @@ export class RunService {
 		agent_id: string
 		task_id?: string
 		runtime: string
+		model?: string
+		provider?: string
+		variant?: string
 		initiated_by?: string
 		instructions?: string
 		resumed_from_run_id?: string
@@ -211,6 +214,9 @@ export class RunService {
 			agent_id: original.agent_id,
 			task_id: original.task_id,
 			runtime: original.runtime,
+			model: original.model,
+			provider: original.provider,
+			variant: original.variant,
 			status: 'pending',
 			initiated_by: input.initiated_by ?? original.initiated_by,
 			instructions: input.message,

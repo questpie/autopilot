@@ -107,7 +107,7 @@ describe('bootstrap', () => {
 		await dbResult.raw.execute(`
 			CREATE TABLE IF NOT EXISTS runs (
 				id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, task_id TEXT, worker_id TEXT,
-				runtime TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+				runtime TEXT NOT NULL, model TEXT, provider TEXT, variant TEXT, status TEXT NOT NULL DEFAULT 'pending',
 				initiated_by TEXT, instructions TEXT, summary TEXT,
 				tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0,
 				error TEXT, started_at TEXT, ended_at TEXT, created_at TEXT NOT NULL,

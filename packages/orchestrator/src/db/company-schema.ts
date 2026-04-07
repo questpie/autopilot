@@ -54,6 +54,9 @@ export const runs = sqliteTable(
 		task_id: text('task_id'),
 		worker_id: text('worker_id'),
 		runtime: text('runtime').notNull(), // claude-code | codex | opencode | direct-api
+		model: text('model'), // canonical model intent (e.g. 'claude-sonnet-4')
+		provider: text('provider'), // canonical provider hint (e.g. 'anthropic')
+		variant: text('variant'), // behavioral variant hint (e.g. 'extended-thinking')
 		status: text('status').notNull().default('pending'), // pending | claimed | running | completed | failed
 		initiated_by: text('initiated_by'),
 		instructions: text('instructions'),

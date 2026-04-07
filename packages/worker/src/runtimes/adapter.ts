@@ -27,6 +27,8 @@ export interface RunContext {
   workDir: string | null
   /** Resolved capability intent from merged agent + step profiles. */
   capabilities: ResolvedCapabilities | null
+  /** Resolved model for this run (after worker-local modelMap). Null = use runtime default. */
+  model: string | null
 }
 
 /** Result returned by a runtime adapter after completing. */

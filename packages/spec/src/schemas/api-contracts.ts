@@ -60,6 +60,11 @@ export const ClaimedRunSchema = z.object({
 	runtime: z.string(),
 	status: z.string(),
 
+	// ─── Model selection intent (canonical, not runtime-specific) ──
+	model: z.string().nullable().optional(),
+	provider: z.string().nullable().optional(),
+	variant: z.string().nullable().optional(),
+
 	// ─── Task context ──────────────────────────────────────────────
 	task_title: z.string().nullable().optional(),
 	task_description: z.string().nullable().optional(),
@@ -120,6 +125,12 @@ export const CreateRunRequestSchema = z.object({
 	agent_id: z.string().min(1),
 	task_id: z.string().optional(),
 	runtime: z.string().min(1).default('claude-code'),
+	/** Canonical model intent (e.g. 'claude-sonnet-4'). Resolved to runtime-specific flag by worker. */
+	model: z.string().optional(),
+	/** Canonical provider hint (e.g. 'anthropic'). Carried as intent; not yet used for claim routing. */
+	provider: z.string().optional(),
+	/** Behavioral variant hint (e.g. 'extended-thinking'). */
+	variant: z.string().optional(),
 	initiated_by: z.string().optional(),
 	instructions: z.string().optional(),
 	/** For continuation runs: the run being continued. */

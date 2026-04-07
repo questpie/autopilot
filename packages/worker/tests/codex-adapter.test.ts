@@ -25,6 +25,7 @@ const BASIC_CONTEXT: RunContext = {
   apiKey: 'test-key',
   runtimeSessionRef: null,
   workDir: null,
+  model: null,
 }
 
 describe('CodexAdapter', () => {

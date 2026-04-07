@@ -68,6 +68,11 @@ export class OpenCodeAdapter implements RuntimeAdapter {
 
     const args: string[] = ['run']
 
+    // Model override (canonical model resolved by worker modelMap, provider/model format)
+    if (context.model) {
+      args.push('--model', context.model)
+    }
+
     // Resume: --continue --session <id> before the prompt
     if (isResume) {
       args.push('--continue', '--session', context.runtimeSessionRef!)

@@ -75,6 +75,7 @@ exit 0
       apiKey: 'test-key-123',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)
@@ -104,6 +105,7 @@ exit 0
       apiKey: 'test-key',
       runtimeSessionRef: null,
       workDir: null,
+      model: null,
     }
 
     const result = await adapter.start(context)

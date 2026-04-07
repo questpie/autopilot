@@ -462,6 +462,9 @@ export class WorkflowEngine {
 				const targeting = this.resolveTargeting(step, agentId)
 				const runtime = step.targeting?.required_runtime ?? this.defaultRuntime
 
+				// Resolve agent model/provider/variant from authored config
+				const agentConfig = this.config.agents.get(agentId)
+
 				// Build instructions: [context] + [step instructions] + [human reply] + [output suffix]
 				const instructions = await this.buildInstructions(task, step, ctx)
 
@@ -471,6 +474,9 @@ export class WorkflowEngine {
 					agent_id: agentId,
 					task_id: task.id,
 					runtime,
+					model: agentConfig?.model,
+					provider: agentConfig?.provider,
+					variant: agentConfig?.variant,
 					initiated_by: 'workflow-engine',
 					instructions,
 					targeting,

@@ -17,6 +17,10 @@ export const AgentSchema = z.object({
 	role: z.string(),
 	description: z.string().default(''),
 	model: z.string().optional(),
+	/** Canonical provider hint (e.g. 'anthropic', 'openai'). Carried as intent; not yet used for claim routing. */
+	provider: z.string().optional(),
+	/** Behavioral variant hint (e.g. 'extended-thinking'). Carried as canonical intent; variant-specific adapter behavior is deferred. */
+	variant: z.string().optional(),
 	fs_scope: FsScopeSchema.optional(),
 	triggers: z.array(AgentTriggerSchema).default([]),
 	/** Capability profile IDs active for all runs by this agent. Step-level profiles extend these. */
