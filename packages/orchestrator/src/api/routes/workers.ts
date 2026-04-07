@@ -126,11 +126,24 @@ const workers = new Hono<AppEnv>()
 		// Look up task context if task_id exists
 		let taskTitle: string | null = null
 		let taskDescription: string | null = null
+		let parentBranch: string | null = null
 		if (run.task_id) {
 			const task = await taskService.get(run.task_id)
 			if (task) {
 				taskTitle = task.title
 				taskDescription = task.description ?? null
+			}
+
+			// Resolve parent branch: if this task has a parent (via task_relations),
+			// the parent's worktree branch is autopilot/{parentTaskId}
+			const { taskGraphService } = c.get('services')
+			if (taskGraphService) {
+				const parents = await taskGraphService.listParents(run.task_id)
+				if (parents.length > 0) {
+					const parentTaskId = parents[0]!.id
+					const safeId = parentTaskId.replace(/[^a-zA-Z0-9_-]/g, '_')
+					parentBranch = `autopilot/${safeId}`
+				}
 			}
 		}
 
@@ -179,6 +192,7 @@ const workers = new Hono<AppEnv>()
 					secret_refs: secretRefs,
 					resolved_shared_secrets: resolvedSharedSecrets,
 					resolved_capabilities: resolvedCapabilities,
+					parent_branch: parentBranch,
 				},
 				lease_id: leaseId,
 			},
@@ -237,13 +251,18 @@ function splitTargeting(raw: string | null | undefined): SplitTargetingResult {
 	let parsed: unknown
 	try {
 		parsed = JSON.parse(raw)
-	} catch {
+	} catch (err) {
+		console.warn('[workers/claim] malformed targeting JSON — treating as empty:', err instanceof Error ? err.message : String(err))
 		return EMPTY_TARGETING
 	}
 
 	const result = TargetingBlobSchema.safeParse(parsed)
 	if (!result.success) {
-		return { ...EMPTY_TARGETING, constraints: parsed as Record<string, unknown> }
+		// Valid JSON but not matching schema — pass through as opaque constraints
+		if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+			return { ...EMPTY_TARGETING, constraints: Object.fromEntries(Object.entries(parsed)) }
+		}
+		return EMPTY_TARGETING
 	}
 
 	const { actions, secret_refs, resolved_capabilities, ...rest } = result.data

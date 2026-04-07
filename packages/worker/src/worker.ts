@@ -272,7 +272,9 @@ export class AutopilotWorker {
       try {
         ws = await this.workspace.acquire({
           runId: run.id,
+          taskId: run.task_id,
           resumedFromRunId: run.resumed_from_run_id,
+          baseBranch: run.parent_branch,
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -364,7 +366,7 @@ export class AutopilotWorker {
       })
 
       if (ws && this.workspace) {
-        await this.workspace.release({ runId: run.id, resumable })
+        await this.workspace.release({ runId: run.id, taskId: run.task_id, resumable })
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err)
@@ -372,7 +374,7 @@ export class AutopilotWorker {
       await this.completeRun(run.id, { status: 'failed', error: errorMsg })
 
       if (ws && this.workspace) {
-        await this.workspace.release({ runId: run.id, resumable: false })
+        await this.workspace.release({ runId: run.id, taskId: run.task_id, resumable: false })
       }
     }
   }

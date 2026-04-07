@@ -100,6 +100,10 @@ export const ClaimedRunSchema = z.object({
 	// ─── Capability intent ──────────────────────────────────────────
 	/** Resolved capability set for this run (merged agent + step profiles). */
 	resolved_capabilities: ResolvedCapabilitiesSchema.optional(),
+
+	// ─── Parent branch hint ─────────────────────────────────────────
+	/** When a child task exists, the parent task's branch so worker can branch from it. */
+	parent_branch: z.string().nullable().optional(),
 })
 
 export const WorkerClaimResponseSchema = z.object({

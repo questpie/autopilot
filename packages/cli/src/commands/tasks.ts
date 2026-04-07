@@ -69,7 +69,10 @@ const tasksCmd = new Command('tasks')
 			console.log('')
 			console.log(separator())
 			const blockedCount = tasks.filter((t) => t.status === 'blocked').length
-			console.log(dim(`${tasks.length} task(s)`) + (blockedCount > 0 ? `  ${badge(`${blockedCount} blocked`, 'yellow')}` : ''))
+			console.log(
+				dim(`${tasks.length} task(s)`) +
+					(blockedCount > 0 ? `  ${badge(`${blockedCount} blocked`, 'yellow')}` : ''),
+			)
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))
 			process.exit(1)
@@ -110,7 +113,9 @@ tasksCmd.addCommand(
 				console.log(section(task.title))
 				console.log('')
 				console.log(`  ${dim('ID:')}          ${task.id}`)
-				console.log(`  ${dim('Status:')}      ${badge(task.status, task.status === 'blocked' ? 'red' : task.status === 'done' ? 'green' : 'cyan')}`)
+				console.log(
+					`  ${dim('Status:')}      ${badge(task.status, task.status === 'blocked' ? 'red' : task.status === 'done' ? 'green' : 'cyan')}`,
+				)
 				console.log(`  ${dim('Type:')}        ${task.type}`)
 				if (task.priority) console.log(`  ${dim('Priority:')}    ${task.priority}`)
 				console.log(`  ${dim('Assigned:')}    ${task.assigned_to ?? 'unassigned'}`)
@@ -129,8 +134,11 @@ tasksCmd.addCommand(
 					} else {
 						console.log('')
 						console.log(`  ${badge('WAITING FOR APPROVAL', 'red')}`)
-						console.log(dim('  Use: autopilot tasks approve|reject|reply ' + task.id))
+						console.log(dim(`  Use: autopilot tasks approve|reject|reply ${task.id}`))
 					}
+
+					// Show last completed run summary for context
+					await printLastRunSummary(client, task.id)
 				}
 
 				if (task.description) {
@@ -144,7 +152,10 @@ tasksCmd.addCommand(
 					const actRes = await client.api.tasks[':id'].activity.$get({ param: { id } })
 					if (actRes.ok) {
 						const entries = (await actRes.json()) as Array<{
-							type: string; actor: string; summary: string; created_at: string
+							type: string
+							actor: string
+							summary: string
+							created_at: string
 						}>
 						if (entries.length > 0) {
 							console.log('')
@@ -156,7 +167,10 @@ tasksCmd.addCommand(
 						}
 					}
 				} catch (err) {
-					console.debug('[tasks] activity fetch failed:', (err as Error).message)
+					console.debug(
+						'[tasks] activity fetch failed:',
+						err instanceof Error ? err.message : String(err),
+					)
 				}
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
@@ -278,7 +292,10 @@ tasksCmd.addCommand(
 					console.error(error(body.error ?? 'Approval failed'))
 					process.exit(1)
 				}
-				const result = (await res.json()) as { task: { id: string; status: string; workflow_step?: string }; actions: string[] }
+				const result = (await res.json()) as {
+					task: { id: string; status: string; workflow_step?: string }
+					actions: string[]
+				}
 				console.log(success(`Task ${id} approved`))
 				console.log(dim(`  Status: ${result.task.status}`))
 				if (result.task.workflow_step) console.log(dim(`  Step: ${result.task.workflow_step}`))
@@ -333,7 +350,11 @@ tasksCmd.addCommand(
 					console.error(error(body.error ?? 'Reply failed'))
 					process.exit(1)
 				}
-				const result = (await res.json()) as { task: { id: string; status: string; workflow_step?: string }; runId: string | null; actions: string[] }
+				const result = (await res.json()) as {
+					task: { id: string; status: string; workflow_step?: string }
+					runId: string | null
+					actions: string[]
+				}
 				console.log(success(`Task ${id} replied`))
 				console.log(dim(`  Status: ${result.task.status}`))
 				if (result.runId) console.log(dim(`  Run created: ${result.runId}`))
@@ -417,13 +438,7 @@ tasksCmd.addCommand(
 				}
 
 				console.log(
-					table(
-						parents.map((t) => [
-							dim(t.id),
-							badge(t.status, statusColor(t.status)),
-							t.title,
-						]),
-					),
+					table(parents.map((t) => [dim(t.id), badge(t.status, statusColor(t.status)), t.title])),
 				)
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
@@ -480,7 +495,14 @@ function statusColor(status: string): string {
 }
 
 function countStatuses(tasks: TaskSummary[]): ChildRollup {
-	const r: ChildRollup = { total: tasks.length, active: 0, blocked: 0, done: 0, failed: 0, backlog: 0 }
+	const r: ChildRollup = {
+		total: tasks.length,
+		active: 0,
+		blocked: 0,
+		done: 0,
+		failed: 0,
+		backlog: 0,
+	}
 	for (const t of tasks) {
 		if (t.status === 'done') r.done++
 		else if (t.status === 'failed') r.failed++
@@ -502,7 +524,10 @@ function printRollupLine(r: ChildRollup): void {
 }
 
 /** Check if a blocked task has children via the rollup endpoint (ground truth). */
-async function getChildCount(client: ReturnType<typeof createApiClient>, taskId: string): Promise<number> {
+async function getChildCount(
+	client: ReturnType<typeof createApiClient>,
+	taskId: string,
+): Promise<number> {
 	try {
 		const res = await client.api.tasks[':id'].rollup.$get({ param: { id: taskId }, query: {} })
 		if (!res.ok) return 0
@@ -513,7 +538,10 @@ async function getChildCount(client: ReturnType<typeof createApiClient>, taskId:
 	}
 }
 
-async function printRollupSummary(client: ReturnType<typeof createApiClient>, taskId: string): Promise<void> {
+async function printRollupSummary(
+	client: ReturnType<typeof createApiClient>,
+	taskId: string,
+): Promise<void> {
 	try {
 		const res = await client.api.tasks[':id'].rollup.$get({ param: { id: taskId }, query: {} })
 		if (!res.ok) return
@@ -535,6 +563,31 @@ async function printRollupSummary(client: ReturnType<typeof createApiClient>, ta
 		console.log(dim(`  Use: autopilot tasks children ${taskId}`))
 	} catch {
 		// Rollup fetch failed — not critical
+	}
+}
+
+/** Show the last completed run's summary for a task (useful for blocked tasks). */
+async function printLastRunSummary(
+	client: ReturnType<typeof createApiClient>,
+	taskId: string,
+): Promise<void> {
+	try {
+		const runsRes = await client.api.runs.$get({ query: { task_id: taskId, status: 'completed' } })
+		if (!runsRes.ok) return
+
+		const runs = (await runsRes.json()) as Array<{
+			id: string
+			summary?: string | null
+			ended_at?: string | null
+		}>
+		const lastRun = runs[runs.length - 1]
+		if (lastRun?.summary) {
+			console.log('')
+			console.log(dim('Last run summary:'))
+			console.log(`  ${lastRun.summary.slice(0, 300)}`)
+		}
+	} catch {
+		// Not critical
 	}
 }
 

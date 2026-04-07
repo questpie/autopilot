@@ -142,6 +142,19 @@ async function renderInbox(): Promise<void> {
 			console.log(`  ${dim(task.id)}`)
 			if (task.workflow_step) console.log(`  ${dim('Step:')} ${task.workflow_step}`)
 			if (task.updated_at) console.log(`  ${dim(timeAgo(task.updated_at))}`)
+
+			// Show last run summary for context
+			try {
+				const runsRes = await client.api.runs.$get({ query: { task_id: task.id, status: 'completed' } })
+				if (runsRes.ok) {
+					const taskRuns = (await runsRes.json()) as Run[]
+					const lastRun = taskRuns[taskRuns.length - 1]
+					if (lastRun?.summary) {
+						console.log(`  ${dim('Last run:')} ${lastRun.summary.slice(0, 150)}`)
+					}
+				}
+			} catch { /* skip */ }
+
 			console.log('')
 			console.log(dim(`    autopilot tasks approve ${task.id}`))
 			console.log(dim(`    autopilot tasks reject ${task.id} -m "reason"`))

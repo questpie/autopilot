@@ -1,6 +1,32 @@
+import { randomBytes } from 'node:crypto'
 import { eq, and } from 'drizzle-orm'
 import { tasks } from '../db/company-schema'
 import type { CompanyDb } from '../db'
+
+/**
+ * Slugify a title into a kebab-case ID suitable for git branches and filesystem paths.
+ * Handles unicode, special chars, collapses dashes, and truncates to a reasonable length.
+ * Appends a short random suffix to prevent collisions.
+ */
+export function slugifyTaskId(title: string, maxLength = 60): string {
+	const slug = title
+		.normalize('NFKD')
+		// Strip combining diacritics (accents)
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		// Replace non-alphanumeric chars with dashes
+		.replace(/[^a-z0-9]+/g, '-')
+		// Collapse multiple dashes
+		.replace(/-{2,}/g, '-')
+		// Trim leading/trailing dashes
+		.replace(/^-|-$/g, '')
+
+	const suffix = randomBytes(2).toString('hex') // 4 hex chars
+	const maxSlugLen = maxLength - suffix.length - 1 // -1 for the dash separator
+
+	const trimmed = slug.slice(0, maxSlugLen).replace(/-$/, '')
+	return trimmed ? `${trimmed}-${suffix}` : suffix
+}
 
 function _getTask(db: CompanyDb, id: string) {
 	return db.select().from(tasks).where(eq(tasks.id, id)).get()

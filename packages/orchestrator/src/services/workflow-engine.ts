@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities } from '@questpie/autopilot-spec'
+import { slugifyTaskId } from './tasks'
 import type { TaskService, TaskRow } from './tasks'
 import type { RunService } from './runs'
 import type { ActivityService } from './activity'
@@ -213,7 +214,7 @@ export class WorkflowEngine {
 		/** Optional deterministic ID. If omitted, a random ID is generated. */
 		id?: string
 	}): Promise<{ task: TaskRow; runId: string | null } | null> {
-		const id = input.id ?? `task-${Date.now()}-${randomBytes(6).toString('hex')}`
+		const id = input.id ?? slugifyTaskId(input.title)
 		const { id: _discardedId, ...rest } = input
 		const task = await this.taskService.create({ id, ...rest })
 		if (!task) return null
