@@ -46,6 +46,8 @@ interface StepContext {
 	sourceRunSummary?: string
 	/** Human reply text. */
 	humanReply?: string
+	/** Summaries from all prior completed runs for the task (chronological order). */
+	priorRunSummaries?: Array<{ runId: string; summary: string }>
 }
 
 /** Default max revisions before escalation. */
@@ -255,7 +257,7 @@ export class WorkflowEngine {
 					// First empty output: retry the same step once
 					console.warn(`[workflow-engine] retrying step "${currentStep}" (empty output retry ${retryCount}/1)`)
 					const actions: string[] = ['empty_output_retry']
-					const ctx = await this.buildStepContext(sourceRunId)
+					const ctx = await this.buildStepContext(sourceRunId, taskId)
 					const updated = (await this.taskService.get(taskId))!
 					const runId = await this.processCurrentStep(updated, actions, ctx)
 					const final = runId !== null ? (await this.taskService.get(taskId))! : updated
@@ -333,8 +335,8 @@ export class WorkflowEngine {
 		}
 		await this.taskService.update(taskId, stepUpdates)
 
-		// Build context from the source run
-		const ctx = await this.buildStepContext(sourceRunId)
+		// Build context from the source run + full task run history
+		const ctx = await this.buildStepContext(sourceRunId, taskId)
 
 		const updated = (await this.taskService.get(taskId))!
 		const runId = await this.processCurrentStep(updated, actions, ctx)
@@ -377,7 +379,8 @@ export class WorkflowEngine {
 
 		await this.taskService.update(taskId, { status: 'active' })
 		const targetStepId = guard.step.on_approve
-		return this.advanceToTarget(taskId, targetStepId)
+		const ctx = await this.buildStepContext(undefined, taskId)
+		return this.advanceToTarget(taskId, targetStepId, undefined, ctx)
 	}
 
 	async reject(taskId: string, reason: string, actor?: string): Promise<AdvanceResult | null> {
@@ -414,7 +417,8 @@ export class WorkflowEngine {
 
 		await this.taskService.update(taskId, { status: 'active' })
 		const targetStepId = guard.step.on_reply
-		return this.advanceToTarget(taskId, targetStepId, undefined, { humanReply: message })
+		const ctx = await this.buildStepContext(undefined, taskId)
+		return this.advanceToTarget(taskId, targetStepId, undefined, { ...ctx, humanReply: message })
 	}
 
 	// ─── Private ────────────────────────────────────────────────────────
@@ -622,12 +626,20 @@ export class WorkflowEngine {
 	private async buildInstructions(task: TaskRow, step: WorkflowStep, ctx: StepContext): Promise<string> {
 		const parts: string[] = []
 
-		// 1. Source run context — the run that directly caused this advancement
+		// 1. Prior run history — all completed runs for context continuity
+		if (ctx.priorRunSummaries?.length) {
+			const historyLines = ctx.priorRunSummaries.map(
+				(r) => `- **${r.runId}**: ${r.summary}`,
+			)
+			parts.push(`## Workflow History\n\n${historyLines.join('\n')}`)
+		}
+
+		// 2. Source run context — the run that directly caused this advancement
 		if (ctx.sourceRunSummary) {
 			parts.push(`## Previous Step Output\n\n${ctx.sourceRunSummary}`)
 		}
 
-		// 2. Explicit artifact inputs — look up by kind from task's artifact history
+		// 3. Explicit artifact inputs — look up by kind from task's artifact history
 		if (step.input?.artifacts?.length && this.artifactService && task.id) {
 			const taskArtifacts = await this.artifactService.listForTask(task.id)
 			for (const wantedKind of step.input.artifacts) {
@@ -635,21 +647,23 @@ export class WorkflowEngine {
 				const found = [...taskArtifacts].reverse().find((a) => a.kind === wantedKind)
 				if (found) {
 					parts.push(`## Input: ${found.title}\n\n${found.ref_value}`)
+				} else {
+					parts.push(`## Input: ${wantedKind}\n\n> **Warning:** Expected artifact "${wantedKind}" was not found. It may not have been produced by a prior step.`)
 				}
 			}
 		}
 
-		// 3. Step YAML instructions
+		// 4. Step YAML instructions
 		if (step.instructions) {
 			parts.push(step.instructions)
 		}
 
-		// 4. Human reply
+		// 5. Human reply
 		if (ctx.humanReply) {
 			parts.push(`## Human Feedback\n\n${ctx.humanReply}`)
 		}
 
-		// 5. Output suffix — auto-generated from step.output declaration
+		// 6. Output suffix — auto-generated from step.output declaration
 		const suffix = generateOutputSuffix(step)
 		if (suffix) {
 			parts.push(suffix)
@@ -658,12 +672,32 @@ export class WorkflowEngine {
 		return parts.join('\n\n')
 	}
 
-	/** Build StepContext from a source run that just completed. */
-	private async buildStepContext(sourceRunId?: string): Promise<StepContext> {
-		if (!sourceRunId) return {}
-		const run = await this.runService.get(sourceRunId)
-		if (!run || !run.summary) return {}
-		return { sourceRunSummary: run.summary }
+	/** Build StepContext from a source run and/or the task's full run history. */
+	private async buildStepContext(sourceRunId?: string, taskId?: string): Promise<StepContext> {
+		const ctx: StepContext = {}
+
+		if (sourceRunId) {
+			const run = await this.runService.get(sourceRunId)
+			if (run?.summary) {
+				ctx.sourceRunSummary = run.summary
+			}
+		}
+
+		if (taskId) {
+			const allRuns = await this.runService.list({ task_id: taskId, status: 'completed' })
+			const sorted = allRuns
+				.filter((r) => r.summary && r.id !== sourceRunId)
+				.sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+				.slice(0, 10)
+			if (sorted.length > 0) {
+				ctx.priorRunSummaries = sorted.map((r) => ({
+					runId: r.id,
+					summary: r.summary!.length > 500 ? `${r.summary!.slice(0, 497)}...` : r.summary!,
+				}))
+			}
+		}
+
+		return ctx
 	}
 
 	// ─── Targeting ──────────────────────────────────────────────────────
@@ -815,8 +849,9 @@ export class WorkflowEngine {
 		}
 		await this.taskService.update(task.id, stepUpdates)
 
+		const ctx = await this.buildStepContext(undefined, task.id)
 		const updated = (await this.taskService.get(task.id))!
-		return this.processCurrentStep(updated, actions, {})
+		return this.processCurrentStep(updated, actions, ctx)
 	}
 
 	/**
@@ -838,7 +873,8 @@ export class WorkflowEngine {
 		if (met === 'pending') return null
 
 		const actions: string[] = []
-		const runId = await this.processCurrentStep(task, actions, {})
+		const ctx = await this.buildStepContext(undefined, taskId)
+		const runId = await this.processCurrentStep(task, actions, ctx)
 
 		const final = (await this.taskService.get(taskId))!
 		return { task: final, runId, actions }

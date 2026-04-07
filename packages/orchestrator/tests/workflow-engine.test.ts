@@ -270,7 +270,9 @@ describe('WorkflowEngine', () => {
 		// Verify new run targets the dev agent
 		const run = await runService.get(advanced!.runId!)
 		expect(run!.agent_id).toBe('dev')
-		expect(run!.instructions).toBe('Implement the plan')
+		expect(run!.instructions).toContain('Implement the plan')
+		// Context forwarding: prior run summary should be included
+		expect(run!.instructions).toContain('## Workflow History')
 	})
 
 	test('human_approval step blocks progression', async () => {
