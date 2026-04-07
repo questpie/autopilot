@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse, RunArtifact } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
 import { executeActions, mergeOutputs, type ActionsMergedResult } from './actions/webhook'
@@ -295,6 +296,14 @@ export class AutopilotWorker {
     const resolvedModel = runtimeConfig
       ? resolveModel(runtimeConfig, run.model)
       : (run.model ?? null)
+
+    // Verify workspace directory exists before launching runtime
+    if (ws?.path && !existsSync(ws.path)) {
+      const msg = `Workspace directory missing: ${ws.path} — worktree may have been removed externally`
+      await this.postEvent(run.id, { type: 'error', summary: msg })
+      await this.completeRun(run.id, { status: 'failed', error: msg })
+      return
+    }
 
     const context: RunContext = {
       runId: run.id,
