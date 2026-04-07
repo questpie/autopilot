@@ -19,7 +19,12 @@
 		"format": "biome format --write .",
 		"changeset": "bunx changeset",
 		"publish:all": "bunx changeset publish --provenance",
-		"version": "bunx changeset version"
+		"version": "bunx changeset version",
+		"release:check": "bun scripts/release/check.ts",
+		"release:canary:version": "bun scripts/release/canary-version.ts",
+		"release:canary:publish": "bun scripts/release/canary-publish.ts",
+		"release:canary:finish": "bun scripts/release/canary-finish.ts",
+		"release:canary:verify": "bun scripts/release/verify-canary-install.ts"
 	},
 	"overrides": {
 		"vite": "^8.0.0"
@@ -32,6 +37,7 @@
 		"@resvg/resvg-js": "^2.6.2",
 		"sharp": "^0.34.5",
 		"turbo": "^2.7.3",
-		"typescript": "^5.9.3"
+		"typescript": "^5.9.3",
+		"@types/bun": "^1.3.0"
 	}
 }

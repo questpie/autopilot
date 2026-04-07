@@ -1,7 +1,7 @@
 # Release Channels and Compatibility
 
 > V1 release/update/channel management for QUESTPIE Autopilot.
-> Last updated: 2026-04-07 (Pass 25.7)
+> Last updated: 2026-04-07 (Pass 25.11)
 
 ---
 
@@ -32,11 +32,11 @@ Autopilot uses two release channels:
 ### What is not guaranteed yet
 
 - Semantic versioning enforcement across packages (planned).
-- Automated release pipeline (releases are currently manual).
+- Stable release automation is limited to the Changesets workflow.
 - Canary Docker images are not yet published automatically.
-- npm canary tags are not yet published automatically.
+- npm canary tags are published through the release workflow when Changesets pre-mode is active, or through the local fallback scripts.
 
-The channel model is defined so that tooling and docs are ready when automated publishing begins.
+The channel model is defined so that tooling and docs stay aligned while release automation matures.
 
 ---
 
@@ -217,14 +217,124 @@ autopilot doctor --offline
 
 ---
 
+## Publishing (maintainer reference)
+
+### How releases work
+
+Releases are managed by [Changesets](https://github.com/changesets/changesets) and published via GitHub Actions.
+
+| Step | What happens |
+|------|-------------|
+| Add changeset | `bunx changeset` — describe the change and affected packages |
+| Push to main | CI runs typecheck + tests. Release workflow creates a "Version Packages" PR. |
+| Merge version PR | Release workflow publishes to npm with provenance attestation. |
+
+### Canary releases (scripted, local)
+
+Use the release scripts via `bun run` for local canary publishing. CI publishing uses Trusted Publishing automatically — see "npm authentication" below.
+
+```bash
+# 1. Pre-flight check
+bun run release:check
+
+# 2. Enter pre mode + version (creates commits, does not publish)
+bun run release:canary:version
+
+# 3. Publish to npm with canary dist-tag (dependency order, stops on failure)
+bun run release:canary:publish
+bun run release:canary:publish -- --dry-run   # preview without publishing
+
+# 4. Verify install
+bun run release:canary:verify
+
+# 5. Push, exit pre mode, optionally tag
+bun run release:canary:finish
+bun run release:canary:finish -- --github-release   # also creates canary-YYYY-MM-DD tag and GitHub release
+```
+
+### Canary releases (manual fallback)
+
+If scripts fail or you need more control:
+
+```bash
+bunx changeset pre enter canary
+git add .changeset/pre.json && git commit -m "chore: enter changesets canary pre mode"
+bunx changeset version
+bun install
+git add -A && git commit -m "chore: version canary alpha packages"
+cd packages/spec && npm publish --tag canary --access public && cd ../..
+cd packages/worker && npm publish --tag canary --access public && cd ../..
+cd packages/orchestrator && npm publish --tag canary --access public && cd ../..
+cd packages/mcp-server && npm publish --tag canary --access public && cd ../..
+cd packages/cli && npm publish --tag canary --access public && cd ../..
+bunx changeset pre exit
+git add .changeset/pre.json && git commit -m "chore: exit changesets canary pre mode"
+git push origin main
+```
+
+### Stable releases
+
+Stable releases follow the normal Changesets flow — no pre mode. Push changeset to main, merge the generated version PR, workflow publishes to npm `@latest`.
+
+### Published packages
+
+| Package | npm name | Published |
+|---------|----------|-----------|
+| CLI | `@questpie/autopilot` | Yes |
+| Spec | `@questpie/autopilot-spec` | Yes |
+| Orchestrator | `@questpie/autopilot-orchestrator` | Yes |
+| Worker | `@questpie/autopilot-worker` | Yes |
+| MCP Server | `@questpie/autopilot-mcp` | Yes |
+
+Private/ignored: `dashboard-v2`, `@questpie/autopilot-docs`.
+
+### npm authentication
+
+The release workflow uses **npm Trusted Publishing (OIDC)** — no `NPM_TOKEN` secret is needed for publishing. GitHub Actions exchanges a short-lived OIDC token with the npm registry automatically.
+
+Requirements:
+- `permissions.id-token: write` in the workflow
+- `environment: npm` on the job
+- npm CLI >= 11.5.1 (the workflow upgrades npm explicitly since Node 22 ships npm 10.x)
+- Trusted Publishing configured per package in the npm UI
+
+`changesets/action@v1` detects the OIDC environment and skips `.npmrc` token generation when no `NPM_TOKEN` is set.
+
+### npm Trusted Publishing setup
+
+Trusted Publishing is configured per package in the npm UI (`npmjs.com → Package Settings → Publishing access → Add a trusted publisher`):
+
+- [x] `@questpie/autopilot` — repo: `questpie/autopilot`, workflow: `release.yml`, environment: `npm`
+- [x] `@questpie/autopilot-spec` — same settings
+- [x] `@questpie/autopilot-orchestrator` — same settings
+- [x] `@questpie/autopilot-worker` — same settings
+- [x] `@questpie/autopilot-mcp` — same settings
+
+### Token notes
+
+- **CI publishing does not use npm tokens.** Trusted Publishing handles auth via OIDC.
+- **Manual fallback** (`scripts/release/canary-publish.ts`) uses local npm auth (`npm login`). This is for emergency use only.
+- **If a local npm token was previously used and may be compromised:** revoke it in npm UI (`npmjs.com → Access Tokens`). Do not store tokens in `.npmrc` or commit them to git.
+- **If the workflow ever needs private dependencies at install time**, use a read-only token for the install step only — not for publish.
+
+### Failure and rollback policy
+
+- **No unpublish by default.** Fix forward with the next canary or patch.
+- **Partial publish** (some packages published, others failed): rerun the workflow after fixing the cause. Already-published versions are idempotent — npm skips them.
+- **Bad canary**: publish a new canary version with the fix. Operators update with `bun add -g @questpie/autopilot@canary`.
+- **Bad stable**: publish a patch release. Pin Docker image to previous tag for immediate rollback.
+
+---
+
 ## Summary
 
 | Aspect | V1 state |
 |--------|----------|
-| Channels | stable / canary defined; automated publishing not yet active |
+| Channels | stable / canary defined; stable CI publishing, local canary scripts |
 | Version inspection | `autopilot version`, `autopilot update check`, doctor integration |
 | Compatibility | Same release expected; packages versioned independently; informational only |
 | Docker update | `docker compose pull && up -d`; pin tag for rollback |
-| CLI update | `bun add -g @questpie/autopilot@latest` |
+| CLI update | `bun add -g @questpie/autopilot@latest` or `@canary` |
 | Auto-update | Watchtower opt-in only; no silent background mutation |
+| Publishing | GitHub Actions + Changesets + npm Trusted Publishing (OIDC) |
 | Enforcement | Deferred — no version rejection or protocol negotiation |

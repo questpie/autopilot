@@ -11,6 +11,9 @@
 		"declaration": true,
 		"declarationMap": true,
 		"sourceMap": true,
-		"noUncheckedIndexedAccess": true
+		"noUncheckedIndexedAccess": true,
+		"types": [
+			"@types/bun"
+		]
 	}
 }

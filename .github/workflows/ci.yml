@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: bunx tsc --noEmit --project packages/spec/tsconfig.json
+      - run: bunx tsc --noEmit --project packages/orchestrator/tsconfig.json
+      - run: bunx tsc --noEmit --project packages/worker/tsconfig.json
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: bun test packages/spec/tests/
+      - run: bun test packages/orchestrator/tests/
+      - run: bun test packages/worker/tests/
+      - run: bun test packages/cli/tests/commands.test.ts packages/cli/tests/version-update.test.ts packages/cli/tests/doctor.test.ts
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build --target runtime -t questpie-autopilot-ci .
