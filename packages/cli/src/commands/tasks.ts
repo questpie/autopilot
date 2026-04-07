@@ -3,6 +3,7 @@ import { program } from '../program'
 import { section, badge, dim, table, success, error, separator, dot, header, warning, stripAnsi } from '../utils/format'
 import { createApiClient, getBaseUrl } from '../utils/client'
 import { getAuthHeaders } from './auth'
+import { LiveRenderer } from '../utils/live-renderer'
 
 // ─── Shared Types ─────────────────────────────────────────────────────────
 
@@ -700,6 +701,228 @@ function buildTimeline(
 	return entries
 }
 
+// ── Progress rendering (pure function — returns lines, no side effects) ─────
+
+interface ProgressData {
+	task: {
+		id: string
+		title: string
+		status: string
+		workflow_id?: string | null
+		workflow_step?: string | null
+		metadata?: string | null
+	}
+	workflow: WorkflowDef
+	taskRuns: RunSummary[]
+	/** Last SSE event summary for the currently running step */
+	runningEventSummary?: string
+}
+
+function renderProgressLines(data: ProgressData): string[] {
+	const { task, workflow, taskRuns, runningEventSummary } = data
+	const lines: string[] = []
+
+	// Parse metadata for revision info
+	let metadata: Record<string, unknown> = {}
+	try {
+		metadata = JSON.parse(task.metadata ?? '{}')
+	} catch (err) {
+		// malformed metadata — ignore
+		void err
+	}
+
+	// Build timeline
+	const entries = buildTimeline(
+		workflow.steps,
+		taskRuns,
+		task.workflow_step ?? null,
+		metadata,
+	)
+
+	// Inject last event summary into running entry
+	const runningEntry = entries.find((e) => e.status === 'running' && e.run)
+	if (runningEntry && runningEventSummary) {
+		runningEntry.lastEvent = truncate(runningEventSummary.replace(/\n/g, ' '), 90)
+	}
+
+	// ── Header ──
+	lines.push('')
+	lines.push(
+		`  ${header(task.title)}  ${badge(task.status, statusColor(task.status))}${task.workflow_step ? ` ${dim('\u2192 ' + task.workflow_step)}` : ''}`,
+	)
+	lines.push('')
+
+	// ── Column headers ──
+	lines.push(
+		dim(
+			`  ${'Step'.padEnd(26)}${'Status'.padEnd(11)}${'Run'.padEnd(17)}${'Duration'.padEnd(10)}Summary`,
+		),
+	)
+	lines.push(dim(`  ${'\u2500'.repeat(76)}`))
+
+	// ── Timeline rows ──
+	for (const entry of entries) {
+		// Annotation-only rows (revision arrows)
+		if (entry.annotation !== undefined && !entry.run) {
+			lines.push(
+				`  ${dim(entry.label.padEnd(26))}${''.padEnd(11)}${''.padEnd(17)}${''.padEnd(10)}${dim('"' + entry.annotation + '"')}`,
+			)
+			continue
+		}
+
+		// Status icon + text
+		let statusIcon: string
+		let statusText: string
+		switch (entry.status) {
+			case 'done':
+				statusIcon = success('\u2713')
+				statusText = success('done')
+				break
+			case 'empty':
+				statusIcon = warning('\u26a0')
+				statusText = warning('empty')
+				break
+			case 'running':
+				statusIcon = '\u{1f504}'
+				statusText = badge('run', 'cyan')
+				break
+			case 'failed':
+				statusIcon = error('\u2717')
+				statusText = error('fail')
+				break
+			case 'pending':
+			default:
+				statusIcon = dim('\u25cb')
+				statusText = dim('pending')
+				break
+		}
+
+		const stepLabel = (entry.status === 'pending' || (entry.status === 'done' && !entry.run))
+			? `${statusIcon} ${dim(entry.label)}`
+			: `${statusIcon} ${entry.label}`
+
+		const runId = entry.run ? dim(shortRunId(entry.run.id)) : ''
+		const duration = entry.run
+			? formatDuration(entry.run.started_at, entry.run.ended_at)
+			: ''
+
+		let summaryText = ''
+		if (entry.run?.summary) {
+			summaryText = truncate(entry.run.summary.replace(/\n/g, ' '), 100)
+		} else if (entry.run && entry.status === 'empty') {
+			summaryText = dim('[no output]')
+		} else if (entry.isHumanApproval) {
+			summaryText = dim('(human approval)')
+		} else if (entry.run?.status === 'running') {
+			summaryText = dim(entry.lastEvent ?? 'Running...')
+		}
+
+		// Build the padded row — account for ANSI escape sequences in padding
+		const stepColWidth = 26
+		const statusColWidth = 11
+		const runColWidth = 17
+		const durColWidth = 10
+
+		const stepVisible = stripAnsi(stepLabel).length
+		const stepPadded = stepLabel + ' '.repeat(Math.max(0, stepColWidth - stepVisible))
+
+		const statusVisible = stripAnsi(statusText).length
+		const statusPadded = statusText + ' '.repeat(Math.max(0, statusColWidth - statusVisible))
+
+		const runVisible = stripAnsi(runId).length
+		const runPadded = runId + ' '.repeat(Math.max(0, runColWidth - runVisible))
+
+		const durPadded = duration.padEnd(durColWidth)
+
+		lines.push(`  ${stepPadded}${statusPadded}${runPadded}${durPadded}${summaryText}`)
+	}
+
+	// ── Footer ──
+	const revisionKeys = Object.keys(metadata).filter((k) => k.startsWith('_revisions:'))
+
+	lines.push('')
+	lines.push(dim(`  Branch: autopilot/${task.id}`))
+	lines.push(dim(`  Worktree: .worktrees/${task.id}`))
+	if (revisionKeys.length > 0) {
+		const parts = revisionKeys.map((k) => {
+			const loop = k.replace('_revisions:', '')
+			const count = typeof metadata[k] === 'number' ? metadata[k] : 0
+			return `${loop.replace('\u2192', '\u2192')}: ${count}/3`
+		})
+		lines.push(dim(`  Revisions: ${parts.join(', ')}`))
+	}
+	lines.push('')
+
+	return lines
+}
+
+// ── Progress data fetching ──────────────────────────────────────────────────
+
+interface FetchProgressResult {
+	task: ProgressData['task']
+	workflow: WorkflowDef
+	taskRuns: RunSummary[]
+	runIds: Set<string>
+	hasRunningStep: boolean
+}
+
+async function fetchProgressData(
+	client: ReturnType<typeof createApiClient>,
+	taskId: string,
+	authHeaders: Record<string, string>,
+): Promise<FetchProgressResult | null> {
+	const taskRes = await client.api.tasks[':id'].$get({ param: { id: taskId } })
+	if (!taskRes.ok) return null
+
+	const task = (await taskRes.json()) as ProgressData['task']
+
+	if (!task.workflow_id) return null
+
+	const baseUrl = getBaseUrl()
+	const wfRes = await fetch(`${baseUrl}/api/config/workflows`, { headers: authHeaders })
+	if (!wfRes.ok) return null
+
+	const workflows = (await wfRes.json()) as WorkflowDef[]
+	const workflow = workflows.find((w) => w.id === task.workflow_id)
+	if (!workflow) return null
+
+	const runsRes = await client.api.runs.$get({ query: { task_id: taskId } })
+	if (!runsRes.ok) return null
+
+	const taskRuns = (await runsRes.json()) as RunSummary[]
+	const runIds = new Set(taskRuns.map((r) => r.id))
+	const hasRunningStep = taskRuns.some((r) => r.status === 'running' || r.status === 'claimed')
+
+	return { task, workflow, taskRuns, runIds, hasRunningStep }
+}
+
+/** Fetch the last event summary for a running run. */
+async function fetchLastEventSummary(
+	runId: string,
+	authHeaders: Record<string, string>,
+): Promise<string | undefined> {
+	try {
+		const baseUrl = getBaseUrl()
+		const eventsRes = await fetch(`${baseUrl}/api/runs/${runId}/events`, { headers: authHeaders })
+		if (!eventsRes.ok) return undefined
+
+		const events = (await eventsRes.json()) as Array<{ type: string; summary?: string }>
+		const last = events.filter((e) => e.type === 'progress' || e.type === 'tool_use').pop()
+		if (last?.summary) return last.summary
+	} catch (err) {
+		void err
+	}
+	return undefined
+}
+
+/** Check if a task status is terminal (no more progress expected). */
+function isTerminalState(status: string, hasRunningStep: boolean): boolean {
+	if (hasRunningStep) return false
+	return status === 'done' || status === 'failed' || status === 'blocked'
+}
+
+// ── Progress command ────────────────────────────────────────────────────────
+
 tasksCmd.addCommand(
 	new Command('progress')
 		.description('Show workflow step timeline with revision loops and summaries')
@@ -707,272 +930,244 @@ tasksCmd.addCommand(
 		.action(async (id: string) => {
 			try {
 				const client = createApiClient()
+				const authHeaders: Record<string, string> = { ...getAuthHeaders() }
+				if (Object.keys(authHeaders).length === 0) authHeaders['X-Local-Dev'] = 'true'
 
-				// 1. Fetch task
-				const taskRes = await client.api.tasks[':id'].$get({ param: { id } })
-				if (!taskRes.ok) {
-					console.error(error(`Task not found: ${id}`))
+				// ── Initial fetch ──
+				const progressData = await fetchProgressData(client, id, authHeaders)
+				if (!progressData) {
+					console.error(error(`Task not found or has no workflow: ${id}`))
 					console.error(dim('Use "autopilot tasks" to list all tasks.'))
 					process.exit(1)
 				}
 
-				const task = (await taskRes.json()) as {
-					id: string
-					title: string
-					status: string
-					workflow_id?: string | null
-					workflow_step?: string | null
-					metadata?: string | null
+				const { task, workflow, taskRuns, runIds, hasRunningStep } = progressData
+
+				// Fetch initial last event for running step
+				const runningRun = taskRuns.find((r) => r.status === 'running' || r.status === 'claimed')
+				let runningEventSummary: string | undefined
+				if (runningRun) {
+					runningEventSummary = await fetchLastEventSummary(runningRun.id, authHeaders)
 				}
 
-				if (!task.workflow_id) {
-					console.error(error(`Task ${id} has no workflow attached`))
-					process.exit(1)
+				// ── Initial render ──
+				const renderer = new LiveRenderer()
+				const initialLines = renderProgressLines({ task, workflow, taskRuns, runningEventSummary })
+				renderer.render(initialLines)
+
+				// If already terminal, exit immediately
+				if (isTerminalState(task.status, hasRunningStep)) {
+					return
 				}
 
-				// 2. Fetch workflow definition
+				// ── SSE live loop ──
 				const baseUrl = getBaseUrl()
-				const authHeaders: Record<string, string> = { ...getAuthHeaders() }
-				if (Object.keys(authHeaders).length === 0) authHeaders['X-Local-Dev'] = 'true'
-				const wfRes = await fetch(`${baseUrl}/api/config/workflows`, {
-					headers: authHeaders,
+				const controller = new AbortController()
+
+				process.on('SIGINT', () => {
+					controller.abort()
+					process.stdout.write('\n')
+					process.exit(0)
 				})
-				if (!wfRes.ok) {
-					console.error(error('Failed to fetch workflow definitions'))
-					process.exit(1)
-				}
-				const workflows = (await wfRes.json()) as WorkflowDef[]
-				const workflow = workflows.find((w) => w.id === task.workflow_id)
-				if (!workflow) {
-					console.error(error(`Workflow not found: ${task.workflow_id}`))
-					process.exit(1)
-				}
 
-				// 3. Fetch all runs for this task
-				const runsRes = await client.api.runs.$get({ query: { task_id: id } })
-				if (!runsRes.ok) {
-					console.error(error('Failed to fetch runs'))
-					process.exit(1)
-				}
-				const taskRuns = (await runsRes.json()) as RunSummary[]
+				// Throttle: track last render time
+				let lastRenderTime = Date.now()
+				let pendingRender = false
+				let renderTimeout: ReturnType<typeof setTimeout> | null = null
 
-				// 4. Parse metadata for revision info
-				let metadata: Record<string, unknown> = {}
-				try {
-					metadata = JSON.parse(task.metadata ?? '{}')
-				} catch (err) {
-					console.debug('[progress] malformed task metadata:', err instanceof Error ? err.message : String(err))
-				}
+				// Mutable state for the live loop
+				let currentRunIds = runIds
+				let currentEventSummary = runningEventSummary
 
-				// 5. Build and render timeline
-				const entries = buildTimeline(
-					workflow.steps,
-					taskRuns,
-					task.workflow_step ?? null,
-					metadata,
-				)
-
-				// 6. Fetch last event for running step
-				const runningEntry = entries.find((e) => e.status === 'running' && e.run)
-				if (runningEntry?.run) {
+				const doRender = async (full: boolean): Promise<boolean> => {
 					try {
-						const eventsRes = await fetch(`${baseUrl}/api/runs/${runningEntry.run.id}/events`, { headers: authHeaders })
-						if (eventsRes.ok) {
-							const events = (await eventsRes.json()) as Array<{ type: string; summary?: string }>
-							const last = events.filter((e) => e.type === 'progress' || e.type === 'tool_use').pop()
-							if (last?.summary) {
-								runningEntry.lastEvent = truncate(last.summary.replace(/\n/g, ' '), 90)
+						if (full) {
+							const freshData = await fetchProgressData(client, id, authHeaders)
+							if (!freshData) return false
+
+							currentRunIds = freshData.runIds
+
+							// Fetch last event for running step
+							const freshRunning = freshData.taskRuns.find(
+								(r) => r.status === 'running' || r.status === 'claimed',
+							)
+							if (freshRunning) {
+								const evtSummary = await fetchLastEventSummary(freshRunning.id, authHeaders)
+								if (evtSummary) currentEventSummary = evtSummary
+							} else {
+								currentEventSummary = undefined
 							}
+
+							const lines = renderProgressLines({
+								task: freshData.task,
+								workflow: freshData.workflow,
+								taskRuns: freshData.taskRuns,
+								runningEventSummary: currentEventSummary,
+							})
+
+							if (isTerminalState(freshData.task.status, freshData.hasRunningStep)) {
+								renderer.finish(lines)
+								return true // signal: terminal
+							}
+
+							renderer.render(lines)
+						} else {
+							// Lightweight re-render with updated event summary only
+							const freshData = await fetchProgressData(client, id, authHeaders)
+							if (!freshData) return false
+
+							currentRunIds = freshData.runIds
+
+							const lines = renderProgressLines({
+								task: freshData.task,
+								workflow: freshData.workflow,
+								taskRuns: freshData.taskRuns,
+								runningEventSummary: currentEventSummary,
+							})
+
+							if (isTerminalState(freshData.task.status, freshData.hasRunningStep)) {
+								renderer.finish(lines)
+								return true
+							}
+
+							renderer.render(lines)
 						}
 					} catch (err) {
-						console.debug('[progress] failed to fetch run events:', err instanceof Error ? err.message : String(err))
+						void err
+					}
+					return false
+				}
+
+				const scheduleRender = (full: boolean): void => {
+					const now = Date.now()
+					const elapsed = now - lastRenderTime
+					const MIN_INTERVAL = 1000
+
+					if (elapsed >= MIN_INTERVAL && !pendingRender) {
+						pendingRender = true
+						lastRenderTime = now
+						doRender(full).then((terminal) => {
+							pendingRender = false
+							if (terminal) {
+								controller.abort()
+							}
+						}).catch(() => {
+							pendingRender = false
+						})
+					} else if (!renderTimeout) {
+						// Schedule a deferred render
+						const delay = MIN_INTERVAL - elapsed
+						renderTimeout = setTimeout(() => {
+							renderTimeout = null
+							lastRenderTime = Date.now()
+							pendingRender = true
+							doRender(full).then((terminal) => {
+								pendingRender = false
+								if (terminal) {
+									controller.abort()
+								}
+							}).catch(() => {
+								pendingRender = false
+							})
+						}, delay)
 					}
 				}
 
-				// ── Header ──
-				console.log('')
-				console.log(
-					`  ${header(task.title)}  ${badge(task.status, statusColor(task.status))}${task.workflow_step ? ` ${dim('\u2192 ' + task.workflow_step)}` : ''}`,
-				)
-				console.log('')
+				// SSE connection with reconnection
+				const connectSSE = async (): Promise<void> => {
+					while (!controller.signal.aborted) {
+						try {
+							const sseRes = await fetch(`${baseUrl}/api/events`, {
+								headers: authHeaders,
+								signal: controller.signal,
+							})
+							if (!sseRes.ok || !sseRes.body) {
+								// Wait before reconnecting
+								await new Promise((resolve) => setTimeout(resolve, 3000))
+								continue
+							}
 
-				// ── Column headers ──
-				const colStep = 'Step'
-				const colStatus = 'Status'
-				const colRun = 'Run'
-				const colDur = 'Duration'
-				const colSummary = 'Summary'
-				console.log(
-					dim(
-						`  ${colStep.padEnd(26)}${colStatus.padEnd(11)}${colRun.padEnd(17)}${colDur.padEnd(10)}${colSummary}`,
-					),
-				)
-				console.log(dim(`  ${'\u2500'.repeat(76)}`))
+							const reader = sseRes.body.getReader()
+							const decoder = new TextDecoder()
+							let buffer = ''
 
-				// ── Timeline rows ──
-				for (const entry of entries) {
-					// Annotation-only rows (revision arrows)
-					if (entry.annotation !== undefined && !entry.run) {
-						console.log(
-							`  ${dim(entry.label.padEnd(26))}${''.padEnd(11)}${''.padEnd(17)}${''.padEnd(10)}${dim('"' + entry.annotation + '"')}`,
-						)
-						continue
-					}
+							while (!controller.signal.aborted) {
+								const { done, value } = await reader.read()
+								if (done) break
 
-					// Status icon + text
-					let statusIcon: string
-					let statusText: string
-					switch (entry.status) {
-						case 'done':
-							statusIcon = success('\u2713')
-							statusText = success('done')
-							break
-						case 'empty':
-							statusIcon = warning('\u26a0')
-							statusText = warning('empty')
-							break
-						case 'running':
-							statusIcon = '\u{1f504}'
-							statusText = badge('run', 'cyan')
-							break
-						case 'failed':
-							statusIcon = error('\u2717')
-							statusText = error('fail')
-							break
-						case 'pending':
-						default:
-							statusIcon = dim('\u25cb')
-							statusText = dim('pending')
-							break
-					}
+								buffer += decoder.decode(value, { stream: true })
+								const sseLines = buffer.split('\n')
+								buffer = sseLines.pop() ?? ''
 
-					const stepLabel = (entry.status === 'pending' || (entry.status === 'done' && !entry.run))
-						? `${statusIcon} ${dim(entry.label)}`
-						: `${statusIcon} ${entry.label}`
+								for (const line of sseLines) {
+									if (!line.startsWith('data: ')) continue
+									const json = line.slice(6)
 
-					const runId = entry.run ? dim(shortRunId(entry.run.id)) : ''
-					const duration = entry.run
-						? formatDuration(entry.run.started_at, entry.run.ended_at)
-						: ''
+									try {
+										const event = JSON.parse(json) as {
+											type: string
+											runId?: string
+											taskId?: string
+											status?: string
+											eventType?: string
+											summary?: string
+											agentId?: string
+										}
 
-					let summaryText = ''
-					if (entry.run?.summary) {
-						summaryText = truncate(entry.run.summary.replace(/\n/g, ' '), 100)
-					} else if (entry.run && entry.status === 'empty') {
-						summaryText = dim('[no output]')
-					} else if (entry.isHumanApproval) {
-						summaryText = dim('(human approval)')
-					} else if (entry.run?.status === 'running') {
-						summaryText = dim(entry.lastEvent ?? 'Running...')
-					}
+										if (event.type === 'heartbeat') continue
 
-					// Build the padded row — account for ANSI escape sequences in padding
-					const stepColWidth = 26
-					const statusColWidth = 11
-					const runColWidth = 17
-					const durColWidth = 10
+										// run_event: update the running step's last event summary
+										if (event.type === 'run_event' && event.runId && currentRunIds.has(event.runId)) {
+											if (event.summary) {
+												currentEventSummary = event.summary
+											}
+											scheduleRender(false)
+											continue
+										}
 
-					const stepVisible = stripAnsi(stepLabel).length
-					const stepPadded = stepLabel + ' '.repeat(Math.max(0, stepColWidth - stepVisible))
+										// run_started / run_completed: full re-render (step progression)
+										if (
+											(event.type === 'run_started' || event.type === 'run_completed') &&
+											event.runId &&
+											currentRunIds.has(event.runId)
+										) {
+											scheduleRender(true)
+											continue
+										}
 
-					const statusVisible = stripAnsi(statusText).length
-					const statusPadded = statusText + ' '.repeat(Math.max(0, statusColWidth - statusVisible))
+										// task_changed: full re-render if it's our task
+										if (event.type === 'task_changed' && event.taskId === id) {
+											scheduleRender(true)
+											continue
+										}
 
-					const runVisible = stripAnsi(runId).length
-					const runPadded = runId + ' '.repeat(Math.max(0, runColWidth - runVisible))
-
-					const durPadded = duration.padEnd(durColWidth)
-
-					console.log(`  ${stepPadded}${statusPadded}${runPadded}${durPadded}${summaryText}`)
-				}
-
-				// ── Footer ──
-				// Count lines below the running step (needed for ANSI cursor positioning)
-				let footerLines = 0
-				let pastRunning = false
-				for (const entry of entries) {
-					if (entry.status === 'running') { pastRunning = true; continue }
-					if (pastRunning) footerLines++
-				}
-				const revisionKeys = Object.keys(metadata).filter((k) => k.startsWith('_revisions:'))
-				footerLines += 3 // blank + branch + worktree
-				if (revisionKeys.length > 0) footerLines++ // revisions line
-
-				console.log('')
-				console.log(dim(`  Branch: autopilot/${task.id}`))
-				console.log(dim(`  Worktree: .worktrees/${task.id}`))
-				if (revisionKeys.length > 0) {
-					const parts = revisionKeys.map((k) => {
-						const loop = k.replace('_revisions:', '')
-						const count = typeof metadata[k] === 'number' ? metadata[k] : 0
-						return `${loop.replace('\u2192', '\u2192')}: ${count}/3`
-					})
-					console.log(dim(`  Revisions: ${parts.join(', ')}`))
-				}
-
-				// ── Live SSE — overwrite running step line in-place ──
-				if (runningEntry?.run) {
-					const sseUrl = `${baseUrl}/api/events`
-					const runId = runningEntry.run.id
-					const controller = new AbortController()
-
-					process.on('SIGINT', () => {
-						controller.abort()
-						process.stdout.write('\n')
-						process.exit(0)
-					})
-
-					try {
-						const sseRes = await fetch(sseUrl, { headers: authHeaders, signal: controller.signal })
-						if (!sseRes.ok || !sseRes.body) return
-						const reader = sseRes.body.getReader()
-						const decoder = new TextDecoder()
-						let buffer = ''
-
-						while (true) {
-							const { done, value } = await reader.read()
-							if (done) break
-							buffer += decoder.decode(value, { stream: true })
-
-							while (buffer.includes('\n\n')) {
-								const blockEnd = buffer.indexOf('\n\n')
-								const block = buffer.slice(0, blockEnd)
-								buffer = buffer.slice(blockEnd + 2)
-
-								const dataLine = block.split('\n').find((l) => l.startsWith('data:'))
-								if (!dataLine) continue
-
-								try {
-									const event = JSON.parse(dataLine.slice(5).trim())
-									if (event.type === 'heartbeat') continue
-
-									const eventRunId = event.run_id ?? event.data?.run_id
-									if (eventRunId !== runId) continue
-
-									const eventType = event.data?.type ?? event.event_type ?? ''
-									const summary = event.data?.summary ?? event.summary ?? ''
-									if (!summary) continue
-
-									const icon = eventType === 'tool_use' ? '\u{1f527}' : eventType === 'error' ? '\u274c' : '\u{1f4ac}'
-									const line = `  ${icon} ${dim(truncate(summary.replace(/\n/g, ' '), 100))}`
-									// Move cursor up to running step line, clear it, write new content, move back down to footer
-									process.stdout.write(`\x1b[${footerLines + 1}A\x1b[2K${line}\x1b[${footerLines + 1}B\x1b[0G`)
-
-									if (event.type === 'run_completed' || event.type === 'task_status_changed') {
-										process.stdout.write('\n')
-										process.exit(0)
+										// A new run might have been started for our task that we don't
+										// know about yet — pick it up on the next full render triggered
+										// by run_started with an unknown runId. We can't filter by
+										// task here since run_started only has runId + agentId, so
+										// do a speculative full render for any unrecognized run_started.
+										if (event.type === 'run_started' && event.runId && !currentRunIds.has(event.runId)) {
+											scheduleRender(true)
+											continue
+										}
+									} catch (err) {
+										void err
 									}
-								} catch {
-									// skip malformed SSE
 								}
 							}
+						} catch (err) {
+							if (controller.signal.aborted) return
+							void err
+							// Reconnect after delay
+							await new Promise((resolve) => setTimeout(resolve, 3000))
 						}
-					} catch (err) {
-						if (controller.signal.aborted) return
-						console.debug('[progress] SSE error:', err instanceof Error ? err.message : String(err))
 					}
 				}
-				console.log('')
+
+				await connectSSE()
+
+				// Clean up timeout if any
+				if (renderTimeout) clearTimeout(renderTimeout)
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				process.exit(1)
