@@ -315,15 +315,8 @@ tasksCmd.addCommand(
 					}
 				}
 
-				const baseUrl = getBaseUrl()
-				const headers = getAuthHeaders()
-				if (Object.keys(headers).length === 0) {
-					headers['X-Local-Dev'] = 'true'
-				}
-
-				const res = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(id)}`, {
-					method: 'DELETE',
-					headers,
+				const res = await client.api.tasks[':id'].$delete({
+					param: { id },
 				})
 
 				if (!res.ok) {
@@ -939,6 +932,8 @@ async function fetchProgressData(
 
 	if (!task.workflow_id) return null
 
+	// Raw fetch: /api/config/* routes are defined inline on the Hono app,
+	// not via .route(), so they are not part of the typed AppType chain.
 	const baseUrl = getBaseUrl()
 	const wfRes = await fetch(`${baseUrl}/api/config/workflows`, { headers: authHeaders })
 	if (!wfRes.ok) return null
@@ -959,12 +954,11 @@ async function fetchProgressData(
 
 /** Fetch the last event summary for a running run. */
 async function fetchLastEventSummary(
+	client: ReturnType<typeof createApiClient>,
 	runId: string,
-	authHeaders: Record<string, string>,
 ): Promise<string | undefined> {
 	try {
-		const baseUrl = getBaseUrl()
-		const eventsRes = await fetch(`${baseUrl}/api/runs/${runId}/events`, { headers: authHeaders })
+		const eventsRes = await client.api.runs[':id'].events.$get({ param: { id: runId } })
 		if (!eventsRes.ok) return undefined
 
 		const events = (await eventsRes.json()) as Array<{ type: string; summary?: string }>
@@ -1008,7 +1002,7 @@ tasksCmd.addCommand(
 				const runningRun = taskRuns.find((r) => r.status === 'running' || r.status === 'claimed')
 				let runningEventSummary: string | undefined
 				if (runningRun) {
-					runningEventSummary = await fetchLastEventSummary(runningRun.id, authHeaders)
+					runningEventSummary = await fetchLastEventSummary(client, runningRun.id)
 				}
 
 				// ── Initial render ──
@@ -1053,7 +1047,7 @@ tasksCmd.addCommand(
 								(r) => r.status === 'running' || r.status === 'claimed',
 							)
 							if (freshRunning) {
-								const evtSummary = await fetchLastEventSummary(freshRunning.id, authHeaders)
+								const evtSummary = await fetchLastEventSummary(client, freshRunning.id)
 								if (evtSummary) currentEventSummary = evtSummary
 							} else {
 								currentEventSummary = undefined
@@ -1352,19 +1346,11 @@ tasksCmd.addCommand(
 		.requiredOption('--on <ids...>', 'Task IDs this task depends on')
 		.action(async (id: string, opts: { on: string[] }) => {
 			try {
-				const baseUrl = getBaseUrl()
-				const headers: Record<string, string> = {
-					'Content-Type': 'application/json',
-					...getAuthHeaders(),
-				}
-				if (Object.keys(getAuthHeaders()).length === 0) {
-					headers['X-Local-Dev'] = 'true'
-				}
+				const client = createApiClient()
 
-				const res = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(id)}/dependencies`, {
-					method: 'POST',
-					headers,
-					body: JSON.stringify({ depends_on: opts.on }),
+				const res = await client.api.tasks[':id'].dependencies.$post({
+					param: { id },
+					json: { depends_on: opts.on },
 				})
 
 				if (!res.ok) {
@@ -1396,14 +1382,10 @@ tasksCmd.addCommand(
 		.argument('<id>', 'Task ID')
 		.action(async (id: string) => {
 			try {
-				const baseUrl = getBaseUrl()
-				const headers: Record<string, string> = { ...getAuthHeaders() }
-				if (Object.keys(headers).length === 0) {
-					headers['X-Local-Dev'] = 'true'
-				}
+				const client = createApiClient()
 
-				const res = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(id)}/dependencies`, {
-					headers,
+				const res = await client.api.tasks[':id'].dependencies.$get({
+					param: { id },
 				})
 
 				if (!res.ok) {

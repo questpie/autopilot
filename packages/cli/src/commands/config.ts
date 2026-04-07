@@ -46,6 +46,8 @@ type ProviderDef = {
 }
 
 // ─── Fetch helpers ──────────────────────────────────────────────────────────
+// Raw fetch: /api/config/* routes are defined inline on the Hono app,
+// not via .route(), so they are not part of the typed AppType chain.
 
 function configHeaders(): Record<string, string> {
 	const headers: Record<string, string> = { ...getAuthHeaders() }

@@ -13,9 +13,8 @@
  */
 import { Command } from 'commander'
 import { program } from '../program'
-import { getBaseUrl } from '../utils/client'
+import { createApiClient } from '../utils/client'
 import { dim, success, error, badge, table, section } from '../utils/format'
-import { getAuthHeaders } from './auth'
 
 interface ScheduleSummary {
 	id: string
@@ -50,17 +49,6 @@ function isEnabled(val: boolean | number | null): boolean {
 	return false
 }
 
-function getHeaders(): Record<string, string> {
-	const headers: Record<string, string> = {
-		...getAuthHeaders(),
-		'Content-Type': 'application/json',
-	}
-	if (!headers['Authorization'] && !headers['X-API-Key']) {
-		headers['X-Local-Dev'] = 'true'
-	}
-	return headers
-}
-
 const scheduleCmd = new Command('schedule').description('Manage schedules')
 
 // ─── list ─────────────────────────────────────────────────────────────────
@@ -70,8 +58,8 @@ scheduleCmd.addCommand(
 		.description('List all schedules')
 		.action(async () => {
 			try {
-				const baseUrl = getBaseUrl()
-				const res = await fetch(`${baseUrl}/api/schedules`, { headers: getHeaders() })
+				const client = createApiClient()
+				const res = await client.api.schedules.$get()
 
 				if (!res.ok) {
 					console.error(error('Failed to fetch schedules'))
@@ -115,9 +103,9 @@ scheduleCmd.addCommand(
 		.argument('<id>', 'Schedule ID')
 		.action(async (id: string) => {
 			try {
-				const baseUrl = getBaseUrl()
-				const res = await fetch(`${baseUrl}/api/schedules/${encodeURIComponent(id)}`, {
-					headers: getHeaders(),
+				const client = createApiClient()
+				const res = await client.api.schedules[':id'].$get({
+					param: { id },
 				})
 
 				if (!res.ok) {
@@ -240,11 +228,9 @@ scheduleCmd.addCommand(
 					if (!opts.mode) body.mode = 'query'
 				}
 
-				const baseUrl = getBaseUrl()
-				const res = await fetch(`${baseUrl}/api/schedules`, {
-					method: 'POST',
-					headers: getHeaders(),
-					body: JSON.stringify(body),
+				const client = createApiClient()
+				const res = await client.api.schedules.$post({
+					json: body as Record<string, unknown> & { name: string; cron: string; agent_id: string },
 				})
 
 				if (!res.ok) {
@@ -274,11 +260,10 @@ scheduleCmd.addCommand(
 		.argument('<id>', 'Schedule ID')
 		.action(async (id: string) => {
 			try {
-				const baseUrl = getBaseUrl()
-				const res = await fetch(`${baseUrl}/api/schedules/${encodeURIComponent(id)}`, {
-					method: 'PATCH',
-					headers: getHeaders(),
-					body: JSON.stringify({ enabled: true }),
+				const client = createApiClient()
+				const res = await client.api.schedules[':id'].$patch({
+					param: { id },
+					json: { enabled: true },
 				})
 
 				if (!res.ok) {
@@ -302,11 +287,10 @@ scheduleCmd.addCommand(
 		.argument('<id>', 'Schedule ID')
 		.action(async (id: string) => {
 			try {
-				const baseUrl = getBaseUrl()
-				const res = await fetch(`${baseUrl}/api/schedules/${encodeURIComponent(id)}`, {
-					method: 'PATCH',
-					headers: getHeaders(),
-					body: JSON.stringify({ enabled: false }),
+				const client = createApiClient()
+				const res = await client.api.schedules[':id'].$patch({
+					param: { id },
+					json: { enabled: false },
 				})
 
 				if (!res.ok) {
@@ -330,10 +314,9 @@ scheduleCmd.addCommand(
 		.argument('<id>', 'Schedule ID')
 		.action(async (id: string) => {
 			try {
-				const baseUrl = getBaseUrl()
-				const res = await fetch(`${baseUrl}/api/schedules/${encodeURIComponent(id)}`, {
-					method: 'DELETE',
-					headers: getHeaders(),
+				const client = createApiClient()
+				const res = await client.api.schedules[':id'].$delete({
+					param: { id },
 				})
 
 				if (!res.ok) {
@@ -361,12 +344,12 @@ scheduleCmd.addCommand(
 		.option('--limit <n>', 'Number of executions to show', '20')
 		.action(async (id: string, opts: { limit: string }) => {
 			try {
-				const baseUrl = getBaseUrl()
+				const client = createApiClient()
 				const limit = parseInt(opts.limit, 10)
-				const res = await fetch(
-					`${baseUrl}/api/schedules/${encodeURIComponent(id)}/history?limit=${limit}`,
-					{ headers: getHeaders() },
-				)
+				const res = await client.api.schedules[':id'].history.$get({
+					param: { id },
+					query: { limit },
+				})
 
 				if (!res.ok) {
 					console.error(error(`Schedule not found: ${id}`))
@@ -419,14 +402,10 @@ scheduleCmd.addCommand(
 		.argument('<id>', 'Schedule ID')
 		.action(async (id: string) => {
 			try {
-				const baseUrl = getBaseUrl()
-				const res = await fetch(
-					`${baseUrl}/api/schedules/${encodeURIComponent(id)}/trigger`,
-					{
-						method: 'POST',
-						headers: getHeaders(),
-					},
-				)
+				const client = createApiClient()
+				const res = await client.api.schedules[':id'].trigger.$post({
+					param: { id },
+				})
 
 				if (!res.ok) {
 					const errBody = (await res.json().catch(() => ({ error: 'Unknown error' }))) as { error?: string }

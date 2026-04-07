@@ -8,9 +8,8 @@
  */
 import { Command } from 'commander'
 import { program } from '../program'
-import { getBaseUrl } from '../utils/client'
+import { createApiClient } from '../utils/client'
 import { header, dim, success, error, badge, table, dot } from '../utils/format'
-import { getAuthHeaders } from './auth'
 
 const secretsCmd = new Command('secret').description('Manage orchestrator-managed shared secrets')
 
@@ -63,21 +62,15 @@ secretsCmd.addCommand(
 					process.exit(1)
 				}
 
-				const baseUrl = getBaseUrl()
-				const headers = {
-					...getAuthHeaders(),
-					'Content-Type': 'application/json',
-				}
+				const client = createApiClient()
 
-				const res = await fetch(`${baseUrl}/api/secrets`, {
-					method: 'POST',
-					headers,
-					body: JSON.stringify({
+				const res = await client.api.secrets.$post({
+					json: {
 						name,
-						scope,
+						scope: scope as 'worker' | 'provider' | 'orchestrator_only',
 						value,
 						description: opts.description,
-					}),
+					},
 				})
 
 				if (!res.ok) {
@@ -102,10 +95,9 @@ secretsCmd.addCommand(
 		.description('List all shared secrets (metadata only — no values)')
 		.action(async () => {
 			try {
-				const baseUrl = getBaseUrl()
-				const headers = getAuthHeaders()
+				const client = createApiClient()
 
-				const res = await fetch(`${baseUrl}/api/secrets`, { headers })
+				const res = await client.api.secrets.$get()
 
 				if (!res.ok) {
 					const body = await res.json().catch(() => ({ error: 'Unknown error' })) as { error: string }
@@ -159,12 +151,10 @@ secretsCmd.addCommand(
 		.argument('<name>', 'Secret name to delete')
 		.action(async (name: string) => {
 			try {
-				const baseUrl = getBaseUrl()
-				const headers = getAuthHeaders()
+				const client = createApiClient()
 
-				const res = await fetch(`${baseUrl}/api/secrets/${encodeURIComponent(name)}`, {
-					method: 'DELETE',
-					headers,
+				const res = await client.api.secrets[':name'].$delete({
+					param: { name },
 				})
 
 				if (!res.ok) {

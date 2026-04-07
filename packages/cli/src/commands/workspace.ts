@@ -3,8 +3,7 @@ import { join } from 'node:path'
 import { program } from '../program'
 import { section, dim, table, error, success, separator } from '../utils/format'
 import { findProjectRoot } from '../utils/find-root'
-import { getBaseUrl } from '../utils/client'
-import { getAuthHeaders } from './auth'
+import { createApiClient } from '../utils/client'
 
 // ─── Git helpers ─────────────────────────────────────────────────────────
 
@@ -294,10 +293,9 @@ function removeWorktreeAndBranch(
 async function fetchTaskStatus(
 	taskId: string,
 ): Promise<{ status: string } | null> {
-	const baseUrl = getBaseUrl()
-	const headers = getAuthHeaders()
 	try {
-		const res = await fetch(`${baseUrl}/api/tasks/${taskId}`, { headers })
+		const client = createApiClient()
+		const res = await client.api.tasks[':id'].$get({ param: { id: taskId } })
 		if (!res.ok) return null
 		const data = (await res.json()) as { status?: string }
 		return data.status ? { status: data.status } : null

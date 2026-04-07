@@ -18,6 +18,8 @@ type WorkflowDef = {
 	}>
 }
 
+// Raw fetch: /api/config/* routes are defined inline on the Hono app,
+// not via .route(), so they are not part of the typed AppType chain.
 async function fetchWorkflows(): Promise<WorkflowDef[]> {
 	const headers: Record<string, string> = { ...getAuthHeaders() }
 	if (Object.keys(headers).length === 0) headers['X-Local-Dev'] = 'true'

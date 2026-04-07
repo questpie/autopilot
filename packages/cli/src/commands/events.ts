@@ -4,6 +4,7 @@ import { badge, dim, error } from '../utils/format'
 import { getBaseUrl } from '../utils/client'
 import { getAuthHeaders } from './auth'
 
+// Raw fetch: SSE streaming requires raw fetch — Hono client does not support SSE.
 const eventsCmd = new Command('event')
 	.description('Stream real-time events from the orchestrator (SSE)')
 	.option('-f, --filter <types>', 'Comma-separated event types to show (e.g. task_changed,run_completed)')
