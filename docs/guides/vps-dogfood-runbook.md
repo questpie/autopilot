@@ -1,4 +1,4 @@
-# VPS Dogfood Runbook
+# VPS Deployment Runbook
 
 > Practical step-by-step for deploying Autopilot on a VPS with remote workers.
 > Last updated: 2026-04-07 (Pass 25.8)
@@ -167,7 +167,7 @@ autopilot worker list
 
 ---
 
-## Step 8: Dogfood — run a task or query
+## Step 8: Verify — run a task or query
 
 ### Quick query test
 

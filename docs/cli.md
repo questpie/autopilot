@@ -78,5 +78,5 @@ See [Release Channels](./guides/release-channels.md) for the full channel model 
 - [Deployment Variants](./guides/deployment-variants.md) — Architecture and topology
 - [Docker Guide](./guides/docker.md) — Container configuration
 - [Runtime Setup](./guides/runtime-setup.md) — Per-runtime install and auth for workers
-- [VPS Dogfood Runbook](./guides/vps-dogfood-runbook.md) — End-to-end deployment walkthrough
+- [VPS Deployment Runbook](./guides/vps-dogfood-runbook.md) — End-to-end deployment walkthrough
 - [Release Channels](./guides/release-channels.md) — Update, rollback, and channel management

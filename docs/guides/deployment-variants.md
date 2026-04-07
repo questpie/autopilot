@@ -51,7 +51,7 @@ This boots `autopilot server start` + `autopilot worker start` together with a l
 **Good for:**
 - Development and testing
 - Proving the full workflow loop
-- Solo dogfood
+- Solo operator use
 
 **Caveats:**
 - Local dev auth bypass is active — not production security
@@ -339,7 +339,7 @@ See [Runtime Setup](./runtime-setup.md) for full per-runtime install, auth, MCP 
 
 | Channel | Docker tag | npm tag | Meaning |
 |---------|-----------|---------|---------|
-| stable | `questpie/autopilot:latest` | `@questpie/autopilot@latest` | Tested release, safe for durable dogfood |
+| stable | `questpie/autopilot:latest` | `@questpie/autopilot@latest` | Tested release, safe for persistent self-hosted use |
 | canary | `questpie/autopilot:canary` | `@questpie/autopilot@canary` | Latest main, may contain breaking changes |
 
 ### Version inspection
@@ -434,7 +434,7 @@ All variants use the same orchestrator/worker primitives. Packaging shape differ
 
 ## See also
 
-- [VPS Dogfood Runbook](./vps-dogfood-runbook.md) — Step-by-step deployment walkthrough
+- [VPS Deployment Runbook](./vps-dogfood-runbook.md) — Step-by-step deployment walkthrough
 - [Runtime Setup](./runtime-setup.md) — Per-runtime install, auth, and caveats
 - [Docker Guide](./docker.md) — Container configuration details
 - [Release Channels](./release-channels.md) — Update, rollback, and channel management

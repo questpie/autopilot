@@ -312,5 +312,5 @@ Doctor does **not** check:
 
 See also:
 - [Deployment Variants](./deployment-variants.md) for the full topology guide
-- [VPS Dogfood Runbook](./vps-dogfood-runbook.md) for end-to-end deployment walkthrough
+- [VPS Deployment Runbook](./vps-dogfood-runbook.md) for end-to-end deployment walkthrough
 - [Release Channels](./release-channels.md) for version management

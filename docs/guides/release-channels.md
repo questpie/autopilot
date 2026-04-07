@@ -11,7 +11,7 @@ Autopilot uses two release channels:
 
 | Channel | Meaning | Docker tag | npm tag |
 |---------|---------|-----------|---------|
-| **stable** | Tested release. Safe for durable dogfood. | `questpie/autopilot:latest` | `@questpie/autopilot@latest` |
+| **stable** | Tested release. Safe for persistent self-hosted use. | `questpie/autopilot:latest` | `@questpie/autopilot@latest` |
 | **canary** | Latest build from main. May contain breaking changes. | `questpie/autopilot:canary` | `@questpie/autopilot@canary` |
 
 ### What stable means

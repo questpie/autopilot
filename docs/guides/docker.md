@@ -188,7 +188,7 @@ docker compose up -d
 
 ## See Also
 
-- [VPS Dogfood Runbook](./vps-dogfood-runbook.md) — End-to-end deployment walkthrough
+- [VPS Deployment Runbook](./vps-dogfood-runbook.md) — End-to-end deployment walkthrough
 - [Runtime Setup](./runtime-setup.md) — Per-runtime install and auth for workers
 - [Deployment Variants](./deployment-variants.md) — Architecture and topology overview
 - [Release Channels](./release-channels.md) — Update, rollback, and channel management
