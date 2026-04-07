@@ -219,6 +219,12 @@ autopilot worker list
 # Expected: worker appears as "online" with runtime capabilities
 ```
 
+Run setup validation from an operator machine:
+
+```bash
+autopilot doctor --url https://autopilot.yourdomain.com
+```
+
 ### URL patterns
 
 The `--url` flag accepts any reachable URL:
@@ -300,6 +306,8 @@ autopilot worker start --url http://10.147.20.1:7778
 ## Runtime adapter setup
 
 Workers need runtime binaries installed and authenticated on the host machine. The Docker orchestrator container does **not** include these.
+
+Use `autopilot doctor --offline --require-runtime` on each worker machine to check whether supported runtime binaries are visible on `PATH`.
 
 ### Claude Code (default runtime)
 

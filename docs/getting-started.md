@@ -43,6 +43,15 @@ autopilot query "Summarize the current workflows"
 autopilot query "Suggest a safer deploy approval step" --allow-mutation
 ```
 
+## Validate Setup
+
+```bash
+autopilot doctor --offline
+autopilot doctor --url http://localhost:7778
+```
+
+Use `--offline` for filesystem/env/runtime checks without probing a running orchestrator.
+
 ## Worker Setup
 
 ```bash

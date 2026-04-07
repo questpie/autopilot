@@ -70,6 +70,16 @@ autopilot worker start --url http://<orchestrator-ip>:7778 --token <token>
 
 Workers need runtime binaries (Claude Code, Codex, OpenCode) installed locally. See [Deployment Variants](./deployment-variants.md#runtime-adapter-setup) for setup instructions.
 
+## Validate Setup
+
+```bash
+# Validate repo/deploy files and optional local runtime binaries
+autopilot doctor --offline
+
+# Validate a running orchestrator
+autopilot doctor --url http://localhost:7778
+```
+
 ## Profiles
 
 ```bash

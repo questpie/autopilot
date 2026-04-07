@@ -98,6 +98,9 @@ docker compose exec orchestrator sh
 
 # List connected workers
 docker compose exec orchestrator autopilot worker list
+
+# Validate from an operator machine
+autopilot doctor --url http://SERVER_IP:7778
 ```
 
 ## Environment Variables

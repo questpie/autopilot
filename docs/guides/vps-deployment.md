@@ -70,3 +70,9 @@ docker compose ps
 docker compose logs -f orchestrator
 curl -s http://localhost:7778/api/health
 ```
+
+From any machine with the CLI installed:
+
+```bash
+autopilot doctor --url http://SERVER_IP:7778
+```

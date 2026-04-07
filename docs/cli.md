@@ -22,6 +22,16 @@ This reference tracks the current CLI/API-first surface. The future operator app
 | `autopilot tasks` | List tasks |
 | `autopilot runs` | List runs |
 | `autopilot inbox` | Show pending operator items |
+| `autopilot doctor` | Validate local setup, deployment env, runtimes, and orchestrator health |
+
+Useful modes:
+
+```bash
+autopilot doctor --offline
+autopilot doctor --url http://localhost:7778
+autopilot doctor --require-runtime
+autopilot doctor --json
+```
 
 ## Workers
 
