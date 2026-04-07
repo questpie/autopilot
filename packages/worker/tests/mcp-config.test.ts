@@ -46,6 +46,42 @@ describe('createMcpConfig', () => {
     }
   })
 
+  test('localDev mode sets AUTOPILOT_LOCAL_DEV instead of AUTOPILOT_API_KEY', async () => {
+    const { configPath, cleanup } = await createMcpConfig({
+      orchestratorUrl: 'http://localhost:7778',
+      apiKey: 'some-key',
+      localDev: true,
+    })
+
+    try {
+      const content = await readFile(configPath, 'utf-8')
+      const config = JSON.parse(content)
+
+      expect(config.mcpServers.autopilot.env.AUTOPILOT_LOCAL_DEV).toBe('true')
+      expect(config.mcpServers.autopilot.env.AUTOPILOT_API_KEY).toBeUndefined()
+    } finally {
+      await cleanup()
+    }
+  })
+
+  test('non-localDev mode sets AUTOPILOT_API_KEY without AUTOPILOT_LOCAL_DEV', async () => {
+    const { configPath, cleanup } = await createMcpConfig({
+      orchestratorUrl: 'http://localhost:7778',
+      apiKey: 'test-api-key',
+      localDev: false,
+    })
+
+    try {
+      const content = await readFile(configPath, 'utf-8')
+      const config = JSON.parse(content)
+
+      expect(config.mcpServers.autopilot.env.AUTOPILOT_API_KEY).toBe('test-api-key')
+      expect(config.mcpServers.autopilot.env.AUTOPILOT_LOCAL_DEV).toBeUndefined()
+    } finally {
+      await cleanup()
+    }
+  })
+
   test('cleanup removes temp directory', async () => {
     const { configPath, cleanup } = await createMcpConfig({
       orchestratorUrl: 'http://localhost:7778',

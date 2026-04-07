@@ -77,6 +77,21 @@ describe('createCodexMcpConfig', () => {
     expect(existsSync(configPath + '.autopilot-backup')).toBe(false)
   })
 
+  test('localDev mode sets AUTOPILOT_LOCAL_DEV instead of AUTOPILOT_API_KEY', async () => {
+    const result = await createCodexMcpConfig({
+      orchestratorUrl: 'http://localhost:4800',
+      apiKey: 'some-key',
+      localDev: true,
+      workDir,
+    })
+
+    const content = await readFile(result.configPath, 'utf-8')
+    expect(content).toContain('AUTOPILOT_LOCAL_DEV = "true"')
+    expect(content).not.toContain('AUTOPILOT_API_KEY')
+
+    await result.cleanup()
+  })
+
   test('uses custom mcpBinaryPath when provided', async () => {
     const result = await createCodexMcpConfig({
       orchestratorUrl: 'http://localhost:4800',
