@@ -159,6 +159,20 @@ const tasks = new Hono<AppEnv>()
 			return c.json(result, 200)
 		},
 	)
+	// DELETE /tasks/:id — delete task with cascade
+	.delete(
+		'/:id',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { taskService } = c.get('services')
+			const { id } = c.req.valid('param')
+
+			const deleted = await taskService.deleteCascade(id)
+			if (!deleted) return c.json({ error: 'task not found' }, 404)
+
+			return c.json(deleted, 200)
+		},
+	)
 	// GET /tasks/:id/activity — approval/rejection/reply history
 	.get(
 		'/:id/activity',

@@ -282,6 +282,58 @@ tasksCmd.addCommand(
 )
 
 tasksCmd.addCommand(
+	new Command('delete')
+		.description('Delete a task and all associated data (runs, events, artifacts, relations)')
+		.argument('<id>', 'Task ID')
+		.option('-f, --force', 'Skip confirmation prompt')
+		.action(async (id: string, opts: { force?: boolean }) => {
+			try {
+				const client = createApiClient()
+
+				if (!opts.force) {
+					// Fetch task first to show title in confirmation
+					const taskRes = await client.api.tasks[':id'].$get({ param: { id } })
+					if (!taskRes.ok) {
+						console.error(error(`Task not found: ${id}`))
+						process.exit(1)
+					}
+					const task = (await taskRes.json()) as { id: string; title: string }
+
+					const answer = prompt(`Delete task "${task.title}"? (y/n) `)
+					if (answer?.toLowerCase() !== 'y') {
+						console.log(dim('Cancelled'))
+						return
+					}
+				}
+
+				const baseUrl = getBaseUrl()
+				const headers = getAuthHeaders()
+				if (Object.keys(headers).length === 0) {
+					headers['X-Local-Dev'] = 'true'
+				}
+
+				const res = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(id)}`, {
+					method: 'DELETE',
+					headers,
+				})
+
+				if (!res.ok) {
+					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as { error?: string }
+					console.error(error(body.error ?? `Failed to delete task: ${id}`))
+					process.exit(1)
+				}
+
+				const deleted = (await res.json()) as { id: string; title: string }
+				console.log(success(`Task deleted: ${deleted.id}`))
+				console.log(dim(`  ${deleted.title}`))
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
+tasksCmd.addCommand(
 	new Command('approve')
 		.description('Approve a task waiting on a human_approval step')
 		.argument('<id>', 'Task ID')

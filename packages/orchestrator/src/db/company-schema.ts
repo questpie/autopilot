@@ -377,6 +377,33 @@ export const sessions = sqliteTable(
 	],
 )
 
+// ─── Schedules ───────────────────────────────────────────────────────────
+
+export const schedules = sqliteTable(
+	'schedules',
+	{
+		id: text('id').primaryKey(),
+		name: text('name').notNull(),
+		description: text('description'),
+		cron: text('cron').notNull(),
+		timezone: text('timezone').default('UTC'),
+		agent_id: text('agent_id').notNull(),
+		workflow_id: text('workflow_id'),
+		task_template: text('task_template').default('{}'), // JSON: { title, description, type, priority }
+		enabled: integer('enabled', { mode: 'boolean' }).default(true),
+		last_run_at: text('last_run_at'),
+		next_run_at: text('next_run_at'),
+		created_by: text('created_by'),
+		created_at: text('created_at').notNull(),
+		updated_at: text('updated_at').notNull(),
+	},
+	(table) => [
+		index('idx_schedules_enabled').on(table.enabled),
+		index('idx_schedules_next_run').on(table.next_run_at),
+		index('idx_schedules_agent').on(table.agent_id),
+	],
+)
+
 // ─── Activity ──────────────────────────────────────────────────────────────
 
 export const activity = sqliteTable(

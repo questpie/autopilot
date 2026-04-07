@@ -1,8 +1,10 @@
 import { Command } from 'commander'
 import { join } from 'node:path'
 import { program } from '../program'
-import { section, dim, table, error, separator } from '../utils/format'
+import { section, dim, table, error, success, separator } from '../utils/format'
 import { findProjectRoot } from '../utils/find-root'
+import { getBaseUrl } from '../utils/client'
+import { getAuthHeaders } from './auth'
 
 // ─── Git helpers ─────────────────────────────────────────────────────────
 
@@ -264,6 +266,183 @@ workspaceCmd
 				} else {
 					console.log(dim('  No diff to show.'))
 				}
+			}
+		} catch (err) {
+			console.error(error(err instanceof Error ? err.message : String(err)))
+			process.exit(1)
+		}
+	})
+
+// ── workspace cleanup [task-id] ────────────────────────────────────────
+
+function removeWorktreeAndBranch(
+	repoRoot: string,
+	wt: ParsedWorktree,
+): { removed: boolean; error?: string } {
+	const removeResult = git(['worktree', 'remove', wt.path, '--force'], repoRoot)
+	if (!removeResult.ok) {
+		return { removed: false, error: `Failed to remove worktree: ${removeResult.stderr}` }
+	}
+	const branchResult = git(['branch', '-D', wt.branch], repoRoot)
+	if (!branchResult.ok) {
+		// Worktree removed but branch deletion failed — not fatal
+		return { removed: true, error: `Worktree removed but branch deletion failed: ${branchResult.stderr}` }
+	}
+	return { removed: true }
+}
+
+async function fetchTaskStatus(
+	taskId: string,
+): Promise<{ status: string } | null> {
+	const baseUrl = getBaseUrl()
+	const headers = getAuthHeaders()
+	try {
+		const res = await fetch(`${baseUrl}/api/tasks/${taskId}`, { headers })
+		if (!res.ok) return null
+		const data = (await res.json()) as { status?: string }
+		return data.status ? { status: data.status } : null
+	} catch {
+		return null
+	}
+}
+
+workspaceCmd
+	.command('cleanup')
+	.description('Remove worktrees for completed/failed tasks')
+	.argument('[task-id]', 'Task ID (if omitted, cleans up all done/failed)')
+	.action(async (taskId?: string) => {
+		try {
+			const root = await resolveProjectRoot()
+			const worktrees = listWorktrees(root)
+
+			if (worktrees.length === 0) {
+				console.log(dim('  No active task worktrees found.'))
+				return
+			}
+
+			if (taskId) {
+				// ── Single task cleanup ──
+				const wt = findWorktree(worktrees, taskId)
+				if (!wt) {
+					console.error(error(`No workspace found for task: ${taskId}`))
+					process.exit(1)
+				}
+
+				const result = removeWorktreeAndBranch(root, wt)
+				if (!result.removed) {
+					console.error(error(result.error ?? 'Unknown error'))
+					process.exit(1)
+				}
+
+				console.log(success(`Removed worktree: ${wt.path}`))
+				console.log(success(`Deleted branch: ${wt.branch}`))
+				if (result.error) {
+					console.log(dim(`  Note: ${result.error}`))
+				}
+				return
+			}
+
+			// ── Bulk cleanup: remove worktrees for done/failed tasks ──
+			console.log(section('Workspace Cleanup'))
+			console.log(dim('  Checking task statuses...'))
+			console.log('')
+
+			let removed = 0
+			let skipped = 0
+
+			for (const wt of worktrees) {
+				const task = await fetchTaskStatus(wt.taskId)
+				if (!task) {
+					console.log(dim(`  ${wt.taskId}: could not fetch status, skipping`))
+					skipped++
+					continue
+				}
+
+				if (task.status !== 'done' && task.status !== 'failed') {
+					console.log(dim(`  ${wt.taskId}: ${task.status}, skipping`))
+					skipped++
+					continue
+				}
+
+				const result = removeWorktreeAndBranch(root, wt)
+				if (result.removed) {
+					console.log(success(`  ${wt.taskId}: removed (${task.status})`))
+					if (result.error) {
+						console.log(dim(`    Note: ${result.error}`))
+					}
+					removed++
+				} else {
+					console.log(error(`  ${wt.taskId}: ${result.error}`))
+					skipped++
+				}
+			}
+
+			console.log('')
+			console.log(separator())
+			console.log(dim(`  ${removed} removed, ${skipped} skipped`))
+		} catch (err) {
+			console.error(error(err instanceof Error ? err.message : String(err)))
+			process.exit(1)
+		}
+	})
+
+// ── workspace merge <task-id> ──────────────────────────────────────────
+
+workspaceCmd
+	.command('merge')
+	.description('Merge task branch into current branch and clean up worktree')
+	.argument('<task-id>', 'Task ID')
+	.option('--no-ff', 'Create a merge commit even if fast-forward is possible')
+	.action(async (taskId: string, opts: { ff: boolean }) => {
+		try {
+			const root = await resolveProjectRoot()
+			const worktrees = listWorktrees(root)
+			const wt = findWorktree(worktrees, taskId)
+
+			if (!wt) {
+				console.error(error(`No workspace found for task: ${taskId}`))
+				console.error(dim('  Run `autopilot workspace list` to see active workspaces.'))
+				process.exit(1)
+			}
+
+			// ── Check worktree is clean ──
+			const dirty = getDirtyFiles(wt.path)
+			if (dirty.length > 0) {
+				console.error(error(`Workspace for ${taskId} has ${dirty.length} dirty file(s). Commit or stash changes first.`))
+				for (const line of dirty) {
+					console.error(`    ${line}`)
+				}
+				process.exit(1)
+			}
+
+			// ── Merge ──
+			const mergeArgs = ['merge', wt.branch]
+			if (!opts.ff) {
+				mergeArgs.push('--no-ff')
+			}
+
+			const mergeResult = git(mergeArgs, root)
+			if (!mergeResult.ok) {
+				// Abort the merge to avoid leaving dirty state
+				git(['merge', '--abort'], root)
+				console.error(error(`Merge conflict or failure merging ${wt.branch}`))
+				console.error(dim(`  ${mergeResult.stderr}`))
+				console.error(dim('  Merge was aborted. Resolve manually if needed.'))
+				process.exit(1)
+			}
+
+			console.log(success(`Merged ${wt.branch} into current branch`))
+
+			// ── Cleanup worktree + branch ──
+			const cleanupResult = removeWorktreeAndBranch(root, wt)
+			if (cleanupResult.removed) {
+				console.log(success(`Removed worktree: ${wt.path}`))
+				console.log(success(`Deleted branch: ${wt.branch}`))
+				if (cleanupResult.error) {
+					console.log(dim(`  Note: ${cleanupResult.error}`))
+				}
+			} else {
+				console.log(dim(`  Note: merge succeeded but cleanup failed: ${cleanupResult.error}`))
 			}
 		} catch (err) {
 			console.error(error(err instanceof Error ? err.message : String(err)))

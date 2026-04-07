@@ -307,6 +307,75 @@ runsCmd.addCommand(
 		}),
 )
 
+// ─── Retry Subcommand ───────────────────────────────────────────────────────
+
+runsCmd.addCommand(
+	new Command('retry')
+		.description('Retry a failed or completed run with the same instructions')
+		.argument('<id>', 'Run ID to retry')
+		.option('-m, --message <message>', 'Override instructions for the new run')
+		.action(async (id: string, opts: { message?: string }) => {
+			try {
+				const client = createApiClient()
+
+				const res = await client.api.runs[':id'].$get({ param: { id } })
+				if (!res.ok) {
+					console.error(error(`Run not found: ${id}`))
+					process.exit(1)
+				}
+
+				const run = (await res.json()) as {
+					id: string
+					status: string
+					agent_id: string
+					runtime: string
+					task_id?: string | null
+					instructions?: string | null
+					model?: string | null
+					provider?: string | null
+					variant?: string | null
+				}
+
+				if (run.status !== 'failed' && run.status !== 'completed') {
+					console.error(error(`Run ${id} is ${run.status} — can only retry failed or completed runs`))
+					process.exit(1)
+				}
+
+				const createPayload: Record<string, string> = {
+					agent_id: run.agent_id,
+					runtime: run.runtime,
+				}
+				if (run.task_id) createPayload.task_id = run.task_id
+				if (opts.message) {
+					createPayload.instructions = opts.message
+				} else if (run.instructions) {
+					createPayload.instructions = run.instructions
+				}
+				if (run.model) createPayload.model = run.model
+				if (run.provider) createPayload.provider = run.provider
+				if (run.variant) createPayload.variant = run.variant
+
+				const createRes = await client.api.runs.$post({ json: createPayload })
+				if (!createRes.ok) {
+					const body = (await createRes.json().catch(() => ({ error: 'Unknown error' }))) as {
+						error: string
+					}
+					console.error(error(`Failed to create retry run: ${body.error}`))
+					process.exit(1)
+				}
+
+				const newRun = (await createRes.json()) as { id: string; status: string }
+				console.log(success(`Retry run created: ${newRun.id}`))
+				console.log(dim(`  Status: ${newRun.status}`))
+				console.log(dim(`  Retries: ${id}`))
+				console.log(dim(`  The run will be picked up by the worker on next poll.`))
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
+			}
+		}),
+)
+
 // ─── Watch Subcommand ───────────────────────────────────────────────────────
 
 interface RunEvent {
