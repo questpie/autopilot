@@ -17,6 +17,8 @@ export interface AuthoredConfig {
 	environments: Map<string, Environment>
 	providers: Map<string, Provider>
 	capabilityProfiles: Map<string, CapabilityProfile>
+	/** Loaded context file content (name → content) from .autopilot/context/ */
+	context: Map<string, string>
 	defaults: { runtime: string; workflow?: string; task_assignee?: string }
 }
 

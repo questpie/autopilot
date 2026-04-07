@@ -28,6 +28,8 @@ export const CompanyScopeSchema = z.object({
 	defaults: ScopeDefaultsSchema.default({}),
 	/** Desired pack dependencies — resolved by `autopilot sync`. */
 	packs: z.array(PackDependencySchema).default([]),
+	/** Context hints — key → relative path from company root. Agents receive these as navigation aids. */
+	context_hints: z.record(z.string(), z.string()).default({}),
 })
 
 /**

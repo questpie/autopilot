@@ -79,6 +79,7 @@ export async function startServer(options?: StartServerOptions) {
 		environments: resolved.environments,
 		providers: resolved.providers,
 		capabilityProfiles: resolved.capabilityProfiles,
+		context: resolved.context,
 		defaults: resolved.defaults,
 	}
 	console.log(

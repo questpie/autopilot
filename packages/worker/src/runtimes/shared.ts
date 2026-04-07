@@ -37,6 +37,33 @@ export function buildPrompt(context: RunContext): string {
     }
   }
 
+  // Injected context — small curated docs always present in the prompt
+  if (context.injectedContext && Object.keys(context.injectedContext).length > 0) {
+    const contextLines: string[] = ['## Context']
+    for (const [name, content] of Object.entries(context.injectedContext)) {
+      contextLines.push(`### ${name}\n${content}`)
+    }
+    parts.push(contextLines.join('\n\n'))
+  }
+
+  // Context hints — navigation map for agent discovery
+  if (context.contextHints && context.contextHints.length > 0) {
+    const hintLines: string[] = [
+      '## Available Knowledge',
+      '',
+      'You have access to these knowledge sources. Read them when relevant to your task:',
+    ]
+    for (const hint of context.contextHints) {
+      const label = hint.description ?? hint.type
+      hintLines.push(`\n- **${label}**`)
+      hintLines.push(`  Path: ${hint.path}`)
+      if (hint.files && hint.files.length > 0) {
+        hintLines.push(`  Key files: ${hint.files.join(', ')}`)
+      }
+    }
+    parts.push(hintLines.join('\n'))
+  }
+
   if (parts.length === 0) {
     parts.push(`Execute run ${context.runId} for agent ${context.agentId}`)
   }

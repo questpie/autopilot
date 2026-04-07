@@ -29,6 +29,10 @@ export interface RunContext {
   capabilities: ResolvedCapabilities | null
   /** Resolved model for this run (after worker-local modelMap). Null = use runtime default. */
   model: string | null
+  /** Small curated context content injected into the prompt (name → content). */
+  injectedContext: Record<string, string> | null
+  /** Navigation hints — paths where agent can find knowledge sources. */
+  contextHints: Array<{ type: string; path: string; description?: string; files?: string[] }> | null
 }
 
 /** Result returned by a runtime adapter after completing. */

@@ -311,6 +311,8 @@ export class AutopilotWorker {
       workDir: ws?.path ?? null,
       capabilities: run.resolved_capabilities ?? null,
       model: resolvedModel,
+      injectedContext: run.injected_context ?? null,
+      contextHints: run.context_hints ?? null,
     }
 
     const isResume = !!run.resumed_from_run_id

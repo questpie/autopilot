@@ -104,6 +104,17 @@ export const ClaimedRunSchema = z.object({
 	// ─── Parent branch hint ─────────────────────────────────────────
 	/** When a child task exists, the parent task's branch so worker can branch from it. */
 	parent_branch: z.string().nullable().optional(),
+
+	// ─── Context assembly ────────────────────────────────────────────────
+	/** Small curated context content injected into the prompt (name → content). */
+	injected_context: z.record(z.string(), z.string()).optional(),
+	/** Navigation hints telling the agent where to find knowledge sources. */
+	context_hints: z.array(z.object({
+		type: z.string(),
+		path: z.string(),
+		description: z.string().optional(),
+		files: z.array(z.string()).optional(),
+	})).optional(),
 })
 
 export const WorkerClaimResponseSchema = z.object({

@@ -1,4 +1,7 @@
 import { randomBytes } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { readdir } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import {
@@ -156,6 +159,41 @@ const workers = new Hono<AppEnv>()
 		// Split targeting blob into constraints vs post-run hooks
 		const { constraints, actions, secretRefs, resolvedCapabilities } = splitTargeting(run.targeting)
 
+		// ─── Context assembly ──────────────────────────────────────────
+		// 1. Resolve injected context: capability_profiles.context names → actual content
+		const contextMap = config.context ?? new Map<string, string>()
+		const injectedContext: Record<string, string> = {}
+		if (resolvedCapabilities?.context) {
+			for (const name of resolvedCapabilities.context) {
+				const content = contextMap.get(name)
+				if (content) {
+					injectedContext[name] = content
+				}
+			}
+		}
+
+		// 2. Resolve context hints from company config
+		const companyRoot = c.get('companyRoot')
+		const companyHintsConfig = config.company.context_hints ?? {}
+		const contextHints: Array<{ type: string; path: string; description?: string; files?: string[] }> = []
+		for (const [hintType, relativePath] of Object.entries(companyHintsConfig)) {
+			const absPath = resolve(companyRoot, relativePath)
+			let files: string[] | undefined
+			if (existsSync(absPath)) {
+				try {
+					const entries = await readdir(absPath)
+					files = entries.filter((e) => !e.startsWith('.')).slice(0, 20)
+				} catch {
+					// Directory not readable — skip file listing
+				}
+			}
+			contextHints.push({
+				type: hintType,
+				path: absPath,
+				files,
+			})
+		}
+
 		// Resolve shared secret refs for worker delivery.
 		// Workers receive only 'worker' scoped secrets.
 		// 'provider' and 'orchestrator_only' scoped secrets stay orchestrator-side.
@@ -193,6 +231,8 @@ const workers = new Hono<AppEnv>()
 					resolved_shared_secrets: resolvedSharedSecrets,
 					resolved_capabilities: resolvedCapabilities,
 					parent_branch: parentBranch,
+					injected_context: Object.keys(injectedContext).length > 0 ? injectedContext : undefined,
+					context_hints: contextHints.length > 0 ? contextHints : undefined,
 				},
 				lease_id: leaseId,
 			},
