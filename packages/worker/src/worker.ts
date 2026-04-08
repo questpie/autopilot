@@ -337,7 +337,8 @@ export class AutopilotWorker {
     const adapter = createAdapter(resolved.config, resolved.resolvedBinaryPath)
 
     let ws: WorkspaceInfo | null = null
-    if (this.workspace) {
+    // Skip worktree for queries (no task_id) — they run in the main checkout
+    if (this.workspace && run.task_id) {
       try {
         ws = await this.workspace.acquire({
           runId: run.id,
