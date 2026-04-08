@@ -52,6 +52,8 @@ function makeConfig(): AuthoredConfig {
 		environments: new Map(),
 		providers: new Map(),
 		capabilityProfiles: new Map(),
+		skills: new Map(),
+		context: new Map(),
 		defaults: { runtime: 'claude-code', workflow: 'review-flow', task_assignee: 'ceo' },
 	}
 }

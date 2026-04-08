@@ -391,6 +391,8 @@ describe('Full pipeline: workflow engine → DB → claim route → response', (
 		environments: new Map(),
 		providers: new Map(),
 		capabilityProfiles: capProfiles,
+		skills: new Map(),
+		context: new Map(),
 		defaults: { runtime: 'claude-code', workflow: 'cap-test', task_assignee: 'dev' },
 	}
 

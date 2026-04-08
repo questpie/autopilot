@@ -461,6 +461,7 @@ function resolveAgentCapabilities(
 
 	return {
 		skills: [...skills],
+		skill_hints: [],
 		mcp_servers: [...mcpServers],
 		context: [...context],
 		prompts,

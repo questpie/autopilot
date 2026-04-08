@@ -110,3 +110,8 @@ export type IntakeResult = z.infer<typeof schemas.IntakeResultSchema>
 export type ConversationResult = z.infer<typeof schemas.ConversationResultSchema>
 export type NotificationPayload = z.infer<typeof schemas.NotificationPayloadSchema>
 export type NotificationAction = z.infer<typeof schemas.NotificationActionSchema>
+
+// Skills
+export type SkillManifest = z.infer<typeof schemas.SkillManifestSchema>
+export type SkillEntry = z.infer<typeof schemas.SkillEntrySchema>
+export type SkillHint = z.infer<typeof schemas.SkillHintSchema>

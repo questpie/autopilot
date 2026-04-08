@@ -21,8 +21,9 @@ import {
 	ProviderSchema,
 	CapabilityProfileSchema,
 	PATHS,
+	loadSkillEntries,
 } from '@questpie/autopilot-spec'
-import type { CompanyScope, ProjectScope, Agent, Workflow, Environment, Provider, CapabilityProfile } from '@questpie/autopilot-spec'
+import type { CompanyScope, ProjectScope, Agent, Workflow, Environment, Provider, CapabilityProfile, SkillEntry } from '@questpie/autopilot-spec'
 import type { z, ZodTypeDef } from 'zod'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -41,7 +42,7 @@ export interface ResolvedConfig {
 	environments: Map<string, Environment>
 	providers: Map<string, Provider>
 	capabilityProfiles: Map<string, CapabilityProfile>
-	skills: Map<string, string>
+	skills: Map<string, SkillEntry>
 	context: Map<string, string>
 	/** Resolved defaults (project overrides company). */
 	defaults: { runtime: string; workflow?: string; task_assignee?: string }
@@ -124,33 +125,6 @@ async function loadTextDir(dir: string): Promise<Map<string, string>> {
 	return result
 }
 
-async function loadSkillsDir(dir: string): Promise<Map<string, string>> {
-	const result = new Map<string, string>()
-	if (!existsSync(dir)) return result
-	let entries: string[]
-	try {
-		entries = await readdir(dir)
-	} catch {
-		return result
-	}
-	for (const entry of entries) {
-		// Standard SKILL.md format: .autopilot/skills/<name>/SKILL.md
-		const skillPath = join(dir, entry, 'SKILL.md')
-		if (existsSync(skillPath)) {
-			const content = await readFile(skillPath, 'utf-8')
-			result.set(entry, content)
-			continue
-		}
-		// Also support flat .md files: .autopilot/skills/<name>.md
-		if (entry.endsWith('.md')) {
-			const content = await readFile(join(dir, entry), 'utf-8')
-			const name = entry.replace(/\.md$/, '')
-			result.set(name, content)
-		}
-	}
-	return result
-}
-
 // ─── Config loading from a single scope root ───────────────────────────────
 
 export async function loadAgentsFromRoot(root: string) {
@@ -174,7 +148,7 @@ export async function loadCapabilityProfilesFromRoot(root: string) {
 }
 
 export async function loadSkillsFromRoot(root: string) {
-	return loadSkillsDir(join(root, PATHS.SKILLS_DIR))
+	return loadSkillEntries(join(root, PATHS.SKILLS_DIR))
 }
 
 export async function loadContextFromRoot(root: string) {
@@ -190,7 +164,7 @@ function mergeMapById<T extends { id: string }>(base: T[], overlay: T[]): Map<st
 	return result
 }
 
-function mergeMaps(base: Map<string, string>, overlay: Map<string, string>): Map<string, string> {
+function mergeMaps<V>(base: Map<string, V>, overlay: Map<string, V>): Map<string, V> {
 	const result = new Map(base)
 	for (const [key, value] of overlay) result.set(key, value) // project shadows
 	return result
@@ -210,7 +184,7 @@ export async function resolveConfig(chain: ScopeChain): Promise<ResolvedConfig> 
 	const companyEnvs = companyRoot ? await loadEnvironmentsFromRoot(companyRoot) : []
 	const companyProviders = companyRoot ? await loadProvidersFromRoot(companyRoot) : []
 	const companyCapProfiles = companyRoot ? await loadCapabilityProfilesFromRoot(companyRoot) : []
-	const companySkills = companyRoot ? await loadSkillsFromRoot(companyRoot) : new Map<string, string>()
+	const companySkills = companyRoot ? await loadSkillsFromRoot(companyRoot) : new Map<string, SkillEntry>()
 	const companyContext = companyRoot ? await loadContextFromRoot(companyRoot) : new Map<string, string>()
 
 	// Load from project root (if different from company root)
@@ -221,7 +195,7 @@ export async function resolveConfig(chain: ScopeChain): Promise<ResolvedConfig> 
 	const projectEnvs = hasProjectRoot ? await loadEnvironmentsFromRoot(projectRoot) : []
 	const projectProviders = hasProjectRoot ? await loadProvidersFromRoot(projectRoot) : []
 	const projectCapProfiles = hasProjectRoot ? await loadCapabilityProfilesFromRoot(projectRoot) : []
-	const projectSkills = hasProjectRoot ? await loadSkillsFromRoot(projectRoot) : new Map<string, string>()
+	const projectSkills = hasProjectRoot ? await loadSkillsFromRoot(projectRoot) : new Map<string, SkillEntry>()
 	const projectContext = hasProjectRoot ? await loadContextFromRoot(projectRoot) : new Map<string, string>()
 
 	// Merge: project overrides company

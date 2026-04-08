@@ -22,7 +22,7 @@ import { discoverScopes, resolveConfig } from './config/scope-resolver'
 import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, DependencyBridge, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, SchedulerDaemon, SteerService } from './services'
 import { Indexer } from './services/indexer'
 import type { AuthoredConfig } from './services'
-import { NotificationBridge, QueryResponseBridge } from './providers'
+import { NotificationBridge, QueryResponseBridge, TaskProgressBridge } from './providers'
 import { eventBus } from './events/event-bus'
 import { hasMasterKey, MasterKeyError } from './crypto'
 
@@ -80,6 +80,7 @@ export async function startServer(options?: StartServerOptions) {
 		environments: resolved.environments,
 		providers: resolved.providers,
 		capabilityProfiles: resolved.capabilityProfiles,
+		skills: resolved.skills,
 		context: resolved.context,
 		defaults: resolved.defaults,
 		queues: resolved.company.queues ?? {},
@@ -188,9 +189,22 @@ export async function startServer(options?: StartServerOptions) {
 		sessionMessageService,
 		artifactService,
 	)
+	const taskProgressBridge = new TaskProgressBridge(
+		eventBus,
+		authoredConfig,
+		runService,
+		taskService,
+		artifactService,
+		conversationBindingService,
+		{ companyRoot, orchestratorUrl },
+		secretService,
+		sessionService,
+		sessionMessageService,
+	)
 	if (authoredConfig.providers.size > 0) {
 		notificationBridge.start()
 		queryResponseBridge.start()
+		taskProgressBridge.start()
 	}
 
 	// ── 7b. Start parent join bridge ────────────────────────────────────
@@ -350,6 +364,7 @@ export async function startServer(options?: StartServerOptions) {
 		indexer.stop()
 		notificationBridge.stop()
 		queryResponseBridge.stop()
+		taskProgressBridge.stop()
 		parentJoinBridge.stop()
 		dependencyBridge.stop()
 		clearInterval(leaseExpiryTimer)

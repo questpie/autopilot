@@ -33,6 +33,12 @@ export const CapabilityProfileSchema = z.object({
 export const ResolvedCapabilitiesSchema = z.object({
 	/** Active skill identifiers (deduplicated). */
 	skills: z.array(z.string()).default([]),
+	/** Skill hints for prompt enrichment (id + name + description). */
+	skill_hints: z.array(z.object({
+		id: z.string(),
+		name: z.string(),
+		description: z.string(),
+	})).default([]),
 	/** Active MCP server identifiers (deduplicated). */
 	mcp_servers: z.array(z.string()).default([]),
 	/** Active context file identifiers (deduplicated). */

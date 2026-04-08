@@ -329,6 +329,9 @@ console.log(JSON.stringify({
 			]),
 			environments: new Map(),
 			providers,
+			capabilityProfiles: new Map(),
+			skills: new Map(),
+			context: new Map(),
 			defaults: { runtime: 'claude-code', workflow: 'review', task_assignee: 'dev' },
 		}
 

@@ -157,6 +157,9 @@ console.log(JSON.stringify({
 			workflows: new Map(),
 			environments: new Map(),
 			providers,
+			capabilityProfiles: new Map(),
+			skills: new Map(),
+			context: new Map(),
 			defaults: { runtime: 'claude-code' },
 		}
 

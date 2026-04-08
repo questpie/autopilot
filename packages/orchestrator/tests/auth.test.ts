@@ -12,6 +12,8 @@ function buildAuthTestApp() {
 		environments: new Map(),
 		providers: new Map(),
 		capabilityProfiles: new Map(),
+		skills: new Map(),
+		context: new Map(),
 	}
 
 	return createApp({

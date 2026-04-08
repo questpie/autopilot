@@ -77,3 +77,4 @@ export {
 	RunSteerRequestSchema,
 	RunSteerSchema,
 } from './api-contracts'
+export { SkillManifestSchema, SkillEntrySchema, SkillHintSchema } from './skill'

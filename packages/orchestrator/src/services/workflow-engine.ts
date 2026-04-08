@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities, QueueConfig, RetryPolicy } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities, QueueConfig, RetryPolicy, SkillEntry } from '@questpie/autopilot-spec'
 import { classifyRunError } from './error-classifier'
 import { slugifyTaskId } from './tasks'
 import type { TaskService, TaskRow } from './tasks'
@@ -18,6 +18,8 @@ export interface AuthoredConfig {
 	environments: Map<string, Environment>
 	providers: Map<string, Provider>
 	capabilityProfiles: Map<string, CapabilityProfile>
+	/** Parsed skill index (id → SkillEntry) from .autopilot/skills/ */
+	skills: Map<string, SkillEntry>
 	/** Loaded context file content (name → content) from .autopilot/context/ */
 	context: Map<string, string>
 	defaults: { runtime: string; workflow?: string; task_assignee?: string }
@@ -1139,8 +1141,22 @@ export class WorkflowEngine {
 		// Merge global context (lowest priority, deduped by Set)
 		for (const c of globalContext) context.add(c)
 
+		// Resolve skill hints from the skill index
+		const skillHints = [...skills]
+			.map(id => {
+				const entry = this.config.skills.get(id)
+				if (!entry) return null
+				return {
+					id,
+					name: entry.manifest.name || id,
+					description: entry.manifest.description,
+				}
+			})
+			.filter((h): h is NonNullable<typeof h> => h !== null)
+
 		return {
 			skills: [...skills],
+			skill_hints: skillHints,
 			mcp_servers: [...mcpServers],
 			context: [...context],
 			prompts,

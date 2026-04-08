@@ -29,7 +29,9 @@ export function buildPrompt(context: RunContext): string {
   // Inject capability profile hints (skills + prompt fragments)
   if (context.capabilities) {
     const cap = context.capabilities
-    if (cap.skills.length > 0) {
+    if (cap.skill_hints && cap.skill_hints.length > 0) {
+      parts.push(`## Active Skills\n${cap.skill_hints.map(h => `- ${h.id} — ${h.description || h.name}`).join('\n')}`)
+    } else if (cap.skills.length > 0) {
       parts.push(`## Active Skills\n${cap.skills.map((s) => `- ${s}`).join('\n')}`)
     }
     if (cap.prompts.length > 0) {

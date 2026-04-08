@@ -81,6 +81,8 @@ const DEFAULT_AUTHORED_CONFIG: AuthoredConfig = {
 	environments: new Map(),
 	providers: new Map(),
 	capabilityProfiles: new Map(),
+	skills: new Map(),
+	context: new Map(),
 	defaults: { runtime: 'claude-code', task_assignee: 'default-agent' },
 }
 
