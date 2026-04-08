@@ -19,6 +19,7 @@ import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
 import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, ScheduleService, SteerService, AuthoredConfig } from '../services'
+import type { Client } from '@libsql/client'
 import type { Actor } from '../auth/types'
 import { authMiddleware } from './middleware/auth'
 import { workerAuthMiddleware } from './middleware/worker-auth'
@@ -36,6 +37,7 @@ import { queries } from './routes/queries'
 import { sessionsRoute } from './routes/sessions'
 import { schedules } from './routes/schedules'
 import { queues } from './routes/queues'
+import { searchRoute } from './routes/search'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +70,8 @@ export interface AppEnv {
 		authoredConfig: AuthoredConfig
 		/** Canonical external base URL for rendered links (previews, notifications). Not the worker connection URL. */
 		orchestratorUrl: string | undefined
+		/** Raw libSQL client for index.db (search). */
+		indexDbRaw: Client | null
 	}
 }
 
@@ -89,6 +93,8 @@ export interface AppConfig {
 	 * This is the public-facing URL operators/users see — NOT the worker connection URL.
 	 */
 	orchestratorUrl?: string
+	/** Raw libSQL client for index.db (search). */
+	indexDbRaw?: Client
 }
 
 const orchestratorPkg = JSON.parse(
@@ -142,6 +148,7 @@ export function createApp(config: AppConfig) {
 		c.set('services', config.services)
 		c.set('authoredConfig', config.authoredConfig)
 		c.set('orchestratorUrl', config.orchestratorUrl)
+		c.set('indexDbRaw', config.indexDbRaw ?? null)
 		c.set('actor', null)
 		c.set('workerId', null)
 		await next()
@@ -217,6 +224,9 @@ export function createApp(config: AppConfig) {
 	app.use('/api/queues/*', userAuth)
 	app.use('/api/queues', userAuth)
 
+	// ── Search routes (user auth — operator surface) ─────────────────
+	app.use('/api/search', userAuth)
+
 	// ── Conversation routes ──────────────────────────────────────────────
 	// Binding management requires user auth; inbound /:providerId is self-authenticated via provider secret
 	app.use('/api/conversations/bindings', userAuth)
@@ -245,6 +255,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/sessions', sessionsRoute)
 		.route('/api/schedules', schedules)
 		.route('/api/queues', queues)
+		.route('/api/search', searchRoute)
 
 	return typedApp
 }

@@ -27,3 +27,4 @@ const client = hc<AppType>(getBaseUrl(), { headers: authHeaders() })
 export const tasks = client.api.tasks
 export const runs = client.api.runs
 export const schedulesApi = client.api.schedules
+export const searchApi = client.api.search

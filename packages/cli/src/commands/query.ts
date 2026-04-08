@@ -1,7 +1,8 @@
 import { Command } from 'commander'
 import { program } from '../program'
-import { section, badge, dim, success, error, separator } from '../utils/format'
-import { createApiClient } from '../utils/client'
+import { section, badge, dim, success, error, separator, dot } from '../utils/format'
+import { createApiClient, getBaseUrl } from '../utils/client'
+import { getAuthHeaders } from './auth'
 
 const queryCmd = new Command('query')
 	.description('Ask a question or request assistant help (no task created)')
@@ -11,7 +12,7 @@ const queryCmd = new Command('query')
 	.option('--continue-from <query_id>', 'Continue from a prior query')
 	.option('--runtime <runtime>', 'Explicit runtime override')
 	.option('-w, --wait', 'Wait for the query to complete and show result', false)
-	.option('--poll-interval <ms>', 'Poll interval in ms when waiting', '3000')
+	.option('-s, --stream', 'Stream live events (alias for --wait)', false)
 	.action(
 		async (
 			prompt: string,
@@ -21,11 +22,12 @@ const queryCmd = new Command('query')
 				continueFrom?: string
 				runtime?: string
 				wait: boolean
-				pollInterval: string
+				stream: boolean
 			},
 		) => {
 			try {
 				const client = createApiClient()
+				const shouldStream = opts.wait || opts.stream
 
 				// Create the query
 				const res = await client.api.queries.$post({
@@ -57,36 +59,18 @@ const queryCmd = new Command('query')
 					console.log(dim(`  Continues: ${created.continue_from}`))
 				}
 
-				if (!opts.wait) {
-					console.log(dim('  Use --wait to wait for completion, or:'))
+				if (!shouldStream) {
+					console.log(dim('  Use --wait/--stream to stream live events, or:'))
 					console.log(dim(`  autopilot query show ${created.query_id}`))
 					return
 				}
 
-				// Poll for completion
-				const pollMs = Number.parseInt(opts.pollInterval, 10)
-				console.log(dim(`  Waiting for completion (poll every ${pollMs}ms)...`))
+				// Stream live events via SSE
+				console.log('')
+				console.log(dim('  (streaming, Ctrl+C to detach)'))
+				console.log('')
 
-				let finalQuery: QueryDetail | undefined
-
-				while (true) {
-					await sleep(pollMs)
-
-					const pollRes = await client.api.queries[':id'].$get({
-						param: { id: created.query_id },
-					})
-					if (!pollRes.ok) {
-						console.error(error('Failed to poll query status'))
-						process.exit(1)
-					}
-
-					const q = (await pollRes.json()) as QueryDetail
-					if (q.status === 'completed' || q.status === 'failed') {
-						finalQuery = q
-						break
-					}
-				}
-
+				const finalQuery = await streamQueryEvents(created.query_id, created.run_id, client)
 				printQueryResult(finalQuery)
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
@@ -226,8 +210,142 @@ function printQueryResult(q: QueryDetail | undefined): void {
 	console.log(`  ${q.prompt.length > 200 ? `${q.prompt.slice(0, 200)}...` : q.prompt}`)
 }
 
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms))
+// ─── SSE Streaming ───────────────────────────────────────────────────────
+
+interface SSEEvent {
+	type: string
+	runId?: string
+	eventType?: string
+	summary?: string
+	status?: string
+}
+
+function formatTime(iso: string): string {
+	const d = new Date(iso)
+	return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
+function eventIcon(type: string): string {
+	switch (type) {
+		case 'started': return `${dot('green')} `
+		case 'completed': return `${dot('green')} `
+		case 'progress': return '\uD83D\uDCAC '
+		case 'tool_use': return '\uD83D\uDD27 '
+		case 'error': return '\u274C '
+		default: return '\u2022 '
+	}
+}
+
+async function streamQueryEvents(
+	queryId: string,
+	runId: string,
+	client: ReturnType<typeof createApiClient>,
+): Promise<QueryDetail | undefined> {
+	const headers: Record<string, string> = { ...getAuthHeaders() }
+	if (Object.keys(headers).length === 0) headers['X-Local-Dev'] = 'true'
+
+	// Check if run already completed before connecting SSE
+	const runRes = await client.api.runs[':id'].$get({ param: { id: runId } })
+	if (runRes.ok) {
+		const run = (await runRes.json()) as { status: string }
+		if (run.status === 'completed' || run.status === 'failed') {
+			const qRes = await client.api.queries[':id'].$get({ param: { id: queryId } })
+			if (qRes.ok) return (await qRes.json()) as QueryDetail
+			return undefined
+		}
+	}
+
+	const sseRes = await fetch(`${getBaseUrl()}/api/events`, { headers })
+	if (!sseRes.ok) {
+		console.error(error(`Failed to connect to event stream (${sseRes.status})`))
+		process.exit(1)
+	}
+
+	const reader = sseRes.body?.getReader()
+	if (!reader) {
+		console.error(error('No response body from event stream'))
+		process.exit(1)
+	}
+
+	// Graceful Ctrl+C cleanup
+	const cleanup = () => {
+		reader.cancel().catch((err) => console.debug('[query] reader cancel error:', err instanceof Error ? err.message : String(err)))
+		console.log('')
+		console.log(dim('  Detached from query stream.'))
+		process.exit(0)
+	}
+	process.on('SIGINT', cleanup)
+	process.on('SIGTERM', cleanup)
+
+	const decoder = new TextDecoder()
+	let buffer = ''
+
+	try {
+		while (true) {
+			const { done, value } = await reader.read()
+			if (done) break
+
+			buffer += decoder.decode(value, { stream: true })
+			const lines = buffer.split('\n')
+			buffer = lines.pop()!
+
+			for (const line of lines) {
+				if (!line.startsWith('data: ')) continue
+				const json = line.slice(6)
+				try {
+					const event = JSON.parse(json) as SSEEvent
+					if (event.type === 'heartbeat') continue
+
+					// Filter for events matching this run
+					if (event.type === 'run_event' && event.runId === runId) {
+						const ts = dim(formatTime(new Date().toISOString()))
+						const icon = eventIcon(event.eventType ?? 'progress')
+						const summary = event.summary ?? ''
+						if (event.eventType === 'progress') {
+							const text = summary.length > 200 ? `${summary.slice(0, 200)}...` : summary
+							console.log(`  ${ts}  ${icon}${dim(`"${text}"`)}`)
+						} else {
+							console.log(`  ${ts}  ${icon}${summary}`)
+						}
+					} else if (event.type === 'run_started' && event.runId === runId) {
+						const ts = dim(formatTime(new Date().toISOString()))
+						console.log(`  ${ts}  ${eventIcon('started')}Run started`)
+					} else if (event.type === 'run_completed' && event.runId === runId) {
+						const ts = dim(formatTime(new Date().toISOString()))
+						const status = event.status ?? 'completed'
+						console.log(`  ${ts}  ${eventIcon('completed')}Run ${status}`)
+						console.log('')
+
+						// Fetch final query result
+						reader.cancel().catch((err) => console.debug('[query] reader cancel error:', err instanceof Error ? err.message : String(err)))
+						process.removeListener('SIGINT', cleanup)
+						process.removeListener('SIGTERM', cleanup)
+
+						const qRes = await client.api.queries[':id'].$get({ param: { id: queryId } })
+						if (qRes.ok) return (await qRes.json()) as QueryDetail
+						return undefined
+					}
+				} catch (err) {
+					console.debug('[query] malformed SSE data:', err instanceof Error ? err.message : String(err))
+				}
+			}
+		}
+	} catch (err) {
+		if (err instanceof Error && err.name === 'AbortError') {
+			// Connection dropped — fall back to polling once
+			const qRes = await client.api.queries[':id'].$get({ param: { id: queryId } })
+			if (qRes.ok) return (await qRes.json()) as QueryDetail
+		}
+		throw err
+	}
+
+	// Stream ended without run_completed — connection drop fallback
+	process.removeListener('SIGINT', cleanup)
+	process.removeListener('SIGTERM', cleanup)
+	console.log(dim('  SSE stream ended, fetching final result...'))
+	const qRes = await client.api.queries[':id'].$get({ param: { id: queryId } })
+	if (qRes.ok) return (await qRes.json()) as QueryDetail
+	return undefined
 }
 
 program.addCommand(queryCmd)

@@ -7,7 +7,8 @@
 	"main": "src/index.ts",
 	"exports": {
 		".": "./src/index.ts",
-		"./api": "./src/api/index.ts"
+		"./api": "./src/api/index.ts",
+		"./handler-sdk": "./src/providers/handler-sdk.ts"
 	},
 	"files": [
 		"src/"

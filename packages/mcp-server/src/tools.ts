@@ -8,7 +8,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { tasks, runs, schedulesApi } from './api-client'
+import { tasks, runs, schedulesApi, searchApi } from './api-client'
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }> }
 
@@ -169,6 +169,10 @@ async function handleScheduleDelete(args: { id: string }) {
 	return ok(await schedulesApi[':id'].$delete({ param: { id: args.id } }))
 }
 
+async function handleSearch(args: { query: string; scope?: string }) {
+	return ok(await searchApi.$get({ query: { q: args.query, scope: args.scope } }))
+}
+
 // ─── Tool registration ─────────────────────────────────────────────
 
 export function registerTools(server: McpServer): void {
@@ -301,4 +305,11 @@ export function registerTools(server: McpServer): void {
 	server.tool('schedule_delete', 'Delete a schedule', {
 		id: z.string().describe('Schedule ID'),
 	}, handleScheduleDelete)
+
+	// ─── Search tool ──────────────────────────────────────────────────
+
+	server.tool('search', 'Full-text search across tasks, runs, context files, and schedules', {
+		query: z.string().describe('Search query'),
+		scope: z.enum(['tasks', 'runs', 'context', 'schedules', 'all']).optional().describe('Scope filter (default: all)'),
+	}, handleSearch)
 }

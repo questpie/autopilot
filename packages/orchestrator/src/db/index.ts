@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type Client, createClient } from '@libsql/client'
@@ -75,11 +74,8 @@ export async function createIndexDb(companyRoot: string): Promise<IndexDbResult>
 
 	const db = drizzle(client, { schema: indexSchema })
 
-	// Run drizzle migrations for index tables (if folder exists)
-	const indexMigrationsDir = join(import.meta.dir, '..', '..', 'drizzle-index')
-	if (existsSync(indexMigrationsDir)) {
-		await migrate(db, { migrationsFolder: indexMigrationsDir })
-	}
+	// Create core tables via raw SQL (index.db is fully rebuildable — no migrations needed)
+	await createIndexTables(client)
 
 	// FTS5 virtual tables for search_index
 	await initSearchFts(client)
@@ -104,6 +100,43 @@ export async function createIndexDb(companyRoot: string): Promise<IndexDbResult>
 	}
 
 	return { db, raw: client }
+}
+
+// ─── Index Table Creation (raw SQL — rebuildable) ─────────────────────────
+
+async function createIndexTables(client: Client): Promise<void> {
+	await client.execute(`
+		CREATE TABLE IF NOT EXISTS search_index (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			entity_type TEXT NOT NULL,
+			entity_id TEXT NOT NULL,
+			title TEXT,
+			content TEXT NOT NULL,
+			content_hash TEXT NOT NULL,
+			indexed_at TEXT NOT NULL,
+			embedding BLOB
+		)
+	`)
+	await client.execute('CREATE INDEX IF NOT EXISTS idx_search_entity_type ON search_index(entity_type)')
+	await client.execute('CREATE INDEX IF NOT EXISTS idx_search_entity_id ON search_index(entity_id)')
+	await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS uq_search_entity ON search_index(entity_type, entity_id)')
+
+	await client.execute(`
+		CREATE TABLE IF NOT EXISTS chunks (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			entity_type TEXT NOT NULL,
+			entity_id TEXT NOT NULL,
+			chunk_index INTEGER NOT NULL,
+			content TEXT NOT NULL,
+			content_hash TEXT NOT NULL,
+			metadata TEXT DEFAULT '{}',
+			indexed_at TEXT NOT NULL,
+			embedding BLOB
+		)
+	`)
+	await client.execute('CREATE INDEX IF NOT EXISTS idx_chunks_entity ON chunks(entity_type, entity_id)')
+	await client.execute('CREATE INDEX IF NOT EXISTS idx_chunks_entity_chunk ON chunks(entity_type, entity_id, chunk_index)')
+	await client.execute('CREATE INDEX IF NOT EXISTS idx_chunks_hash ON chunks(content_hash)')
 }
 
 // ─── FTS5 Initialization ───────────────────────────────────────────────────

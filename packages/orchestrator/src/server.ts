@@ -20,6 +20,7 @@ import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
 import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, DependencyBridge, SecretService, QueryService, SessionService, ScheduleService, SchedulerDaemon, SteerService } from './services'
+import { Indexer } from './services/indexer'
 import type { AuthoredConfig } from './services'
 import { NotificationBridge, QueryResponseBridge } from './providers'
 import { eventBus } from './events/event-bus'
@@ -66,7 +67,7 @@ export async function startServer(options?: StartServerOptions) {
 
 	// ── 3. Create databases ──────────────────────────────────────────────
 	const { db: companyDb } = await createCompanyDb(companyRoot)
-	const { db: _indexDb } = await createIndexDb(companyRoot)
+	const { db: indexDb, raw: indexDbRaw } = await createIndexDb(companyRoot)
 	console.log('[server] databases initialized')
 
 	// ── 4. Build resolved config (company + project merge) ───────────────
@@ -202,6 +203,12 @@ export async function startServer(options?: StartServerOptions) {
 	const schedulerDaemon = new SchedulerDaemon(scheduleService, workflowEngine, queryService, activityService)
 	schedulerDaemon.start()
 
+	// ── 7d. Start search indexer ──────────────────────────────────────
+	const indexer = new Indexer({ companyDb, indexDb, authoredConfig })
+	indexer.start().catch((err) => {
+		console.error('[server] indexer startup error:', err instanceof Error ? err.message : String(err))
+	})
+
 	// ── 8. Create Hono app ───────────────────────────────────────────────
 	const effectiveBypass = options?.allowLocalDevBypass && env.NODE_ENV !== 'production'
 	if (options?.allowLocalDevBypass) {
@@ -219,6 +226,7 @@ export async function startServer(options?: StartServerOptions) {
 		corsOrigin: env.CORS_ORIGIN,
 		allowLocalDevBypass: effectiveBypass,
 		orchestratorUrl,
+		indexDbRaw,
 	})
 
 	// ── 9. Start HTTP server ─────────────────────────────────────────────

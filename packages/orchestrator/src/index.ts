@@ -6,3 +6,5 @@ export { discoverScopes, resolveConfig, discoverAndResolve } from './config/scop
 export type { ScopeChain, ResolvedConfig } from './config/scope-resolver'
 export { WorkflowEngine } from './services/workflow-engine'
 export type { AuthoredConfig } from './services/workflow-engine'
+export { defineHandler, ok, fail, taskCreate, approve, reject, reply, query, noop } from './providers/handler-sdk'
+export type { HandlerEnvelope, HandlerResult, HandlerFn, TaskCreateInput } from './providers/handler-sdk'
