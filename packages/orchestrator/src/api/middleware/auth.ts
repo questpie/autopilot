@@ -139,7 +139,7 @@ const LOCAL_DEV_ACTOR: Actor = {
  * Uses X-Forwarded-For, then falls back to connection info heuristics.
  * Conservative: if we can't determine origin, reject.
  */
-function isLocalhostRequest(req: Request): boolean {
+export function isLocalhostRequest(req: Request): boolean {
 	const forwarded = req.headers.get('x-forwarded-for')
 	if (forwarded) {
 		const first = forwarded.split(',')[0]!.trim()

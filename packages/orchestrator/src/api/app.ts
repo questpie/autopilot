@@ -21,7 +21,7 @@ import { env } from '../env'
 import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, SteerService, AuthoredConfig } from '../services'
 import type { Client } from '@libsql/client'
 import type { Actor } from '../auth/types'
-import { authMiddleware, resolveActor as resolveActorFn } from './middleware/auth'
+import { authMiddleware, isLocalhostRequest, resolveActor as resolveActorFn } from './middleware/auth'
 import { workerAuthMiddleware } from './middleware/worker-auth'
 import { createMiddleware } from 'hono/factory'
 import { events } from './routes/events'
@@ -217,7 +217,8 @@ export function createApp(config: AppConfig) {
 		const effectiveBypassEither = config.allowLocalDevBypass && env.NODE_ENV !== 'production'
 		if (
 			effectiveBypassEither &&
-			c.req.header('x-local-dev') === 'true'
+			c.req.header('x-local-dev') === 'true' &&
+			isLocalhostRequest(c.req.raw)
 		) {
 			c.set('workerId', null)
 			return next()
