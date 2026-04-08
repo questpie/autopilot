@@ -5,8 +5,9 @@ import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
 import type { AppEnv } from '../app'
-import { search } from '../../services/search'
-import type { SearchScope } from '../../services/search'
+import { search, type SearchScope } from '../../services/search'
+
+const scopeSchema = z.enum(['tasks', 'runs', 'context', 'schedules', 'all'])
 
 const searchRoute = new Hono<AppEnv>().get(
 	'/',
@@ -14,7 +15,7 @@ const searchRoute = new Hono<AppEnv>().get(
 		'query',
 		z.object({
 			q: z.string().min(1),
-			scope: z.enum(['tasks', 'runs', 'context', 'schedules', 'all']).optional(),
+			scope: scopeSchema.optional(),
 		}),
 	),
 	async (c) => {
@@ -23,9 +24,10 @@ const searchRoute = new Hono<AppEnv>().get(
 		if (!rawClient) {
 			return c.json({ error: 'search index not available' }, 503)
 		}
+		const resolvedScope: SearchScope = scope ?? 'all'
 		try {
-			const results = await search(rawClient, q, (scope ?? 'all') as SearchScope)
-			return c.json({ results, query: q, scope: scope ?? 'all' }, 200)
+			const results = await search(rawClient, q, resolvedScope)
+			return c.json({ results, query: q, scope: resolvedScope }, 200)
 		} catch (err) {
 			return c.json({ error: err instanceof Error ? err.message : String(err) }, 500)
 		}

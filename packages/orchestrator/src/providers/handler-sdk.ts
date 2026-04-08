@@ -23,7 +23,7 @@
 export interface HandlerEnvelope {
 	op: string
 	provider_id: string
-	provider_kind: string
+	provider_kind: 'notification_channel' | 'intent_channel' | 'conversation_channel'
 	config: Record<string, unknown>
 	secrets: Record<string, string>
 	payload: Record<string, unknown>
@@ -34,10 +34,6 @@ export interface HandlerResult {
 	external_id?: string
 	metadata?: Record<string, unknown>
 	error?: string
-	action?: string
-	input?: Record<string, unknown>
-	reason?: string
-	message?: string
 }
 
 export type HandlerFn = (envelope: HandlerEnvelope) => Promise<HandlerResult>
@@ -64,27 +60,27 @@ export interface TaskCreateInput {
 }
 
 export function taskCreate(input: TaskCreateInput): HandlerResult {
-	return { ok: true, action: 'task.create', input }
+	return { ok: true, metadata: { action: 'task.create', input } }
 }
 
 export function approve(): HandlerResult {
-	return { ok: true, action: 'task.approve' }
+	return { ok: true, metadata: { action: 'task.approve' } }
 }
 
 export function reject(reason?: string): HandlerResult {
-	return { ok: true, action: 'task.reject', reason }
+	return { ok: true, metadata: { action: 'task.reject', reason } }
 }
 
 export function reply(message: string): HandlerResult {
-	return { ok: true, action: 'task.reply', message }
+	return { ok: true, metadata: { action: 'task.reply', message } }
 }
 
 export function query(message: string): HandlerResult {
-	return { ok: true, action: 'query.message', message }
+	return { ok: true, metadata: { action: 'query.message', message } }
 }
 
 export function noop(reason?: string): HandlerResult {
-	return { ok: true, action: 'noop', reason }
+	return { ok: true, metadata: { action: 'noop', reason } }
 }
 
 // ─── Main entry point ────────────────────────────────────────────────────────

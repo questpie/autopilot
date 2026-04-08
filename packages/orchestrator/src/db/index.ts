@@ -89,14 +89,14 @@ export async function createIndexDb(companyRoot: string): Promise<IndexDbResult>
 			'CREATE INDEX IF NOT EXISTS search_vec_idx ON search_index (libsql_vector_idx(embedding))',
 		)
 	} catch (err) {
-		console.warn('[db] vector index search_vec_idx unavailable (libSQL without vector support?):', (err as Error).message)
+		console.warn('[db] vector index search_vec_idx unavailable (libSQL without vector support?):', err instanceof Error ? err.message : String(err))
 	}
 	try {
 		await client.execute(
 			'CREATE INDEX IF NOT EXISTS chunks_vec_idx ON chunks (libsql_vector_idx(embedding))',
 		)
 	} catch (err) {
-		console.warn('[db] vector index chunks_vec_idx unavailable (libSQL without vector support?):', (err as Error).message)
+		console.warn('[db] vector index chunks_vec_idx unavailable (libSQL without vector support?):', err instanceof Error ? err.message : String(err))
 	}
 
 	return { db, raw: client }
@@ -155,7 +155,7 @@ async function initSearchFts(client: Client): Promise<void> {
 			)
 		`)
 	} catch (err) {
-		console.warn('[db] search FTS5 init failed:', (err as Error).message)
+		console.warn('[db] search FTS5 init failed:', err instanceof Error ? err.message : String(err))
 	}
 
 	try {
@@ -176,7 +176,7 @@ async function initSearchFts(client: Client): Promise<void> {
 			END
 		`)
 	} catch (err) {
-		console.warn('[db] search FTS5 triggers failed:', (err as Error).message)
+		console.warn('[db] search FTS5 triggers failed:', err instanceof Error ? err.message : String(err))
 	}
 }
 
@@ -194,7 +194,7 @@ async function initChunksFts(client: Client): Promise<void> {
 			)
 		`)
 	} catch (err) {
-		console.warn('[db] chunks FTS5 init failed:', (err as Error).message)
+		console.warn('[db] chunks FTS5 init failed:', err instanceof Error ? err.message : String(err))
 	}
 
 	try {
@@ -215,7 +215,7 @@ async function initChunksFts(client: Client): Promise<void> {
 			END
 		`)
 	} catch (err) {
-		console.warn('[db] chunks FTS5 triggers failed:', (err as Error).message)
+		console.warn('[db] chunks FTS5 triggers failed:', err instanceof Error ? err.message : String(err))
 	}
 }
 
@@ -232,7 +232,7 @@ async function initMessagesFts(client: Client): Promise<void> {
 			)
 		`)
 	} catch (err) {
-		console.warn('[db] messages FTS5 init failed:', (err as Error).message)
+		console.warn('[db] messages FTS5 init failed:', err instanceof Error ? err.message : String(err))
 	}
 
 	try {
@@ -253,7 +253,7 @@ async function initMessagesFts(client: Client): Promise<void> {
 			END
 		`)
 	} catch (err) {
-		console.warn('[db] messages FTS5 triggers failed:', (err as Error).message)
+		console.warn('[db] messages FTS5 triggers failed:', err instanceof Error ? err.message : String(err))
 	}
 }
 

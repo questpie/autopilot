@@ -6,7 +6,7 @@
  * Uses content hash to avoid re-indexing unchanged content.
  */
 import { createHash } from 'node:crypto'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, desc } from 'drizzle-orm'
 import type { CompanyDb, IndexDb } from '../db'
 import type { AuthoredConfig } from './workflow-engine'
 import { tasks, runs, schedules } from '../db/company-schema'
@@ -70,7 +70,7 @@ async function indexTasks(companyDb: CompanyDb, indexDb: IndexDb): Promise<numbe
 
 async function indexRuns(companyDb: CompanyDb, indexDb: IndexDb): Promise<number> {
 	// Only index runs with summaries, limit to most recent 500 to avoid memory issues
-	const allRuns = await companyDb.select().from(runs).orderBy(runs.created_at).limit(500).all()
+	const allRuns = await companyDb.select().from(runs).orderBy(desc(runs.created_at)).limit(500).all()
 	let count = 0
 	for (const run of allRuns) {
 		if (!run.summary) continue

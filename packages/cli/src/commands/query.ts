@@ -332,10 +332,15 @@ async function streamQueryEvents(
 		}
 	} catch (err) {
 		if (err instanceof Error && err.name === 'AbortError') {
-			// Connection dropped — fall back to polling once
+			// Connection dropped — clean up listeners and fall back to polling once
+			process.removeListener('SIGINT', cleanup)
+			process.removeListener('SIGTERM', cleanup)
 			const qRes = await client.api.queries[':id'].$get({ param: { id: queryId } })
 			if (qRes.ok) return (await qRes.json()) as QueryDetail
+			return undefined
 		}
+		process.removeListener('SIGINT', cleanup)
+		process.removeListener('SIGTERM', cleanup)
 		throw err
 	}
 
