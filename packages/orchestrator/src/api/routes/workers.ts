@@ -244,13 +244,28 @@ const workers = new Hono<AppEnv>()
 	})
 	// POST /workers/deregister — deregister a worker
 	.post('/deregister', zValidator('json', WorkerDeregisterRequestSchema), async (c) => {
-		const { workerService } = c.get('services')
+		const { workerService, runService, workflowEngine } = c.get('services')
 		const authWorkerId = c.get('workerId')
 		const body = c.req.valid('json')
 
 		const { workerId, mismatch } = getAuthoritativeWorkerId(authWorkerId, body.worker_id)
 		if (mismatch) {
 			return c.json({ error: `Authenticated as ${authWorkerId} but body.worker_id is ${body.worker_id}` }, 403)
+		}
+
+		// Release all active leases for this worker — fail the associated runs
+		// so they can be retried/rescheduled rather than waiting for lease expiry.
+		const activeLeases = await workerService.getActiveLeasesForWorker(workerId)
+		for (const lease of activeLeases) {
+			await workerService.completeLease(lease.id, 'failed')
+			await runService.complete(lease.run_id, {
+				status: 'failed',
+				error: 'worker deregistered',
+			})
+			const run = await runService.get(lease.run_id)
+			if (run?.task_id) {
+				await workflowEngine.handleRunFailure(run.task_id, lease.run_id)
+			}
 		}
 
 		await workerService.setOffline(workerId)

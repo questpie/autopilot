@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { eq, and, or, sql, inArray } from 'drizzle-orm'
-import { tasks, runs, runEvents, artifacts, taskRelations, conversationBindings, workerLeases } from '../db/company-schema'
+import { tasks, runs, runEvents, artifacts, taskRelations, conversationBindings, workerLeases, scheduleExecutions, runSteers } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
 /**
@@ -263,11 +263,12 @@ export class TaskService {
 			const runIds = taskRuns.map((r) => r.id)
 
 			if (runIds.length > 0) {
-				// 2. Delete run_events + artifacts + worker_leases for each run
+				// 2. Delete run_events + artifacts + worker_leases + run_steers for each run
 				for (const runId of runIds) {
 					tx.delete(runEvents).where(eq(runEvents.run_id, runId)).run()
 					tx.delete(artifacts).where(eq(artifacts.run_id, runId)).run()
 					tx.delete(workerLeases).where(eq(workerLeases.run_id, runId)).run()
+					tx.delete(runSteers).where(eq(runSteers.run_id, runId)).run()
 				}
 
 				// 3. Delete runs
@@ -285,7 +286,10 @@ export class TaskService {
 			// 6. Delete conversation bindings
 			tx.delete(conversationBindings).where(eq(conversationBindings.task_id, id)).run()
 
-			// 7. Delete the task itself
+			// 7. Delete schedule_executions referencing this task
+			tx.delete(scheduleExecutions).where(eq(scheduleExecutions.task_id, id)).run()
+
+			// 8. Delete the task itself
 			tx.delete(tasks).where(eq(tasks.id, id)).run()
 		})
 

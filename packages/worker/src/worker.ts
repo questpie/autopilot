@@ -52,6 +52,7 @@ export class AutopilotWorker {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private pollTimer: ReturnType<typeof setInterval> | null = null
   private running = false
+  private polling = false
   private activeRunIds = new Set<string>()
   private maxConcurrentRuns: number
   private adapters = new Map<string, RuntimeAdapter>()
@@ -271,30 +272,36 @@ export class AutopilotWorker {
 
   private async poll(): Promise<void> {
     if (!this.running) return
+    if (this.polling) return // prevent overlapping polls
+    this.polling = true
 
-    // Claim runs until at capacity or no more work available
-    while (this.running && this.activeRunIds.size < this.maxConcurrentRuns) {
-      try {
-        const res = (await this.api('/api/workers/claim', {
-          method: 'POST',
-          body: { worker_id: this.workerId },
-        })) as WorkerClaimResponse
+    try {
+      // Claim runs until at capacity or no more work available
+      while (this.running && this.activeRunIds.size < this.maxConcurrentRuns) {
+        try {
+          const res = (await this.api('/api/workers/claim', {
+            method: 'POST',
+            body: { worker_id: this.workerId },
+          })) as WorkerClaimResponse
 
-        if (!res.run) break // no more work available
+          if (!res.run) break // no more work available
 
-        this.activeRunIds.add(res.run.id)
-        const runId = res.run.id
-        this.executeRun(res.run)
-          .catch((err) => {
-            console.error(`[worker] run ${runId} failed:`, err)
-          })
-          .finally(() => {
-            this.activeRunIds.delete(runId)
-          })
-      } catch (err) {
-        console.error('[worker] poll failed:', err)
-        break
+          this.activeRunIds.add(res.run.id)
+          const runId = res.run.id
+          this.executeRun(res.run)
+            .catch((err) => {
+              console.error(`[worker] run ${runId} failed:`, err)
+            })
+            .finally(() => {
+              this.activeRunIds.delete(runId)
+            })
+        } catch (err) {
+          console.error('[worker] poll failed:', err)
+          break
+        }
       }
+    } finally {
+      this.polling = false
     }
   }
 

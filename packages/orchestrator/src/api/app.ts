@@ -193,10 +193,16 @@ export function createApp(config: AppConfig) {
 	app.use('/api/tasks', userAuth)
 	app.use('/api/events', userAuth)
 
-	// ── User auth for run inspection and operator actions ────────────────
+	// ── User auth for run listing, creation, and operator actions ────────
+	app.use('/api/runs', userAuth)
 	app.use('/api/runs/*/artifacts', userAuth)
 	app.use('/api/runs/*/cancel', userAuth)
+	app.use('/api/runs/*/continue', userAuth)
 	app.use('/api/runs/*/steer', userAuth)
+	// Note: GET /api/runs/:id (detail) is accessible to both workers (via workerAuth on
+	// sub-routes) and users. The sub-route worker auth on /events, /complete, /steers/claim
+	// covers worker write paths. The detail endpoint itself is not gated to avoid breaking
+	// workers that may need to read run details in the future.
 
 	// ── Preview routes (user auth — same as tasks/artifacts) ─────────────
 	app.use('/api/previews/*', userAuth)

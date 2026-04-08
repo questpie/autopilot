@@ -135,6 +135,8 @@ export class ScheduleService {
 	async delete(id: string): Promise<ScheduleRow | undefined> {
 		const existing = await this.get(id)
 		if (!existing) return undefined
+		// Cascade: delete execution history before the schedule itself
+		await this.db.delete(scheduleExecutions).where(eq(scheduleExecutions.schedule_id, id))
 		await this.db.delete(schedules).where(eq(schedules.id, id))
 		return existing
 	}

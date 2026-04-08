@@ -36,6 +36,10 @@ export class QueryResponseBridge {
 	 */
 	private lastProgressSent = new Map<string, number>()
 	private static readonly PROGRESS_THROTTLE_MS = 10_000
+	/** Periodic cleanup timer to prevent memory leaks from orphaned tracking entries. */
+	private cleanupTimer: ReturnType<typeof setInterval> | null = null
+	/** Max age (ms) for tracking entries before they're considered stale. */
+	private static readonly TRACKING_STALE_MS = 60 * 60 * 1000 // 1 hour
 
 	constructor(
 		private eventBus: EventBus,
@@ -54,6 +58,17 @@ export class QueryResponseBridge {
 				console.error('[query-response-bridge] unhandled error:', err instanceof Error ? err.message : String(err))
 			})
 		})
+		// Periodic cleanup of stale tracking entries (runs that never completed)
+		this.cleanupTimer = setInterval(() => {
+			const staleThreshold = Date.now() - QueryResponseBridge.TRACKING_STALE_MS
+			for (const [runId, lastSent] of this.lastProgressSent) {
+				if (lastSent < staleThreshold) {
+					this.lastProgressSent.delete(runId)
+					this.workingIndicatorSent.delete(runId)
+				}
+			}
+		}, 5 * 60 * 1000) // every 5 minutes
+		this.cleanupTimer.unref()
 		console.log('[query-response-bridge] started')
 	}
 
@@ -61,6 +76,10 @@ export class QueryResponseBridge {
 		if (this.unsubscribe) {
 			this.unsubscribe()
 			this.unsubscribe = null
+		}
+		if (this.cleanupTimer) {
+			clearInterval(this.cleanupTimer)
+			this.cleanupTimer = null
 		}
 	}
 
