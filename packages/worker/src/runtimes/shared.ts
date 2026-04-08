@@ -87,7 +87,7 @@ export function extractResult(rawText: string): ExtractedResult {
   const structured = parseStructuredOutput(rawText)
 
   const artifacts: RunArtifact[] = (structured?.artifacts ?? []).map((a) => ({
-    kind: a.kind as RunArtifact['kind'],
+    kind: a.kind,
     title: a.title,
     ref_kind: 'inline' as const,
     ref_value: a.content,

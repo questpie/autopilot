@@ -48,9 +48,10 @@ export const ArtifactSchema = z.object({
 	metadata: z.record(z.unknown()).optional(),
 })
 
-/** Artifacts reported by the worker in run completion. */
+/** Artifacts reported by the worker in run completion.
+ *  `kind` accepts any string — the orchestrator normalizes unknown values to "other". */
 export const RunArtifactSchema = z.object({
-	kind: ArtifactKindSchema.default('changed_file'),
+	kind: z.string().default('changed_file'),
 	title: z.string(),
 	ref_kind: ArtifactRefKindSchema.default('file'),
 	ref_value: z.string(),

@@ -8,6 +8,7 @@ import {
 	CreateRunRequestSchema,
 	ContinueRunRequestSchema,
 	RunSteerRequestSchema,
+	ArtifactKindSchema,
 } from '@questpie/autopilot-spec'
 import type { ResolvedCapabilities, CapabilityProfile } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
@@ -178,22 +179,29 @@ const runs = new Hono<AppEnv>()
 			})
 
 			// Register artifacts reported by the worker
+			const validArtifactKinds = new Set(ArtifactKindSchema.options)
 			let hasPreviewFiles = false
 			let previewEntry: string | null = null
 			if (body.artifacts?.length) {
 				for (const art of body.artifacts) {
+					const normalizedKind = validArtifactKinds.has(art.kind) ? art.kind : 'other'
+					const artMetadata = art.metadata ? { ...art.metadata } : {}
+					if (normalizedKind !== art.kind) {
+						artMetadata.original_kind = art.kind
+						console.debug(`[runs] normalized unknown artifact kind "${art.kind}" to "other"`)
+					}
 					await artifactService.create({
 						id: `art-${Date.now()}-${randomBytes(6).toString('hex')}`,
 						run_id: id,
 						task_id: run.task_id ?? undefined,
-						kind: art.kind,
+						kind: normalizedKind,
 						title: art.title,
 						ref_kind: art.ref_kind,
 						ref_value: art.ref_value,
 						mime_type: art.mime_type,
-						metadata: art.metadata ? JSON.stringify(art.metadata) : undefined,
+						metadata: Object.keys(artMetadata).length > 0 ? JSON.stringify(artMetadata) : undefined,
 					})
-					if (art.kind === 'preview_file') {
+					if (normalizedKind === 'preview_file') {
 						hasPreviewFiles = true
 						if (!previewEntry && art.title.endsWith('index.html')) {
 							previewEntry = art.title
