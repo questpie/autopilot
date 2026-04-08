@@ -37,6 +37,7 @@ async function handleTaskCreate(args: {
 	queue?: string
 	start_after?: string
 	depends_on?: string[]
+	workflow_id?: string
 }) {
 	return ok(await tasks.$post({ json: args }))
 }
@@ -194,6 +195,7 @@ export function registerTools(server: McpServer): void {
 		queue: z.string().optional().describe('Named queue for concurrency control'),
 		start_after: z.string().optional().describe('ISO datetime — task will not start before this time'),
 		depends_on: z.array(z.string()).optional().describe('Task IDs this task depends on'),
+		workflow_id: z.string().optional().describe('Workflow ID (e.g. "direct" for one-shot, "dogfood" for dev). Falls back to company default if omitted.'),
 	}, handleTaskCreate)
 
 	server.tool('task_update', 'Update a task', {

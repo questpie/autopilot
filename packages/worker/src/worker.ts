@@ -337,8 +337,9 @@ export class AutopilotWorker {
     const adapter = createAdapter(resolved.config, resolved.resolvedBinaryPath)
 
     let ws: WorkspaceInfo | null = null
-    // Skip worktree for queries (no task_id) — they run in the main checkout
-    if (this.workspace && run.task_id) {
+    // Skip worktree for queries (no task_id) or when workspace mode is 'none'
+    const needsWorktree = run.task_id && run.workspace_mode !== 'none'
+    if (this.workspace && needsWorktree) {
       try {
         ws = await this.workspace.acquire({
           runId: run.id,
@@ -357,6 +358,17 @@ export class AutopilotWorker {
           error: `Workspace setup failed: ${msg}`,
         })
         return
+      }
+    }
+
+    // When worktree was skipped for a task (workspace_mode: 'none'), use main checkout
+    if (!ws && this.workspace && run.task_id) {
+      ws = {
+        path: this.workspace.repoRoot,
+        branch: '',
+        created: false,
+        runId: run.id,
+        degraded: true,
       }
     }
 
@@ -426,8 +438,9 @@ export class AutopilotWorker {
       const resumable = !!result?.sessionId
 
       // Collect preview files from worktree before cleanup
+      // Skip when workspace is degraded (no real worktree diff to collect from)
       let allArtifacts: RunArtifact[] = result?.artifacts ?? []
-      if (ws && this.config.repoRoot) {
+      if (ws && !ws.degraded && this.config.repoRoot) {
         const previewFiles = await collectPreviewFiles(ws.path, this.config.repoRoot)
         if (previewFiles.length > 0) {
           allArtifacts = [...allArtifacts, ...previewFiles]
@@ -458,7 +471,7 @@ export class AutopilotWorker {
         outputs: Object.keys(mergedOutputs).length > 0 ? mergedOutputs : undefined,
       })
 
-      if (ws && this.workspace) {
+      if (ws && !ws.degraded && this.workspace) {
         await this.workspace.release({ runId: run.id, taskId: run.task_id, resumable })
       }
     } catch (err) {
@@ -467,7 +480,7 @@ export class AutopilotWorker {
       await this.postEvent(run.id, { type: 'error', summary: errorMsg })
       await this.completeRun(run.id, { status: 'failed', error: errorMsg })
 
-      if (ws && this.workspace) {
+      if (ws && !ws.degraded && this.workspace) {
         await this.workspace.release({ runId: run.id, taskId: run.task_id, resumable: false })
       }
     }

@@ -147,9 +147,14 @@ export const WorkflowStepSchema = z.object({
 	retry_policy: RetryPolicySchema.optional(),
 })
 
+export const WorkspaceConfigSchema = z.object({
+	mode: z.enum(['none', 'isolated_worktree']).default('isolated_worktree'),
+})
+
 export const WorkflowSchema = z.object({
 	id: z.string(),
 	name: z.string(),
 	description: z.string().default(''),
+	workspace: WorkspaceConfigSchema.optional(),
 	steps: z.array(WorkflowStepSchema),
 })

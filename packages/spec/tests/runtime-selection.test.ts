@@ -77,6 +77,49 @@ describe('runtime selection schema contract', () => {
 		expect(result.variant).toBeUndefined()
 	})
 
+	test('ClaimedRunSchema accepts workspace_mode values', () => {
+		const none = ClaimedRunSchema.parse({
+			id: 'run-1',
+			agent_id: 'dev',
+			task_id: 'task-1',
+			runtime: 'claude-code',
+			status: 'claimed',
+			workspace_mode: 'none',
+		})
+		expect(none.workspace_mode).toBe('none')
+
+		const isolated = ClaimedRunSchema.parse({
+			id: 'run-2',
+			agent_id: 'dev',
+			task_id: 'task-2',
+			runtime: 'claude-code',
+			status: 'claimed',
+			workspace_mode: 'isolated_worktree',
+		})
+		expect(isolated.workspace_mode).toBe('isolated_worktree')
+	})
+
+	test('ClaimedRunSchema allows null/undefined workspace_mode (backward compat)', () => {
+		const withNull = ClaimedRunSchema.parse({
+			id: 'run-1',
+			agent_id: 'dev',
+			task_id: null,
+			runtime: 'claude-code',
+			status: 'claimed',
+			workspace_mode: null,
+		})
+		expect(withNull.workspace_mode).toBeNull()
+
+		const withoutField = ClaimedRunSchema.parse({
+			id: 'run-2',
+			agent_id: 'dev',
+			task_id: null,
+			runtime: 'claude-code',
+			status: 'claimed',
+		})
+		expect(withoutField.workspace_mode).toBeUndefined()
+	})
+
 	test('CreateRunRequestSchema accepts model/provider/variant', () => {
 		const result = CreateRunRequestSchema.parse({
 			agent_id: 'dev',

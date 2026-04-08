@@ -131,11 +131,21 @@ const workers = new Hono<AppEnv>()
 		let taskTitle: string | null = null
 		let taskDescription: string | null = null
 		let parentBranch: string | null = null
+		let workspaceMode: 'none' | 'isolated_worktree' | null = null
 		if (run.task_id) {
 			const task = await taskService.get(run.task_id)
 			if (task) {
 				taskTitle = task.title
 				taskDescription = task.description ?? null
+
+				// Resolve workspace_mode from workflow config
+				if (task.workflow_id) {
+					const config = c.get('authoredConfig')
+					const workflow = config.workflows.get(task.workflow_id)
+					if (workflow?.workspace?.mode) {
+						workspaceMode = workflow.workspace.mode
+					}
+				}
 			}
 
 			// Resolve parent branch: if this task has a parent (via task_relations),
@@ -233,6 +243,7 @@ const workers = new Hono<AppEnv>()
 					secret_refs: secretRefs,
 					resolved_shared_secrets: resolvedSharedSecrets,
 					resolved_capabilities: resolvedCapabilities,
+					workspace_mode: workspaceMode,
 					parent_branch: parentBranch,
 					injected_context: Object.keys(injectedContext).length > 0 ? injectedContext : undefined,
 					context_hints: contextHints.length > 0 ? contextHints : undefined,

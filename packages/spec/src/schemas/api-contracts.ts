@@ -101,6 +101,10 @@ export const ClaimedRunSchema = z.object({
 	/** Resolved capability set for this run (merged agent + step profiles). */
 	resolved_capabilities: ResolvedCapabilitiesSchema.optional(),
 
+	// ─── Workspace policy ───────────────────────────────────────────
+	/** Controls whether the worker creates an isolated worktree for this run. */
+	workspace_mode: z.enum(['none', 'isolated_worktree']).nullable().optional(),
+
 	// ─── Parent branch hint ─────────────────────────────────────────
 	/** When a child task exists, the parent task's branch so worker can branch from it. */
 	parent_branch: z.string().nullable().optional(),

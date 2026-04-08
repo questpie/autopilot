@@ -189,6 +189,25 @@ describe('WorkspaceManager', () => {
   })
 })
 
+describe('WorkspaceManager.repoRoot (workspace_mode: none support)', () => {
+  let repoDir: string
+
+  beforeAll(async () => {
+    repoDir = await createTempGitRepo()
+  })
+
+  afterAll(async () => {
+    await rm(repoDir, { recursive: true, force: true })
+  })
+
+  test('repoRoot getter exposes the main checkout path for degraded workspace', () => {
+    const mgr = new WorkspaceManager({ repoRoot: repoDir })
+    // Worker uses repoRoot to construct a degraded WorkspaceInfo when workspace_mode is 'none'
+    expect(mgr.repoRoot).toBe(repoDir)
+    expect(existsSync(mgr.repoRoot)).toBe(true)
+  })
+})
+
 describe('WorkspaceManager (non-git directory)', () => {
   let tmpDir: string
 

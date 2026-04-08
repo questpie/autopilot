@@ -18,6 +18,7 @@ import type { RunService } from '../services/runs'
 import type { SessionService, SessionRow } from '../services/sessions'
 import type { SecretService } from '../services/secrets'
 import type { SessionMessageService, SessionMessageRow } from '../services/session-messages'
+import type { ArtifactService } from '../services/artifacts'
 import { invokeProvider, type HandlerRuntimeConfig } from './handler-runtime'
 
 export interface QueryResponseBridgeConfig {
@@ -64,6 +65,7 @@ export class QueryResponseBridge {
 		private config: QueryResponseBridgeConfig,
 		private secretService?: SecretService,
 		private sessionMessageService?: SessionMessageService,
+		private artifactService?: ArtifactService,
 	) {}
 
 	start(): void {
@@ -174,12 +176,21 @@ export class QueryResponseBridge {
 			? (run?.error ?? run?.summary ?? 'Query failed.')
 			: (run?.summary ?? 'Query completed.')
 
+		// Include preview_url if available
+		let previewUrl: string | undefined
+		if (this.artifactService && run) {
+			const artifacts = await this.artifactService.listForRun(event.runId)
+			const preview = artifacts.find((a) => a.kind === 'preview_url')
+			if (preview) previewUrl = preview.ref_value
+		}
+
 		const payload: NotificationPayload = {
 			orchestrator_url: this.config.orchestratorUrl,
 			event_type: 'query_response',
 			severity: failed ? 'error' : 'info',
 			title: failed ? 'Query Failed' : '',
 			summary,
+			preview_url: previewUrl,
 			conversation_id: session.external_conversation_id,
 			thread_id: session.external_thread_id ?? undefined,
 			...(editMessageId ? { edit_message_id: editMessageId } : {}),

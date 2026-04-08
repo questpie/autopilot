@@ -186,6 +186,7 @@ export async function startServer(options?: StartServerOptions) {
 		{ companyRoot, orchestratorUrl },
 		secretService,
 		sessionMessageService,
+		artifactService,
 	)
 	if (authoredConfig.providers.size > 0) {
 		notificationBridge.start()

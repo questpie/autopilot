@@ -72,6 +72,9 @@ if (op === 'notify.send') {
 
 	if (isQueryEvent) {
 		text = markdownToTelegramHtml(summary || title)
+		if (previewUrl) {
+			text += `\n\n\ud83d\udd17 <a href="${escapeHtml(previewUrl)}">Preview</a>`
+		}
 		parseMode = 'HTML'
 	} else {
 		// Rich HTML formatting for task notifications

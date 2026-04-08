@@ -1,5 +1,5 @@
 export { AgentSchema, FsScopeSchema, AgentTriggerSchema } from './agent'
-export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema, StepOutputSchema, StepInputSchema, StepTransitionSchema, RetryPolicySchema, RetryErrorTypeSchema, RetryExhaustedActionSchema } from './workflow'
+export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema, StepOutputSchema, StepInputSchema, StepTransitionSchema, RetryPolicySchema, RetryErrorTypeSchema, RetryExhaustedActionSchema, WorkspaceConfigSchema } from './workflow'
 export { EnvironmentSchema } from './environment'
 export {
 	SecretRefSchema,
