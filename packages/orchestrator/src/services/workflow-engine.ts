@@ -207,16 +207,17 @@ export class WorkflowEngine {
 		}
 
 		const workflowId = task.workflow_id ?? this.defaultWorkflow
-		if (workflowId && !task.workflow_id) {
+		if (workflowId && (!task.workflow_id || !task.workflow_step)) {
 			const workflow = this.config.workflows.get(workflowId)
 			if (!workflow) {
-				console.warn(`[workflow-engine] default_workflow "${workflowId}" not found — skipping workflow attachment`)
+				const source = task.workflow_id ? 'workflow_id' : 'default_workflow'
+				console.warn(`[workflow-engine] ${source} "${workflowId}" not found — skipping workflow attachment`)
 			} else if (workflow.steps.length === 0) {
 				console.warn(`[workflow-engine] workflow "${workflowId}" has no steps — skipping`)
 			} else {
-				updates.workflow_id = workflowId
-				updates.workflow_step = workflow.steps[0]!.id
-				actions.push('workflow_attached')
+				if (!task.workflow_id) updates.workflow_id = workflowId
+				if (!task.workflow_step) updates.workflow_step = workflow.steps[0]!.id
+				actions.push(task.workflow_id ? 'workflow_step_attached' : 'workflow_attached')
 			}
 		}
 

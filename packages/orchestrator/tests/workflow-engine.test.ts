@@ -173,6 +173,23 @@ describe('WorkflowEngine', () => {
 		expect(result!.actions).toContain('workflow_attached')
 	})
 
+	test('intake sets initial step for explicit workflow_id', async () => {
+		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
+		const task = await taskService.create({
+			id: `task-explicit-wf-${Date.now()}`,
+			title: 'Test explicit workflow',
+			type: 'feature',
+			workflow_id: 'default',
+			created_by: 'test',
+		})
+
+		const result = await engine.intake(task!.id)
+		expect(result).not.toBeNull()
+		expect(result!.task.workflow_id).toBe('default')
+		expect(result!.task.workflow_step).toBe('intake')
+		expect(result!.actions).toContain('workflow_step_attached')
+	})
+
 	test('intake creates run for first agent step', async () => {
 		const engine = new WorkflowEngine(makeConfig(), taskService, runService)
 		const task = await taskService.create({
