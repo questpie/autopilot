@@ -10,7 +10,7 @@
  * 7. Create Hono app
  * 8. Bun.serve on port 7778
  */
-import { existsSync } from 'node:fs'
+import { existsSync, watch as fsWatch, type FSWatcher } from 'node:fs'
 import { join, resolve } from 'node:path'
 import dotenv from 'dotenv'
 import { createApp } from './api'
@@ -200,7 +200,7 @@ export async function startServer(options?: StartServerOptions) {
 	workflowEngine.setCheckDependenciesFn((taskId) => dependencyBridge.checkDependencies(taskId))
 
 	// ── 7c. Start scheduler daemon ─────────────────────────────────────
-	const schedulerDaemon = new SchedulerDaemon(scheduleService, workflowEngine, queryService, activityService)
+	const schedulerDaemon = new SchedulerDaemon(scheduleService, workflowEngine, queryService, activityService, authoredConfig)
 	schedulerDaemon.start()
 
 	// ── 7d. Start search indexer ──────────────────────────────────────
@@ -283,5 +283,76 @@ export async function startServer(options?: StartServerOptions) {
 	// Ensure timer doesn't prevent process exit
 	leaseExpiryTimer.unref()
 
-	return { server, app, services, companyRoot, auth, db: companyDb, notificationBridge, schedulerDaemon }
+	// ── 12. Config file watcher (auto-reload on .autopilot/ changes) ────
+	const watchers: FSWatcher[] = []
+	let reloadTimer: ReturnType<typeof setTimeout> | null = null
+	const DEBOUNCE_MS = 500
+
+	const reloadConfig = async () => {
+		try {
+			const newChain = await discoverScopes(companyRoot)
+			const newResolved = await resolveConfig(newChain)
+			authoredConfig.company = newResolved.company
+			authoredConfig.agents = newResolved.agents
+			authoredConfig.workflows = newResolved.workflows
+			authoredConfig.environments = newResolved.environments
+			authoredConfig.providers = newResolved.providers
+			authoredConfig.capabilityProfiles = newResolved.capabilityProfiles
+			authoredConfig.context = newResolved.context
+			authoredConfig.defaults = newResolved.defaults
+			authoredConfig.queues = newResolved.company.queues ?? {}
+			console.log(
+				`[server] config reloaded (${newResolved.agents.size} agents, ${newResolved.workflows.size} workflows, ${newResolved.environments.size} environments, ${newResolved.providers.size} providers)`,
+			)
+		} catch (err) {
+			console.error('[server] config reload error:', err instanceof Error ? err.message : String(err))
+		}
+	}
+
+	const scheduleReload = () => {
+		if (reloadTimer) clearTimeout(reloadTimer)
+		reloadTimer = setTimeout(() => {
+			reloadTimer = null
+			void reloadConfig()
+		}, DEBOUNCE_MS)
+	}
+
+	const watchDir = (dir: string) => {
+		const autopilotDir = join(dir, '.autopilot')
+		if (!existsSync(autopilotDir)) return
+		try {
+			const watcher = fsWatch(autopilotDir, { recursive: true }, (_event, filename) => {
+				if (filename && (filename.endsWith('.yaml') || filename.endsWith('.yml') || filename.endsWith('.md'))) {
+					scheduleReload()
+				}
+			})
+			watchers.push(watcher)
+		} catch (err) {
+			console.warn('[server] could not watch', autopilotDir, ':', err instanceof Error ? err.message : String(err))
+		}
+	}
+
+	watchDir(companyRoot)
+	if (chain.projectRoot && chain.projectRoot !== companyRoot) {
+		watchDir(chain.projectRoot)
+	}
+
+	// ── Stop function for graceful shutdown ─────────────────────────────
+	const stop = () => {
+		schedulerDaemon.stop()
+		indexer.stop()
+		notificationBridge.stop()
+		queryResponseBridge.stop()
+		parentJoinBridge.stop()
+		dependencyBridge.stop()
+		clearInterval(leaseExpiryTimer)
+		if (reloadTimer) clearTimeout(reloadTimer)
+		for (const w of watchers) w.close()
+		if (indexDbRaw && typeof indexDbRaw.close === 'function') {
+			indexDbRaw.close()
+		}
+		server.stop()
+	}
+
+	return { server, app, services, companyRoot, auth, db: companyDb, notificationBridge, schedulerDaemon, stop }
 }

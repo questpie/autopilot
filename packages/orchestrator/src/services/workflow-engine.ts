@@ -78,6 +78,9 @@ export class WorkflowEngine {
 	private defaultWorkflow: string | undefined
 	private defaultRuntime: string
 
+	/** Guard against concurrent advance() calls for the same task. */
+	private advancing = new Set<string>()
+
 	/** Injected rollup function — avoids circular dependency with TaskGraphService. */
 	private childRollupFn?: (taskId: string, relationType?: string) => Promise<ChildRollup>
 
@@ -265,6 +268,19 @@ export class WorkflowEngine {
 	 * @param sourceRunId — the run that just completed (direct source for context forwarding)
 	 */
 	async advance(taskId: string, outputs?: Record<string, string>, sourceRunId?: string): Promise<AdvanceResult | null> {
+		if (this.advancing.has(taskId)) {
+			console.warn(`[workflow-engine] concurrent advance for task ${taskId}, skipping`)
+			return null
+		}
+		this.advancing.add(taskId)
+		try {
+			return await this._advanceInner(taskId, outputs, sourceRunId)
+		} finally {
+			this.advancing.delete(taskId)
+		}
+	}
+
+	private async _advanceInner(taskId: string, outputs?: Record<string, string>, sourceRunId?: string): Promise<AdvanceResult | null> {
 		const task = await this.taskService.get(taskId)
 		if (!task || !task.workflow_id || !task.workflow_step) return null
 

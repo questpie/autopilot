@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import type { ClaimedRun, WorkerClaimResponse, WorkerRegisterResponse, WorkerEvent, RunCompletion, WorkerEnrollResponse, RunArtifact } from '@questpie/autopilot-spec'
 import type { RuntimeAdapter, RunContext } from './runtimes/adapter'
 import { executeActions, mergeOutputs, type ActionsMergedResult } from './actions/webhook'
@@ -61,6 +61,7 @@ export class AutopilotWorker {
   private resolvedRuntimes: ResolvedRuntime[] = []
   private isLocalDev: boolean
   private apiServer: WorkerApiServer | null = null
+  private worktreeCleanupTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(private config: WorkerConfig) {
     this.isLocalDev = config.localDev ?? false
@@ -171,12 +172,23 @@ export class AutopilotWorker {
         apiConfig,
       )
     }
+
+    // ── Periodic worktree cleanup (every 5 min) ────────────────────
+    if (this.workspace) {
+      this.worktreeCleanupTimer = setInterval(() => {
+        this.cleanupStaleWorktrees().catch((err) => {
+          console.warn('[worker] worktree cleanup error:', err instanceof Error ? err.message : String(err))
+        })
+      }, 5 * 60_000)
+      this.worktreeCleanupTimer.unref()
+    }
   }
 
   async stop(): Promise<void> {
     this.running = false
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     if (this.pollTimer) clearInterval(this.pollTimer)
+    if (this.worktreeCleanupTimer) clearInterval(this.worktreeCleanupTimer)
 
     // Wait for all active runs to complete (with timeout)
     if (this.activeRunIds.size > 0) {
@@ -493,6 +505,44 @@ export class AutopilotWorker {
         console.log(`[worker] delivered steer ${steer.id} to run ${runId}`)
       } else {
         console.warn(`[worker] steer ${steer.id} could not be delivered to run ${runId}`)
+      }
+    }
+  }
+
+  /** Scan .worktrees/ and remove any whose task is in terminal state (done/failed). */
+  private async cleanupStaleWorktrees(): Promise<void> {
+    if (!this.workspace) return
+    const base = this.workspace.getWorktreeBase()
+    if (!existsSync(base)) return
+
+    let entries: string[]
+    try {
+      entries = readdirSync(base)
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      // Skip worktrees for currently active runs
+      if (this.activeRunIds.has(entry)) continue
+
+      // Query orchestrator for run status
+      try {
+        const run = (await this.api(`/api/runs/${encodeURIComponent(entry)}`, { method: 'GET' })) as {
+          id: string
+          task_id?: string
+          status: string
+        }
+        if (run.status === 'completed' || run.status === 'failed') {
+          await this.workspace.release({
+            runId: entry,
+            taskId: run.task_id,
+            resumable: false,
+          })
+          console.log(`[worker] cleaned up worktree for terminal run ${entry}`)
+        }
+      } catch {
+        // Run not found or API error — skip this entry
       }
     }
   }

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { eq, and, desc } from 'drizzle-orm'
-import { sessions } from '../db/company-schema'
+import { sessions, queries } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
 /**
@@ -166,7 +166,8 @@ export class SessionService {
 		return normalizeRows(rows)
 	}
 
-	/** Find the active session whose last_query_id matches the given query. */
+	/** Find the active session whose last_query_id matches the given query.
+	 *  Verifies the referenced query actually exists; clears dangling reference if not. */
 	async findByLastQuery(queryId: string): Promise<SessionRow | undefined> {
 		const row = await this.db
 			.select()
@@ -178,7 +179,26 @@ export class SessionService {
 				),
 			)
 			.get()
-		return row ? normalizeRow(row) : undefined
+		if (!row) return undefined
+
+		// Verify the referenced query still exists
+		const queryExists = await this.db
+			.select({ id: queries.id })
+			.from(queries)
+			.where(eq(queries.id, queryId))
+			.get()
+
+		if (!queryExists) {
+			// Clear the dangling reference
+			console.warn(`[sessions] clearing dangling last_query_id ${queryId} on session ${row.id}`)
+			await this.db
+				.update(sessions)
+				.set({ last_query_id: null, updated_at: new Date().toISOString() })
+				.where(eq(sessions.id, row.id))
+			return undefined
+		}
+
+		return normalizeRow(row)
 	}
 
 	async listForTask(taskId: string): Promise<SessionRow[]> {

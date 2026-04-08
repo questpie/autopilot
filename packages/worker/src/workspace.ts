@@ -185,6 +185,11 @@ export class WorkspaceManager {
     return { removed: true, branch }
   }
 
+  /** Get the base directory for all worktrees. */
+  getWorktreeBase(): string {
+    return this.#worktreeBase
+  }
+
   /** Check if a workspace exists for a run. */
   exists(runId: string): boolean {
     return existsSync(this.worktreePath(runId))

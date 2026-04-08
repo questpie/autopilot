@@ -1,3 +1,8 @@
+// SECURITY: Handler scripts are operator-authored code executed with full access
+// to passed secrets. They are NOT sandboxed. Ensure only trusted code is placed
+// in .autopilot/handlers/. The handler receives resolved secrets as env vars in
+// the envelope and can exfiltrate them via stdout/stderr/network.
+
 /**
  * Handler runtime — executes provider Bun handler scripts.
  *

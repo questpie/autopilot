@@ -21,8 +21,9 @@ import { env } from '../env'
 import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, ScheduleService, SteerService, AuthoredConfig } from '../services'
 import type { Client } from '@libsql/client'
 import type { Actor } from '../auth/types'
-import { authMiddleware } from './middleware/auth'
+import { authMiddleware, resolveActor as resolveActorFn } from './middleware/auth'
 import { workerAuthMiddleware } from './middleware/worker-auth'
+import { createMiddleware } from 'hono/factory'
 import { events } from './routes/events'
 import { tasks } from './routes/tasks'
 import { runs } from './routes/runs'
@@ -199,10 +200,37 @@ export function createApp(config: AppConfig) {
 	app.use('/api/runs/*/cancel', userAuth)
 	app.use('/api/runs/*/continue', userAuth)
 	app.use('/api/runs/*/steer', userAuth)
-	// Note: GET /api/runs/:id (detail) is accessible to both workers (via workerAuth on
-	// sub-routes) and users. The sub-route worker auth on /events, /complete, /steers/claim
-	// covers worker write paths. The detail endpoint itself is not gated to avoid breaking
-	// workers that may need to read run details in the future.
+	// GET /api/runs/:id — both users and workers need access
+	const eitherAuth = createMiddleware<AppEnv>(async (c, next) => {
+		// Try worker auth first (X-Worker-Secret header)
+		const workerSecret = c.req.header('x-worker-secret')
+		if (workerSecret) {
+			const { enrollmentService } = c.get('services')
+			const workerId = await enrollmentService.validateMachineSecret(workerSecret)
+			if (workerId) {
+				c.set('workerId', workerId)
+				return next()
+			}
+		}
+		// Try local dev bypass
+		const effectiveBypassEither = config.allowLocalDevBypass && env.NODE_ENV !== 'production'
+		if (
+			effectiveBypassEither &&
+			c.req.header('x-local-dev') === 'true'
+		) {
+			c.set('workerId', null)
+			return next()
+		}
+		// Fall through to user auth
+		const { enrollmentService } = c.get('services')
+		const actor = await resolveActorFn(c.req.raw, c.get('auth'), enrollmentService)
+		if (actor) {
+			c.set('actor', actor)
+			return next()
+		}
+		return c.json({ error: 'Unauthorized' }, 401)
+	})
+	app.use('/api/runs/:id', eitherAuth)
 
 	// ── Preview routes (user auth — same as tasks/artifacts) ─────────────
 	app.use('/api/previews/*', userAuth)

@@ -27,7 +27,7 @@ program.addCommand(
 				const port = Number.parseInt(opts.port, 10)
 
 				// ── 1. Start orchestrator ─────────────────────────────────────
-				const { server } = await startServer({ companyRoot: root, port, allowLocalDevBypass: true })
+				const { server, stop: stopServer } = await startServer({ companyRoot: root, port, allowLocalDevBypass: true })
 				const orchestratorUrl = `http://localhost:${server.port}`
 
 				// ── 2. Start local worker ─────────────────────────────────────
@@ -67,7 +67,7 @@ program.addCommand(
 					console.log('')
 					console.log(warning('Shutting down...'))
 					if (worker) await worker.stop()
-					server.stop()
+					stopServer()
 					console.log(success('Stopped.'))
 					process.exit(0)
 				}

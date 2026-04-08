@@ -53,7 +53,7 @@ async function getHumanSession(request: Request, auth: Auth): Promise<HumanSessi
 	}
 }
 
-async function resolveActor(
+export async function resolveActor(
 	request: Request,
 	auth: Auth,
 	enrollmentService?: EnrollmentService,

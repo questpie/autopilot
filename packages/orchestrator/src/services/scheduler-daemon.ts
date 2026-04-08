@@ -8,6 +8,7 @@
 import type { ScheduleService, ScheduleRow } from './schedules'
 import { interpolateTemplate } from './schedules'
 import type { WorkflowEngine } from './workflow-engine'
+import type { AuthoredConfig } from './workflow-engine'
 import type { QueryService } from './queries'
 import type { ActivityService } from './activity'
 
@@ -20,6 +21,7 @@ export class SchedulerDaemon {
 		private workflowEngine: WorkflowEngine,
 		private queryService: QueryService | null,
 		private activityService: ActivityService | null,
+		private authoredConfig?: AuthoredConfig,
 	) {}
 
 	start(intervalMs = 15_000): void {
@@ -72,6 +74,20 @@ export class SchedulerDaemon {
 	}
 
 	async execute(schedule: ScheduleRow, now: Date): Promise<void> {
+		// ── Validate agent exists in authored config ─────────────────────
+		if (this.authoredConfig && schedule.agent_id && !this.authoredConfig.agents.has(schedule.agent_id)) {
+			const reason = `agent "${schedule.agent_id}" not found in authored config`
+			console.warn(`[scheduler] skipping schedule ${schedule.id}: ${reason}`)
+			await this.scheduleService.recordExecution({
+				schedule_id: schedule.id,
+				status: 'failed',
+				error: reason,
+				triggered_at: now.toISOString(),
+			})
+			await this.scheduleService.advanceSchedule(schedule.id, now)
+			return
+		}
+
 		const mode = schedule.mode ?? 'task'
 		const concurrencyPolicy = schedule.concurrency_policy ?? 'skip'
 
