@@ -267,11 +267,12 @@ describe('Telegram handler normalization', () => {
 		'telegram.ts',
 	)
 
-	function runHandler(envelope: Record<string, unknown>): Promise<Record<string, unknown>> {
+	function runHandler(envelope: Record<string, unknown>, env?: Record<string, string>): Promise<Record<string, unknown>> {
 		const proc = Bun.spawn(['bun', 'run', handlerPath], {
 			stdin: new Blob([JSON.stringify(envelope)]),
 			stdout: 'pipe',
 			stderr: 'pipe',
+			env: env ? { ...process.env, ...env } : process.env,
 		})
 		return new Response(proc.stdout).text().then((t) => JSON.parse(t.trim()))
 	}
@@ -392,6 +393,45 @@ describe('Telegram handler normalization', () => {
 			expect(received).toHaveLength(1)
 			// No reply_markup when no actions
 			expect(received[0].reply_markup).toBeUndefined()
+		} finally {
+			mockServer.stop()
+		}
+	})
+
+	it('resolves env placeholders in default_chat_id', async () => {
+		const received: Record<string, unknown>[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				received.push(await req.json())
+				return Response.json({ ok: true, result: { message_id: 44 } })
+			},
+		})
+
+		try {
+			const result = await runHandler(
+				{
+					op: 'notify.send',
+					provider_id: 'telegram',
+					provider_kind: 'conversation_channel',
+					config: {
+						api_base_url: `http://localhost:${mockServer.port}`,
+						default_chat_id: '${TELEGRAM_CHAT_ID}',
+					},
+					secrets: { bot_token: 'test-token' },
+					payload: {
+						event_type: 'run_completed',
+						severity: 'info',
+						title: 'Run done',
+						summary: 'All good',
+					},
+				},
+				{ TELEGRAM_CHAT_ID: '99999' },
+			)
+
+			expect(result.ok).toBe(true)
+			expect(received).toHaveLength(1)
+			expect(received[0].chat_id).toBe('99999')
 		} finally {
 			mockServer.stop()
 		}

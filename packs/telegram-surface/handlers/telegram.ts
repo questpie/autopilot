@@ -48,7 +48,7 @@ const TELEGRAM_API = `${apiBase}/bot${botToken}`
 if (op === 'notify.send') {
 	const payload = envelope.payload as Record<string, unknown>
 	const chatId = (payload.conversation_id as string)
-		?? (envelope.config?.default_chat_id as string)
+		?? resolveEnvPlaceholder(envelope.config?.default_chat_id)
 
 	if (!chatId) {
 		console.log(JSON.stringify({ ok: true, metadata: { skipped: true, reason: 'no chat_id' } }))
@@ -413,4 +413,11 @@ function markdownToTelegramHtml(text: string): string {
 	}
 
 	return html
+}
+
+function resolveEnvPlaceholder(value: unknown): string | undefined {
+	if (typeof value !== 'string' || value.length === 0) return undefined
+	const match = value.match(/^\$\{([A-Z0-9_]+)\}$/)
+	if (!match) return value
+	return process.env[match[1]]
 }
