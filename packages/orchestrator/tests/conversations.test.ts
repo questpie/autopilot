@@ -265,6 +265,19 @@ console.log(JSON.stringify({
   },
 }))`
 
+	const COMMAND_HANDLER = `const input = await Bun.stdin.text()
+const envelope = JSON.parse(input)
+console.log(JSON.stringify({
+  ok: true,
+  metadata: {
+    action: 'conversation.command',
+    conversation_id: envelope.payload.conversation_id,
+    thread_id: envelope.payload.thread_id,
+    command: envelope.payload.command,
+    args: envelope.payload.args,
+  },
+}))`
+
 	function makeProvider(id: string, handler: string): Provider {
 		return {
 			id,
@@ -281,7 +294,24 @@ console.log(JSON.stringify({
 
 	function buildApp(providers: Map<string, Provider>, services: Services) {
 		const authoredConfig: AuthoredConfig = {
-			company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: '', email: '' }, defaults: {} },
+			company: {
+				name: 'test',
+				slug: 'test',
+				description: '',
+				timezone: 'UTC',
+				language: 'en',
+				owner: { name: '', email: '' },
+				defaults: {},
+				conversation_commands: {
+					build: {
+						action: 'task.create',
+						workflow_id: 'review',
+						type: 'feature',
+						title_template: '{{args}}',
+						description_template: '{{args}}',
+					},
+				},
+			},
 			agents: new Map([
 				['dev', { id: 'dev', name: 'Dev', role: 'developer', description: '' }],
 			]),
@@ -333,6 +363,7 @@ console.log(JSON.stringify({
 		await writeFile(join(companyRoot, '.autopilot', 'handlers', 'approve.ts'), APPROVE_HANDLER)
 		await writeFile(join(companyRoot, '.autopilot', 'handlers', 'noop.ts'), NOOP_HANDLER)
 		await writeFile(join(companyRoot, '.autopilot', 'handlers', 'unbound.ts'), UNBOUND_HANDLER)
+		await writeFile(join(companyRoot, '.autopilot', 'handlers', 'command.ts'), COMMAND_HANDLER)
 		dbResult = await createCompanyDb(companyRoot)
 	})
 
@@ -652,6 +683,71 @@ console.log(JSON.stringify({
 		const body = await res.json() as any
 		expect(body.error).toContain('Task not found')
 		delete process.env.__TEST_CONV_SECRET_conv7
+	})
+
+	test('conversation.command is idempotent for same conversation thread', async () => {
+		process.env.__TEST_CONV_SECRET_convcmd = 'secret-cmd'
+		const providers = new Map([['convcmd', makeProvider('convcmd', 'handlers/command.ts')]])
+		const taskService = new TaskService(dbResult.db)
+		const runService = new RunService(dbResult.db)
+		const activityService = new ActivityService(dbResult.db)
+		const workflowEngine = new WorkflowEngine(
+			{
+				company: {} as any,
+				agents: new Map([['dev', { id: 'dev', name: 'Dev', role: 'developer', description: '' }]]),
+				workflows: new Map([['review', {
+					id: 'review', name: 'Review', description: '', steps: [
+						{ id: 'work', type: 'agent', agent_id: 'dev', instructions: 'Do work' },
+						{ id: 'review', type: 'human_approval' },
+						{ id: 'done', type: 'done' },
+					],
+				}]]),
+				environments: new Map(),
+				providers,
+				defaults: { runtime: 'claude-code', workflow: 'review', task_assignee: 'dev' },
+			},
+			taskService, runService, activityService,
+		)
+		const services: Services = {
+			taskService, runService,
+			workerService: {} as any,
+			enrollmentService: {} as any,
+			activityService,
+			artifactService: new ArtifactService(dbResult.db),
+			conversationBindingService: new ConversationBindingService(dbResult.db),
+			sessionService: new SessionService(dbResult.db),
+			sessionMessageService: new SessionMessageService(dbResult.db),
+			queryService: new QueryService(dbResult.db),
+			secretService: new SecretService(dbResult.db),
+			workflowEngine,
+			taskRelationService: {} as any,
+			taskGraphService: {} as any,
+		}
+		const app = buildApp(providers, services)
+
+		const payload = {
+			conversation_id: 'cmd-chat-1',
+			thread_id: 'telegram-message-777',
+			command: 'build',
+			args: 'prepare demo note',
+		}
+		const headers = { 'x-provider-secret': 'secret-cmd' }
+		const first = await app.request('/api/conversations/convcmd', post(payload, headers))
+		const second = await app.request('/api/conversations/convcmd', post(payload, headers))
+
+		expect(first.status).toBe(200)
+		expect(second.status).toBe(200)
+		const firstBody = await first.json() as any
+		const secondBody = await second.json() as any
+		expect(firstBody.action).toBe('task.created')
+		expect(secondBody.action).toBe('task.created')
+		expect(secondBody.existing).toBe(true)
+		expect(secondBody.task_id).toBe(firstBody.task_id)
+
+		const matchingTasks = (await taskService.list()).filter((task) => task.title === 'prepare demo note')
+		expect(matchingTasks.length).toBe(1)
+
+		delete process.env.__TEST_CONV_SECRET_convcmd
 	})
 
 	test('duplicate binding creation returns 409', async () => {

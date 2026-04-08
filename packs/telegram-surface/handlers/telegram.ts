@@ -335,6 +335,7 @@ if (op === 'conversation.ingest') {
 	// Handle text message
 	if (message) {
 		const chatId = String((message.chat as Record<string, unknown>)?.id ?? '')
+		const messageId = message.message_id !== undefined ? String(message.message_id) : undefined
 		const text = (message.text as string ?? '').trim()
 		const replyTo = message.reply_to_message as Record<string, unknown> | undefined
 		const threadId = replyTo ? String(replyTo.message_id ?? '') : undefined
@@ -375,7 +376,9 @@ if (op === 'conversation.ingest') {
 			const args = spaceIdx > 0 ? text.slice(spaceIdx + 1).trim() : ''
 			emit(conversationCommand({
 				conversation_id: chatId,
-				thread_id: threadId,
+				// For new work orders, use the Telegram update message_id as a
+				// stable idempotency key. Replies keep their reply target.
+				thread_id: threadId ?? messageId,
 				command,
 				args,
 				sender_id: senderId,

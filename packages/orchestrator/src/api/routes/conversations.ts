@@ -94,7 +94,7 @@ const conversations = new Hono<AppEnv>()
 	)
 	// POST /conversations/:providerId — inbound conversation payload (provider-secret auth)
 	.post('/:providerId', zValidator('param', z.object({ providerId: z.string() })), async (c) => {
-		const { workflowEngine, conversationBindingService, sessionService, sessionMessageService, queryService, runService } = c.get('services')
+		const { workflowEngine, conversationBindingService, sessionService, sessionMessageService, queryService, runService, taskService } = c.get('services')
 		const authoredConfig = c.get('authoredConfig')
 		const companyRoot = c.get('companyRoot')
 		const { providerId } = c.req.valid('param')
@@ -334,6 +334,26 @@ const conversations = new Hono<AppEnv>()
 			if (commandConfig.action === 'task.create') {
 				const actor = `provider:${providerId}`
 
+				// Idempotency for provider retries: handlers should pass a stable
+				// thread_id for command messages (Telegram uses message_id).
+				if (result.thread_id) {
+					const existingBinding = await conversationBindingService.findExact(
+						providerId,
+						result.conversation_id,
+						result.thread_id,
+					)
+					if (existingBinding?.task_id) {
+						const existingTask = await taskService.get(existingBinding.task_id)
+						return c.json({
+							action: 'task.created',
+							task_id: existingBinding.task_id,
+							workflow_id: existingTask?.workflow_id ?? undefined,
+							command: result.command,
+							existing: true,
+						}, 200)
+					}
+				}
+
 				// Render templates
 				const templateCtx: Record<string, string> = {
 					args: result.args,
@@ -379,14 +399,37 @@ const conversations = new Hono<AppEnv>()
 
 				// Bind to conversation
 				const bindingId = `bind-${Date.now()}-${randomBytes(6).toString('hex')}`
-				await conversationBindingService.create({
-					id: bindingId,
-					provider_id: providerId,
-					external_conversation_id: result.conversation_id,
-					external_thread_id: result.thread_id,
-					mode: 'task_thread',
-					task_id: materialized.task.id,
-				})
+				try {
+					await conversationBindingService.create({
+						id: bindingId,
+						provider_id: providerId,
+						external_conversation_id: result.conversation_id,
+						external_thread_id: result.thread_id,
+						mode: 'task_thread',
+						task_id: materialized.task.id,
+					})
+				} catch (err) {
+					// A retry can race with the original request. Return 200 so the
+					// provider stops retrying instead of creating more tasks.
+					if (err instanceof Error && err.message.includes('already exists') && result.thread_id) {
+						const existingBinding = await conversationBindingService.findExact(
+							providerId,
+							result.conversation_id,
+							result.thread_id,
+						)
+						if (existingBinding?.task_id) {
+							const existingTask = await taskService.get(existingBinding.task_id)
+							return c.json({
+								action: 'task.created',
+								task_id: existingBinding.task_id,
+								workflow_id: existingTask?.workflow_id ?? undefined,
+								command: result.command,
+								existing: true,
+							}, 200)
+						}
+					}
+					throw err
+				}
 
 				return c.json({
 					action: 'task.created',
@@ -521,4 +564,3 @@ export { conversations }
 function renderTemplate(template: string, ctx: Record<string, string>): string {
 	return template.replace(/\{\{(\w+)\}\}/g, (_, key) => ctx[key] ?? '')
 }
-

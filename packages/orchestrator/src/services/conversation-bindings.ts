@@ -43,8 +43,8 @@ export class ConversationBindingService {
 		return _getBinding(this.db, id)
 	}
 
-	/** Exact match — no fallback. Used for uniqueness checks in create(). */
-	private async findExact(
+	/** Exact match — no fallback. Used for uniqueness/idempotency checks. */
+	async findExact(
 		providerId: string,
 		externalConversationId: string,
 		externalThreadId?: string,

@@ -21,6 +21,7 @@ interface HandlerResult {
 
 function makeEnvelope(text: string, overrides?: { reply_to_message?: Record<string, unknown> }): Record<string, unknown> {
 	const message: Record<string, unknown> = {
+		message_id: 777,
 		chat: { id: 12345 },
 		from: { id: 111, first_name: 'Test' },
 		text,
@@ -57,8 +58,20 @@ describe('Telegram handler: conversation.command routing', () => {
 		expect(result.metadata?.action).toBe('conversation.command')
 		expect(result.metadata?.command).toBe('build')
 		expect(result.metadata?.args).toBe('nainštaluj providera')
+		expect(result.metadata?.thread_id).toBe('777')
 		expect(result.metadata?.sender_id).toBe('111')
 		expect(result.metadata?.sender_name).toBe('Test')
+	})
+
+	test('/build reply preserves reply thread_id', async () => {
+		const result = await runHandler(makeEnvelope('/build follow up', {
+			reply_to_message: { message_id: 999 },
+		}))
+
+		expect(result.ok).toBe(true)
+		expect(result.metadata?.action).toBe('conversation.command')
+		expect(result.metadata?.command).toBe('build')
+		expect(result.metadata?.thread_id).toBe('999')
 	})
 
 	test('/direct napíš básničku → conversation.command', async () => {

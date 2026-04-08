@@ -487,6 +487,81 @@ console.log(JSON.stringify({ ok: false, error: 'delivery failed' }))`
 		expect(systemMsgs.length).toBeGreaterThanOrEqual(1)
 		expect(systemMsgs[0].content).toContain('run_completed')
 	})
+
+	test('task binding suppresses duplicate default-chat delivery', async () => {
+		await writeFile(invocationsFile, '')
+
+		const eventBus = new EventBus()
+		const provider = makeConvProviderWithDefaultChat(
+			'notif-bound',
+			'handlers/ok-handler.ts',
+			'default-chat-bound',
+		)
+
+		const taskId = `task-bound-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Bound task',
+			type: 'development',
+			created_by: 'test',
+		})
+		await bindingService.create({
+			id: `bind-bound-${Date.now()}`,
+			provider_id: 'notif-bound',
+			external_conversation_id: 'bound-chat-123',
+			external_thread_id: 'source-message-1',
+			mode: 'task_thread',
+			task_id: taskId,
+		})
+
+		const runId = `run-bound-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			task_id: taskId,
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'test run with bound task',
+		})
+		await runService.start(runId)
+		await runService.complete(runId, { status: 'completed', summary: 'Bound task completed' })
+
+		const authoredConfig = {
+			company: {},
+			agents: new Map(),
+			workflows: new Map(),
+			environments: new Map(),
+			providers: new Map([['notif-bound', provider]]),
+			capabilityProfiles: new Map(),
+			defaults: { runtime: 'claude-code' },
+		}
+
+		const bridge = new NotificationBridge(
+			eventBus,
+			authoredConfig,
+			runService,
+			taskService,
+			artifactService,
+			bindingService,
+			{ companyRoot: testRoot },
+			undefined,
+			sessionService,
+			sessionMessageService,
+		)
+		bridge.start()
+
+		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
+		await new Promise((r) => setTimeout(r, 2000))
+		bridge.stop()
+
+		const content = await Bun.file(invocationsFile).text()
+		const entries = content.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line))
+
+		const boundCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'bound-chat-123')
+		const defaultChatCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-bound')
+		expect(boundCalls.length).toBe(1)
+		expect(defaultChatCalls.length).toBe(0)
+	})
 })
 
 // ─── Test 3: QueryResponseBridge progress fallback edit tracking ─────────────

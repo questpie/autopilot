@@ -71,13 +71,23 @@ export class NotificationBridge {
 			await this.sendToProvider(provider, payload, runtimeConfig)
 		}
 
-		// 1b. Default-chat delivery for conversation_channel providers
-		// Only for task-scoped events — query responses are delivered by QueryResponseBridge
+		// 2. Bound conversation_channel delivery (task-scoped outbound)
+		const taskBindings = payload.task_id
+			? await this.conversationBindingService.listForTask(payload.task_id)
+			: []
+		if (payload.task_id) {
+			await this.deliverToBoundConversations(payload, event, runtimeConfig, taskBindings)
+		}
+
+		// 3. Default-chat delivery for conversation_channel providers.
+		// Only for task-scoped events with no explicit binding for that provider;
+		// query responses are delivered by QueryResponseBridge.
 		if (payload && payload.task_id) {
 			for (const provider of this.authoredConfig.providers.values()) {
 				if (provider.kind !== 'conversation_channel') continue
 				if (!provider.capabilities.some((c) => c.op === 'notify.send')) continue
 				if (!this.matchesEventFilters(provider, event)) continue
+				if (taskBindings.some((binding) => binding.provider_id === provider.id && binding.mode === 'task_thread')) continue
 
 				const defaultChatId = provider.config.default_chat_id
 				if (typeof defaultChatId !== 'string' || !defaultChatId) continue
@@ -108,11 +118,6 @@ export class NotificationBridge {
 					})
 				}
 			}
-		}
-
-		// 2. Bound conversation_channel delivery (new: task-scoped outbound)
-		if (payload.task_id) {
-			await this.deliverToBoundConversations(payload, event, runtimeConfig)
 		}
 	}
 
@@ -147,10 +152,10 @@ export class NotificationBridge {
 		payload: NotificationPayload,
 		event: AutopilotEvent,
 		runtimeConfig: HandlerRuntimeConfig,
+		bindings?: Awaited<ReturnType<ConversationBindingService['listForTask']>>,
 	): Promise<void> {
-		const bindings = await this.conversationBindingService.listForTask(payload.task_id!)
-
-		for (const binding of bindings) {
+		const targetBindings = bindings ?? await this.conversationBindingService.listForTask(payload.task_id!)
+		for (const binding of targetBindings) {
 			// Only task_thread bindings receive task-scoped outbound updates
 			if (binding.mode !== 'task_thread') continue
 
