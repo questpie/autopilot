@@ -13,7 +13,7 @@ export { CapabilityProfileSchema, ResolvedCapabilitiesSchema } from './capabilit
 export { ExternalActionSchema, WebhookActionSchema, ScriptActionSchema, ScriptRunnerSchema, ScriptResultSchema } from './external-action'
 export { ArtifactSchema, ArtifactKindSchema, ArtifactRefKindSchema, RunArtifactSchema } from './artifact'
 export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema } from './company'
-export { CompanyScopeSchema, ProjectScopeSchema, ScopeDefaultsSchema, QueueConfigSchema } from './scope'
+export { CompanyScopeSchema, ProjectScopeSchema, ScopeDefaultsSchema, QueueConfigSchema, ConversationCommandConfigSchema } from './scope'
 export {
 	PackDependencySchema,
 	RegistrySchema,

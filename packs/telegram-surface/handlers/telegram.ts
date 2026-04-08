@@ -13,6 +13,7 @@
  *   Normalizes Telegram webhook updates into orchestrator conversation actions.
  *   Supports: callback_query (button presses), text messages (reply/commands).
  *   Emits sender_id/sender_name for group chat identity.
+ *   Generic commands: any /command forwards to conversation.command
  *
  * Envelope shape (stdin JSON):
  *   { op, provider_id, provider_kind, config, secrets, payload }
@@ -23,6 +24,78 @@
  * Required config:
  *   default_chat_id — fallback chat for notifications
  */
+
+// ─── Inline SDK helpers (handler runs standalone, can't import orchestrator) ──
+
+interface HandlerResult {
+	ok: boolean
+	external_id?: string
+	metadata?: Record<string, unknown>
+	error?: string
+}
+
+function ok(data?: Partial<HandlerResult>): HandlerResult {
+	return { ok: true, ...data }
+}
+
+function fail(error: string): HandlerResult {
+	return { ok: false, error }
+}
+
+function noop(reason?: string): HandlerResult {
+	return { ok: true, metadata: { action: 'noop', reason } }
+}
+
+function queryMessage(input: {
+	conversation_id: string
+	thread_id?: string
+	message: string
+	sender_id?: string
+	sender_name?: string
+}): HandlerResult {
+	return { ok: true, metadata: { action: 'query.message', ...input } }
+}
+
+function conversationApprove(input: {
+	conversation_id: string
+	thread_id?: string
+}): HandlerResult {
+	return { ok: true, metadata: { action: 'task.approve', ...input } }
+}
+
+function conversationReject(input: {
+	conversation_id: string
+	thread_id?: string
+	message?: string
+}): HandlerResult {
+	return { ok: true, metadata: { action: 'task.reject', ...input } }
+}
+
+function conversationReply(input: {
+	conversation_id: string
+	thread_id?: string
+	message: string
+}): HandlerResult {
+	return { ok: true, metadata: { action: 'task.reply', ...input } }
+}
+
+function conversationCommand(input: {
+	conversation_id: string
+	thread_id?: string
+	command: string
+	args: string
+	sender_id?: string
+	sender_name?: string
+}): HandlerResult {
+	return { ok: true, metadata: { action: 'conversation.command', ...input } }
+}
+
+function emit(result: HandlerResult): never {
+	console.log(JSON.stringify(result))
+	process.exit(0)
+}
+
+// ─── Envelope parsing ─────────────────────────────────────────────────────
 
 interface TelegramResponse {
 	ok: boolean
@@ -36,8 +109,7 @@ const op = envelope.op as string
 
 const botToken = envelope.secrets?.bot_token as string | undefined
 if (!botToken) {
-	console.log(JSON.stringify({ ok: false, error: 'Missing secret: bot_token' }))
-	process.exit(0)
+	emit(fail('Missing secret: bot_token'))
 }
 
 const apiBase = (envelope.config?.api_base_url as string) ?? 'https://api.telegram.org'
@@ -51,8 +123,7 @@ if (op === 'notify.send') {
 		?? resolveEnvPlaceholder(envelope.config?.default_chat_id)
 
 	if (!chatId) {
-		console.log(JSON.stringify({ ok: true, metadata: { skipped: true, reason: 'no chat_id' } }))
-		process.exit(0)
+		emit(ok({ metadata: { skipped: true, reason: 'no chat_id' } }))
 	}
 
 	const title = payload.title as string ?? 'Notification'
@@ -171,8 +242,7 @@ if (op === 'notify.send') {
 		if (data.ok) {
 			// For edits, the message_id stays the same; for new messages, capture it
 			const messageId = useEdit ? Number(editMessageId) : (data.result?.message_id ?? 0)
-			console.log(JSON.stringify({
-				ok: true,
+			emit(ok({
 				external_id: String(messageId),
 				metadata: { chat_id: chatId, message_id: messageId },
 			}))
@@ -183,8 +253,7 @@ if (op === 'notify.send') {
 			// fast query completions can duplicate the final message via fallback send.
 			if (useEdit && description.toLowerCase().includes('message is not modified')) {
 				const messageId = Number(editMessageId)
-				console.log(JSON.stringify({
-					ok: true,
+				emit(ok({
 					external_id: String(messageId),
 					metadata: { chat_id: chatId, message_id: messageId, unchanged: true },
 				}))
@@ -200,29 +269,19 @@ if (op === 'notify.send') {
 				})
 				const fallbackData = (await fallbackRes.json()) as TelegramResponse
 				if (fallbackData.ok) {
-					console.log(JSON.stringify({
-						ok: true,
+					emit(ok({
 						external_id: String(fallbackData.result?.message_id ?? ''),
 						metadata: { chat_id: chatId, message_id: fallbackData.result?.message_id },
 					}))
 				} else {
-					console.log(JSON.stringify({
-						ok: false,
-						error: `Telegram API: ${fallbackData.description ?? 'Unknown error'}`,
-					}))
+					emit(fail(`Telegram API: ${fallbackData.description ?? 'Unknown error'}`))
 				}
 			} else {
-				console.log(JSON.stringify({
-					ok: false,
-					error: `Telegram API: ${data.description ?? 'Unknown error'}`,
-				}))
+				emit(fail(`Telegram API: ${data.description ?? 'Unknown error'}`))
 			}
 		}
 	} catch (err) {
-		console.log(JSON.stringify({
-			ok: false,
-			error: err instanceof Error ? err.message : String(err),
-		}))
+		emit(fail(err instanceof Error ? err.message : String(err)))
 	}
 
 	process.exit(0)
@@ -251,40 +310,26 @@ if (op === 'conversation.ingest') {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ callback_query_id: callbackId }),
-			}).catch(() => {})
+			}).catch((err: unknown) => {
+				// Best-effort callback answer — log but don't block the response
+				console.error(`answerCallbackQuery failed: ${err instanceof Error ? err.message : String(err)}`)
+			})
 		}
 
 		if (data.startsWith('approve:')) {
-			console.log(JSON.stringify({
-				ok: true,
-				metadata: {
-					action: 'task.approve',
-					conversation_id: chatId,
-					thread_id: messageId,
-				},
-			}))
-			process.exit(0)
+			emit(conversationApprove({ conversation_id: chatId, thread_id: messageId }))
 		}
 
 		if (data.startsWith('reject:')) {
-			console.log(JSON.stringify({
-				ok: true,
-				metadata: {
-					action: 'task.reject',
-					conversation_id: chatId,
-					thread_id: messageId,
-					message: 'Rejected via Telegram',
-				},
+			emit(conversationReject({
+				conversation_id: chatId,
+				thread_id: messageId,
+				message: 'Rejected via Telegram',
 			}))
-			process.exit(0)
 		}
 
 		// Unknown callback
-		console.log(JSON.stringify({
-			ok: true,
-			metadata: { action: 'noop', reason: `Unknown callback: ${data}` },
-		}))
-		process.exit(0)
+		emit(noop(`Unknown callback: ${data}`))
 	}
 
 	// Handle text message
@@ -300,76 +345,65 @@ if (op === 'conversation.ingest') {
 		const senderName = (from?.first_name as string) ?? (from?.username as string) ?? undefined
 
 		if (!text) {
-			console.log(JSON.stringify({
-				ok: true,
-				metadata: { action: 'noop', reason: 'Empty message' },
-			}))
-			process.exit(0)
+			emit(noop('Empty message'))
 		}
 
-		// Command handling — explicit task actions
+		// ── Reserved task-action commands ──────────────────────────────
 		if (text === '/approve') {
-			console.log(JSON.stringify({
-				ok: true,
-				metadata: { action: 'task.approve', conversation_id: chatId, thread_id: threadId },
-			}))
-			process.exit(0)
+			emit(conversationApprove({ conversation_id: chatId, thread_id: threadId }))
 		}
 
 		if (text.startsWith('/reject')) {
 			const reason = text.slice('/reject'.length).trim() || 'Rejected via Telegram'
-			console.log(JSON.stringify({
-				ok: true,
-				metadata: { action: 'task.reject', conversation_id: chatId, thread_id: threadId, message: reason },
-			}))
-			process.exit(0)
+			emit(conversationReject({ conversation_id: chatId, thread_id: threadId, message: reason }))
 		}
 
 		if (text.startsWith('/reply ')) {
 			const replyMessage = text.slice('/reply '.length).trim()
 			if (replyMessage) {
-				console.log(JSON.stringify({
-					ok: true,
-					metadata: { action: 'task.reply', conversation_id: chatId, thread_id: threadId, message: replyMessage },
-				}))
-				process.exit(0)
+				emit(conversationReply({ conversation_id: chatId, thread_id: threadId, message: replyMessage }))
 			}
+		}
+
+		// ── Generic command detection ─────────────────────────────────
+		// Commands that fall through to query.message (conversation resets)
+		const PASSTHROUGH_COMMANDS = new Set(['/reset', '/new', '/clear'])
+
+		if (text.startsWith('/') && !PASSTHROUGH_COMMANDS.has(text.split(' ')[0]!)) {
+			const spaceIdx = text.indexOf(' ')
+			const command = spaceIdx > 0 ? text.slice(1, spaceIdx) : text.slice(1)
+			const args = spaceIdx > 0 ? text.slice(spaceIdx + 1).trim() : ''
+			emit(conversationCommand({
+				conversation_id: chatId,
+				thread_id: threadId,
+				command,
+				args,
+				sender_id: senderId,
+				sender_name: senderName,
+			}))
 		}
 
 		// If replying to a bot notification message, treat as task reply
 		// (replyTo indicates the user is responding to a specific notification)
 		if (replyTo) {
-			console.log(JSON.stringify({
-				ok: true,
-				metadata: { action: 'task.reply', conversation_id: chatId, thread_id: threadId, message: text },
-			}))
-			process.exit(0)
+			emit(conversationReply({ conversation_id: chatId, thread_id: threadId, message: text }))
 		}
 
 		// General message (not a command, not replying to notification) → query mode
-		console.log(JSON.stringify({
-			ok: true,
-			metadata: {
-				action: 'query.message',
-				conversation_id: chatId,
-				message: text,
-				sender_id: senderId,
-				sender_name: senderName,
-			},
+		emit(queryMessage({
+			conversation_id: chatId,
+			message: text,
+			sender_id: senderId,
+			sender_name: senderName,
 		}))
-		process.exit(0)
 	}
 
 	// Unknown update type
-	console.log(JSON.stringify({
-		ok: true,
-		metadata: { action: 'noop', reason: 'Unrecognized Telegram update' },
-	}))
-	process.exit(0)
+	emit(noop('Unrecognized Telegram update'))
 }
 
 // Unknown operation
-console.log(JSON.stringify({ ok: false, error: `Unknown op: ${op}` }))
+emit(fail(`Unknown op: ${op}`))
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 

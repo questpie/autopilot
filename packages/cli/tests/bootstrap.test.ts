@@ -224,6 +224,82 @@ describe('autopilot bootstrap', () => {
 		expect(config.slug).toMatch(/^[a-z0-9-]+$/)
 	})
 
+	it('scaffolds autopilot-operator.md context file', async () => {
+		await runBootstrap(tempDir)
+
+		const operatorPath = join(tempDir, '.autopilot', 'context', 'autopilot-operator.md')
+		expect(existsSync(operatorPath)).toBe(true)
+		const content = readFileSync(operatorPath, 'utf-8')
+		expect(content).toContain('Query vs Task')
+		expect(content).toContain('/direct')
+		expect(content).toContain('/build')
+	})
+
+	it('scaffolds docs/README.md', async () => {
+		await runBootstrap(tempDir)
+
+		const docsPath = join(tempDir, '.autopilot', 'docs', 'README.md')
+		expect(existsSync(docsPath)).toBe(true)
+		const content = readFileSync(docsPath, 'utf-8')
+		expect(content).toContain('Autopilot Documentation')
+		expect(content).toContain('company.yaml')
+	})
+
+	it('scaffolds direct.yaml workflow alongside chosen workflow', async () => {
+		await runBootstrap(tempDir, ['--workflow', 'bounded-dev'])
+
+		const directPath = join(tempDir, '.autopilot', 'workflows', 'direct.yaml')
+		expect(existsSync(directPath)).toBe(true)
+		const raw = readFileSync(directPath, 'utf-8')
+		const workflow = WorkflowSchema.parse(parseYaml(raw))
+		expect(workflow.id).toBe('direct')
+
+		// Also confirm the chosen workflow exists alongside
+		expect(existsSync(join(tempDir, '.autopilot', 'workflows', 'bounded-dev.yaml'))).toBe(true)
+	})
+
+	it('bounded-dev workflow has isolated_worktree workspace mode', async () => {
+		await runBootstrap(tempDir, ['--workflow', 'bounded-dev'])
+
+		const raw = readFileSync(join(tempDir, '.autopilot', 'workflows', 'bounded-dev.yaml'), 'utf-8')
+		const parsed = parseYaml(raw)
+		expect(parsed.workspace?.mode).toBe('isolated_worktree')
+	})
+
+	it('company.yaml includes context_hints', async () => {
+		await runBootstrap(tempDir)
+
+		const raw = readFileSync(join(tempDir, PATHS.COMPANY_CONFIG), 'utf-8')
+		const parsed = parseYaml(raw)
+		expect(parsed.context_hints).toBeDefined()
+		expect(parsed.context_hints.specs).toBe('specs/')
+		expect(parsed.context_hints.autopilot_docs).toBe('.autopilot/docs/')
+	})
+
+	it('company.yaml includes conversation_commands', async () => {
+		await runBootstrap(tempDir)
+
+		const raw = readFileSync(join(tempDir, PATHS.COMPANY_CONFIG), 'utf-8')
+		const parsed = parseYaml(raw)
+		expect(parsed.conversation_commands).toBeDefined()
+		expect(parsed.conversation_commands.direct).toBeDefined()
+		expect(parsed.conversation_commands.direct.action).toBe('task.create')
+		expect(parsed.conversation_commands.direct.workflow_id).toBe('direct')
+		expect(parsed.conversation_commands.build).toBeDefined()
+		expect(parsed.conversation_commands.build.workflow_id).toBe('bounded-dev')
+		expect(parsed.conversation_commands.task).toBeDefined()
+	})
+
+	it('conversation_commands validate against CompanyScopeSchema', async () => {
+		await runBootstrap(tempDir)
+
+		const raw = readFileSync(join(tempDir, PATHS.COMPANY_CONFIG), 'utf-8')
+		const config = CompanyScopeSchema.parse(parseYaml(raw))
+		expect(config.conversation_commands.direct).toBeDefined()
+		expect(config.conversation_commands.direct.action).toBe('task.create')
+		expect(config.conversation_commands.build.type).toBe('feature')
+	})
+
 	it('custom runtime is reflected in company.yaml', async () => {
 		await runBootstrap(tempDir, ['--runtime', 'codex'])
 

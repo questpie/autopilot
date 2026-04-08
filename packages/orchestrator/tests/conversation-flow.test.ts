@@ -14,7 +14,8 @@ import { sessionMessages } from '../src/db/company-schema'
 import { SessionService, QueryService, SessionMessageService } from '../src/services'
 import { buildQueryInstructions } from '../src/services/queries'
 import type { SessionMessageRow } from '../src/services/session-messages'
-import { QueryRowSchema, SessionRowSchema, SessionMessageRowSchema } from '@questpie/autopilot-spec'
+import { QueryRowSchema, SessionRowSchema, SessionMessageRowSchema, ConversationResultSchema } from '@questpie/autopilot-spec'
+import { conversationTaskCreate, conversationApprove, conversationCommand, queryMessage, noop } from '../src/providers/handler-sdk'
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -603,5 +604,125 @@ describe('markConsumed ordering safety', () => {
 		const updated = await msgSvc.get(msg.id)
 		expect(updated).toBeDefined()
 		expect(updated!.query_id).toBe(q.id)
+	})
+})
+
+// ─── Handler SDK → ConversationResultSchema round-trip ────────────────────
+
+describe('conversationTaskCreate SDK → schema round-trip', () => {
+	test('conversationTaskCreate metadata validates as ConversationResultSchema task.create', () => {
+		const handlerResult = conversationTaskCreate({
+			conversation_id: 'chat-123',
+			thread_id: '456',
+			input: {
+				title: 'Build feature',
+				type: 'task',
+				workflow_id: 'bounded-dev',
+			},
+		})
+
+		expect(handlerResult.ok).toBe(true)
+		expect(handlerResult.metadata).toBeDefined()
+
+		const parsed = ConversationResultSchema.safeParse(handlerResult.metadata)
+		expect(parsed.success).toBe(true)
+		if (parsed.success) {
+			expect(parsed.data.action).toBe('task.create')
+			expect(parsed.data.conversation_id).toBe('chat-123')
+			expect(parsed.data.thread_id).toBe('456')
+			expect(parsed.data.input.title).toBe('Build feature')
+			expect(parsed.data.input.workflow_id).toBe('bounded-dev')
+		}
+	})
+
+	test('conversationTaskCreate without thread_id validates', () => {
+		const handlerResult = conversationTaskCreate({
+			conversation_id: 'chat-999',
+			input: { title: 'Quick fix', type: 'bugfix' },
+		})
+
+		const parsed = ConversationResultSchema.safeParse(handlerResult.metadata)
+		expect(parsed.success).toBe(true)
+		if (parsed.success) {
+			expect(parsed.data.action).toBe('task.create')
+			expect(parsed.data.thread_id).toBeUndefined()
+		}
+	})
+
+	test('conversationApprove metadata validates as task.approve', () => {
+		const handlerResult = conversationApprove({
+			conversation_id: 'chat-123',
+			thread_id: '789',
+		})
+
+		const parsed = ConversationResultSchema.safeParse(handlerResult.metadata)
+		expect(parsed.success).toBe(true)
+		if (parsed.success) {
+			expect(parsed.data.action).toBe('task.approve')
+		}
+	})
+
+	test('queryMessage metadata validates as query.message', () => {
+		const handlerResult = queryMessage({
+			conversation_id: 'chat-123',
+			message: 'hello world',
+			sender_id: 'user-1',
+			sender_name: 'Jan',
+		})
+
+		const parsed = ConversationResultSchema.safeParse(handlerResult.metadata)
+		expect(parsed.success).toBe(true)
+		if (parsed.success) {
+			expect(parsed.data.action).toBe('query.message')
+			expect(parsed.data.sender_name).toBe('Jan')
+		}
+	})
+
+	test('noop metadata validates as noop', () => {
+		const handlerResult = noop('Not actionable')
+
+		const parsed = ConversationResultSchema.safeParse(handlerResult.metadata)
+		expect(parsed.success).toBe(true)
+		if (parsed.success) {
+			expect(parsed.data.action).toBe('noop')
+			expect(parsed.data.reason).toBe('Not actionable')
+		}
+	})
+
+	test('conversationCommand metadata validates as conversation.command', () => {
+		const handlerResult = conversationCommand({
+			conversation_id: 'chat-123',
+			thread_id: '456',
+			command: 'build',
+			args: 'nainštaluj providera',
+			sender_id: 'user-1',
+			sender_name: 'Jan',
+		})
+
+		expect(handlerResult.ok).toBe(true)
+		const parsed = ConversationResultSchema.safeParse(handlerResult.metadata)
+		expect(parsed.success).toBe(true)
+		if (parsed.success) {
+			expect(parsed.data.action).toBe('conversation.command')
+			expect(parsed.data.command).toBe('build')
+			expect(parsed.data.args).toBe('nainštaluj providera')
+			expect(parsed.data.sender_id).toBe('user-1')
+		}
+	})
+
+	test('conversationCommand without optional fields validates', () => {
+		const handlerResult = conversationCommand({
+			conversation_id: 'chat-123',
+			command: 'direct',
+			args: '',
+		})
+
+		const parsed = ConversationResultSchema.safeParse(handlerResult.metadata)
+		expect(parsed.success).toBe(true)
+		if (parsed.success) {
+			expect(parsed.data.action).toBe('conversation.command')
+			expect(parsed.data.command).toBe('direct')
+			expect(parsed.data.args).toBe('')
+		}
 	})
 })

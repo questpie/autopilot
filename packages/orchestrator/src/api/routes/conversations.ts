@@ -320,6 +320,127 @@ const conversations = new Hono<AppEnv>()
 			}, 200)
 		}
 
+		// ── Conversation command routing ─────────────────────────────────
+		if (result.action === 'conversation.command') {
+			const commandConfig = authoredConfig.company.conversation_commands?.[result.command]
+			if (!commandConfig) {
+				return c.json({
+					action: 'unknown_command',
+					command: result.command,
+					available: Object.keys(authoredConfig.company.conversation_commands ?? {}),
+				}, 200)
+			}
+
+			if (commandConfig.action === 'task.create') {
+				const actor = `provider:${providerId}`
+
+				// Render templates
+				const templateCtx: Record<string, string> = {
+					args: result.args,
+					command: result.command,
+					conversation_id: result.conversation_id,
+					thread_id: result.thread_id ?? '',
+					sender_id: result.sender_id ?? '',
+					sender_name: result.sender_name ?? '',
+				}
+
+				const title = renderTemplate(commandConfig.title_template ?? '{{args}}', templateCtx)
+				const description = renderTemplate(commandConfig.description_template ?? '{{args}}', templateCtx)
+
+				if (!title) {
+					return c.json({ action: 'noop', reason: `Usage: /${result.command} <prompt>` }, 200)
+				}
+
+				const materialized = await workflowEngine.materializeTask({
+					title,
+					type: commandConfig.type ?? 'task',
+					description,
+					workflow_id: commandConfig.workflow_id,
+					created_by: actor,
+					metadata: commandConfig.capability_profiles?.length
+						? JSON.stringify({ capability_profiles: commandConfig.capability_profiles })
+						: undefined,
+				})
+
+				if (!materialized) {
+					return c.json({ error: 'Failed to create task' }, 500)
+				}
+
+				// If the command config has instructions, update the run
+				if (commandConfig.instructions && materialized.runId) {
+					const run = await runService.get(materialized.runId)
+					if (run) {
+						const combinedInstructions = run.instructions
+							? `${run.instructions}\n\n${commandConfig.instructions}`
+							: commandConfig.instructions
+						await runService.updateInstructions(materialized.runId, combinedInstructions)
+					}
+				}
+
+				// Bind to conversation
+				const bindingId = `bind-${Date.now()}-${randomBytes(6).toString('hex')}`
+				await conversationBindingService.create({
+					id: bindingId,
+					provider_id: providerId,
+					external_conversation_id: result.conversation_id,
+					external_thread_id: result.thread_id,
+					mode: 'task_thread',
+					task_id: materialized.task.id,
+				})
+
+				return c.json({
+					action: 'task.created',
+					task_id: materialized.task.id,
+					workflow_id: materialized.task.workflow_id ?? undefined,
+					command: result.command,
+				}, 200)
+			}
+
+			// Future: other command actions (query, schedule, etc.)
+			return c.json({ error: `Unsupported command action: ${commandConfig.action}` }, 400)
+		}
+
+		// ── Task creation routing ─────────────────────────────────────────
+		if (result.action === 'task.create') {
+			const actor = `provider:${providerId}`
+			const { input } = result
+
+			const materialized = await workflowEngine.materializeTask({
+				title: input.title,
+				type: input.type,
+				description: input.description,
+				priority: input.priority,
+				assigned_to: input.assigned_to,
+				workflow_id: input.workflow_id,
+				metadata: input.metadata ? JSON.stringify(input.metadata) : undefined,
+				created_by: actor,
+			})
+
+			if (!materialized) {
+				return c.json({ error: 'Failed to create task' }, 500)
+			}
+
+			// Create conversation binding to tie the chat thread to the new task
+			const bindingId = `bind-${Date.now()}-${randomBytes(6).toString('hex')}`
+			await conversationBindingService.create({
+				id: bindingId,
+				provider_id: providerId,
+				external_conversation_id: result.conversation_id,
+				external_thread_id: result.thread_id,
+				mode: 'task_thread',
+				task_id: materialized.task.id,
+			})
+
+			return c.json(
+				{
+					action: 'task.created',
+					task_id: materialized.task.id,
+					workflow_id: materialized.task.workflow_id ?? undefined,
+				},
+				200,
+			)
+		}
+
 		// ── Task action routing ───────────────────────────────────────────
 		// 1. Try session lookup first (preferred — explicit mode tracking)
 		const session = await sessionService.findByExternal(
@@ -396,3 +517,8 @@ const conversations = new Hono<AppEnv>()
 	})
 
 export { conversations }
+
+function renderTemplate(template: string, ctx: Record<string, string>): string {
+	return template.replace(/\{\{(\w+)\}\}/g, (_, key) => ctx[key] ?? '')
+}
+

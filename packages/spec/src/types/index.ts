@@ -75,6 +75,7 @@ export type CompanyScope = z.infer<typeof schemas.CompanyScopeSchema>
 export type ProjectScope = z.infer<typeof schemas.ProjectScopeSchema>
 export type ScopeDefaults = z.infer<typeof schemas.ScopeDefaultsSchema>
 export type QueueConfig = z.infer<typeof schemas.QueueConfigSchema>
+export type ConversationCommandConfig = z.infer<typeof schemas.ConversationCommandConfigSchema>
 
 // Packs
 export type PackDependency = z.infer<typeof schemas.PackDependencySchema>

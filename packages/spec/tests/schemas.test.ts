@@ -3,6 +3,7 @@ import { ZodError } from 'zod'
 import {
 	AgentSchema,
 	CompanySchema,
+	ConversationResultSchema,
 	HumanSchema,
 	ScheduleSchema,
 	WorkflowSchema,
@@ -139,6 +140,125 @@ describe('ScheduleSchema', () => {
 		expect(result.description).toBe('')
 		expect(result.create_task).toBe(false)
 		expect(result.enabled).toBe(true)
+	})
+})
+
+describe('ConversationResultSchema', () => {
+	test('accepts task.create with conversation fields', () => {
+		const result = ConversationResultSchema.safeParse({
+			action: 'task.create',
+			conversation_id: 'chat-123',
+			thread_id: '456',
+			input: { title: 'Build feature', type: 'task', workflow_id: 'bounded-dev' },
+		})
+		expect(result.success).toBe(true)
+		if (result.success) {
+			expect(result.data.action).toBe('task.create')
+			expect(result.data.conversation_id).toBe('chat-123')
+			expect(result.data.thread_id).toBe('456')
+			expect(result.data.input.title).toBe('Build feature')
+			expect(result.data.input.type).toBe('task')
+			expect(result.data.input.workflow_id).toBe('bounded-dev')
+		}
+	})
+
+	test('rejects task.create with missing title', () => {
+		const result = ConversationResultSchema.safeParse({
+			action: 'task.create',
+			conversation_id: 'chat-123',
+			input: { type: 'task', workflow_id: 'bounded-dev' },
+		})
+		expect(result.success).toBe(false)
+	})
+
+	test('rejects task.create with empty title', () => {
+		const result = ConversationResultSchema.safeParse({
+			action: 'task.create',
+			conversation_id: 'chat-123',
+			input: { title: '', type: 'task' },
+		})
+		expect(result.success).toBe(false)
+	})
+
+	test('rejects task.create with missing input', () => {
+		const result = ConversationResultSchema.safeParse({
+			action: 'task.create',
+			conversation_id: 'chat-123',
+		})
+		expect(result.success).toBe(false)
+	})
+
+	test('accepts task.create without optional thread_id', () => {
+		const result = ConversationResultSchema.safeParse({
+			action: 'task.create',
+			conversation_id: 'chat-123',
+			input: { title: 'Fix bug', type: 'bugfix' },
+		})
+		expect(result.success).toBe(true)
+	})
+
+	test('accepts query.message with sender fields', () => {
+		const result = ConversationResultSchema.safeParse({
+			action: 'query.message',
+			conversation_id: 'chat-123',
+			message: 'hello world',
+			sender_id: 'user-1',
+			sender_name: 'Jan',
+		})
+		expect(result.success).toBe(true)
+		if (result.success) {
+			expect(result.data.action).toBe('query.message')
+		}
+	})
+
+	test('accepts noop without reason', () => {
+		const result = ConversationResultSchema.safeParse({ action: 'noop' })
+		expect(result.success).toBe(true)
+	})
+
+	test('accepts conversation.command with all fields', () => {
+		const result = ConversationResultSchema.safeParse({
+			action: 'conversation.command',
+			conversation_id: 'chat-123',
+			thread_id: '456',
+			command: 'build',
+			args: 'nainštaluj providera',
+			sender_id: 'user-1',
+			sender_name: 'Jan',
+		})
+		expect(result.success).toBe(true)
+		if (result.success) {
+			expect(result.data.action).toBe('conversation.command')
+			expect(result.data.command).toBe('build')
+			expect(result.data.args).toBe('nainštaluj providera')
+		}
+	})
+
+	test('accepts conversation.command without optional fields', () => {
+		const result = ConversationResultSchema.safeParse({
+			action: 'conversation.command',
+			conversation_id: 'chat-123',
+			command: 'direct',
+			args: '',
+		})
+		expect(result.success).toBe(true)
+	})
+
+	test('rejects conversation.command without command field', () => {
+		const result = ConversationResultSchema.safeParse({
+			action: 'conversation.command',
+			conversation_id: 'chat-123',
+			args: 'something',
+		})
+		expect(result.success).toBe(false)
+	})
+
+	test('rejects unknown action', () => {
+		const result = ConversationResultSchema.safeParse({
+			action: 'task.delete',
+			conversation_id: 'chat-123',
+		})
+		expect(result.success).toBe(false)
 	})
 })
 

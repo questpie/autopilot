@@ -51,6 +51,35 @@ function companyYaml(config: BootstrapConfig): string {
 			workflow: config.workflow,
 			task_assignee: 'dev',
 		},
+		context_hints: {
+			specs: 'specs/',
+			autopilot_docs: '.autopilot/docs/',
+		},
+		conversation_commands: {
+			direct: {
+				action: 'task.create',
+				workflow_id: 'direct',
+				type: 'task',
+				title_template: '{{args}}',
+				description_template: '{{args}}',
+				instructions: 'Complete this as a direct one-shot work order from chat.',
+			},
+			build: {
+				action: 'task.create',
+				workflow_id: 'bounded-dev',
+				type: 'feature',
+				title_template: '{{args}}',
+				description_template: '{{args}}\n\nThis work order was created from chat.',
+				instructions: 'Treat this as implementation work. Inspect existing docs/workflows first.\nDo not create new primitives unless the existing ones do not fit.',
+			},
+			task: {
+				action: 'task.create',
+				workflow_id: 'bounded-dev',
+				type: 'task',
+				title_template: '{{args}}',
+				description_template: '{{args}}',
+			},
+		},
 	})
 }
 
@@ -76,6 +105,8 @@ name: "Bounded Development"
 description: >
   Plan → implement → human review → done.
   A simple but safe development workflow with human approval.
+workspace:
+  mode: isolated_worktree
 steps:
   - id: plan
     type: agent
@@ -116,6 +147,8 @@ name: "Simple"
 description: >
   Implement → human review → done.
   Minimal workflow for quick tasks.
+workspace:
+  mode: isolated_worktree
 steps:
   - id: implement
     type: agent
@@ -152,6 +185,93 @@ function projectContextMd(config: BootstrapConfig): string {
 Add project-specific context here: tech stack, key dependencies, folder structure, domain concepts.
 
 This file is synced into CLAUDE.md by \`autopilot sync\`.
+`
+}
+
+function operatorContextMd(): string {
+	return `# Autopilot Operator Context
+
+## Query vs Task
+
+- **Query mode** (plain chat): read-only — answers questions, brainstorms, drafts text. Does NOT modify the repo.
+- **Task / work order**: creates a durable task that runs a workflow. Use for any repo-mutating work.
+
+## Conversation Commands
+
+Available commands are configured in \`company.yaml\` under \`conversation_commands\`.
+
+Default bootstrap commands:
+
+| Command | Description |
+|---------|-------------|
+| \`/direct <prompt>\` | One-shot non-code work, no worktree |
+| \`/build <prompt>\` | Code/config changes with isolated worktree |
+| \`/task <prompt>\` | General task creation |
+
+Commands are resolved by the orchestrator, not by chat handlers.
+Any chat surface (Telegram, Discord, etc.) sends the command name and args;
+the orchestrator looks up the configured action and creates the task.
+
+Custom commands can be added to \`conversation_commands\` in \`company.yaml\`.
+
+## Creating tasks from chat
+
+Use \`/build <prompt>\` or \`/task <prompt>\` in chat to create work orders.
+Tasks created from chat automatically bind results back to the originating conversation.
+
+## Artifacts
+
+- Unknown artifact kinds normalize to \`other\` with \`metadata.original_kind\`
+- Use \`doc\` for text documents
+- Use \`preview_file\` + \`preview_url\` for HTML/file previews
+
+## Provider/workflow installation
+
+Provider and workflow setup is repo/config work — use \`/build\` or create a task with \`workflow_id: bounded-dev\`.
+`
+}
+
+function docsReadmeMd(): string {
+	return `# Autopilot Documentation
+
+## Canonical Specs
+
+- \`specs/autopilot/README.md\` — architecture overview and pass map
+- \`specs/autopilot/current-steering.md\` — current truth and invariants
+- \`specs/autopilot/primitive-roadmap.md\` — primitive layering and design guardrails
+
+## Configuration
+
+- \`.autopilot/company.yaml\` — company config
+- \`.autopilot/project.yaml\` — project config
+- \`.autopilot/agents/\` — agent definitions
+- \`.autopilot/workflows/\` — workflow definitions
+- \`.autopilot/handlers/\` — provider handler scripts
+- \`.autopilot/context/\` — injected context files
+`
+}
+
+function directWorkflowYaml(): string {
+	return `id: direct
+name: Direct one-shot work
+description: Complete simple non-dev work directly. No worktree, no review.
+workspace:
+  mode: none
+steps:
+  - id: run
+    type: agent
+    agent_id: dev
+    instructions: >
+      Complete the task directly. Do not create code changes unless explicitly asked.
+      If the result is small text, include it in the summary.
+    output:
+      summary:
+        description: "Brief result summary"
+  - id: done
+    type: done
+transitions:
+  - from: run
+    to: done
 `
 }
 
@@ -246,10 +366,17 @@ function scaffoldLocalFirst(config: BootstrapConfig): WriteResult {
 	const workflowContent = config.workflow === 'bounded-dev' ? boundedDevWorkflowYaml() : simpleWorkflowYaml()
 	safeWrite(join(ap, 'workflows', `${config.workflow}.yaml`), workflowContent, result)
 
+	// Workflow: direct (always scaffold alongside the chosen workflow)
+	safeWrite(join(ap, 'workflows', 'direct.yaml'), directWorkflowYaml(), result)
+
 	// Context
 	mkdirSync(join(ap, 'context'), { recursive: true })
 	safeWrite(join(ap, 'context', 'company.md'), companyContextMd(config), result)
 	safeWrite(join(ap, 'context', 'project.md'), projectContextMd(config), result)
+	safeWrite(join(ap, 'context', 'autopilot-operator.md'), operatorContextMd(), result)
+
+	// Docs
+	safeWrite(join(ap, 'docs', 'README.md'), docsReadmeMd(), result)
 
 	// Import existing repo context
 	if (config.importContext) {

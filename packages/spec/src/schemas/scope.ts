@@ -16,6 +16,19 @@ export const QueueConfigSchema = z.object({
 export type QueueConfig = z.infer<typeof QueueConfigSchema>
 
 /**
+ * Configuration for a conversation command (e.g. /deploy, /create).
+ */
+export const ConversationCommandConfigSchema = z.object({
+	action: z.enum(['task.create']),
+	workflow_id: z.string().optional(),
+	type: z.string().default('task'),
+	title_template: z.string().default('{{args}}'),
+	description_template: z.string().default('{{args}}'),
+	instructions: z.string().optional(),
+	capability_profiles: z.array(z.string()).default([]),
+})
+
+/**
  * Defaults that can be set at company or project scope.
  * Project values override company values when set.
  */
@@ -49,6 +62,8 @@ export const CompanyScopeSchema = z.object({
 	queues: z.record(z.string(), QueueConfigSchema).default({}),
 	/** Context file names (from .autopilot/context/) always injected into every run prompt. */
 	global_context: z.array(z.string()).default([]),
+	/** Conversation command definitions — key = command name (e.g. "deploy"). */
+	conversation_commands: z.record(z.string(), ConversationCommandConfigSchema).default({}),
 })
 
 /**

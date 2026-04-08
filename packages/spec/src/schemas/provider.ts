@@ -145,6 +145,12 @@ export const ConversationResultSchema = z.discriminatedUnion('action', [
 		message: z.string().optional(),
 	}),
 	z.object({
+		action: z.literal('task.create'),
+		conversation_id: z.string(),
+		thread_id: z.string().optional(),
+		input: IntakeTaskInputSchema,
+	}),
+	z.object({
 		action: z.literal('query.message'),
 		conversation_id: z.string(),
 		thread_id: z.string().optional(),
@@ -152,6 +158,15 @@ export const ConversationResultSchema = z.discriminatedUnion('action', [
 		/** Sender identity for group chats. */
 		sender_id: z.string().optional(),
 		/** Display name of the sender. */
+		sender_name: z.string().optional(),
+	}),
+	z.object({
+		action: z.literal('conversation.command'),
+		conversation_id: z.string(),
+		thread_id: z.string().optional(),
+		command: z.string().min(1),
+		args: z.string(),
+		sender_id: z.string().optional(),
 		sender_name: z.string().optional(),
 	}),
 	z.object({

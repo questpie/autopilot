@@ -94,6 +94,46 @@ export function conversationReply(input: ConversationActionInput & { message: st
 	return { ok: true, metadata: { action: 'task.reply', ...input } }
 }
 
+export interface ConversationTaskCreateInput {
+	conversation_id: string
+	thread_id?: string
+	input: {
+		title: string
+		description?: string
+		type?: string
+		priority?: string
+		assigned_to?: string
+		workflow_id?: string
+		metadata?: Record<string, unknown>
+		[key: string]: unknown
+	}
+}
+
+export function conversationTaskCreate(input: ConversationTaskCreateInput): HandlerResult {
+	return {
+		ok: true,
+		metadata: {
+			action: 'task.create',
+			conversation_id: input.conversation_id,
+			thread_id: input.thread_id,
+			input: input.input,
+		},
+	}
+}
+
+export interface ConversationCommandInput {
+	conversation_id: string
+	thread_id?: string
+	command: string
+	args: string
+	sender_id?: string
+	sender_name?: string
+}
+
+export function conversationCommand(input: ConversationCommandInput): HandlerResult {
+	return { ok: true, metadata: { action: 'conversation.command', ...input } }
+}
+
 export function noop(reason?: string): HandlerResult {
 	return { ok: true, metadata: { action: 'noop', reason } }
 }

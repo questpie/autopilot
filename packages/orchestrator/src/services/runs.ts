@@ -138,6 +138,15 @@ export class RunService {
 		return this.get(runId)
 	}
 
+	/** Update the instructions for a run. */
+	async updateInstructions(runId: string, instructions: string) {
+		await this.db
+			.update(runs)
+			.set({ instructions })
+			.where(eq(runs.id, runId))
+		return this.get(runId)
+	}
+
 	/** Append a compact event to a run. */
 	async appendEvent(
 		runId: string,
