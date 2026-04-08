@@ -147,8 +147,14 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       })
       this.subprocess = proc
 
-      // Set up stdin sink for sending initial prompt and steer messages
-      this.stdinSink = proc.stdin as unknown as FileSink
+      // Set up stdin sink for sending initial prompt and steer messages.
+      // Bun.spawn with stdin:'pipe' returns a FileSink object at runtime.
+      // TypeScript lacks the type, so we use a local interface + runtime validation.
+      const sink = proc.stdin
+      if (!sink || typeof (sink as FileSink).write !== 'function') {
+        throw new Error('Expected Bun FileSink for stdin pipe — got ' + typeof sink)
+      }
+      this.stdinSink = sink as FileSink
 
       // Send the initial prompt as a stream-json user_message
       const initialMessage = JSON.stringify({ type: 'user_message', content: prompt })
@@ -195,7 +201,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
 
   async stop(): Promise<void> {
     if (this.stdinSink) {
-      try { this.stdinSink.end() } catch { /* process may already be dead */ }
+      try { this.stdinSink.end() } catch (err) { console.debug('[claude-code] stdin.end() failed (process may already be dead):', err instanceof Error ? err.message : String(err)) }
       this.stdinSink = null
     }
     if (this.subprocess) {

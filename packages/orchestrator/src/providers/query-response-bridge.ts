@@ -80,13 +80,21 @@ export class QueryResponseBridge {
 		const query = await this.queryService.getByRunId(event.runId)
 		if (!query) return
 
-		// Find the session that owns this query
+		// Find the session that owns this query.
+		// Note: if a newer query replaced last_query_id on the session before this one
+		// completed, the lookup will miss and the response will not be delivered.
 		const session = await this.sessionService.findByLastQuery(query.id)
-		if (!session) return
+		if (!session) {
+			console.debug(`[query-response-bridge] no session found for query ${query.id} (may have been superseded by a newer query)`)
+			return
+		}
 
 		// Resolve the provider
 		const provider = this.authoredConfig.providers.get(session.provider_id)
-		if (!provider) return
+		if (!provider) {
+			console.warn(`[query-response-bridge] provider ${session.provider_id} not found in authored config`)
+			return
+		}
 		if (provider.kind !== 'conversation_channel') return
 		if (!provider.capabilities.some((c) => c.op === 'notify.send')) return
 

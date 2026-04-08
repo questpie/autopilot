@@ -30,38 +30,45 @@ export class SteerService {
 			created_at: now,
 		})
 
-		return this.get(id) as Promise<SteerRow>
+		const row = await this.get(id)
+		if (!row) throw new Error(`Failed to read back steer ${id} after insert`)
+		return row
 	}
 
 	async get(id: string): Promise<SteerRow | undefined> {
 		return _getSteer(this.db, id)
 	}
 
-	/** Get all pending steer messages for a run and mark them as delivered. */
+	/**
+	 * Atomically claim all pending steer messages for a run.
+	 * Marks them as delivered and returns the claimed rows.
+	 * Uses update-first-then-read to prevent double-delivery.
+	 */
 	async claimPending(runId: string): Promise<SteerRow[]> {
 		const now = new Date().toISOString()
-		const pending = await this.db
-			.select()
-			.from(runSteers)
+
+		// Atomically mark all pending steers as delivered
+		await this.db
+			.update(runSteers)
+			.set({ status: 'delivered', delivered_at: now })
 			.where(
 				and(
 					eq(runSteers.run_id, runId),
 					eq(runSteers.status, 'pending'),
 				),
 			)
+
+		// Read back the ones we just delivered (delivered_at === now)
+		return this.db
+			.select()
+			.from(runSteers)
+			.where(
+				and(
+					eq(runSteers.run_id, runId),
+					eq(runSteers.delivered_at, now),
+				),
+			)
 			.all()
-
-		if (pending.length === 0) return []
-
-		// Mark all as delivered
-		for (const row of pending) {
-			await this.db
-				.update(runSteers)
-				.set({ status: 'delivered', delivered_at: now })
-				.where(eq(runSteers.id, row.id))
-		}
-
-		return pending
 	}
 
 	/** List all steer messages for a run. */

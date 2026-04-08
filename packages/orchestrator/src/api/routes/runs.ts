@@ -10,7 +10,7 @@ import {
 	RunSteerRequestSchema,
 } from '@questpie/autopilot-spec'
 import type { ResolvedCapabilities, CapabilityProfile } from '@questpie/autopilot-spec'
-import type { AppEnv, Services } from '../app'
+import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
 
 const runs = new Hono<AppEnv>()
@@ -242,7 +242,7 @@ const runs = new Hono<AppEnv>()
 			})
 
 			// Query completion: if this run belongs to a query, update the query record
-			const { queryService } = c.get('services') as { queryService?: Services['queryService'] }
+			const { queryService } = c.get('services')
 			if (queryService) {
 				const queryRow = await queryService.getByRunId(id)
 				if (queryRow) {
