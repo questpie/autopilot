@@ -169,7 +169,7 @@ describe('bootstrap', () => {
 		)
 		const artifactService = new ArtifactService(dbResult.db)
 		const conversationBindingService = new ConversationBindingService(dbResult.db)
-		services = { taskService, runService, workerService, enrollmentService, activityService, artifactService, conversationBindingService, workflowEngine }
+		services = { taskService, runService, workerService, enrollmentService, activityService, artifactService, conversationBindingService, sessionMessageService: {} as any, workflowEngine }
 
 		// App with real routes, fake auth
 		app = buildBootstrapApp({

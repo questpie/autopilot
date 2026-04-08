@@ -27,6 +27,7 @@ import {
 	SecretService,
 	QueryService,
 	SessionService,
+	SessionMessageService,
 } from '../src/services'
 import type { AppEnv, Services } from '../src/api/app'
 import type { Actor } from '../src/auth/types'
@@ -47,6 +48,7 @@ const DDL = [
 	`DROP TABLE IF EXISTS sessions`,
 	`DROP TABLE IF EXISTS conversation_bindings`,
 	`DROP TABLE IF EXISTS task_relations`,
+	`DROP TABLE IF EXISTS session_messages`,
 	`CREATE TABLE tasks (
 		id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT DEFAULT '',
 		type TEXT NOT NULL, status TEXT NOT NULL, priority TEXT DEFAULT 'medium',
@@ -98,16 +100,26 @@ const DDL = [
 		id TEXT PRIMARY KEY, prompt TEXT NOT NULL, agent_id TEXT NOT NULL,
 		run_id TEXT, status TEXT NOT NULL DEFAULT 'pending',
 		allow_repo_mutation INTEGER DEFAULT 0, mutated_repo INTEGER DEFAULT 0,
-		summary TEXT, continue_from TEXT, carryover_summary TEXT,
-		runtime_session_ref TEXT, created_by TEXT NOT NULL,
-		created_at TEXT NOT NULL, ended_at TEXT, metadata TEXT DEFAULT '{}'
+		summary TEXT, runtime_session_ref TEXT, created_by TEXT NOT NULL,
+		created_at TEXT NOT NULL, ended_at TEXT, metadata TEXT DEFAULT '{}',
+		session_id TEXT
 	)`,
 	`CREATE TABLE sessions (
 		id TEXT PRIMARY KEY, provider_id TEXT NOT NULL,
 		external_conversation_id TEXT NOT NULL,
-		external_thread_id TEXT, mode TEXT NOT NULL,
-		task_id TEXT, query_id TEXT,
-		created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+		external_thread_id TEXT NOT NULL, mode TEXT NOT NULL,
+		task_id TEXT,
+		status TEXT NOT NULL DEFAULT 'active',
+		created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+		metadata TEXT DEFAULT '{}',
+		runtime_session_ref TEXT, preferred_worker_id TEXT
+	)`,
+	`CREATE TABLE session_messages (
+		id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+		role TEXT NOT NULL, content TEXT NOT NULL,
+		query_id TEXT, external_message_id TEXT,
+		metadata TEXT DEFAULT '{}',
+		created_at TEXT NOT NULL
 	)`,
 	`CREATE TABLE conversation_bindings (
 		id TEXT PRIMARY KEY, task_id TEXT NOT NULL, provider_id TEXT NOT NULL,
@@ -221,6 +233,7 @@ describe('URL Generation — Configured Base URL', () => {
 			secretService,
 			queryService,
 			sessionService,
+			sessionMessageService: new SessionMessageService(dbResult.db),
 		}
 	})
 

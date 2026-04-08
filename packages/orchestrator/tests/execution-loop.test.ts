@@ -172,6 +172,7 @@ describe('execution loop', () => {
 			activityService: new ActivityService(db),
 			artifactService: new ArtifactService(db),
 			conversationBindingService: new ConversationBindingService(db),
+			sessionMessageService: {} as any,
 			workflowEngine,
 		}
 

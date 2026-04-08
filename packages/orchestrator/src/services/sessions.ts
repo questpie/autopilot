@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { eq, and, desc } from 'drizzle-orm'
-import { sessions, queries } from '../db/company-schema'
+import { sessions } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
 /**
@@ -68,7 +68,6 @@ export class SessionService {
 			external_thread_id: threadKey,
 			mode,
 			task_id: mode === 'task_thread' ? (input.task_id ?? null) : null,
-			last_query_id: null,
 			status: 'active',
 			created_at: now,
 			updated_at: now,
@@ -81,7 +80,9 @@ export class SessionService {
 			input.external_conversation_id,
 			input.external_thread_id,
 		)
-		return session ?? (this.get(id) as Promise<SessionRow>)
+		const result = session ?? await this.get(id)
+		if (!result) throw new Error(`Failed to read back session ${id} after insert`)
+		return result
 	}
 
 	async get(id: string): Promise<SessionRow | undefined> {
@@ -124,12 +125,17 @@ export class SessionService {
 		return this.get(id)
 	}
 
-	/** Update the last query reference for session-level continuity. */
-	async updateLastQuery(id: string, queryId: string): Promise<SessionRow | undefined> {
+	/** Update session resume state (runtime_session_ref + preferred_worker_id). */
+	async updateResumeState(
+		id: string,
+		runtimeSessionRef: string | null,
+		preferredWorkerId: string | null,
+	): Promise<SessionRow | undefined> {
 		await this.db
 			.update(sessions)
 			.set({
-				last_query_id: queryId,
+				runtime_session_ref: runtimeSessionRef,
+				preferred_worker_id: preferredWorkerId,
 				updated_at: new Date().toISOString(),
 			})
 			.where(eq(sessions.id, id))
@@ -164,41 +170,6 @@ export class SessionService {
 		const filtered = conditions.length > 0 ? query.where(and(...conditions)) : query
 		const rows = await filtered.orderBy(desc(sessions.updated_at)).all()
 		return normalizeRows(rows)
-	}
-
-	/** Find the active session whose last_query_id matches the given query.
-	 *  Verifies the referenced query actually exists; clears dangling reference if not. */
-	async findByLastQuery(queryId: string): Promise<SessionRow | undefined> {
-		const row = await this.db
-			.select()
-			.from(sessions)
-			.where(
-				and(
-					eq(sessions.last_query_id, queryId),
-					eq(sessions.status, 'active'),
-				),
-			)
-			.get()
-		if (!row) return undefined
-
-		// Verify the referenced query still exists
-		const queryExists = await this.db
-			.select({ id: queries.id })
-			.from(queries)
-			.where(eq(queries.id, queryId))
-			.get()
-
-		if (!queryExists) {
-			// Clear the dangling reference
-			console.warn(`[sessions] clearing dangling last_query_id ${queryId} on session ${row.id}`)
-			await this.db
-				.update(sessions)
-				.set({ last_query_id: null, updated_at: new Date().toISOString() })
-				.where(eq(sessions.id, row.id))
-			return undefined
-		}
-
-		return normalizeRow(row)
 	}
 
 	async listForTask(taskId: string): Promise<SessionRow[]> {

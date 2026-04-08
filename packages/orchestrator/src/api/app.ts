@@ -18,7 +18,7 @@ import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, ScheduleService, SteerService, AuthoredConfig } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, SteerService, AuthoredConfig } from '../services'
 import type { Client } from '@libsql/client'
 import type { Actor } from '../auth/types'
 import { authMiddleware, resolveActor as resolveActorFn } from './middleware/auth'
@@ -56,6 +56,7 @@ export interface Services {
 	secretService: SecretService
 	queryService: QueryService
 	sessionService: SessionService
+	sessionMessageService: SessionMessageService
 	scheduleService: ScheduleService
 	steerService: SteerService
 }

@@ -63,6 +63,18 @@ export class WorkerService {
 		return this.db.select().from(workers).all()
 	}
 
+	isStale(worker: WorkerRow, thresholdMs = 90_000): boolean {
+		if (!worker.last_heartbeat) return true
+		const cutoff = new Date(Date.now() - thresholdMs).toISOString()
+		return worker.last_heartbeat < cutoff
+	}
+
+	isUnavailable(worker: WorkerRow | undefined, thresholdMs = 90_000): boolean {
+		if (!worker) return true
+		if (worker.status === 'offline') return true
+		return this.isStale(worker, thresholdMs)
+	}
+
 	/** Update heartbeat timestamp and renew all active leases for this worker. */
 	async heartbeat(workerId: string): Promise<void> {
 		const now = new Date().toISOString()
@@ -104,9 +116,8 @@ export class WorkerService {
 	 * and mark them offline.
 	 */
 	async expireStale(thresholdMs = 60_000): Promise<string[]> {
-		const cutoff = new Date(Date.now() - thresholdMs).toISOString()
-		const allOnline = await this.list({ status: 'online' })
-		const stale = allOnline.filter((w) => w.last_heartbeat !== null && w.last_heartbeat < cutoff)
+		const allWorkers = await this.list()
+		const stale = allWorkers.filter((w) => w.status !== 'offline' && this.isStale(w, thresholdMs))
 		for (const w of stale) {
 			await this.setOffline(w.id)
 		}

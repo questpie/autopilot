@@ -1,0 +1,1 @@
+ALTER TABLE `session_messages` ADD `external_message_id` text;

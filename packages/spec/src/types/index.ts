@@ -93,6 +93,8 @@ export type QueryRow = z.infer<typeof schemas.QueryRowSchema>
 export type SessionMode = z.infer<typeof schemas.SessionModeSchema>
 export type SessionStatus = z.infer<typeof schemas.SessionStatusSchema>
 export type SessionRow = z.infer<typeof schemas.SessionRowSchema>
+export type SessionMessageRole = z.infer<typeof schemas.SessionMessageRoleSchema>
+export type SessionMessageRow = z.infer<typeof schemas.SessionMessageRowSchema>
 
 // Providers
 export type Provider = z.infer<typeof schemas.ProviderSchema>

@@ -37,6 +37,9 @@ export type { QueryRow } from './queries'
 export { SessionService } from './sessions'
 export type { SessionRow } from './sessions'
 
+export { SessionMessageService } from './session-messages'
+export type { SessionMessageRow } from './session-messages'
+
 export { SecretService } from './secrets'
 export type { SharedSecretRow } from './secrets'
 

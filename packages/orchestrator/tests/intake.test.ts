@@ -218,6 +218,7 @@ console.log(JSON.stringify({
 			activityService: new ActivityService(dbResult.db),
 			artifactService: new ArtifactService(dbResult.db),
 			conversationBindingService: {} as any,
+			sessionMessageService: {} as any,
 			workflowEngine,
 		}
 
@@ -252,6 +253,7 @@ console.log(JSON.stringify({
 			enrollmentService: {} as any,
 			activityService: new ActivityService(dbResult.db),
 			artifactService: new ArtifactService(dbResult.db),
+			sessionMessageService: {} as any,
 			workflowEngine: {} as any,
 		}
 
@@ -278,6 +280,7 @@ console.log(JSON.stringify({
 			enrollmentService: {} as any,
 			activityService: new ActivityService(dbResult.db),
 			artifactService: new ArtifactService(dbResult.db),
+			sessionMessageService: {} as any,
 			workflowEngine: {} as any,
 		}
 
@@ -303,6 +306,7 @@ console.log(JSON.stringify({
 			enrollmentService: {} as any,
 			activityService: new ActivityService(dbResult.db),
 			artifactService: new ArtifactService(dbResult.db),
+			sessionMessageService: {} as any,
 			workflowEngine: {} as any,
 		}
 
@@ -325,6 +329,7 @@ console.log(JSON.stringify({
 			enrollmentService: {} as any,
 			activityService: new ActivityService(dbResult.db),
 			artifactService: new ArtifactService(dbResult.db),
+			sessionMessageService: {} as any,
 			workflowEngine: {} as any,
 		}
 
@@ -348,6 +353,7 @@ console.log(JSON.stringify({
 			enrollmentService: {} as any,
 			activityService: new ActivityService(dbResult.db),
 			artifactService: new ArtifactService(dbResult.db),
+			sessionMessageService: {} as any,
 			workflowEngine: {} as any,
 		}
 
@@ -373,6 +379,7 @@ console.log(JSON.stringify({
 			enrollmentService: {} as any,
 			activityService: new ActivityService(dbResult.db),
 			artifactService: new ArtifactService(dbResult.db),
+			sessionMessageService: {} as any,
 			workflowEngine: {} as any,
 		}
 
@@ -393,14 +400,35 @@ console.log(JSON.stringify({
 describe('Text Intake Handler E2E', () => {
 	const testRoot = join(tmpdir(), `qp-text-intake-e2e-${Date.now()}`)
 
+	const HANDLER_SRC = `
+const envelope = await Bun.stdin.json();
+const { op, payload, config, provider_id } = envelope;
+
+if (op === 'intent.ingest') {
+  if (!payload.text) {
+    console.log(JSON.stringify({ ok: true, metadata: { action: 'noop' } }));
+  } else {
+    console.log(JSON.stringify({
+      ok: true,
+      metadata: {
+        action: 'task.create',
+        input: {
+          title: payload.text,
+          type: payload.type ?? config.default_type ?? 'task',
+          priority: payload.priority,
+          metadata: { source_provider: provider_id },
+        },
+      },
+    }));
+  }
+} else {
+  console.log(JSON.stringify({ ok: false, error: 'unknown op: ' + op }));
+}
+`
+
 	beforeAll(async () => {
 		await mkdir(join(testRoot, '.autopilot', 'handlers'), { recursive: true })
-
-		// Copy the real text-intake handler
-		const handlerSrc = await Bun.file(
-			join(import.meta.dir, '..', '..', '..', '.autopilot', 'handlers', 'text-intake.ts'),
-		).text()
-		await writeFile(join(testRoot, '.autopilot', 'handlers', 'text-intake.ts'), handlerSrc)
+		await writeFile(join(testRoot, '.autopilot', 'handlers', 'text-intake.ts'), HANDLER_SRC)
 	})
 
 	afterAll(async () => {

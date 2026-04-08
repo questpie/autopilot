@@ -412,6 +412,7 @@ describe('Full pipeline: workflow engine → DB → claim route → response', (
 			runService,
 			workerService,
 			secretService,
+			sessionMessageService: {} as any,
 			workflowEngine: engine,
 		} as unknown as Services
 

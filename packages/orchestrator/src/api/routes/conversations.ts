@@ -22,6 +22,7 @@ import { ConversationResultSchema } from '@questpie/autopilot-spec'
 import type { AppEnv } from '../app'
 import { invokeProvider, resolveSecrets } from '../../providers/handler-runtime'
 import { buildQueryInstructions } from '../../services/queries'
+import type { SessionMessageRow } from '../../services/session-messages'
 
 const conversations = new Hono<AppEnv>()
 	// POST /conversations/bindings — create a binding (user auth, handled in app.ts)
@@ -93,7 +94,7 @@ const conversations = new Hono<AppEnv>()
 	)
 	// POST /conversations/:providerId — inbound conversation payload (provider-secret auth)
 	.post('/:providerId', zValidator('param', z.object({ providerId: z.string() })), async (c) => {
-		const { workflowEngine, conversationBindingService, sessionService, queryService, runService } = c.get('services')
+		const { workflowEngine, conversationBindingService, sessionService, sessionMessageService, queryService, runService } = c.get('services')
 		const authoredConfig = c.get('authoredConfig')
 		const companyRoot = c.get('companyRoot')
 		const { providerId } = c.req.valid('param')
@@ -194,64 +195,104 @@ const conversations = new Hono<AppEnv>()
 				return c.json({ error: 'No default agent configured for query routing' }, 400)
 			}
 
-			// ── Check if session has an active running query → steer instead of new query
-			if (session.last_query_id) {
-				const lastQuery = await queryService.get(session.last_query_id)
-				if (lastQuery?.status === 'running' && lastQuery.run_id) {
-					const activeRun = await runService.get(lastQuery.run_id)
-					if (activeRun && (activeRun.status === 'running' || activeRun.status === 'claimed')) {
-						// Route as steer message to the active run
-						const { steerService } = c.get('services')
-						const steer = await steerService.create({
-							run_id: activeRun.id,
-							message: result.message,
-							created_by: `provider:${providerId}`,
-						})
-
-						return c.json({
-							action: 'query.steered',
-							session_id: session.id,
-							query_id: lastQuery.id,
-							run_id: activeRun.id,
-							steer_id: steer.id,
-						}, 200)
-					}
-				}
-			}
-
-			// Resolve continuity from session's last query
-			let carryoverSummary: string | null = null
-			let runtimeSessionRef: string | undefined
-			let preferredWorkerId: string | undefined
-
-			if (session.last_query_id) {
-				const priorQuery = await queryService.get(session.last_query_id)
-				if (priorQuery) {
-					carryoverSummary = priorQuery.summary?.slice(0, 500) ?? null
-					if (priorQuery.runtime_session_ref && priorQuery.run_id) {
-						runtimeSessionRef = priorQuery.runtime_session_ref
-						const priorRun = await runService.get(priorQuery.run_id)
-						preferredWorkerId = priorRun?.worker_id ?? undefined
-					}
-				}
-			}
-
 			const initiator = `provider:${providerId}`
 
+			// ── Store user message unconditionally (before any routing) ───
+			const userMsgMetadata: Record<string, unknown> = {}
+			if (result.sender_id) userMsgMetadata.sender_id = result.sender_id
+			if (result.sender_name) userMsgMetadata.sender_name = result.sender_name
+			const userMsg = await sessionMessageService.create({
+				session_id: session.id,
+				role: 'user',
+				content: result.message,
+				metadata: Object.keys(userMsgMetadata).length > 0 ? JSON.stringify(userMsgMetadata) : undefined,
+			})
+
+			// ── Detect /reset, /new, /clear ──────────────────────────────
+			const trimmed = result.message.trim().toLowerCase()
+			if (trimmed === '/reset' || trimmed === '/new' || trimmed === '/clear') {
+				await sessionService.updateResumeState(session.id, null, null)
+				await sessionMessageService.clearForSession(session.id)
+				// Close old session so bridge ignores completions from pre-reset queries
+				await sessionService.close(session.id)
+
+				// Send visible chat confirmation via notify.send
+				if (provider.capabilities.some((cap) => cap.op === 'notify.send')) {
+					invokeProvider(
+						provider,
+						'notify.send',
+						{
+							event_type: 'session_reset',
+							severity: 'info',
+							title: '',
+							summary: 'Session reset. New messages will start a fresh agent session.',
+							conversation_id: result.conversation_id,
+							thread_id: result.thread_id,
+						},
+						{ companyRoot },
+						secretService,
+					).catch((err) => {
+						console.warn(`[conversations] reset confirmation send failed:`, err instanceof Error ? err.message : String(err))
+					})
+				}
+
+				return c.json({ action: 'session.reset', session_id: session.id }, 200)
+			}
+
+			// ── Check if session has an active query/run → queue instead of dispatching
+			const activeQuery = await queryService.findActiveForSession(session.id)
+			if (activeQuery && activeQuery.run_id) {
+				const activeRun = await runService.get(activeQuery.run_id)
+				if (activeRun && (activeRun.status === 'pending' || activeRun.status === 'claimed' || activeRun.status === 'running')) {
+					return c.json({ action: 'queued', session_id: session.id }, 200)
+				}
+			}
+
+			// ── Build query prompt ───────────────────────────────────────
+			const hasResume = !!session.runtime_session_ref
+
+			// ── Offline worker policy: clear stale resume state ─────
+			let effectiveResume = hasResume
+			if (hasResume && session.preferred_worker_id) {
+				const { workerService } = c.get('services')
+				const worker = await workerService.get(session.preferred_worker_id)
+				if (workerService.isUnavailable(worker, 90_000)) {
+					console.warn(`[conversations] preferred worker ${session.preferred_worker_id} is unavailable — cold-starting session ${session.id}`)
+					await sessionService.updateResumeState(session.id, null, null)
+					effectiveResume = false
+				}
+			}
+
+			let instructionMessages: SessionMessageRow[] = []
+
+			if (effectiveResume) {
+				// Resume mode: system notifications since the last completed query in this session
+				const lastCompletedQuery = await queryService.findLastCompletedForSession(session.id)
+				const since = lastCompletedQuery?.created_at ?? session.created_at
+				instructionMessages = await sessionMessageService.listSystemSince(session.id, since)
+			} else {
+				// Cold start: recent history (excluding the message we just stored — it goes as the prompt)
+				const recent = await sessionMessageService.listRecent(session.id)
+				instructionMessages = recent.filter(m => m.id !== userMsg.id)
+			}
+
+			const instructions = buildQueryInstructions(result.message, {
+				sessionMessages: instructionMessages,
+				allowMutation: false,
+				hasResume: effectiveResume,
+			})
+
+			// ── Create query with session_id ─────────────────────────────
 			const query = await queryService.create({
 				prompt: result.message,
 				agent_id: agentId,
 				allow_repo_mutation: false,
-				continue_from: session.last_query_id ?? undefined,
-				carryover_summary: carryoverSummary ?? undefined,
+				session_id: session.id,
 				created_by: initiator,
 			})
 
-			const instructions = buildQueryInstructions(result.message, false, carryoverSummary)
-
-			// Resolve agent model/provider/variant from authored config
+			// ── Create run with resume state ─────────────────────────────
 			const agentConfig = authoredConfig.agents.get(agentId)
-
 			const runId = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
 			await runService.create({
 				id: runId,
@@ -262,21 +303,20 @@ const conversations = new Hono<AppEnv>()
 				variant: agentConfig?.variant,
 				initiated_by: initiator,
 				instructions,
-				runtime_session_ref: runtimeSessionRef,
-				preferred_worker_id: preferredWorkerId,
+				runtime_session_ref: effectiveResume ? (session.runtime_session_ref ?? undefined) : undefined,
+				preferred_worker_id: effectiveResume ? (session.preferred_worker_id ?? undefined) : undefined,
 			})
 
 			await queryService.linkRun(query.id, runId)
 
-			const continueFrom = session.last_query_id
-			await sessionService.updateLastQuery(session.id, query.id)
+			// ── Mark user message consumed (after dispatch is complete) ──
+			await sessionMessageService.markConsumed([userMsg.id], query.id)
 
 			return c.json({
 				action: 'query.dispatched',
 				session_id: session.id,
 				query_id: query.id,
 				run_id: runId,
-				continue_from: continueFrom,
 			}, 200)
 		}
 

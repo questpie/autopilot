@@ -63,20 +63,35 @@ export function taskCreate(input: TaskCreateInput): HandlerResult {
 	return { ok: true, metadata: { action: 'task.create', input } }
 }
 
-export function approve(): HandlerResult {
-	return { ok: true, metadata: { action: 'task.approve' } }
+// ─── Conversation-aware helpers ─────────────────────────────────────────
+
+export interface QueryMessageInput {
+	conversation_id: string
+	thread_id?: string
+	message: string
+	sender_id?: string
+	sender_name?: string
 }
 
-export function reject(reason?: string): HandlerResult {
-	return { ok: true, metadata: { action: 'task.reject', reason } }
+export function queryMessage(input: QueryMessageInput): HandlerResult {
+	return { ok: true, metadata: { action: 'query.message', ...input } }
 }
 
-export function reply(message: string): HandlerResult {
-	return { ok: true, metadata: { action: 'task.reply', message } }
+export interface ConversationActionInput {
+	conversation_id: string
+	thread_id?: string
 }
 
-export function query(message: string): HandlerResult {
-	return { ok: true, metadata: { action: 'query.message', message } }
+export function conversationApprove(input: ConversationActionInput): HandlerResult {
+	return { ok: true, metadata: { action: 'task.approve', ...input } }
+}
+
+export function conversationReject(input: ConversationActionInput & { message?: string }): HandlerResult {
+	return { ok: true, metadata: { action: 'task.reject', ...input } }
+}
+
+export function conversationReply(input: ConversationActionInput & { message: string }): HandlerResult {
+	return { ok: true, metadata: { action: 'task.reply', ...input } }
 }
 
 export function noop(reason?: string): HandlerResult {

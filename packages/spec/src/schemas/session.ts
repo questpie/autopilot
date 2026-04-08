@@ -12,9 +12,24 @@ export const SessionRowSchema = z.object({
 	external_thread_id: z.string().nullable(),
 	mode: SessionModeSchema,
 	task_id: z.string().nullable(),
-	last_query_id: z.string().nullable(),
 	status: SessionStatusSchema,
 	created_at: z.string(),
 	updated_at: z.string(),
 	metadata: z.string(),
+	runtime_session_ref: z.string().nullable(),
+	preferred_worker_id: z.string().nullable(),
+})
+
+export const SessionMessageRoleSchema = z.enum(['user', 'assistant', 'system'])
+
+/** Session message record — durable conversation/system message log. */
+export const SessionMessageRowSchema = z.object({
+	id: z.string(),
+	session_id: z.string(),
+	role: SessionMessageRoleSchema,
+	content: z.string(),
+	query_id: z.string().nullable(),
+	external_message_id: z.string().nullable(),
+	metadata: z.string(),
+	created_at: z.string(),
 })

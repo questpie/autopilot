@@ -23,7 +23,9 @@ A pack like `questpie/telegram-surface` installs a provider config and a handler
 
 ## Current scope
 
-Today providers support outbound notifications, intent intake, and conversation-assisted task actions. This is not a generic plugin platform — providers integrate Autopilot with the outside world while keeping the orchestrator in charge of the core model.
+Today providers support outbound notifications (including edit-in-place via `edit_message_id`), intent intake, conversation-assisted task actions, and session-based query routing. This is not a generic plugin platform — providers integrate Autopilot with the outside world while keeping the orchestrator in charge of the core model.
+
+Current outbound delivery uses `notify.send` with optional `edit_message_id` for progressive response updates. Future operations like `conversation.send`, `conversation.update`, `conversation.typing`, and `conversation.delete` belong to a later surface protocol pass and are not yet implemented.
 
 ## How it works
 
@@ -140,7 +142,7 @@ console.log(JSON.stringify({
 |---|---|---|
 | `notify.send` | Delivers a notification outward | Keeps tasks/runs/artifacts as source of truth |
 | `intent.ingest` | Normalizes inbound payload into a task-create decision | Creates the real task through normal task flow |
-| `conversation.ingest` | Normalizes inbound thread activity into approve/reject/reply actions | Applies the action through workflow primitives |
+| `conversation.ingest` | Normalizes inbound thread activity into approve/reject/reply/query actions | Routes task actions through workflow primitives; routes query messages through session-based query dispatch |
 
 ## Notification providers
 
@@ -170,18 +172,22 @@ The task still goes through the same intake path as `autopilot tasks create`.
 
 ## Conversation providers
 
-Conversation providers let an external thread act as a task-scoped operator surface.
+Conversation providers let an external thread act as both a task-scoped operator surface and a query/personal assistant surface.
 
 Typical inbound mapping:
 
 - `/approve` -> `task.approve`
 - `/reject reason` -> `task.reject`
-- ordinary text -> `task.reply`
+- reply to notification -> `task.reply`
+- general message -> `query.message` (session-based query routing)
+
+The `query.message` action can carry `sender_id` and `sender_name` for group chat identity.
 
 Typical outbound usage:
 
 - notify the same bound thread when a task blocks
-- send completion/failure updates
+- send completion/failure updates via `notify.send`
+- progressive query responses via `notify.send` with `edit_message_id` (edit-in-place)
 - include preview URLs where relevant
 
 See [Conversation-Assisted Operation](/docs/conversation-assisted-operation) for the binding model.

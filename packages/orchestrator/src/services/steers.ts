@@ -42,15 +42,14 @@ export class SteerService {
 	/**
 	 * Atomically claim all pending steer messages for a run.
 	 * Marks them as delivered and returns the claimed rows.
-	 * Uses update-first-then-read to prevent double-delivery.
+	 * Selects pending IDs first, then updates and reads back by those IDs
+	 * to avoid flakes when two claims share the same millisecond.
 	 */
 	async claimPending(runId: string): Promise<SteerRow[]> {
-		const now = new Date().toISOString()
-
-		// Atomically mark all pending steers as delivered
-		await this.db
-			.update(runSteers)
-			.set({ status: 'delivered', delivered_at: now })
+		// 1. Select pending steer IDs for this run
+		const pending = await this.db
+			.select({ id: runSteers.id })
+			.from(runSteers)
 			.where(
 				and(
 					eq(runSteers.run_id, runId),
@@ -58,17 +57,26 @@ export class SteerService {
 				),
 			)
 
-		// Read back the ones we just delivered (delivered_at === now)
-		return this.db
-			.select()
-			.from(runSteers)
-			.where(
-				and(
-					eq(runSteers.run_id, runId),
-					eq(runSteers.delivered_at, now),
-				),
-			)
-			.all()
+		if (pending.length === 0) return []
+
+		const ids = pending.map((r) => r.id)
+		const now = new Date().toISOString()
+
+		// 2. Update only those specific IDs
+		for (const id of ids) {
+			await this.db
+				.update(runSteers)
+				.set({ status: 'delivered', delivered_at: now })
+				.where(eq(runSteers.id, id))
+		}
+
+		// 3. Read back the claimed rows by ID
+		const result: SteerRow[] = []
+		for (const id of ids) {
+			const row = await this.db.select().from(runSteers).where(eq(runSteers.id, id)).get()
+			if (row) result.push(row)
+		}
+		return result
 	}
 
 	/** List all steer messages for a run. */

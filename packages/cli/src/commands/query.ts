@@ -9,7 +9,6 @@ const queryCmd = new Command('query')
 	.argument('<prompt>', 'The question or request')
 	.option('-a, --agent <agent_id>', 'Agent to handle the query')
 	.option('--allow-mutation', 'Allow the query to modify repo/company files', false)
-	.option('--continue-from <query_id>', 'Continue from a prior query')
 	.option('--runtime <runtime>', 'Explicit runtime override')
 	.option('-w, --wait', 'Wait for the query to complete and show result', false)
 	.option('-s, --stream', 'Stream live events (alias for --wait)', false)
@@ -19,7 +18,6 @@ const queryCmd = new Command('query')
 			opts: {
 				agent?: string
 				allowMutation: boolean
-				continueFrom?: string
 				runtime?: string
 				wait: boolean
 				stream: boolean
@@ -35,7 +33,6 @@ const queryCmd = new Command('query')
 						prompt,
 						agent_id: opts.agent,
 						allow_repo_mutation: opts.allowMutation,
-						continue_from: opts.continueFrom,
 						runtime: opts.runtime,
 					},
 				})
@@ -50,14 +47,10 @@ const queryCmd = new Command('query')
 					query_id: string
 					run_id: string
 					status: string
-					continue_from: string | null
 				}
 
 				console.log(success(`Query created: ${created.query_id}`))
 				console.log(dim(`  Run: ${created.run_id}`))
-				if (created.continue_from) {
-					console.log(dim(`  Continues: ${created.continue_from}`))
-				}
 
 				if (!shouldStream) {
 					console.log(dim('  Use --wait/--stream to stream live events, or:'))
@@ -156,8 +149,6 @@ interface QueryDetail {
 	mutated_repo: boolean
 	summary: string | null
 	error: string | null
-	continue_from: string | null
-	carryover_summary: string | null
 	created_by: string
 	created_at: string
 	ended_at: string | null
@@ -189,7 +180,6 @@ function printQueryResult(q: QueryDetail | undefined): void {
 	console.log(`  ${dim('Status:')}   ${badge(q.status, queryStatusColor(q.status))}`)
 	console.log(`  ${dim('Agent:')}    ${q.agent_id}`)
 	if (q.run_id) console.log(`  ${dim('Run:')}      ${q.run_id}`)
-	if (q.continue_from) console.log(`  ${dim('Continues:')} ${q.continue_from}`)
 	console.log(`  ${dim('Mutation:')} ${q.allow_repo_mutation ? 'allowed' : 'read-only'}${q.mutated_repo ? ' (files changed)' : ''}`)
 	console.log(`  ${dim('Created:')}  ${q.created_at}`)
 	if (q.ended_at) console.log(`  ${dim('Ended:')}    ${q.ended_at}`)

@@ -56,6 +56,8 @@ export {
 	SessionModeSchema,
 	SessionStatusSchema,
 	SessionRowSchema,
+	SessionMessageRoleSchema,
+	SessionMessageRowSchema,
 } from './session'
 export {
 	WorkerRegisterRequestSchema,

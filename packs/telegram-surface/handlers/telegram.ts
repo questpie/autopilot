@@ -6,10 +6,13 @@
  * notify.send (outbound):
  *   Sends task notifications to Telegram with inline approve/reject buttons.
  *   Uses the Telegram Bot API (sendMessage with inline_keyboard).
+ *   Supports edit-in-place via edit_message_id payload field.
+ *   Query events (query_response, query_progress) render Markdown-like text as Telegram HTML.
  *
  * conversation.ingest (inbound):
  *   Normalizes Telegram webhook updates into orchestrator conversation actions.
  *   Supports: callback_query (button presses), text messages (reply/commands).
+ *   Emits sender_id/sender_name for group chat identity.
  *
  * Envelope shape (stdin JSON):
  *   { op, provider_id, provider_kind, config, secrets, payload }
@@ -59,56 +62,94 @@ if (op === 'notify.send') {
 	const taskUrl = payload.task_url as string | undefined
 	const eventType = payload.event_type as string | undefined
 	const severity = payload.severity as string | undefined
+	const editMessageId = payload.edit_message_id as string | undefined
 
-	// Build message text
-	const icon = severity === 'error' ? '\u274c'
-		: severity === 'warning' ? '\u26a0\ufe0f'
-		: '\u2705'
+	// Query events (query_response, query_progress) use chat text without task icons.
+	const isQueryEvent = eventType === 'query_response' || eventType === 'query_progress'
 
-	const lines: string[] = [
-		`${icon} <b>${escapeHtml(title)}</b>`,
-	]
+	let text: string
+	let parseMode: string | undefined
 
-	if (summary) lines.push('', escapeHtml(summary))
-	if (previewUrl) lines.push('', `\ud83d\udd17 <a href="${escapeHtml(previewUrl)}">Preview</a>`)
-	if (taskUrl) lines.push(`\ud83d\udcdd <a href="${escapeHtml(taskUrl)}">Task details</a>`)
+	if (isQueryEvent) {
+		text = markdownToTelegramHtml(summary || title)
+		parseMode = 'HTML'
+	} else {
+		// Rich HTML formatting for task notifications
+		const icon = severity === 'error' ? '\u274c'
+			: severity === 'warning' ? '\u26a0\ufe0f'
+			: '\u2705'
 
-	// Build inline keyboard from normalized actions (if present)
-	const actions = payload.actions as Array<{
-		action: string
-		label: string
-		style?: string
-		requires_message?: boolean
-	}> | undefined
+		const lines: string[] = [
+			`${icon} <b>${escapeHtml(title)}</b>`,
+		]
 
-	const keyboard: Array<Array<{ text: string; callback_data: string }>> = []
-	if (taskId && actions && actions.length > 0) {
-		const buttons: Array<{ text: string; callback_data: string }> = []
-		for (const act of actions) {
-			if (act.requires_message) continue
+		if (summary) lines.push('', escapeHtml(summary))
+		if (previewUrl) lines.push('', `\ud83d\udd17 <a href="${escapeHtml(previewUrl)}">Preview</a>`)
+		if (taskUrl) lines.push(`\ud83d\udcdd <a href="${escapeHtml(taskUrl)}">Task details</a>`)
 
-			const STYLE_ICONS: Record<string, string> = { primary: '\u2705 ', danger: '\u274c ' }
-			const ACTION_PREFIXES: Record<string, string> = { 'task.approve': 'approve', 'task.reject': 'reject' }
+		// Build inline keyboard from normalized actions (if present)
+		const actions = payload.actions as Array<{
+			action: string
+			label: string
+			style?: string
+			requires_message?: boolean
+		}> | undefined
 
-			const icon = STYLE_ICONS[act.style ?? ''] ?? ''
-			const callbackPrefix = ACTION_PREFIXES[act.action]
-			if (!callbackPrefix) continue
-
-			buttons.push({ text: `${icon}${act.label}`, callback_data: `${callbackPrefix}:${taskId}` })
+		if (taskId && actions && actions.length > 0) {
+			// If there's a requires_message action (e.g. task.reply), add a text hint
+			const replyAction = actions.find((a) => a.requires_message)
+			if (replyAction) {
+				lines.push('', `\ud83d\udcac Reply to this message to ${replyAction.label.toLowerCase()}`)
+			}
 		}
-		if (buttons.length > 0) keyboard.push(buttons)
 
-		// If there's a requires_message action (e.g. task.reply), add a text hint
-		const replyAction = actions.find((a) => a.requires_message)
-		if (replyAction) {
-			lines.push('', `\ud83d\udcac Reply to this message to ${replyAction.label.toLowerCase()}`)
+		text = lines.join('\n')
+		parseMode = 'HTML'
+	}
+
+	// Build inline keyboard (only for task notifications)
+	const keyboard: Array<Array<{ text: string; callback_data: string }>> = []
+	if (!isQueryEvent && taskId) {
+		const actions = payload.actions as Array<{
+			action: string
+			label: string
+			style?: string
+			requires_message?: boolean
+		}> | undefined
+
+		if (actions && actions.length > 0) {
+			const buttons: Array<{ text: string; callback_data: string }> = []
+			for (const act of actions) {
+				if (act.requires_message) continue
+
+				const STYLE_ICONS: Record<string, string> = { primary: '\u2705 ', danger: '\u274c ' }
+				const ACTION_PREFIXES: Record<string, string> = { 'task.approve': 'approve', 'task.reject': 'reject' }
+
+				const icon = STYLE_ICONS[act.style ?? ''] ?? ''
+				const callbackPrefix = ACTION_PREFIXES[act.action]
+				if (!callbackPrefix) continue
+
+				buttons.push({ text: `${icon}${act.label}`, callback_data: `${callbackPrefix}:${taskId}` })
+			}
+			if (buttons.length > 0) keyboard.push(buttons)
 		}
 	}
 
+	// Choose between editing an existing message or sending a new one
+	const useEdit = !!editMessageId
+	const apiMethod = useEdit ? 'editMessageText' : 'sendMessage'
+
 	const body: Record<string, unknown> = {
 		chat_id: chatId,
-		text: lines.join('\n'),
-		parse_mode: 'HTML',
+		text,
+	}
+
+	if (useEdit) {
+		body.message_id = Number(editMessageId)
+	}
+
+	if (parseMode) {
+		body.parse_mode = parseMode
 	}
 
 	if (keyboard.length > 0) {
@@ -116,7 +157,7 @@ if (op === 'notify.send') {
 	}
 
 	try {
-		const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+		const res = await fetch(`${TELEGRAM_API}/${apiMethod}`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(body),
@@ -125,16 +166,44 @@ if (op === 'notify.send') {
 		const data = (await res.json()) as TelegramResponse
 
 		if (data.ok) {
+			// For edits, the message_id stays the same; for new messages, capture it
+			const messageId = useEdit ? Number(editMessageId) : (data.result?.message_id ?? 0)
 			console.log(JSON.stringify({
 				ok: true,
-				external_id: String(data.result?.message_id ?? ''),
-				metadata: { chat_id: chatId, message_id: data.result?.message_id },
+				external_id: String(messageId),
+				metadata: { chat_id: chatId, message_id: messageId },
 			}))
 		} else {
-			console.log(JSON.stringify({
-				ok: false,
-				error: `Telegram API: ${data.description ?? 'Unknown error'}`,
-			}))
+			// If edit fails (e.g. message deleted), fall back to sending a new message
+			if (useEdit) {
+				const fallbackBody: Record<string, unknown> = { chat_id: chatId, text }
+				if (parseMode) fallbackBody.parse_mode = parseMode
+				if (keyboard.length > 0) fallbackBody.reply_markup = JSON.stringify({ inline_keyboard: keyboard })
+
+				const fallbackRes = await fetch(`${TELEGRAM_API}/sendMessage`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(fallbackBody),
+				})
+				const fallbackData = (await fallbackRes.json()) as TelegramResponse
+				if (fallbackData.ok) {
+					console.log(JSON.stringify({
+						ok: true,
+						external_id: String(fallbackData.result?.message_id ?? ''),
+						metadata: { chat_id: chatId, message_id: fallbackData.result?.message_id },
+					}))
+				} else {
+					console.log(JSON.stringify({
+						ok: false,
+						error: `Telegram API: ${fallbackData.description ?? 'Unknown error'}`,
+					}))
+				}
+			} else {
+				console.log(JSON.stringify({
+					ok: false,
+					error: `Telegram API: ${data.description ?? 'Unknown error'}`,
+				}))
+			}
 		}
 	} catch (err) {
 		console.log(JSON.stringify({
@@ -212,6 +281,11 @@ if (op === 'conversation.ingest') {
 		const replyTo = message.reply_to_message as Record<string, unknown> | undefined
 		const threadId = replyTo ? String(replyTo.message_id ?? '') : undefined
 
+		// Extract sender identity for group chat support
+		const from = message.from as Record<string, unknown> | undefined
+		const senderId = from?.id !== undefined ? String(from.id) : undefined
+		const senderName = (from?.first_name as string) ?? (from?.username as string) ?? undefined
+
 		if (!text) {
 			console.log(JSON.stringify({
 				ok: true,
@@ -262,7 +336,13 @@ if (op === 'conversation.ingest') {
 		// General message (not a command, not replying to notification) → query mode
 		console.log(JSON.stringify({
 			ok: true,
-			metadata: { action: 'query.message', conversation_id: chatId, message: text },
+			metadata: {
+				action: 'query.message',
+				conversation_id: chatId,
+				message: text,
+				sender_id: senderId,
+				sender_name: senderName,
+			},
 		}))
 		process.exit(0)
 	}
@@ -285,4 +365,39 @@ function escapeHtml(text: string): string {
 		.replace(/&/g, '&amp;')
 		.replace(/</g, '&lt;')
 		.replace(/>/g, '&gt;')
+}
+
+function markdownToTelegramHtml(text: string): string {
+	const protectedFragments: Array<{ token: string; html: string }> = []
+	let nextToken = 0
+
+	const protect = (html: string): string => {
+		const token = `@@QPCODE${nextToken}@@`
+		nextToken += 1
+		protectedFragments.push({ token, html })
+		return token
+	}
+
+	let working = text.replace(/```([\s\S]*?)```/g, (_match, code: string) => {
+		return protect(`<pre>${escapeHtml(code.trim())}</pre>`)
+	})
+
+	working = working.replace(/`([^`\n]+)`/g, (_match, code: string) => {
+		return protect(`<code>${escapeHtml(code)}</code>`)
+	})
+
+	let html = escapeHtml(working)
+
+	html = html.replace(/^#{1,6}\s+(.+)$/gm, '<b>$1</b>')
+	html = html.replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>')
+	html = html.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+	html = html.replace(/__([^_\n]+)__/g, '<b>$1</b>')
+	html = html.replace(/\*([^*\n]+)\*/g, '<i>$1</i>')
+	html = html.replace(/_([^_\n]+)_/g, '<i>$1</i>')
+
+	for (const fragment of protectedFragments) {
+		html = html.replace(fragment.token, fragment.html)
+	}
+
+	return html
 }

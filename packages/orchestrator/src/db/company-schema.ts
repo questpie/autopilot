@@ -341,21 +341,20 @@ export const queries = sqliteTable(
 		mutated_repo: integer('mutated_repo', { mode: 'boolean' }).notNull().default(false),
 		summary: text('summary'),
 
-		// ─── Thin continuity (foundation for Pass 24.9) ──────────────
-		continue_from: text('continue_from'), // prior query ID
-		carryover_summary: text('carryover_summary'), // short derived context
 		runtime_session_ref: text('runtime_session_ref'), // optional adapter resume handle
 
 		created_by: text('created_by').notNull(),
 		created_at: text('created_at').notNull(),
 		ended_at: text('ended_at'),
 		metadata: text('metadata').default('{}'),
+		/** Session this query belongs to. */
+		session_id: text('session_id'),
 	},
 	(table) => [
 		index('idx_queries_status').on(table.status),
 		index('idx_queries_agent').on(table.agent_id),
 		index('idx_queries_created').on(table.created_at),
-		index('idx_queries_continue_from').on(table.continue_from),
+		index('idx_queries_session').on(table.session_id),
 	],
 )
 
@@ -370,11 +369,15 @@ export const sessions = sqliteTable(
 		external_thread_id: text('external_thread_id').notNull(), // real thread ID or '__chat__' sentinel
 		mode: text('mode').notNull(), // query | task_thread
 		task_id: text('task_id'),
-		last_query_id: text('last_query_id'),
+
 		status: text('status').notNull().default('active'), // active | closed
 		created_at: text('created_at').notNull(),
 		updated_at: text('updated_at').notNull(),
 		metadata: text('metadata').default('{}'),
+		/** Claude Code session ID for --resume. */
+		runtime_session_ref: text('runtime_session_ref'),
+		/** Worker that holds session files — route continuation runs here. */
+		preferred_worker_id: text('preferred_worker_id'),
 	},
 	(table) => [
 		uniqueIndex('uq_session_provider_conv').on(table.provider_id, table.external_conversation_id, table.external_thread_id),
@@ -382,6 +385,27 @@ export const sessions = sqliteTable(
 		index('idx_sessions_task').on(table.task_id),
 		index('idx_sessions_status').on(table.status),
 		index('idx_sessions_mode').on(table.mode),
+	],
+)
+
+// ─── Session Messages ────────────────────────────────────────────────────
+
+export const sessionMessages = sqliteTable(
+	'session_messages',
+	{
+		id: text('id').primaryKey(),
+		session_id: text('session_id').notNull(),
+		role: text('role').notNull(), // user | assistant | system
+		content: text('content').notNull(),
+		query_id: text('query_id'), // null = queued user message not yet consumed
+		/** External provider message ID used for edit-in-place delivery. */
+		external_message_id: text('external_message_id'),
+		metadata: text('metadata').default('{}'),
+		created_at: text('created_at').notNull(),
+	},
+	(table) => [
+		index('idx_session_messages_session_created').on(table.session_id, table.created_at),
+		index('idx_session_messages_session_query').on(table.session_id, table.query_id),
 	],
 )
 

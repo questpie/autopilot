@@ -19,7 +19,7 @@ import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, DependencyBridge, SecretService, QueryService, SessionService, ScheduleService, SchedulerDaemon, SteerService } from './services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, DependencyBridge, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, SchedulerDaemon, SteerService } from './services'
 import { Indexer } from './services/indexer'
 import type { AuthoredConfig } from './services'
 import { NotificationBridge, QueryResponseBridge } from './providers'
@@ -103,6 +103,7 @@ export async function startServer(options?: StartServerOptions) {
 	const secretService = new SecretService(companyDb)
 	const queryService = new QueryService(companyDb)
 	const sessionService = new SessionService(companyDb)
+	const sessionMessageService = new SessionMessageService(companyDb)
 	const scheduleService = new ScheduleService(companyDb)
 	const steerService = new SteerService(companyDb)
 
@@ -150,6 +151,7 @@ export async function startServer(options?: StartServerOptions) {
 		secretService,
 		queryService,
 		sessionService,
+		sessionMessageService,
 		scheduleService,
 		steerService,
 	}
@@ -173,6 +175,7 @@ export async function startServer(options?: StartServerOptions) {
 		{ companyRoot, orchestratorUrl },
 		secretService,
 		sessionService,
+		sessionMessageService,
 	)
 	const queryResponseBridge = new QueryResponseBridge(
 		eventBus,
@@ -182,6 +185,7 @@ export async function startServer(options?: StartServerOptions) {
 		sessionService,
 		{ companyRoot, orchestratorUrl },
 		secretService,
+		sessionMessageService,
 	)
 	if (authoredConfig.providers.size > 0) {
 		notificationBridge.start()
@@ -247,6 +251,7 @@ export async function startServer(options?: StartServerOptions) {
 			status: 'failed',
 			error: 'lease expired (orchestrator restart recovery)',
 		})
+		eventBus.emit({ type: 'run_completed', runId, status: 'failed' })
 	}
 
 	try {
@@ -271,6 +276,7 @@ export async function startServer(options?: StartServerOptions) {
 					status: 'failed',
 					error: 'lease expired (periodic cleanup)',
 				})
+				eventBus.emit({ type: 'run_completed', runId, status: 'failed' })
 			})
 			if (result.failedRunIds.length > 0) {
 				console.log(`[server] periodic cleanup: failed ${result.failedRunIds.length} run(s), recovered ${result.recoveredWorkerIds.length} worker(s)`)

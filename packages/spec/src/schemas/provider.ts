@@ -149,6 +149,10 @@ export const ConversationResultSchema = z.discriminatedUnion('action', [
 		conversation_id: z.string(),
 		thread_id: z.string().optional(),
 		message: z.string().min(1),
+		/** Sender identity for group chats. */
+		sender_id: z.string().optional(),
+		/** Display name of the sender. */
+		sender_name: z.string().optional(),
 	}),
 	z.object({
 		action: z.literal('noop'),

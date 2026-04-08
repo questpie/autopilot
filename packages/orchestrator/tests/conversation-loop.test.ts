@@ -406,12 +406,43 @@ console.log(JSON.stringify({ ok: true }))`
 describe('Text Conversation Handler — notify.send', () => {
 	const testRoot = join(tmpdir(), `qp-conv-notify-e2e-${Date.now()}`)
 
+	const HANDLER_SRC = `
+const envelope = await Bun.stdin.json();
+const { op, payload } = envelope;
+
+if (op === 'notify.send') {
+  if (payload.conversation_id) {
+    console.log(JSON.stringify({
+      ok: true,
+      metadata: {
+        delivered: true,
+        conversation_id: payload.conversation_id,
+        thread_id: payload.thread_id,
+        title: payload.title,
+        preview_url: payload.preview_url,
+      },
+    }));
+  } else {
+    console.log(JSON.stringify({ ok: true, metadata: { skipped: true } }));
+  }
+} else if (op === 'conversation.ingest') {
+  if (!payload.conversation_id || !payload.text) {
+    console.log(JSON.stringify({ ok: true, metadata: { action: 'noop' } }));
+  } else if (payload.text === '/approve') {
+    console.log(JSON.stringify({ ok: true, metadata: { action: 'task.approve', conversation_id: payload.conversation_id } }));
+  } else if (payload.text.startsWith('/reject ')) {
+    console.log(JSON.stringify({ ok: true, metadata: { action: 'task.reject', conversation_id: payload.conversation_id, message: payload.text.slice('/reject '.length) } }));
+  } else {
+    console.log(JSON.stringify({ ok: true, metadata: { action: 'task.reply', message: payload.text, conversation_id: payload.conversation_id } }));
+  }
+} else {
+  console.log(JSON.stringify({ ok: false, error: 'unknown op: ' + op }));
+}
+`
+
 	beforeAll(async () => {
 		await mkdir(join(testRoot, '.autopilot', 'handlers'), { recursive: true })
-		const handlerSrc = await Bun.file(
-			join(import.meta.dir, '..', '..', '..', '.autopilot', 'handlers', 'text-conversation.ts'),
-		).text()
-		await writeFile(join(testRoot, '.autopilot', 'handlers', 'text-conversation.ts'), handlerSrc)
+		await writeFile(join(testRoot, '.autopilot', 'handlers', 'text-conversation.ts'), HANDLER_SRC)
 	})
 
 	afterAll(async () => {

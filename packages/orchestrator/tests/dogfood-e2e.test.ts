@@ -8,7 +8,7 @@
  * Uses real config loading (.autopilot/ YAML), real DB, real WorkflowEngine.
  */
 import { test, expect, describe, beforeAll, afterAll } from 'bun:test'
-import { mkdir, rm, writeFile, readFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createCompanyDb, type CompanyDbResult } from '../src/db'
@@ -16,8 +16,113 @@ import { loadCompany, loadAgents, loadWorkflows, loadEnvironments } from '../src
 import { TaskService, RunService, WorkflowEngine, ActivityService } from '../src/services'
 import type { AuthoredConfig } from '../src/services'
 
-const REPO_ROOT = join(__dirname, '..', '..', '..')
 const CAPS = [{ runtime: 'claude-code', models: [], maxConcurrent: 1, tags: [] }]
+
+const COMPANY_YAML = `\
+name: test
+slug: test
+defaults:
+  runtime: claude-code
+  workflow: dogfood
+  task_assignee: dev
+`
+
+const DEV_AGENT_YAML = `\
+id: dev
+name: Dev Agent
+role: developer
+`
+
+const DOGFOOD_WORKFLOW_YAML = `\
+id: dogfood
+name: "Dogfood Development"
+description: >
+  Plan → validate plan → generate implementation prompt →
+  implement → validate implementation → human review → done.
+steps:
+  - id: plan
+    type: agent
+    agent_id: dev
+    instructions: >
+      Research and create an implementation plan for the task.
+    output:
+      summary:
+        description: "The complete implementation plan"
+
+  - id: validate-plan
+    type: agent
+    agent_id: dev
+    instructions: >
+      Validate the implementation plan from the previous step.
+    output:
+      outcome:
+        description: "Whether the plan is ready for implementation"
+        values:
+          approved: "Plan is complete and ready"
+          revise: "Plan needs changes"
+      summary:
+        description: "Brief validation result"
+    transitions:
+      - when: { outcome: approved }
+        goto: generate-impl-prompt
+      - when: { outcome: revise }
+        goto: plan
+
+  - id: generate-impl-prompt
+    type: agent
+    agent_id: dev
+    instructions: >
+      Generate a detailed implementation prompt.
+    output:
+      summary:
+        description: "Brief status"
+      artifacts:
+        - kind: implementation_prompt
+          title: "Implementation Prompt"
+          description: "Full implementation instructions for the next agent"
+
+  - id: implement
+    type: agent
+    agent_id: dev
+    instructions: >
+      Implement the task following the implementation prompt.
+    input:
+      artifacts:
+        - implementation_prompt
+    output:
+      summary:
+        description: "Brief summary of what was implemented"
+
+  - id: validate-impl
+    type: agent
+    agent_id: dev
+    instructions: >
+      Validate the implementation from the previous step.
+    output:
+      outcome:
+        description: "Whether the implementation is correct"
+        values:
+          approved: "Implementation is correct and tests pass"
+          revise: "Implementation needs fixes"
+      summary:
+        description: "Brief validation result"
+      feedback:
+        description: "Specific issues to fix if revising"
+    transitions:
+      - when: { outcome: approved }
+        goto: review
+      - when: { outcome: revise }
+        goto: implement
+
+  - id: review
+    type: human_approval
+    on_approve: done
+    on_reply: implement
+    on_reject: done
+
+  - id: done
+    type: done
+`
 
 describe('Dogfood E2E', () => {
 	const companyRoot = join(tmpdir(), `qp-dogfood-e2e-${Date.now()}`)
@@ -33,14 +138,9 @@ describe('Dogfood E2E', () => {
 		await mkdir(join(companyRoot, '.autopilot', 'workflows'), { recursive: true })
 		await mkdir(join(companyRoot, '.autopilot', 'environments'), { recursive: true })
 
-		const companyYaml = await readFile(join(REPO_ROOT, '.autopilot', 'company.yaml'), 'utf-8')
-		await writeFile(join(companyRoot, '.autopilot', 'company.yaml'), companyYaml)
-
-		const devYaml = await readFile(join(REPO_ROOT, '.autopilot', 'agents', 'dev.yaml'), 'utf-8')
-		await writeFile(join(companyRoot, '.autopilot', 'agents', 'dev.yaml'), devYaml)
-
-		const dogfoodYaml = await readFile(join(REPO_ROOT, '.autopilot', 'workflows', 'dogfood.yaml'), 'utf-8')
-		await writeFile(join(companyRoot, '.autopilot', 'workflows', 'dogfood.yaml'), dogfoodYaml)
+		await writeFile(join(companyRoot, '.autopilot', 'company.yaml'), COMPANY_YAML)
+		await writeFile(join(companyRoot, '.autopilot', 'agents', 'dev.yaml'), DEV_AGENT_YAML)
+		await writeFile(join(companyRoot, '.autopilot', 'workflows', 'dogfood.yaml'), DOGFOOD_WORKFLOW_YAML)
 
 		const company = await loadCompany(companyRoot)
 		const agents = new Map((await loadAgents(companyRoot)).map((a) => [a.id, a]))

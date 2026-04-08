@@ -22,11 +22,6 @@ export const QueryRequestSchema = z.object({
 	 */
 	allow_repo_mutation: z.boolean().default(false),
 
-	// ─── Thin continuity (foundation for Pass 24.9) ──────────────────
-
-	/** Continue from a prior query. Provides carryover context. */
-	continue_from: z.string().optional(),
-
 	// ─── Runtime hints ───────────────────────────────────────────────
 
 	/** Explicit runtime override (e.g. 'claude-code'). Uses company default if omitted. */
@@ -61,16 +56,12 @@ export const QueryResultSchema = z.object({
 	/** Error message if failed. */
 	error: z.string().nullable().optional(),
 
-	// ─── Thin continuity ─────────────────────────────────────────────
-	/** Prior query this continues from. */
-	continue_from: z.string().nullable(),
 })
 
 // ─── Query Row (DB persistence shape) ─────────────────────────────────────
 
 /**
- * Minimal persistence record for query invocations.
- * Not a full session — just enough to inspect, continue, and audit.
+ * Persistence record for query invocations. Linked to sessions for conversation continuity.
  */
 export const QueryRowSchema = z.object({
 	id: z.string(),
@@ -82,11 +73,6 @@ export const QueryRowSchema = z.object({
 	mutated_repo: z.boolean(),
 	summary: z.string().nullable(),
 
-	// ─── Thin continuity ─────────────────────────────────────────────
-	/** ID of the prior query this continues from. */
-	continue_from: z.string().nullable(),
-	/** Short derived summary from the prior query (for context carryover). */
-	carryover_summary: z.string().nullable(),
 	/** Runtime session handle for optional adapter-level resume. */
 	runtime_session_ref: z.string().nullable(),
 
@@ -94,4 +80,5 @@ export const QueryRowSchema = z.object({
 	created_at: z.string(),
 	ended_at: z.string().nullable(),
 	metadata: z.string(),
+	session_id: z.string().nullable(),
 })

@@ -32,39 +32,17 @@ const queries = new Hono<AppEnv>()
 				return c.json({ error: 'agent_id required (no company default configured)' }, 400)
 			}
 
-			// ── Thin continuity: resolve carryover from prior query ──────
-			let carryoverSummary: string | null = null
-			let runtimeSessionRef: string | undefined
-			let preferredWorkerId: string | undefined
-
-			if (body.continue_from) {
-				const prior = await queryService.get(body.continue_from)
-				if (!prior) {
-					return c.json({ error: `continue_from query not found: ${body.continue_from}` }, 404)
-				}
-				carryoverSummary = prior.summary?.slice(0, 500) ?? null
-
-				if (prior.runtime_session_ref && prior.run_id) {
-					runtimeSessionRef = prior.runtime_session_ref
-					const priorRun = await runService.get(prior.run_id)
-					preferredWorkerId = priorRun?.worker_id ?? undefined
-				}
-			}
-
 			const query = await queryService.create({
 				prompt: body.prompt,
 				agent_id: agentId,
 				allow_repo_mutation: body.allow_repo_mutation,
-				continue_from: body.continue_from,
-				carryover_summary: carryoverSummary ?? undefined,
 				created_by: initiator,
 			})
 
-			const instructions = buildQueryInstructions(
-				body.prompt,
-				body.allow_repo_mutation,
-				carryoverSummary,
-			)
+			const instructions = buildQueryInstructions(body.prompt, {
+				allowMutation: body.allow_repo_mutation,
+				hasResume: false,
+			})
 
 			// Resolve agent model/provider/variant from authored config
 			const agentConfig = authoredConfig.agents.get(agentId)
@@ -79,8 +57,6 @@ const queries = new Hono<AppEnv>()
 				variant: agentConfig?.variant,
 				initiated_by: initiator,
 				instructions,
-				runtime_session_ref: runtimeSessionRef,
-				preferred_worker_id: preferredWorkerId,
 			})
 
 			await queryService.linkRun(query.id, runId)
@@ -89,7 +65,6 @@ const queries = new Hono<AppEnv>()
 				query_id: query.id,
 				run_id: runId,
 				status: 'pending',
-				continue_from: body.continue_from ?? null,
 			}, 201)
 		},
 	)
@@ -127,11 +102,9 @@ const queries = new Hono<AppEnv>()
 				status: query.status,
 				run_id: query.run_id,
 				error: query.status === 'failed' ? query.summary : null,
-				continue_from: query.continue_from,
 				prompt: query.prompt,
 				agent_id: query.agent_id,
 				allow_repo_mutation: query.allow_repo_mutation,
-				carryover_summary: query.carryover_summary,
 				created_by: query.created_by,
 				created_at: query.created_at,
 				ended_at: query.ended_at,

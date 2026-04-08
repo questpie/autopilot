@@ -581,13 +581,30 @@ describe('Webhook Example Provider E2E', () => {
 	const received: Array<Record<string, unknown>> = []
 
 	beforeAll(async () => {
-		await mkdir(join(testRoot, '.autopilot', 'handlers'), { recursive: true })
+		const HANDLER_SRC = `
+const envelope = await Bun.stdin.json();
+const { op, payload, secrets } = envelope;
 
-		// Copy the real webhook handler
-		const handlerSrc = await Bun.file(
-			join(import.meta.dir, '..', '..', '..', '.autopilot', 'handlers', 'webhook-notify.ts'),
-		).text()
-		await writeFile(join(testRoot, '.autopilot', 'handlers', 'webhook-notify.ts'), handlerSrc)
+if (op === 'notify.send') {
+  const url = secrets.webhook_url;
+  if (!url) {
+    console.log(JSON.stringify({ ok: false, error: 'Missing secret: webhook_url' }));
+    process.exit(0);
+  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const externalId = res.headers.get('x-request-id') ?? undefined;
+  console.log(JSON.stringify({ ok: true, external_id: externalId }));
+} else {
+  console.log(JSON.stringify({ ok: false, error: 'unknown op: ' + op }));
+}
+`
+
+		await mkdir(join(testRoot, '.autopilot', 'handlers'), { recursive: true })
+		await writeFile(join(testRoot, '.autopilot', 'handlers', 'webhook-notify.ts'), HANDLER_SRC)
 
 		// Start a local webhook receiver
 		webhookServer = Bun.serve({

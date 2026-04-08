@@ -6,7 +6,6 @@
  * - No hidden task creation
  * - Read-only query path
  * - Mutation-allowed query path
- * - Thin continuity model (continue_from + carryover)
  * - Query result contract
  * - API route surface (POST + GET)
  * - Query completion on run completion
@@ -37,6 +36,7 @@ import {
 	TaskGraphService,
 	SecretService,
 	QueryService,
+	SessionMessageService,
 } from '../src/services'
 import type { AppEnv, Services } from '../src/api/app'
 import type { Actor } from '../src/auth/types'
@@ -163,6 +163,7 @@ beforeAll(async () => {
 		workflowEngine,
 		secretService,
 		queryService,
+		sessionMessageService: new SessionMessageService(db),
 	}
 
 	app = buildTestApp(testDir, db, services)
@@ -182,23 +183,20 @@ describe('QueryRequestSchema', () => {
 		expect(result.success).toBe(true)
 		if (result.success) {
 			expect(result.data.allow_repo_mutation).toBe(false)
-			expect(result.data.continue_from).toBeUndefined()
 		}
 	})
 
-	test('parses full request with continuity', () => {
+	test('parses full request', () => {
 		const result = QueryRequestSchema.safeParse({
 			prompt: 'Explain the workflow config',
 			agent_id: 'my-agent',
 			allow_repo_mutation: true,
-			continue_from: 'query-123',
 			runtime: 'claude-code',
 		})
 		expect(result.success).toBe(true)
 		if (result.success) {
 			expect(result.data.agent_id).toBe('my-agent')
 			expect(result.data.allow_repo_mutation).toBe(true)
-			expect(result.data.continue_from).toBe('query-123')
 		}
 	})
 
@@ -216,7 +214,6 @@ describe('QueryResultSchema', () => {
 			status: 'completed',
 			run_id: 'run-456',
 			mutated_repo: false,
-			continue_from: null,
 		})
 		expect(result.success).toBe(true)
 	})
@@ -229,7 +226,6 @@ describe('QueryResultSchema', () => {
 			status: 'completed',
 			run_id: 'run-456',
 			mutated_repo: false,
-			continue_from: null,
 			artifacts: [{ kind: 'doc', title: 'x', ref_kind: 'inline', ref_value: 'y' }],
 		})
 		// Zod strips unknown keys by default, so this still parses
@@ -241,7 +237,7 @@ describe('QueryResultSchema', () => {
 })
 
 describe('QueryRowSchema', () => {
-	test('parses row with continuity fields', () => {
+	test('parses row', () => {
 		const result = QueryRowSchema.safeParse({
 			id: 'query-123',
 			prompt: 'Hello',
@@ -251,9 +247,8 @@ describe('QueryRowSchema', () => {
 			allow_repo_mutation: false,
 			mutated_repo: false,
 			summary: 'Done',
-			continue_from: null,
-			carryover_summary: null,
 			runtime_session_ref: null,
+			session_id: null,
 			created_by: 'user',
 			created_at: '2024-01-01T00:00:00Z',
 			ended_at: '2024-01-01T00:01:00Z',
@@ -344,100 +339,6 @@ describe('POST /api/queries', () => {
 		const afterTasks = (await afterRes.json()) as unknown[]
 
 		expect(afterTasks.length).toBe(beforeTasks.length)
-	})
-})
-
-describe('Query continuity', () => {
-	test('continue_from carries over summary and routes to same worker', async () => {
-		// Register a fresh worker for this test
-		await app.request(
-			'/api/workers/register',
-			post({ id: 'w-cont', name: 'cont-worker', capabilities: [{ runtime: 'claude-code', models: [], maxConcurrent: 1, tags: [] }] }),
-		)
-
-		// Drain any pending runs from prior tests so our claim is deterministic
-		let drained = true
-		while (drained) {
-			const claimRes = await app.request('/api/workers/claim', post({ worker_id: 'w-cont' }))
-			const claimBody = (await claimRes.json()) as { run: { id: string } | null }
-			if (!claimBody.run) {
-				drained = false
-			} else {
-				// Complete the drained run
-				await app.request(`/api/runs/${claimBody.run.id}/events`, post({ type: 'started', summary: 'drain' }))
-				await app.request(`/api/runs/${claimBody.run.id}/complete`, post({ status: 'completed', summary: 'drained' }))
-			}
-		}
-
-		// Create first query
-		const res1 = await app.request(
-			'/api/queries',
-			post({ prompt: 'First question' }),
-		)
-		const q1 = (await res1.json()) as { query_id: string; run_id: string }
-
-		// Claim and complete the first query's run
-		const claimRes = await app.request('/api/workers/claim', post({ worker_id: 'w-cont' }))
-		const claimed = (await claimRes.json()) as { run: { id: string } | null }
-		expect(claimed.run).not.toBeNull()
-		expect(claimed.run!.id).toBe(q1.run_id)
-
-		await app.request(
-			`/api/runs/${q1.run_id}/events`,
-			post({ type: 'started', summary: 'Starting' }),
-		)
-		await app.request(
-			`/api/runs/${q1.run_id}/complete`,
-			post({
-				status: 'completed',
-				summary: 'Found 3 agents: planner, coder, reviewer.',
-				runtime_session_ref: 'session-abc',
-				resumable: true,
-			}),
-		)
-
-		// Create continuation query
-		const res2 = await app.request(
-			'/api/queries',
-			post({
-				prompt: 'Tell me more about the planner agent',
-				continue_from: q1.query_id,
-			}),
-		)
-		expect(res2.status).toBe(201)
-		const q2 = (await res2.json()) as { query_id: string; run_id: string }
-
-		// Verify the continuation query record
-		const queryRes = await app.request(`/api/queries/${q2.query_id}`)
-		const query = (await queryRes.json()) as {
-			continue_from: string
-			carryover_summary: string
-		}
-		expect(query.continue_from).toBe(q1.query_id)
-		expect(query.carryover_summary).toContain('Found 3 agents')
-
-		// Verify the run has carryover in instructions and preferred_worker_id
-		const runRes = await app.request(`/api/runs/${q2.run_id}`)
-		const run = (await runRes.json()) as {
-			instructions: string
-			preferred_worker_id: string | null
-			runtime_session_ref: string | null
-		}
-		expect(run.instructions).toContain('PRIOR_QUERY_CONTEXT')
-		expect(run.instructions).toContain('Found 3 agents')
-		expect(run.preferred_worker_id).toBe('w-cont')
-		expect(run.runtime_session_ref).toBe('session-abc')
-	})
-
-	test('continue_from with invalid query ID returns 404', async () => {
-		const res = await app.request(
-			'/api/queries',
-			post({
-				prompt: 'Continue from nonexistent',
-				continue_from: 'query-does-not-exist',
-			}),
-		)
-		expect(res.status).toBe(404)
 	})
 })
 

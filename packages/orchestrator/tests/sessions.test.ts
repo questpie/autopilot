@@ -4,7 +4,7 @@
  * Covers:
  * - SessionModeSchema, SessionStatusSchema, SessionRowSchema parsing
  * - ConversationResultSchema query.message validation
- * - SessionService CRUD (findOrCreate, get, findByExternal, bindTask, updateLastQuery, close, list, listForTask)
+ * - SessionService CRUD (findOrCreate, get, findByExternal, bindTask, close, list, listForTask)
  * - Inbound routing: query.message → session-based query plane dispatch
  * - Inbound routing: task-bound thread via session
  * - No hidden task creation from general messaging
@@ -35,6 +35,7 @@ import {
 	SessionService,
 	QueryService,
 	SecretService,
+	SessionMessageService,
 } from '../src/services'
 import type { AuthoredConfig } from '../src/services'
 import type { AppEnv, Services } from '../src/api/app'
@@ -82,11 +83,12 @@ describe('SessionRowSchema', () => {
 			external_thread_id: null,
 			mode: 'query',
 			task_id: null,
-			last_query_id: null,
 			status: 'active',
 			created_at: '2026-01-01T00:00:00.000Z',
 			updated_at: '2026-01-01T00:00:00.000Z',
 			metadata: '{}',
+			runtime_session_ref: null,
+			preferred_worker_id: null,
 		})
 		expect(r.success).toBe(true)
 	})
@@ -208,18 +210,6 @@ describe('SessionService', () => {
 		expect(updated).toBeDefined()
 		expect(updated!.mode).toBe('task_thread')
 		expect(updated!.task_id).toBe('task-xyz')
-	})
-
-	test('updateLastQuery stores last query reference', async () => {
-		const session = await service.findOrCreate({
-			provider_id: 'tg-lq',
-			external_conversation_id: 'chat-lq',
-		})
-		expect(session.last_query_id).toBeNull()
-
-		const updated = await service.updateLastQuery(session.id, 'query-111')
-		expect(updated).toBeDefined()
-		expect(updated!.last_query_id).toBe('query-111')
 	})
 
 	test('close sets status to closed', async () => {
@@ -389,6 +379,7 @@ console.log(JSON.stringify({
 			artifactService: new ArtifactService(dbResult.db),
 			conversationBindingService: new ConversationBindingService(dbResult.db),
 			sessionService: new SessionService(dbResult.db),
+			sessionMessageService: new SessionMessageService(dbResult.db),
 			queryService: new QueryService(dbResult.db),
 			workflowEngine: {} as any,
 			taskRelationService: {} as any,
@@ -515,13 +506,13 @@ console.log(JSON.stringify({
 		delete process.env.__TEST_SESSION_SECRET_prov2
 	})
 
-	test('second query.message continues from prior query', async () => {
+	test('second query.message while first is running gets queued', async () => {
 		process.env.__TEST_SESSION_SECRET_prov3 = 'secret-3'
 		const providers = new Map([['prov3', makeProvider('prov3', 'handlers/query-msg.ts')]])
 		const services = makeServices()
 		const app = buildApp(providers, services)
 
-		// First message
+		// First message — dispatches normally
 		const res1 = await app.request(
 			'/api/conversations/prov3',
 			post(
@@ -531,9 +522,9 @@ console.log(JSON.stringify({
 		)
 		expect(res1.status).toBe(200)
 		const body1 = await res1.json() as any
-		const firstQueryId = body1.query_id
+		expect(body1.action).toBe('query.dispatched')
 
-		// Second message — same conversation_id, should continue
+		// Second message — first query's run is still pending, so this gets queued
 		const res2 = await app.request(
 			'/api/conversations/prov3',
 			post(
@@ -543,8 +534,8 @@ console.log(JSON.stringify({
 		)
 		expect(res2.status).toBe(200)
 		const body2 = await res2.json() as any
-		expect(body2.action).toBe('query.dispatched')
-		expect(body2.continue_from).toBe(firstQueryId)
+		expect(body2.action).toBe('queued')
+		expect(body2.session_id).toBeDefined()
 
 		delete process.env.__TEST_SESSION_SECRET_prov3
 	})
@@ -605,6 +596,7 @@ console.log(JSON.stringify({
 			artifactService,
 			conversationBindingService: bindingService,
 			sessionService,
+			sessionMessageService: new SessionMessageService(dbResult.db),
 			queryService: new QueryService(dbResult.db),
 			workflowEngine,
 			taskRelationService: {} as any,
@@ -692,6 +684,7 @@ console.log(JSON.stringify({
 			artifactService,
 			conversationBindingService: bindingService,
 			sessionService,
+			sessionMessageService: new SessionMessageService(dbResult.db),
 			queryService: new QueryService(dbResult.db),
 			workflowEngine,
 			taskRelationService: {} as any,

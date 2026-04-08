@@ -17,6 +17,7 @@ import type { ArtifactService } from '../services/artifacts'
 import type { ConversationBindingService } from '../services/conversation-bindings'
 import type { SessionService } from '../services/sessions'
 import type { SecretService } from '../services/secrets'
+import type { SessionMessageService } from '../services/session-messages'
 import { invokeProvider, type HandlerRuntimeConfig } from './handler-runtime'
 
 export interface NotificationBridgeConfig {
@@ -38,6 +39,7 @@ export class NotificationBridge {
 		private config: NotificationBridgeConfig,
 		private secretService?: SecretService,
 		private sessionService?: SessionService,
+		private sessionMessageService?: SessionMessageService,
 	) {}
 
 	start(): void {
@@ -67,6 +69,45 @@ export class NotificationBridge {
 		const notifProviders = this.getMatchingProviders(event, 'notification_channel')
 		for (const provider of notifProviders) {
 			await this.sendToProvider(provider, payload, runtimeConfig)
+		}
+
+		// 1b. Default-chat delivery for conversation_channel providers
+		// Only for task-scoped events — query responses are delivered by QueryResponseBridge
+		if (payload && payload.task_id) {
+			for (const provider of this.authoredConfig.providers.values()) {
+				if (provider.kind !== 'conversation_channel') continue
+				if (!provider.capabilities.some((c) => c.op === 'notify.send')) continue
+				if (!this.matchesEventFilters(provider, event)) continue
+
+				const defaultChatId = provider.config.default_chat_id
+				if (typeof defaultChatId !== 'string' || !defaultChatId) continue
+
+				// Send notification to default chat
+				const chatPayload: NotificationPayload = {
+					...payload,
+					conversation_id: defaultChatId,
+				}
+				const sendResult = await this.sendToProvider(provider, chatPayload, runtimeConfig)
+
+				// Store system message only if send succeeded
+				if (sendResult?.ok && this.sessionService && this.sessionMessageService) {
+					const chatSession = await this.sessionService.findOrCreate({
+						provider_id: provider.id,
+						external_conversation_id: defaultChatId,
+						mode: 'query',
+					})
+					await this.sessionMessageService.create({
+						session_id: chatSession.id,
+						role: 'system',
+						content: `[${payload.event_type}] ${payload.title}: ${payload.summary}`.slice(0, 2000),
+						metadata: JSON.stringify({
+							task_id: payload.task_id,
+							run_id: payload.run_id,
+							notification_type: payload.event_type,
+						}),
+					})
+				}
+			}
 		}
 
 		// 2. Bound conversation_channel delivery (new: task-scoped outbound)
@@ -136,7 +177,11 @@ export class NotificationBridge {
 			// task_thread, breaking the general-chat = query-first invariant.
 			if (this.sessionService && payload.task_id) {
 				const threadId = sendResult?.external_id || (binding.external_thread_id ?? undefined)
-				await this.sessionService.findOrCreate({
+				if (!threadId) {
+					console.debug(`[notification-bridge] skipping task_thread session for binding ${binding.id}: no thread_id available`)
+					continue
+				}
+				const taskSession = await this.sessionService.findOrCreate({
 					provider_id: binding.provider_id,
 					external_conversation_id: binding.external_conversation_id,
 					external_thread_id: threadId,
@@ -144,7 +189,22 @@ export class NotificationBridge {
 					task_id: payload.task_id,
 				}).catch((err) => {
 					console.warn(`[notification-bridge] session creation failed for binding ${binding.id}:`, err instanceof Error ? err.message : String(err))
+					return undefined
 				})
+
+				// Store system notification as session message
+				if (this.sessionMessageService && taskSession) {
+					await this.sessionMessageService.create({
+						session_id: taskSession.id,
+						role: 'system',
+						content: `[${payload.event_type}] ${payload.title}: ${payload.summary}`.slice(0, 2000),
+						metadata: JSON.stringify({
+							task_id: payload.task_id,
+							run_id: payload.run_id,
+							notification_type: payload.event_type,
+						}),
+					})
+				}
 			}
 		}
 	}
