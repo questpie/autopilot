@@ -26,6 +26,16 @@ export interface QueryResponseBridgeConfig {
 
 export class QueryResponseBridge {
 	private unsubscribe: (() => void) | null = null
+	/**
+	 * Track runs where we have already sent a "working" indicator.
+	 * Prevents sending multiple "working" messages for the same run.
+	 */
+	private workingIndicatorSent = new Set<string>()
+	/**
+	 * Throttle progress updates per run — at most one every PROGRESS_THROTTLE_MS.
+	 */
+	private lastProgressSent = new Map<string, number>()
+	private static readonly PROGRESS_THROTTLE_MS = 10_000
 
 	constructor(
 		private eventBus: EventBus,
@@ -55,7 +65,16 @@ export class QueryResponseBridge {
 	}
 
 	private async handleEvent(event: AutopilotEvent): Promise<void> {
+		if (event.type === 'run_event') {
+			await this.handleRunEvent(event)
+			return
+		}
+
 		if (event.type !== 'run_completed') return
+
+		// Clean up tracking state for this run
+		this.workingIndicatorSent.delete(event.runId)
+		this.lastProgressSent.delete(event.runId)
 
 		// Check if this run belongs to a query (still status: running at event time)
 		const query = await this.queryService.getByRunId(event.runId)
@@ -88,6 +107,58 @@ export class QueryResponseBridge {
 			// No thread_id for query sessions — responses go to the main chat
 		}
 
+		await this.sendToProvider(provider, payload)
+	}
+
+	/**
+	 * Handle run_event for progressive response delivery.
+	 * - On first progress event: send a "working" indicator to the conversation
+	 * - Throttled to avoid spamming the conversation channel
+	 */
+	private async handleRunEvent(event: { type: 'run_event'; runId: string; eventType: string; summary: string }): Promise<void> {
+		// Only send working indicators for progress events
+		if (event.eventType !== 'started' && event.eventType !== 'progress') return
+
+		// Already sent working indicator for this run? Skip unless enough time passed for a progress update.
+		if (this.workingIndicatorSent.has(event.runId)) {
+			// Throttle subsequent progress updates
+			const lastSent = this.lastProgressSent.get(event.runId) ?? 0
+			if (Date.now() - lastSent < QueryResponseBridge.PROGRESS_THROTTLE_MS) return
+		}
+
+		// Check if this run belongs to a query
+		const query = await this.queryService.getByRunId(event.runId)
+		if (!query) return
+
+		// Find the session that owns this query
+		const session = await this.sessionService.findByLastQuery(query.id)
+		if (!session) return
+
+		// Resolve the provider
+		const provider = this.authoredConfig.providers.get(session.provider_id)
+		if (!provider) return
+		if (provider.kind !== 'conversation_channel') return
+		if (!provider.capabilities.some((c) => c.op === 'notify.send')) return
+
+		const isFirst = !this.workingIndicatorSent.has(event.runId)
+		this.workingIndicatorSent.add(event.runId)
+		this.lastProgressSent.set(event.runId, Date.now())
+
+		const payload: NotificationPayload = {
+			orchestrator_url: this.config.orchestratorUrl,
+			event_type: 'query_progress',
+			severity: 'info',
+			title: isFirst ? 'Working...' : 'Still working...',
+			summary: isFirst
+				? 'Working on your request...'
+				: event.summary.slice(0, 200),
+			conversation_id: session.external_conversation_id,
+		}
+
+		await this.sendToProvider(provider, payload)
+	}
+
+	private async sendToProvider(provider: import('@questpie/autopilot-spec').Provider, payload: NotificationPayload): Promise<void> {
 		const runtimeConfig: HandlerRuntimeConfig = { companyRoot: this.config.companyRoot }
 
 		try {

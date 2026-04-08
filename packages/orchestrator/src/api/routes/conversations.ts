@@ -194,6 +194,31 @@ const conversations = new Hono<AppEnv>()
 				return c.json({ error: 'No default agent configured for query routing' }, 400)
 			}
 
+			// ── Check if session has an active running query → steer instead of new query
+			if (session.last_query_id) {
+				const lastQuery = await queryService.get(session.last_query_id)
+				if (lastQuery?.status === 'running' && lastQuery.run_id) {
+					const activeRun = await runService.get(lastQuery.run_id)
+					if (activeRun && (activeRun.status === 'running' || activeRun.status === 'claimed')) {
+						// Route as steer message to the active run
+						const { steerService } = c.get('services')
+						const steer = await steerService.create({
+							run_id: activeRun.id,
+							message: result.message,
+							created_by: `provider:${providerId}`,
+						})
+
+						return c.json({
+							action: 'query.steered',
+							session_id: session.id,
+							query_id: lastQuery.id,
+							run_id: activeRun.id,
+							steer_id: steer.id,
+						}, 200)
+					}
+				}
+			}
+
 			// Resolve continuity from session's last query
 			let carryoverSummary: string | null = null
 			let runtimeSessionRef: string | undefined

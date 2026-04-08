@@ -72,4 +72,6 @@ export {
 	CreateJoinTokenResponseSchema,
 	WorkerEnrollRequestSchema,
 	WorkerEnrollResponseSchema,
+	RunSteerRequestSchema,
+	RunSteerSchema,
 } from './api-contracts'

@@ -65,4 +65,11 @@ export interface RuntimeAdapter {
 
   /** Force stop the runtime. */
   stop(): Promise<void>
+
+  /**
+   * Send a steering message to the running agent mid-execution.
+   * Only supported by adapters that use bidirectional stdin streaming.
+   * Returns true if the message was delivered, false if not supported or not running.
+   */
+  steer?(message: string): boolean
 }

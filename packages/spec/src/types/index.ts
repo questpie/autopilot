@@ -58,6 +58,8 @@ export type WorkerRegisterResponse = z.infer<typeof schemas.WorkerRegisterRespon
 export type ContinueRunRequest = z.infer<typeof schemas.ContinueRunRequestSchema>
 export type WorkerEnrollRequest = z.infer<typeof schemas.WorkerEnrollRequestSchema>
 export type WorkerEnrollResponse = z.infer<typeof schemas.WorkerEnrollResponseSchema>
+export type RunSteerRequest = z.infer<typeof schemas.RunSteerRequestSchema>
+export type RunSteer = z.infer<typeof schemas.RunSteerSchema>
 
 // Schedules
 export type Schedule = z.infer<typeof schemas.ScheduleSchema>

@@ -437,6 +437,26 @@ export const scheduleExecutions = sqliteTable(
 	],
 )
 
+// ─── Run Steers ──────────────────────────────────────────────────────────────
+
+export const runSteers = sqliteTable(
+	'run_steers',
+	{
+		id: text('id').primaryKey(),
+		run_id: text('run_id').notNull(),
+		message: text('message').notNull(),
+		/** pending = not yet delivered to worker; delivered = picked up by worker. */
+		status: text('status').notNull().default('pending'), // pending | delivered
+		created_by: text('created_by').notNull(),
+		created_at: text('created_at').notNull(),
+		delivered_at: text('delivered_at'),
+	},
+	(table) => [
+		index('idx_run_steers_run_status').on(table.run_id, table.status),
+		index('idx_run_steers_created').on(table.created_at),
+	],
+)
+
 // ─── Activity ──────────────────────────────────────────────────────────────
 
 export const activity = sqliteTable(

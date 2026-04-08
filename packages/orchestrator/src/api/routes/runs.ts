@@ -7,6 +7,7 @@ import {
 	RunCompletionSchema,
 	CreateRunRequestSchema,
 	ContinueRunRequestSchema,
+	RunSteerRequestSchema,
 } from '@questpie/autopilot-spec'
 import type { ResolvedCapabilities, CapabilityProfile } from '@questpie/autopilot-spec'
 import type { AppEnv, Services } from '../app'
@@ -369,6 +370,62 @@ const runs = new Hono<AppEnv>()
 			})
 
 			return c.json(continuation, 201)
+		},
+	)
+
+	// POST /runs/:id/steer — send a steering message to a running run (user auth)
+	.post(
+		'/:id/steer',
+		zValidator('param', z.object({ id: z.string() })),
+		zValidator('json', RunSteerRequestSchema),
+		async (c) => {
+			const { runService, steerService } = c.get('services')
+			const actor = c.get('actor')
+			const { id } = c.req.valid('param')
+			const body = c.req.valid('json')
+
+			const run = await runService.get(id)
+			if (!run) return c.json({ error: 'run not found' }, 404)
+
+			if (run.status !== 'running' && run.status !== 'claimed') {
+				return c.json({ error: `Run ${id} is ${run.status} — can only steer running/claimed runs` }, 400)
+			}
+
+			const steer = await steerService.create({
+				run_id: id,
+				message: body.message,
+				created_by: body.created_by ?? actor?.id ?? 'system',
+			})
+
+			eventBus.emit({
+				type: 'run_event',
+				runId: id,
+				eventType: 'steer',
+				summary: `Steering message: ${body.message.slice(0, 100)}`,
+			})
+
+			return c.json(steer, 201)
+		},
+	)
+	// POST /runs/:id/steers/claim — worker claims pending steer messages (worker auth)
+	.post(
+		'/:id/steers/claim',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { runService, steerService } = c.get('services')
+			const { id } = c.req.valid('param')
+
+			const run = await runService.get(id)
+			if (!run) return c.json({ error: 'run not found' }, 404)
+
+			// Verify authenticated worker owns this run
+			const authWorkerId = c.get('workerId')
+			if (authWorkerId && run.worker_id && run.worker_id !== authWorkerId) {
+				return c.json({ error: `Run ${id} belongs to worker ${run.worker_id}, not ${authWorkerId}` }, 403)
+			}
+
+			const steers = await steerService.claimPending(id)
+			return c.json({ steers }, 200)
 		},
 	)
 

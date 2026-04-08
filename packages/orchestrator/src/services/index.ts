@@ -40,6 +40,9 @@ export type { SessionRow } from './sessions'
 export { SecretService } from './secrets'
 export type { SharedSecretRow } from './secrets'
 
+export { SteerService } from './steers'
+export type { SteerRow } from './steers'
+
 export { ScheduleService, computeNextRun, interpolateTemplate } from './schedules'
 export type { ScheduleRow, ScheduleExecutionRow } from './schedules'
 

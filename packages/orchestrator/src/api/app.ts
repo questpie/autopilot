@@ -18,7 +18,7 @@ import { HTTPException } from 'hono/http-exception'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, ScheduleService, AuthoredConfig } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, ScheduleService, SteerService, AuthoredConfig } from '../services'
 import type { Actor } from '../auth/types'
 import { authMiddleware } from './middleware/auth'
 import { workerAuthMiddleware } from './middleware/worker-auth'
@@ -54,6 +54,7 @@ export interface Services {
 	queryService: QueryService
 	sessionService: SessionService
 	scheduleService: ScheduleService
+	steerService: SteerService
 }
 
 export interface AppEnv {
@@ -188,6 +189,7 @@ export function createApp(config: AppConfig) {
 	// ── User auth for run inspection and operator actions ────────────────
 	app.use('/api/runs/*/artifacts', userAuth)
 	app.use('/api/runs/*/cancel', userAuth)
+	app.use('/api/runs/*/steer', userAuth)
 
 	// ── Preview routes (user auth — same as tasks/artifacts) ─────────────
 	app.use('/api/previews/*', userAuth)
@@ -225,6 +227,7 @@ export function createApp(config: AppConfig) {
 	app.use('/api/workers', workerAuth)
 	app.use('/api/runs/*/events', workerAuth)
 	app.use('/api/runs/*/complete', workerAuth)
+	app.use('/api/runs/*/steers/claim', workerAuth)
 
 	// ── All API routes (typed chain for Hono client inference) ───────────
 	const typedApp = app

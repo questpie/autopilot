@@ -167,6 +167,25 @@ export const ContinueRunRequestSchema = z.object({
 	initiated_by: z.string().optional(),
 })
 
+// ─── Run Steering ─────────────────────────────────────────────────────────
+
+export const RunSteerRequestSchema = z.object({
+	/** The steering message to deliver to the running agent. */
+	message: z.string().min(1),
+	/** Who is sending this steering message. */
+	created_by: z.string().optional(),
+})
+
+export const RunSteerSchema = z.object({
+	id: z.string(),
+	run_id: z.string(),
+	message: z.string(),
+	status: z.enum(['pending', 'delivered']),
+	created_by: z.string(),
+	created_at: z.string(),
+	delivered_at: z.string().nullable(),
+})
+
 // ─── Worker Enrollment ─────────────────────────────────────────────────────
 
 export const CreateJoinTokenRequestSchema = z.object({

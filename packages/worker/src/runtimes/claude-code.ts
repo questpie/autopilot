@@ -43,9 +43,17 @@ const MCP_TOOL_NAMES = [
  * - Fresh run: spawns with -p (print mode) and a prompt
  * - Resume: spawns with --resume <session-id> -p and a continuation message
  */
+/** Bun FileSink type for stdin pipe. */
+interface FileSink {
+  write(data: string | Uint8Array): number
+  flush(): void | Promise<void>
+  end(): void
+}
+
 export class ClaudeCodeAdapter implements RuntimeAdapter {
   private eventHandler: ((event: WorkerEvent) => void) | null = null
   private subprocess: Subprocess | null = null
+  private stdinSink: FileSink | null = null
   private config: ClaudeCodeConfig
 
   constructor(config?: ClaudeCodeConfig) {
@@ -54,6 +62,26 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
 
   onEvent(handler: (event: WorkerEvent) => void): void {
     this.eventHandler = handler
+  }
+
+  /**
+   * Send a steering message to Claude Code mid-execution via stdin.
+   * Uses stream-json input format: {"type":"user_message","content":"..."}
+   * Returns true if the message was written, false if not running or stdin unavailable.
+   */
+  steer(message: string): boolean {
+    if (!this.stdinSink) return false
+
+    try {
+      const payload = JSON.stringify({ type: 'user_message', content: message })
+      this.stdinSink.write(payload + '\n')
+      this.stdinSink.flush()
+      this.emit({ type: 'progress', summary: `Steering: ${truncate(message)}` })
+      return true
+    } catch (err) {
+      console.warn('[claude-code] failed to write steer message to stdin:', err instanceof Error ? err.message : String(err))
+      return false
+    }
   }
 
   async start(context: RunContext): Promise<RuntimeResult | undefined> {
@@ -69,7 +97,8 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       args.push('--resume', context.runtimeSessionRef!)
     }
 
-    args.push('-p', prompt, '--output-format', 'stream-json')
+    // Use bidirectional stream-json for both input and output
+    args.push('-p', '--input-format', 'stream-json', '--output-format', 'stream-json')
 
     // Model override (canonical model resolved by worker modelMap)
     if (context.model) {
@@ -109,6 +138,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
     try {
       const proc = Bun.spawn([binaryPath, ...args], {
         cwd: context.workDir ?? this.config.workDir ?? process.cwd(),
+        stdin: 'pipe',
         stdout: 'pipe',
         stderr: 'pipe',
         env: {
@@ -117,10 +147,21 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       })
       this.subprocess = proc
 
+      // Set up stdin sink for sending initial prompt and steer messages
+      this.stdinSink = proc.stdin as unknown as FileSink
+
+      // Send the initial prompt as a stream-json user_message
+      const initialMessage = JSON.stringify({ type: 'user_message', content: prompt })
+      this.stdinSink.write(initialMessage + '\n')
+      this.stdinSink.flush()
+
       // Collect stderr in parallel with streaming stdout
       const stderrPromise = new Response(proc.stderr).text()
       const { sessionId, lastResult, tokens } = await this.streamJsonl(proc)
       const stderr = await stderrPromise
+
+      // Clean up stdin sink
+      this.stdinSink = null
 
       const exitCode = await proc.exited
       this.subprocess = null
@@ -147,11 +188,16 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
         outputs: extracted.outputs,
       }
     } finally {
+      this.stdinSink = null
       if (mcpCleanup) await mcpCleanup()
     }
   }
 
   async stop(): Promise<void> {
+    if (this.stdinSink) {
+      try { this.stdinSink.end() } catch { /* process may already be dead */ }
+      this.stdinSink = null
+    }
     if (this.subprocess) {
       this.subprocess.kill()
       this.subprocess = null
