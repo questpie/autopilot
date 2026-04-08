@@ -669,6 +669,312 @@ describe('Telegram handler normalization', () => {
 	})
 })
 
+// ─── Task Progress Rendering Tests ──────────────────────────────────────
+
+describe('Telegram handler task_progress rendering', () => {
+	const handlerPath = join(
+		import.meta.dir,
+		'..',
+		'..',
+		'..',
+		'packs',
+		'telegram-surface',
+		'handlers',
+		'telegram.ts',
+	)
+
+	function runHandler(envelope: Record<string, unknown>, env?: Record<string, string>): Promise<Record<string, unknown>> {
+		const proc = Bun.spawn(['bun', 'run', handlerPath], {
+			stdin: new Blob([JSON.stringify(envelope)]),
+			stdout: 'pipe',
+			stderr: 'pipe',
+			env: env ? { ...process.env, ...env } : process.env,
+		})
+		return new Response(proc.stdout).text().then((t) => JSON.parse(t.trim()))
+	}
+
+	it('renders working status card', async () => {
+		const received: Record<string, unknown>[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				received.push(await req.json())
+				return Response.json({ ok: true, result: { message_id: 100 } })
+			},
+		})
+
+		try {
+			const result = await runHandler({
+				op: 'notify.send',
+				provider_id: 'telegram',
+				provider_kind: 'conversation_channel',
+				config: { api_base_url: `http://localhost:${mockServer.port}` },
+				secrets: { bot_token: 'test-token' },
+				payload: {
+					event_type: 'task_progress',
+					normalized_status: 'working',
+					workflow_id: 'bounded-dev',
+					workflow_step: 'coding',
+					title: 'Implement feature X',
+					summary: 'Working on implementation',
+					task_id: 'task-1',
+					conversation_id: '99999',
+				},
+			})
+
+			expect(result.ok).toBe(true)
+			expect(received).toHaveLength(1)
+
+			const body = received[0]
+			const text = body.text as string
+			// Robot emoji + bold title
+			expect(text).toContain('\ud83e\udd16')
+			expect(text).toContain('<b>Implement feature X</b>')
+			// Workflow id
+			expect(text).toContain('bounded-dev')
+			// Hourglass + Working
+			expect(text).toContain('\u23f3')
+			expect(text).toContain('Working')
+			// No inline keyboard for working status
+			expect(body.reply_markup).toBeUndefined()
+		} finally {
+			mockServer.stop()
+		}
+	})
+
+	it('renders waiting_for_review with buttons', async () => {
+		const received: Record<string, unknown>[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				received.push(await req.json())
+				return Response.json({ ok: true, result: { message_id: 100 } })
+			},
+		})
+
+		try {
+			const result = await runHandler({
+				op: 'notify.send',
+				provider_id: 'telegram',
+				provider_kind: 'conversation_channel',
+				config: { api_base_url: `http://localhost:${mockServer.port}` },
+				secrets: { bot_token: 'test-token' },
+				payload: {
+					event_type: 'task_progress',
+					normalized_status: 'waiting_for_review',
+					workflow_id: 'bounded-dev',
+					workflow_step: 'review',
+					title: 'Review needed',
+					summary: 'Changes ready for review',
+					task_id: 'task-id',
+					conversation_id: '99999',
+					actions: [
+						{ action: 'task.approve', label: 'Approve', style: 'primary', requires_message: false },
+						{ action: 'task.reject', label: 'Reject', style: 'danger', requires_message: false },
+						{ action: 'task.reply', label: 'Reply', style: 'secondary', requires_message: true },
+					],
+				},
+			})
+
+			expect(result.ok).toBe(true)
+			expect(received).toHaveLength(1)
+
+			const body = received[0]
+			const text = body.text as string
+			// Eyes emoji + Waiting for review
+			expect(text).toContain('\ud83d\udc40')
+			expect(text).toContain('Waiting for review')
+
+			// Inline keyboard with Approve and Reject
+			const markup = JSON.parse(body.reply_markup as string) as { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }
+			expect(markup.inline_keyboard).toHaveLength(1)
+			const buttons = markup.inline_keyboard[0]
+			expect(buttons).toHaveLength(2)
+			expect(buttons[0].callback_data).toBe('approve:task-id')
+			expect(buttons[1].callback_data).toBe('reject:task-id')
+
+			// Reply hint in text
+			expect(text).toContain('Reply to this message')
+		} finally {
+			mockServer.stop()
+		}
+	})
+
+	it('renders completed status', async () => {
+		const received: Record<string, unknown>[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				received.push(await req.json())
+				return Response.json({ ok: true, result: { message_id: 100 } })
+			},
+		})
+
+		try {
+			const result = await runHandler({
+				op: 'notify.send',
+				provider_id: 'telegram',
+				provider_kind: 'conversation_channel',
+				config: { api_base_url: `http://localhost:${mockServer.port}` },
+				secrets: { bot_token: 'test-token' },
+				payload: {
+					event_type: 'task_progress',
+					normalized_status: 'completed',
+					workflow_id: 'bounded-dev',
+					workflow_step: 'done',
+					title: 'Feature complete',
+					summary: 'All tests passing, ready to merge',
+					task_id: 'task-2',
+					conversation_id: '99999',
+				},
+			})
+
+			expect(result.ok).toBe(true)
+			expect(received).toHaveLength(1)
+
+			const body = received[0]
+			const text = body.text as string
+			// Checkmark + Completed
+			expect(text).toContain('\u2705')
+			expect(text).toContain('Completed')
+			// Summary present
+			expect(text).toContain('All tests passing, ready to merge')
+			// No inline keyboard
+			expect(body.reply_markup).toBeUndefined()
+		} finally {
+			mockServer.stop()
+		}
+	})
+
+	it('renders failed status', async () => {
+		const received: Record<string, unknown>[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				received.push(await req.json())
+				return Response.json({ ok: true, result: { message_id: 100 } })
+			},
+		})
+
+		try {
+			const result = await runHandler({
+				op: 'notify.send',
+				provider_id: 'telegram',
+				provider_kind: 'conversation_channel',
+				config: { api_base_url: `http://localhost:${mockServer.port}` },
+				secrets: { bot_token: 'test-token' },
+				payload: {
+					event_type: 'task_progress',
+					normalized_status: 'failed',
+					workflow_id: 'bounded-dev',
+					workflow_step: 'coding',
+					title: 'Task failed',
+					summary: 'Build error: missing dependency',
+					task_id: 'task-3',
+					conversation_id: '99999',
+				},
+			})
+
+			expect(result.ok).toBe(true)
+			expect(received).toHaveLength(1)
+
+			const body = received[0]
+			const text = body.text as string
+			// Cross + Failed
+			expect(text).toContain('\u274c')
+			expect(text).toContain('Failed')
+			// Error summary present
+			expect(text).toContain('Build error: missing dependency')
+		} finally {
+			mockServer.stop()
+		}
+	})
+
+	it('edits existing message with edit_message_id', async () => {
+		const receivedPaths: string[] = []
+		const received: Record<string, unknown>[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				receivedPaths.push(new URL(req.url).pathname)
+				received.push(await req.json())
+				return Response.json({ ok: true, result: { message_id: 42 } })
+			},
+		})
+
+		try {
+			const result = await runHandler({
+				op: 'notify.send',
+				provider_id: 'telegram',
+				provider_kind: 'conversation_channel',
+				config: { api_base_url: `http://localhost:${mockServer.port}` },
+				secrets: { bot_token: 'test-token' },
+				payload: {
+					event_type: 'task_progress',
+					normalized_status: 'working',
+					workflow_id: 'bounded-dev',
+					workflow_step: 'coding',
+					title: 'Still working',
+					summary: 'Making progress',
+					task_id: 'task-4',
+					conversation_id: '99999',
+					edit_message_id: '42',
+				},
+			})
+
+			expect(result.ok).toBe(true)
+			// API call uses editMessageText
+			expect(receivedPaths[0]).toContain('editMessageText')
+			// message_id is 42 in the request body
+			expect(received[0].message_id).toBe(42)
+		} finally {
+			mockServer.stop()
+		}
+	})
+
+	it('no buttons when working status', async () => {
+		const received: Record<string, unknown>[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				received.push(await req.json())
+				return Response.json({ ok: true, result: { message_id: 100 } })
+			},
+		})
+
+		try {
+			const result = await runHandler({
+				op: 'notify.send',
+				provider_id: 'telegram',
+				provider_kind: 'conversation_channel',
+				config: { api_base_url: `http://localhost:${mockServer.port}` },
+				secrets: { bot_token: 'test-token' },
+				payload: {
+					event_type: 'task_progress',
+					normalized_status: 'working',
+					workflow_id: 'bounded-dev',
+					workflow_step: 'coding',
+					title: 'Working on it',
+					summary: 'In progress',
+					task_id: 'task-5',
+					conversation_id: '99999',
+					actions: [
+						{ action: 'task.approve', label: 'Approve', style: 'primary', requires_message: false },
+						{ action: 'task.reject', label: 'Reject', style: 'danger', requires_message: false },
+					],
+				},
+			})
+
+			expect(result.ok).toBe(true)
+			expect(received).toHaveLength(1)
+			// No reply_markup even though actions are provided — buttons only for waiting_for_review
+			expect(received[0].reply_markup).toBeUndefined()
+		} finally {
+			mockServer.stop()
+		}
+	})
+})
+
 // ─── No Core Hardcoding ─────────────────────────────────────────────────
 
 describe('Minimal Telegram awareness in core', () => {

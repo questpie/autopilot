@@ -559,7 +559,9 @@ console.log(JSON.stringify({ ok: false, error: 'delivery failed' }))`
 
 		const boundCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'bound-chat-123')
 		const defaultChatCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-bound')
-		expect(boundCalls.length).toBe(1)
+		// NotificationBridge skips ALL delivery for tasks with task_thread bindings
+		// (TaskProgressBridge handles them instead)
+		expect(boundCalls.length).toBe(0)
 		expect(defaultChatCalls.length).toBe(0)
 	})
 })
@@ -1022,6 +1024,203 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-restart-' + counter }))
 
 		// Verify its content is the final summary, not the hourglass
 		expect(assistantMsgs[0].content).toBe('Restart done')
+	})
+})
+
+// ─── Test 5b: TaskProgressBridge binding-key isolation ─────────────────────────
+
+describe('TaskProgressBridge binding-key isolation', () => {
+	const testRoot = join(tmpdir(), `qp-bridge-tpb-${Date.now()}`)
+	const logFilePath = join(testRoot, 'tpb-invocations.jsonl')
+
+	let dbResult: CompanyDbResult
+	let runService: RunService
+	let taskService: TaskService
+	let artifactService: ArtifactService
+	let bindingService: ConversationBindingService
+	let sessionService: SessionService
+	let sessionMessageService: SessionMessageService
+
+	// Counter-based handler: returns unique external_id per call and logs conversation_id + edit_message_id
+	const TPB_HANDLER_SRC = `import { appendFileSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+const input = await Bun.stdin.text()
+const envelope = JSON.parse(input)
+const counterFile = '${join(testRoot, 'tpb-counter.txt')}'
+let counter = 1
+if (existsSync(counterFile)) {
+  counter = parseInt(readFileSync(counterFile, 'utf-8').trim(), 10) + 1
+}
+writeFileSync(counterFile, String(counter))
+appendFileSync('${logFilePath}', JSON.stringify({
+  op: envelope.op,
+  conversation_id: envelope.payload?.conversation_id,
+  thread_id: envelope.payload?.thread_id,
+  edit_message_id: envelope.payload?.edit_message_id || null,
+  event_type: envelope.payload?.event_type,
+  normalized_status: envelope.payload?.normalized_status,
+  counter,
+}) + '\\n')
+console.log(JSON.stringify({ ok: true, external_id: 'ext-tpb-' + counter }))`
+
+	function makeConvProvider(): Provider {
+		return {
+			id: 'tpb-prov',
+			name: 'TPB Conv',
+			kind: 'conversation_channel',
+			handler: 'handlers/tpb-handler.ts',
+			capabilities: [{ op: 'conversation.ingest' }, { op: 'notify.send' }],
+			events: [
+				{ types: ['run_completed'], statuses: ['completed', 'failed'] },
+				{ types: ['task_changed'] },
+			],
+			config: {},
+			secret_refs: [],
+			description: '',
+		}
+	}
+
+	beforeAll(async () => {
+		await mkdir(join(testRoot, '.autopilot', 'handlers'), { recursive: true })
+		await writeFile(join(testRoot, '.autopilot', 'handlers', 'tpb-handler.ts'), TPB_HANDLER_SRC)
+
+		dbResult = await createCompanyDb(testRoot)
+		runService = new RunService(dbResult.db)
+		taskService = new TaskService(dbResult.db)
+		artifactService = new ArtifactService(dbResult.db)
+		bindingService = new ConversationBindingService(dbResult.db)
+		sessionService = new SessionService(dbResult.db)
+		sessionMessageService = new SessionMessageService(dbResult.db)
+	})
+
+	afterAll(async () => {
+		dbResult.raw.close()
+		await rm(testRoot, { recursive: true, force: true })
+	})
+
+	test('two bindings on same provider get independent progress messages', async () => {
+		await writeFile(logFilePath, '')
+		await writeFile(join(testRoot, 'tpb-counter.txt'), '0')
+
+		const eventBus = new EventBus()
+		const provider = makeConvProvider()
+		const authoredConfig = {
+			company: {},
+			agents: new Map(),
+			workflows: new Map(),
+			environments: new Map(),
+			providers: new Map([['tpb-prov', provider]]),
+			capabilityProfiles: new Map(),
+			defaults: { runtime: 'claude-code' },
+		}
+
+		// Import TaskProgressBridge
+		const { TaskProgressBridge } = await import('../src/providers/task-progress-bridge')
+
+		const bridge = new TaskProgressBridge(
+			eventBus,
+			authoredConfig,
+			runService,
+			taskService,
+			artifactService,
+			bindingService,
+			{ companyRoot: testRoot },
+			undefined,
+			sessionService,
+			sessionMessageService,
+		)
+		bridge.start()
+
+		// Create a task
+		const taskId = `task-tpb-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Multi-binding task',
+			type: 'development',
+			created_by: 'test',
+		})
+
+		// Create TWO task_thread bindings for the SAME provider but DIFFERENT conversations
+		const bindingId1 = `bind-tpb-1-${Date.now()}`
+		const bindingId2 = `bind-tpb-2-${Date.now()}`
+		await bindingService.create({
+			id: bindingId1,
+			provider_id: 'tpb-prov',
+			external_conversation_id: 'chat-A',
+			external_thread_id: 'thread-A',
+			mode: 'task_thread',
+			task_id: taskId,
+		})
+		await bindingService.create({
+			id: bindingId2,
+			provider_id: 'tpb-prov',
+			external_conversation_id: 'chat-B',
+			external_thread_id: 'thread-B',
+			mode: 'task_thread',
+			task_id: taskId,
+		})
+
+		// Create a run for the task
+		const runId = `run-tpb-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			task_id: taskId,
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'multi-binding test',
+		})
+		await runService.start(runId)
+		await runService.complete(runId, { status: 'completed', summary: 'Multi-binding done' })
+
+		// Emit run_completed — should send to BOTH bindings with unique messages
+		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
+		await new Promise((r) => setTimeout(r, 2000))
+
+		// Read first batch of invocations
+		let content = await Bun.file(logFilePath).text()
+		let entries = content.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+
+		// Should have exactly 2 calls — one for each binding
+		expect(entries.length).toBe(2)
+
+		const chatACalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'chat-A')
+		const chatBCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'chat-B')
+
+		expect(chatACalls.length).toBe(1)
+		expect(chatBCalls.length).toBe(1)
+
+		// Both should be initial sends (no edit_message_id)
+		expect(chatACalls[0].edit_message_id).toBeNull()
+		expect(chatBCalls[0].edit_message_id).toBeNull()
+
+		// They should have different external_ids
+		const chatAExtId = `ext-tpb-${chatACalls[0].counter}`
+		const chatBExtId = `ext-tpb-${chatBCalls[0].counter}`
+		expect(chatAExtId).not.toBe(chatBExtId)
+
+		// Now emit a second event (task_changed) — should EDIT the correct message for each binding
+		eventBus.emit({ type: 'task_changed', taskId, status: 'active' })
+		await new Promise((r) => setTimeout(r, 2000))
+		bridge.stop()
+
+		// Re-read log
+		content = await Bun.file(logFilePath).text()
+		entries = content.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+
+		// Should now have 4 calls total (2 initial + 2 edits)
+		expect(entries.length).toBe(4)
+
+		// The edit calls (3rd and 4th) should use the correct edit_message_id for their conversation
+		const editCalls = entries.slice(2)
+		const editChatA = editCalls.find((e: Record<string, unknown>) => e.conversation_id === 'chat-A')
+		const editChatB = editCalls.find((e: Record<string, unknown>) => e.conversation_id === 'chat-B')
+
+		expect(editChatA).toBeDefined()
+		expect(editChatB).toBeDefined()
+
+		// Each edit should reference the external_id from its own initial send, NOT the other binding's
+		expect(editChatA.edit_message_id).toBe(chatAExtId)
+		expect(editChatB.edit_message_id).toBe(chatBExtId)
 	})
 })
 

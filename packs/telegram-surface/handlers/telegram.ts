@@ -137,6 +137,7 @@ if (op === 'notify.send') {
 
 	// Query events (query_response, query_progress) use chat text without task icons.
 	const isQueryEvent = eventType === 'query_response' || eventType === 'query_progress'
+	const isTaskProgress = eventType === 'task_progress'
 
 	let text: string
 	let parseMode: string | undefined
@@ -146,6 +147,45 @@ if (op === 'notify.send') {
 		if (previewUrl) {
 			text += `\n\n\ud83d\udd17 <a href="${escapeHtml(previewUrl)}">Preview</a>`
 		}
+		parseMode = 'HTML'
+	} else if (isTaskProgress) {
+		// Card-style progress rendering for task_progress events
+		const normalizedStatus = payload.normalized_status as string | undefined
+		const workflowId = payload.workflow_id as string | undefined
+
+		const STATUS_MAP: Record<string, { icon: string; label: string }> = {
+			working: { icon: '\u23f3', label: 'Working' },
+			plan_ready: { icon: '\ud83d\udcdd', label: 'Plan ready' },
+			waiting_for_review: { icon: '\ud83d\udc40', label: 'Waiting for review' },
+			completed: { icon: '\u2705', label: 'Completed' },
+			failed: { icon: '\u274c', label: 'Failed' },
+		}
+
+		const status = STATUS_MAP[normalizedStatus ?? ''] ?? { icon: '\u2139\ufe0f', label: normalizedStatus ?? 'Unknown' }
+
+		const lines: string[] = [
+			`\ud83e\udd16 <b>${escapeHtml(title)}</b>`,
+		]
+
+		if (workflowId) {
+			lines.push(`\ud83d\udccb <i>${escapeHtml(workflowId)}</i>`)
+		}
+
+		lines.push('', `${status.icon} <b>${status.label}</b>`)
+
+		if (summary) {
+			const truncated = summary.length > 500 ? `${summary.slice(0, 497)}...` : summary
+			lines.push(escapeHtml(truncated))
+		}
+
+		if (previewUrl) lines.push('', `\ud83d\udd17 <a href="${escapeHtml(previewUrl)}">Preview</a>`)
+		if (taskUrl) lines.push(`\ud83d\udcdd <a href="${escapeHtml(taskUrl)}">Task details</a>`)
+
+		if (normalizedStatus === 'waiting_for_review') {
+			lines.push('', '\ud83d\udcac Reply to this message to respond')
+		}
+
+		text = lines.join('\n')
 		parseMode = 'HTML'
 	} else {
 		// Rich HTML formatting for task notifications
@@ -181,9 +221,13 @@ if (op === 'notify.send') {
 		parseMode = 'HTML'
 	}
 
-	// Build inline keyboard (only for task notifications)
+	// Build inline keyboard (only for task notifications and task_progress waiting_for_review)
 	const keyboard: Array<Array<{ text: string; callback_data: string }>> = []
-	if (!isQueryEvent && taskId) {
+	const showButtons = isTaskProgress
+		? (payload.normalized_status === 'waiting_for_review' && !!taskId)
+		: (!isQueryEvent && !!taskId)
+
+	if (showButtons) {
 		const actions = payload.actions as Array<{
 			action: string
 			label: string

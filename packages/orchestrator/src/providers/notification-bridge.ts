@@ -72,22 +72,26 @@ export class NotificationBridge {
 		}
 
 		// 2. Bound conversation_channel delivery (task-scoped outbound)
+		// If the task has task_thread bindings, TaskProgressBridge handles all
+		// delivery for that task — skip both bound and default-chat delivery here.
 		const taskBindings = payload.task_id
 			? await this.conversationBindingService.listForTask(payload.task_id)
 			: []
-		if (payload.task_id) {
+		const hasTaskThreadBindings = taskBindings.some((b) => b.mode === 'task_thread')
+
+		if (payload.task_id && !hasTaskThreadBindings) {
 			await this.deliverToBoundConversations(payload, event, runtimeConfig, taskBindings)
 		}
 
 		// 3. Default-chat delivery for conversation_channel providers.
 		// Only for task-scoped events with no explicit binding for that provider;
 		// query responses are delivered by QueryResponseBridge.
-		if (payload && payload.task_id) {
+		// Skip entirely when task_thread bindings exist (TaskProgressBridge handles it).
+		if (payload && payload.task_id && !hasTaskThreadBindings) {
 			for (const provider of this.authoredConfig.providers.values()) {
 				if (provider.kind !== 'conversation_channel') continue
 				if (!provider.capabilities.some((c) => c.op === 'notify.send')) continue
 				if (!this.matchesEventFilters(provider, event)) continue
-				if (taskBindings.some((binding) => binding.provider_id === provider.id && binding.mode === 'task_thread')) continue
 
 				const defaultChatId = provider.config.default_chat_id
 				if (typeof defaultChatId !== 'string' || !defaultChatId) continue
