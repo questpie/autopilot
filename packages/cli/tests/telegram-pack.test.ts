@@ -397,6 +397,40 @@ describe('Telegram handler normalization', () => {
 		}
 	})
 
+	it('treats Telegram "message is not modified" edit response as success', async () => {
+		const receivedPaths: string[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				receivedPaths.push(new URL(req.url).pathname)
+				return Response.json({ ok: false, description: 'Bad Request: message is not modified' })
+			},
+		})
+
+		try {
+			const result = await runHandler({
+				op: 'notify.send',
+				provider_id: 'telegram',
+				provider_kind: 'conversation_channel',
+				config: { api_base_url: `http://localhost:${mockServer.port}` },
+				secrets: { bot_token: 'test-token' },
+				payload: {
+					event_type: 'query_response',
+					summary: 'Jasné, som tu! Čo potrebuješ?',
+					conversation_id: '99999',
+					edit_message_id: '123',
+				},
+			})
+
+			expect(result.ok).toBe(true)
+			expect(result.external_id).toBe('123')
+			expect((result.metadata as Record<string, unknown>).unchanged).toBe(true)
+			expect(receivedPaths).toEqual(['/bottest-token/editMessageText'])
+		} finally {
+			mockServer.stop()
+		}
+	})
+
 	// Inbound tests (conversation.ingest)
 
 	it('normalizes callback_query approve button', async () => {
@@ -485,7 +519,7 @@ describe('Telegram handler normalization', () => {
 		expect(meta.message).toBe('Not good enough')
 	})
 
-	it('normalizes plain text as task.reply', async () => {
+	it('normalizes plain text as query.message', async () => {
 		const result = await runHandler({
 			op: 'conversation.ingest',
 			provider_id: 'telegram',
@@ -502,7 +536,7 @@ describe('Telegram handler normalization', () => {
 
 		expect(result.ok).toBe(true)
 		const meta = result.metadata as Record<string, unknown>
-		expect(meta.action).toBe('task.reply')
+		expect(meta.action).toBe('query.message')
 		expect(meta.message).toBe('Please also add tests for the edge case')
 	})
 

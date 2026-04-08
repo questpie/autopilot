@@ -177,8 +177,18 @@ if (op === 'notify.send') {
 				metadata: { chat_id: chatId, message_id: messageId },
 			}))
 		} else {
-			// If edit fails (e.g. message deleted), fall back to sending a new message
-			if (useEdit) {
+			const description = data.description ?? ''
+			// Telegram returns "message is not modified" when the progress text already
+			// matches the final response. Treat that as a successful edit, otherwise
+			// fast query completions can duplicate the final message via fallback send.
+			if (useEdit && description.toLowerCase().includes('message is not modified')) {
+				const messageId = Number(editMessageId)
+				console.log(JSON.stringify({
+					ok: true,
+					external_id: String(messageId),
+					metadata: { chat_id: chatId, message_id: messageId, unchanged: true },
+				}))
+			} else if (useEdit) {
 				const fallbackBody: Record<string, unknown> = { chat_id: chatId, text }
 				if (parseMode) fallbackBody.parse_mode = parseMode
 				if (keyboard.length > 0) fallbackBody.reply_markup = JSON.stringify({ inline_keyboard: keyboard })
