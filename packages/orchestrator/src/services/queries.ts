@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, inArray } from 'drizzle-orm'
 import { queries } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 import type { SessionMessageRow } from './session-messages'
