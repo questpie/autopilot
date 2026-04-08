@@ -32,6 +32,11 @@ export class QueryResponseBridge {
 	 */
 	private workingIndicatorSent = new Set<string>()
 	/**
+	 * Track the external message ID (e.g. Telegram message_id) per run,
+	 * so subsequent updates edit the same message instead of sending new ones.
+	 */
+	private messageIdByRun = new Map<string, string>()
+	/**
 	 * Throttle progress updates per run — at most one every PROGRESS_THROTTLE_MS.
 	 */
 	private lastProgressSent = new Map<string, number>()
@@ -65,6 +70,7 @@ export class QueryResponseBridge {
 				if (lastSent < staleThreshold) {
 					this.lastProgressSent.delete(runId)
 					this.workingIndicatorSent.delete(runId)
+					this.messageIdByRun.delete(runId)
 				}
 			}
 		}, 5 * 60 * 1000) // every 5 minutes
@@ -91,9 +97,13 @@ export class QueryResponseBridge {
 
 		if (event.type !== 'run_completed') return
 
+		// Grab tracked message ID before cleanup (for edit-in-place)
+		const editMessageId = this.messageIdByRun.get(event.runId)
+
 		// Clean up tracking state for this run
 		this.workingIndicatorSent.delete(event.runId)
 		this.lastProgressSent.delete(event.runId)
+		this.messageIdByRun.delete(event.runId)
 
 		// Check if this run belongs to a query (still status: running at event time)
 		const query = await this.queryService.getByRunId(event.runId)
@@ -128,10 +138,11 @@ export class QueryResponseBridge {
 			orchestrator_url: this.config.orchestratorUrl,
 			event_type: 'query_response',
 			severity: failed ? 'error' : 'info',
-			title: failed ? 'Query Failed' : 'Query Response',
+			title: failed ? 'Query Failed' : '',
 			summary,
 			conversation_id: session.external_conversation_id,
 			// No thread_id for query sessions — responses go to the main chat
+			...(editMessageId ? { edit_message_id: editMessageId } : {}),
 		}
 
 		await this.sendToProvider(provider, payload)
@@ -171,21 +182,28 @@ export class QueryResponseBridge {
 		this.workingIndicatorSent.add(event.runId)
 		this.lastProgressSent.set(event.runId, Date.now())
 
+		const existingMessageId = this.messageIdByRun.get(event.runId)
+
 		const payload: NotificationPayload = {
 			orchestrator_url: this.config.orchestratorUrl,
 			event_type: 'query_progress',
 			severity: 'info',
-			title: isFirst ? 'Working...' : 'Still working...',
+			title: '',
 			summary: isFirst
-				? 'Working on your request...'
-				: event.summary.slice(0, 200),
+				? '\u23f3'
+				: event.summary.slice(0, 200) || '\u23f3',
 			conversation_id: session.external_conversation_id,
+			...(existingMessageId ? { edit_message_id: existingMessageId } : {}),
 		}
 
-		await this.sendToProvider(provider, payload)
+		const result = await this.sendToProvider(provider, payload)
+		// Capture the external message ID from the first send so we can edit it later
+		if (result?.external_id && !existingMessageId) {
+			this.messageIdByRun.set(event.runId, result.external_id)
+		}
 	}
 
-	private async sendToProvider(provider: import('@questpie/autopilot-spec').Provider, payload: NotificationPayload): Promise<void> {
+	private async sendToProvider(provider: import('@questpie/autopilot-spec').Provider, payload: NotificationPayload): Promise<import('@questpie/autopilot-spec').HandlerResult | null> {
 		const runtimeConfig: HandlerRuntimeConfig = { companyRoot: this.config.companyRoot }
 
 		try {
@@ -193,11 +211,13 @@ export class QueryResponseBridge {
 			if (!result.ok) {
 				console.warn(`[query-response-bridge] provider ${provider.id} failed: ${result.error}`)
 			}
+			return result
 		} catch (err) {
 			console.error(
 				`[query-response-bridge] provider ${provider.id} error:`,
 				err instanceof Error ? err.message : String(err),
 			)
+			return null
 		}
 	}
 }

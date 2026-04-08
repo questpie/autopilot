@@ -204,4 +204,6 @@ export const NotificationPayloadSchema = z.object({
 	binding_mode: z.enum(['task_thread', 'intent_intake']).optional(),
 	/** Normalized task actions available for this notification. */
 	actions: z.array(NotificationActionSchema).optional(),
+	/** External message ID to edit instead of sending a new message (edit-in-place). */
+	edit_message_id: z.string().optional(),
 })
