@@ -437,6 +437,43 @@ describe('Telegram handler normalization', () => {
 		}
 	})
 
+	it('resolves env placeholders in payload conversation_id', async () => {
+		const received: Record<string, unknown>[] = []
+		const mockServer = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				received.push(await req.json())
+				return Response.json({ ok: true, result: { message_id: 45 } })
+			},
+		})
+
+		try {
+			const result = await runHandler(
+				{
+					op: 'notify.send',
+					provider_id: 'telegram',
+					provider_kind: 'conversation_channel',
+					config: { api_base_url: `http://localhost:${mockServer.port}` },
+					secrets: { bot_token: 'test-token' },
+					payload: {
+						event_type: 'run_completed',
+						severity: 'info',
+						title: 'Run done',
+						summary: 'All good',
+						conversation_id: '${TELEGRAM_CHAT_ID}',
+					},
+				},
+				{ TELEGRAM_CHAT_ID: '99999' },
+			)
+
+			expect(result.ok).toBe(true)
+			expect(received).toHaveLength(1)
+			expect(received[0].chat_id).toBe('99999')
+		} finally {
+			mockServer.stop()
+		}
+	})
+
 	it('treats Telegram "message is not modified" edit response as success', async () => {
 		const receivedPaths: string[] = []
 		const mockServer = Bun.serve({

@@ -47,7 +47,7 @@ const TELEGRAM_API = `${apiBase}/bot${botToken}`
 
 if (op === 'notify.send') {
 	const payload = envelope.payload as Record<string, unknown>
-	const chatId = (payload.conversation_id as string)
+	const chatId = resolveEnvPlaceholder(payload.conversation_id)
 		?? resolveEnvPlaceholder(envelope.config?.default_chat_id)
 
 	if (!chatId) {
