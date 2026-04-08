@@ -128,14 +128,10 @@ describe('ClaudeCodeAdapter', () => {
 
   test('builds prompt correctly from context', async () => {
     const echoBinaryPath = join(tmpDir, 'claude-echo')
-    // Write prompt to a file, then output it as JSON-escaped result
-    // Prompt now comes via stdin as stream-json, not as -p argument
-    const promptFile = join(tmpDir, 'captured-prompt.txt')
+    // Prompt comes as -p argument; capture all args to a file
+    const argsFile = join(tmpDir, 'captured-args.txt')
     const echoScript = `#!/bin/bash
-# Read the initial user_message from stdin (stream-json format)
-read -r line
-echo "$line" > "${promptFile}"
-# Output a valid result
+printf '%s\\n' "$@" > "${argsFile}"
 printf '{"type":"result","subtype":"success","result":"PROMPT captured"}\\n'
 exit 0
 `
@@ -166,13 +162,11 @@ exit 0
     }
 
     const result = await adapter.start(context)
-    // The prompt is now sent as a stream-json message on stdin
-    const capturedJson = await Bun.file(promptFile).text()
-    const parsed = JSON.parse(capturedJson.trim())
-    expect(parsed.type).toBe('user_message')
-    expect(parsed.content).toContain('Write tests')
-    expect(parsed.content).toContain('Add unit tests')
-    expect(parsed.content).toContain('Focus on edge cases')
+    const capturedArgs = await Bun.file(argsFile).text()
+    // Prompt is passed as the argument after -p
+    expect(capturedArgs).toContain('Write tests')
+    expect(capturedArgs).toContain('Add unit tests')
+    expect(capturedArgs).toContain('Focus on edge cases')
   })
 
   test('handles plain text stdout gracefully', async () => {
@@ -429,86 +423,9 @@ exit 0
     expect(progressEvents.some((e) => e.summary!.includes('Now editing'))).toBe(true)
   })
 
-  test('steer sends user_message to stdin during execution', async () => {
-    // Create a binary that reads from stdin and echoes steer messages
-    const steerBinaryPath = join(tmpDir, 'claude-steer')
-    const steerCapture = join(tmpDir, 'steer-capture.txt')
-    const steerScript = `#!/bin/bash
-# Read initial user_message
-read -r initial
-
-# Wait briefly for steer messages to arrive
-sleep 0.3
-
-# Read any subsequent messages from stdin (non-blocking)
-messages=""
-while IFS= read -r -t 0.5 line; do
-  messages="$messages$line
-"
-done
-
-# Write captured steer messages to file
-echo "$messages" > "${steerCapture}"
-
-# Output result
-echo '{"type":"result","subtype":"success","result":"Received steer messages.","usage":{"input_tokens":10,"output_tokens":5}}'
-exit 0
-`
-    await writeFile(steerBinaryPath, steerScript)
-    await chmod(steerBinaryPath, 0o755)
-
-    const adapter = new ClaudeCodeAdapter({
-      binaryPath: steerBinaryPath,
-      workDir: tmpDir,
-    })
-
-    const events: WorkerEvent[] = []
-    adapter.onEvent((e) => events.push(e))
-
-    const context: RunContext = {
-      runId: 'run-steer-1',
-      agentId: 'developer',
-      agentName: null,
-      agentRole: null,
-      taskId: null,
-      taskTitle: null,
-      taskDescription: null,
-      instructions: 'Do something',
-      orchestratorUrl: 'http://localhost:7778',
-      apiKey: 'test-key',
-      runtimeSessionRef: null,
-      workDir: null,
-      capabilities: null,
-      model: null,
-      injectedContext: null,
-      contextHints: null,
-      localDev: false,
-    }
-
-    // Start the run in background
-    const runPromise = adapter.start(context)
-
-    // Wait a bit for the process to start
-    await Bun.sleep(100)
-
-    // Send a steer message
-    const delivered = adapter.steer('Focus on pricing instead')
-    expect(delivered).toBe(true)
-
-    const result = await runPromise
-
-    // Verify steer event was emitted
-    const steerEvents = events.filter((e) => e.summary.startsWith('Steering:'))
-    expect(steerEvents.length).toBe(1)
-    expect(steerEvents[0]!.summary).toContain('Focus on pricing')
-
-    // Verify the steer message was written to stdin
-    const captured = await Bun.file(steerCapture).text()
-    if (captured.trim()) {
-      const parsed = JSON.parse(captured.trim().split('\n')[0]!)
-      expect(parsed.type).toBe('user_message')
-      expect(parsed.content).toBe('Focus on pricing instead')
-    }
+  test('steer returns false — steering deferred until stream-json input is supported', () => {
+    const adapter = new ClaudeCodeAdapter({ workDir: tmpDir })
+    expect(adapter.steer('test')).toBe(false)
   })
 
   test('steer returns false when not running', () => {

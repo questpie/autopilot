@@ -66,22 +66,13 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
 
   /**
    * Send a steering message to Claude Code mid-execution via stdin.
-   * Uses stream-json input format: {"type":"user_message","content":"..."}
-   * Returns true if the message was written, false if not running or stdin unavailable.
+   * NOTE: Currently disabled — --input-format stream-json requires investigation.
+   * Steer infrastructure (DB, API, worker polling) is in place; this method is the
+   * missing link. When enabled, switch to stdin:'pipe' and bidirectional stream-json.
    */
-  steer(message: string): boolean {
-    if (!this.stdinSink) return false
-
-    try {
-      const payload = JSON.stringify({ type: 'user_message', content: message })
-      this.stdinSink.write(payload + '\n')
-      this.stdinSink.flush()
-      this.emit({ type: 'progress', summary: `Steering: ${truncate(message)}` })
-      return true
-    } catch (err) {
-      console.warn('[claude-code] failed to write steer message to stdin:', err instanceof Error ? err.message : String(err))
-      return false
-    }
+  steer(_message: string): boolean {
+    // Steering deferred — stdin pipe not open in current -p <prompt> mode
+    return false
   }
 
   async start(context: RunContext): Promise<RuntimeResult | undefined> {
@@ -97,8 +88,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       args.push('--resume', context.runtimeSessionRef!)
     }
 
-    // Use bidirectional stream-json for both input and output
-    args.push('-p', '--input-format', 'stream-json', '--output-format', 'stream-json')
+    args.push('-p', prompt, '--output-format', 'stream-json')
 
     // Model override (canonical model resolved by worker modelMap)
     if (context.model) {
@@ -138,7 +128,6 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
     try {
       const proc = Bun.spawn([binaryPath, ...args], {
         cwd: context.workDir ?? this.config.workDir ?? process.cwd(),
-        stdin: 'pipe',
         stdout: 'pipe',
         stderr: 'pipe',
         env: {
@@ -146,20 +135,6 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
         },
       })
       this.subprocess = proc
-
-      // Set up stdin sink for sending initial prompt and steer messages.
-      // Bun.spawn with stdin:'pipe' returns a FileSink object at runtime.
-      // TypeScript lacks the type, so we use a local interface + runtime validation.
-      const sink = proc.stdin
-      if (!sink || typeof (sink as FileSink).write !== 'function') {
-        throw new Error('Expected Bun FileSink for stdin pipe — got ' + typeof sink)
-      }
-      this.stdinSink = sink as FileSink
-
-      // Send the initial prompt as a stream-json user_message
-      const initialMessage = JSON.stringify({ type: 'user_message', content: prompt })
-      this.stdinSink.write(initialMessage + '\n')
-      this.stdinSink.flush()
 
       // Collect stderr in parallel with streaming stdout
       const stderrPromise = new Response(proc.stderr).text()
