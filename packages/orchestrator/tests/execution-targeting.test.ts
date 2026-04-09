@@ -190,7 +190,7 @@ describe('Execution Targeting', () => {
 			initiated_by: 'test',
 		})
 
-		const caps = [{ runtime: 'claude-code', models: ['claude-sonnet-4-20250514'], maxConcurrent: 1 }]
+		const caps = [{ runtime: 'claude-code', models: ['claude-opus-4-6'], maxConcurrent: 1 }]
 		const claimed = await runService.claim('worker-any', 'claude-code', caps)
 		expect(claimed).not.toBeUndefined()
 		expect(claimed!.id).toBe(runId)

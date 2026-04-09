@@ -10,7 +10,7 @@
  * 7. Create Hono app
  * 8. Bun.serve on port 7778
  */
-import { existsSync, watch as fsWatch, type FSWatcher } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import dotenv from 'dotenv'
 import { createApp } from './api'
@@ -19,6 +19,7 @@ import { createAuth } from './auth'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
+import { ConfigManager } from './config/config-manager'
 import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, DependencyBridge, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, SchedulerDaemon, SteerService } from './services'
 import { Indexer } from './services/indexer'
 import type { AuthoredConfig } from './services'
@@ -228,7 +229,19 @@ export async function startServer(options?: StartServerOptions) {
 		console.error('[server] indexer startup error:', err instanceof Error ? err.message : String(err))
 	})
 
-	// ── 8. Create Hono app ───────────────────────────────────────────────
+	// ── 8. Config hot reload manager ────────────────────────────────────
+	const configManager = new ConfigManager(authoredConfig, {
+		companyRoot,
+		onReload: (_cfg) => {
+			workflowEngine.refreshDefaults()
+			const issues = workflowEngine.validate()
+			for (const issue of issues) {
+				console.warn(`[config] post-reload warning: ${issue}`)
+			}
+		},
+	})
+
+	// ── 9. Create Hono app ───────────────────────────────────────────────
 	const effectiveBypass = options?.allowLocalDevBypass && env.NODE_ENV !== 'production'
 	if (options?.allowLocalDevBypass) {
 		console.log(effectiveBypass
@@ -247,6 +260,7 @@ export async function startServer(options?: StartServerOptions) {
 		orchestratorUrl,
 		indexDbRaw,
 		operatorWebDist: resolve(import.meta.dir, '..', '..', '..', 'apps', 'operator-web', 'dist'),
+		configManager,
 	})
 
 	// ── 9. Start HTTP server ─────────────────────────────────────────────
@@ -305,59 +319,8 @@ export async function startServer(options?: StartServerOptions) {
 	// Ensure timer doesn't prevent process exit
 	leaseExpiryTimer.unref()
 
-	// ── 12. Config file watcher (auto-reload on .autopilot/ changes) ────
-	const watchers: FSWatcher[] = []
-	let reloadTimer: ReturnType<typeof setTimeout> | null = null
-	const DEBOUNCE_MS = 500
-
-	const reloadConfig = async () => {
-		try {
-			const newChain = await discoverScopes(companyRoot)
-			const newResolved = await resolveConfig(newChain)
-			authoredConfig.company = newResolved.company
-			authoredConfig.agents = newResolved.agents
-			authoredConfig.workflows = newResolved.workflows
-			authoredConfig.environments = newResolved.environments
-			authoredConfig.providers = newResolved.providers
-			authoredConfig.capabilityProfiles = newResolved.capabilityProfiles
-			authoredConfig.context = newResolved.context
-			authoredConfig.defaults = newResolved.defaults
-			authoredConfig.queues = newResolved.company.queues ?? {}
-			console.log(
-				`[server] config reloaded (${newResolved.agents.size} agents, ${newResolved.workflows.size} workflows, ${newResolved.environments.size} environments, ${newResolved.providers.size} providers)`,
-			)
-		} catch (err) {
-			console.error('[server] config reload error:', err instanceof Error ? err.message : String(err))
-		}
-	}
-
-	const scheduleReload = () => {
-		if (reloadTimer) clearTimeout(reloadTimer)
-		reloadTimer = setTimeout(() => {
-			reloadTimer = null
-			void reloadConfig()
-		}, DEBOUNCE_MS)
-	}
-
-	const watchDir = (dir: string) => {
-		const autopilotDir = join(dir, '.autopilot')
-		if (!existsSync(autopilotDir)) return
-		try {
-			const watcher = fsWatch(autopilotDir, { recursive: true }, (_event, filename) => {
-				if (filename && (filename.endsWith('.yaml') || filename.endsWith('.yml') || filename.endsWith('.md'))) {
-					scheduleReload()
-				}
-			})
-			watchers.push(watcher)
-		} catch (err) {
-			console.warn('[server] could not watch', autopilotDir, ':', err instanceof Error ? err.message : String(err))
-		}
-	}
-
-	watchDir(companyRoot)
-	if (chain.projectRoot && chain.projectRoot !== companyRoot) {
-		watchDir(chain.projectRoot)
-	}
+	// ── 12. Start config file watcher ───────────────────────────────────
+	configManager.startWatching(chain)
 
 	// ── Stop function for graceful shutdown ─────────────────────────────
 	const stop = () => {
@@ -369,13 +332,12 @@ export async function startServer(options?: StartServerOptions) {
 		parentJoinBridge.stop()
 		dependencyBridge.stop()
 		clearInterval(leaseExpiryTimer)
-		if (reloadTimer) clearTimeout(reloadTimer)
-		for (const w of watchers) w.close()
+		configManager.stop()
 		if (indexDbRaw && typeof indexDbRaw.close === 'function') {
 			indexDbRaw.close()
 		}
 		server.stop()
 	}
 
-	return { server, app, services, companyRoot, auth, db: companyDb, notificationBridge, schedulerDaemon, stop }
+	return { server, app, services, companyRoot, auth, db: companyDb, notificationBridge, schedulerDaemon, configManager, stop }
 }

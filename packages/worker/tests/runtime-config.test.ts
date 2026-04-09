@@ -29,7 +29,7 @@ describe('resolveRuntime', () => {
     expect(resolved.resolvedBinaryPath).toBeTruthy()
     expect(resolved.resolvedBinaryPath).toContain('claude')
     expect(resolved.capability.runtime).toBe('claude-code')
-    expect(resolved.capability.models).toContain('claude-sonnet-4-20250514')
+    expect(resolved.capability.models).toContain('claude-opus-4-6')
     expect(resolved.capability.maxConcurrent).toBe(1)
     expect(resolved.adapter).toBeDefined()
   })
@@ -110,7 +110,7 @@ describe('resolveRuntime', () => {
     const resolved = resolveRuntime(config)
 
     expect(resolved.capability.runtime).toBe('claude-code')
-    expect(resolved.capability.models).toEqual(['claude-sonnet-4-20250514'])
+    expect(resolved.capability.models).toEqual(['claude-opus-4-6'])
     expect(resolved.capability.maxConcurrent).toBe(1)
   })
 

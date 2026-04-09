@@ -101,6 +101,8 @@ export interface AppConfig {
 	indexDbRaw?: Client
 	/** Absolute path to the built operator-web dist directory. */
 	operatorWebDist?: string
+	/** ConfigManager for hot reload status reporting. */
+	configManager?: import('../config/config-manager').ConfigManager
 }
 
 const orchestratorPkg = JSON.parse(
@@ -200,6 +202,15 @@ export function createApp(config: AppConfig) {
 	app.get('/api/config/providers', (c) => {
 		const cfg = c.get('authoredConfig')
 		return c.json([...cfg.providers.values()], 200)
+	})
+	app.get('/api/config/reload-status', (c) => {
+		if (!config.configManager) return c.json({ available: false }, 200)
+		return c.json({ available: true, ...config.configManager.status() }, 200)
+	})
+	app.post('/api/config/reload', async (c) => {
+		if (!config.configManager) return c.json({ error: 'config manager not available' }, 503)
+		const result = await config.configManager.reload()
+		return c.json(result, result.ok ? 200 : 500)
 	})
 
 	// ── Enrollment: enroll is public, tokens requires user auth ──────────

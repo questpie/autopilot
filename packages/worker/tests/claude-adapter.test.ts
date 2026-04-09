@@ -21,7 +21,7 @@ describe('ClaudeCodeAdapter', () => {
 
     // Create a fake claude binary that outputs stream-json JSONL
     const script = buildClaudeScript([
-      { type: 'system', subtype: 'init', session_id: 'test-session-123', model: 'claude-sonnet-4-20250514', tools: [] },
+      { type: 'system', subtype: 'init', session_id: 'test-session-123', model: 'claude-opus-4-6', tools: [] },
       {
         type: 'assistant',
         message: {

@@ -25,11 +25,11 @@ describe('resolveModel', () => {
 		const config: RuntimeConfig = {
 			runtime: 'claude-code',
 			modelMap: {
-				'claude-sonnet-4': 'claude-sonnet-4-20250514',
+				'claude-sonnet-4': 'claude-opus-4-6',
 				'claude-opus-4': 'claude-opus-4-20250514',
 			},
 		}
-		expect(resolveModel(config, 'claude-sonnet-4')).toBe('claude-sonnet-4-20250514')
+		expect(resolveModel(config, 'claude-sonnet-4')).toBe('claude-opus-4-6')
 		expect(resolveModel(config, 'claude-opus-4')).toBe('claude-opus-4-20250514')
 	})
 

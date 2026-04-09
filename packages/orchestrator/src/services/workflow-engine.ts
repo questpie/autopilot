@@ -111,6 +111,16 @@ export class WorkflowEngine {
 		this.checkDependenciesFn = fn
 	}
 
+	/**
+	 * Refresh cached defaults from the current authored config.
+	 * Call after config hot reload so new defaults take effect for future tasks.
+	 */
+	refreshDefaults(): void {
+		this.defaultAssignee = this.config.defaults.task_assignee
+		this.defaultWorkflow = this.config.defaults.workflow
+		this.defaultRuntime = this.config.defaults.runtime
+	}
+
 	// ─── Validation ─────────────────────────────────────────────────────
 
 	validate(): string[] {

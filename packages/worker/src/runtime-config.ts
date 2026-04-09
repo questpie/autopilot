@@ -38,7 +38,7 @@ export interface RuntimeConfig {
   tags?: string[]
   /**
    * Maps canonical model names to runtime-specific model strings.
-   * E.g. { 'claude-sonnet-4': 'claude-sonnet-4-20250514' } for claude-code,
+   * E.g. { 'claude-sonnet-4': 'claude-opus-4-6' } for claude-code,
    * or { 'claude-sonnet-4': 'anthropic/claude-sonnet-4-5' } for opencode.
    * If a model is not in the map, the canonical name is passed through as-is.
    */
@@ -73,7 +73,7 @@ function whichSync(name: string): string | null {
 
 /** Default models per runtime kind. */
 const DEFAULT_MODELS: Record<string, string[]> = {
-  'claude-code': ['claude-sonnet-4-20250514'],
+  'claude-code': ['claude-opus-4-6'],
   codex: [],
   opencode: [],
   'direct-api': [],

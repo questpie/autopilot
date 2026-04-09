@@ -39,6 +39,8 @@ name: "Dogfood Development"
 description: >
   Plan → validate plan → generate implementation prompt →
   implement → validate implementation → human review → done.
+workspace:
+  mode: isolated_worktree
 steps:
   - id: plan
     type: agent
@@ -192,6 +194,7 @@ describe('Dogfood E2E', () => {
 		expect(config.defaults.workflow).toBe('dogfood')
 
 		const wf = config.workflows.get('dogfood')!
+		expect(wf.workspace?.mode).toBe('isolated_worktree')
 		const stepIds = wf.steps.map((s) => s.id)
 		expect(stepIds).toEqual(['plan', 'validate-plan', 'generate-impl-prompt', 'implement', 'validate-impl', 'review', 'done'])
 

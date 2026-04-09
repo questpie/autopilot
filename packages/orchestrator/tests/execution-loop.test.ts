@@ -16,7 +16,7 @@ import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { migrate } from 'drizzle-orm/libsql/migrator'
 import { companySchema, type CompanyDb } from '../src/db'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService } from '../src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, QueryService } from '../src/services'
 import type { AppEnv, Services } from '../src/api/app'
 import type { Actor } from '../src/auth/types'
 import { runs } from '../src/api/routes/runs'
@@ -42,7 +42,9 @@ function buildTestApp(companyRoot: string, db: CompanyDb, services: Services) {
 		c.set('db', db)
 		c.set('auth', {} as never) // unused in these routes
 		c.set('services', services)
-		c.set('authoredConfig', { company: {} as any, agents: new Map(), workflows: new Map(), environments: new Map(), providers: new Map(), capabilityProfiles: new Map() })
+		c.set('authoredConfig', { company: {} as any, agents: new Map(), workflows: new Map(), environments: new Map(), providers: new Map(), capabilityProfiles: new Map(), skills: new Map(), context: new Map(), defaults: { runtime: 'claude-code' }, queues: {} })
+		c.set('orchestratorUrl', 'http://localhost:7778')
+		c.set('indexDbRaw', null)
 		c.set('actor', FAKE_ACTOR)
 		c.set('workerId', null)
 		await next()
@@ -173,6 +175,7 @@ describe('execution loop', () => {
 			artifactService: new ArtifactService(db),
 			conversationBindingService: new ConversationBindingService(db),
 			sessionMessageService: {} as any,
+			queryService: new QueryService(db),
 			workflowEngine,
 		}
 

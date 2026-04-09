@@ -60,7 +60,7 @@ const DDL = [
 	)`,
 ]
 
-const CAPS_CLAUDE = [{ runtime: 'claude-code', models: ['claude-sonnet-4-20250514'], maxConcurrent: 1 }]
+const CAPS_CLAUDE = [{ runtime: 'claude-code', models: ['claude-opus-4-6'], maxConcurrent: 1 }]
 const CAPS_CODEX = [{ runtime: 'codex', models: ['codex-mini-latest'], maxConcurrent: 1 }]
 
 // ─── Tests ─────────────────────────────────────────────────────────────────

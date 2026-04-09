@@ -85,10 +85,10 @@ describe('Claude Code --model flag', () => {
 		const adapter = new ClaudeCodeAdapter({ binaryPath, useMcp: false })
 		adapter.onEvent(() => {})
 
-		await adapter.start(baseContext({ model: 'claude-sonnet-4-20250514' }))
+		await adapter.start(baseContext({ model: 'claude-opus-4-6' }))
 		const args = await readArgs(argsFile)
 		expect(args).toContain('--model')
-		expect(args).toContain('claude-sonnet-4-20250514')
+		expect(args).toContain('claude-opus-4-6')
 	})
 })
 

@@ -39,12 +39,12 @@ async function createTempGitRepo(): Promise<string> {
 
 function makeFakeRuntime(): ResolvedRuntime {
   return {
-    config: { runtime: 'claude-code', models: ['claude-sonnet-4-20250514'], tags: ['test'] },
+    config: { runtime: 'claude-code', models: ['claude-opus-4-6'], tags: ['test'] },
     resolvedBinaryPath: '/usr/bin/true', // exists and returns 0
     adapter: { start: async () => undefined, onEvent: () => {}, stop: async () => {} },
     capability: {
       runtime: 'claude-code',
-      models: ['claude-sonnet-4-20250514'],
+      models: ['claude-opus-4-6'],
       maxConcurrent: 1,
       tags: ['test'],
     } as WorkerCapability,
@@ -133,7 +133,7 @@ describe('GET /status', () => {
     expect(data.max_concurrent_runs).toBe(1)
     expect(data.runtimes).toHaveLength(1)
     expect(data.runtimes[0].runtime).toBe('claude-code')
-    expect(data.runtimes[0].models).toEqual(['claude-sonnet-4-20250514'])
+    expect(data.runtimes[0].models).toEqual(['claude-opus-4-6'])
   })
 
   test('returns repo_root and default_branch when repo is configured', async () => {
