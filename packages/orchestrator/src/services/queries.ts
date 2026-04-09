@@ -221,7 +221,16 @@ You are in query mode with full repo access. You may read, create, and edit file
   </artifact>
   </AUTOPILOT_RESULT>
 
-  For simple web artifacts, default to a single \`index.html\` file.
+  For simple web artifacts, default to a single self-contained \`index.html\` file.
+  If the output naturally needs multiple local files or assets (for example HTML + CSS + JS, a reveal.js deck, a built \`dist/\` directory, or images/fonts), do not force everything into one giant file just because the user did not name a platform primitive.
+  In that case, prepare the files normally and return a directory preview directive, for example:
+
+  <AUTOPILOT_RESULT>
+  <summary>Built a multi-file preview artifact.</summary>
+  <artifact kind="preview_dir" path="output/deck" entry="presentation.html" title="Deck" />
+  </AUTOPILOT_RESULT>
+
+  The user should be able to ask naturally for a page, deck, or prototype without knowing about \`preview_file\` or \`preview_dir\`.
   Keep the \`<summary>\` concise — it may be delivered to chat surfaces like Telegram.
   Do not duplicate the artifact content outside the structured block.
 

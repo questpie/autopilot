@@ -367,8 +367,9 @@ export class AutopilotWorker {
     const adapter = createAdapter(resolved.config, resolved.resolvedBinaryPath)
 
     let ws: WorkspaceInfo | null = null
-    // Skip worktree for queries (no task_id) or when workspace mode is 'none'
-    const needsWorktree = run.task_id && run.workspace_mode !== 'none'
+    // Only isolated_worktree runs need a dedicated worktree.
+    // Mutable queries and workspace_mode:none tasks use the shared checkout repoRoot.
+    const needsWorktree = run.workspace_mode === 'isolated_worktree'
     if (this.workspace && needsWorktree) {
       try {
         ws = await this.workspace.acquire({
@@ -391,8 +392,8 @@ export class AutopilotWorker {
       }
     }
 
-    // When worktree was skipped for a task (workspace_mode: 'none'), use main checkout
-    if (!ws && this.workspace && run.task_id) {
+    // Shared-checkout runs use the main repo checkout as their workDir.
+    if (!ws && this.workspace && run.workspace_mode === 'none') {
       ws = {
         path: this.workspace.repoRoot,
         branch: '',

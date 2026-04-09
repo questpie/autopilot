@@ -489,6 +489,60 @@ describe('query completion on run finish', () => {
 		expect(query.mutated_repo).toBe(false)
 	})
 
+	test('worker claim marks mutable query runs as shared-checkout workspace_mode:none', async () => {
+		const workerId = `worker-mutable-query-${Date.now()}`
+		const runtime = `mutable-query-${Date.now()}`
+
+		await app.request(
+			'/api/workers/register',
+			post({
+				id: workerId,
+				capabilities: [{ runtime, models: [], maxConcurrent: 1, tags: [] }],
+			}),
+		)
+
+		await app.request(
+			'/api/queries',
+			post({ prompt: 'build a previewable deck', runtime, allow_repo_mutation: true }),
+		)
+
+		const claimRes = await app.request(
+			'/api/workers/claim',
+			post({ worker_id: workerId, runtime }),
+		)
+		expect(claimRes.status).toBe(200)
+		const claim = await claimRes.json() as { run: { task_id: string | null; workspace_mode?: string | null } | null }
+		expect(claim.run?.task_id).toBeNull()
+		expect(claim.run?.workspace_mode).toBe('none')
+	})
+
+	test('worker claim keeps read-only query runs without workspace_mode override', async () => {
+		const workerId = `worker-readonly-query-${Date.now()}`
+		const runtime = `readonly-query-${Date.now()}`
+
+		await app.request(
+			'/api/workers/register',
+			post({
+				id: workerId,
+				capabilities: [{ runtime, models: [], maxConcurrent: 1, tags: [] }],
+			}),
+		)
+
+		await app.request(
+			'/api/queries',
+			post({ prompt: 'inspect this file only', runtime, allow_repo_mutation: false }),
+		)
+
+		const claimRes = await app.request(
+			'/api/workers/claim',
+			post({ worker_id: workerId, runtime }),
+		)
+		expect(claimRes.status).toBe(200)
+		const claim = await claimRes.json() as { run: { task_id: string | null; workspace_mode?: string | null } | null }
+		expect(claim.run?.task_id).toBeNull()
+		expect(claim.run?.workspace_mode ?? null).toBeNull()
+	})
+
 	test('worker claim skips shared-checkout runs when shared checkout is already locked', async () => {
 		const workflowId = `wf-isolated-${Date.now()}`
 		const taskId = `task-isolated-${Date.now()}`
@@ -637,8 +691,19 @@ describe('buildQueryInstructions', () => {
 		})
 		expect(instructions).toContain('mutable')
 		expect(instructions).toContain('preview_file')
+		expect(instructions).toContain('preview_dir')
 		expect(instructions).toContain('AUTOPILOT_RESULT')
 		expect(instructions).toContain('task')
+	})
+
+	test('mutable query instructions explain natural preview selection', () => {
+		const instructions = buildQueryInstructions('build a reveal.js deck', {
+			allowMutation: true,
+			hasResume: false,
+		})
+		expect(instructions).toContain('single self-contained')
+		expect(instructions).toContain('The user should be able to ask naturally')
+		expect(instructions).toContain('presentation.html')
 	})
 
 	test('mutable query instructions include Autopilot-native tooling bias', () => {

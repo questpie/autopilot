@@ -107,6 +107,11 @@ const orchestratorPkg = JSON.parse(
 	readFileSync(resolve(import.meta.dir, '..', '..', 'package.json'), 'utf-8'),
 ) as { version: string }
 
+// Worker run completion can legitimately carry multi-file durable previews,
+// including base64-encoded assets from preview_dir. Keep this comfortably above
+// the 20 MB raw preview_dir cap to account for JSON + base64 overhead.
+const API_BODY_LIMIT_BYTES = 32 * 1024 * 1024
+
 // ─── App Factory ────────────────────────────────────────────────────────────
 
 export function createApp(config: AppConfig) {
@@ -134,7 +139,7 @@ export function createApp(config: AppConfig) {
 	app.use(
 		'*',
 		bodyLimit({
-			maxSize: 1 * 1024 * 1024,
+			maxSize: API_BODY_LIMIT_BYTES,
 			onError: (c) => c.json({ error: 'request body too large' }, 413),
 		}),
 	)

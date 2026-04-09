@@ -85,6 +85,28 @@ async function resolveTaskContext(
 	}
 }
 
+async function resolveQueryWorkspaceMode(
+	c: Context<AppEnv>,
+	runId: string,
+): Promise<'none' | null> {
+	const { queryService } = c.get('services')
+	const query = await queryService.getByRunIdAnyStatus(runId)
+	return query?.allow_repo_mutation ? 'none' : null
+}
+
+async function resolveRunContext(
+	c: Context<AppEnv>,
+	run: { id: string; task_id: string | null },
+): Promise<TaskContext> {
+	if (run.task_id) {
+		return resolveTaskContext(c, run.task_id)
+	}
+	return {
+		...NULL_TASK_CONTEXT,
+		workspaceMode: await resolveQueryWorkspaceMode(c, run.id),
+	}
+}
+
 function runRequiresSharedCheckout(
 	run: { task_id: string | null },
 	opts: {
@@ -182,7 +204,7 @@ const workers = new Hono<AppEnv>()
 
 		let run = await runService.claim(workerId, body.runtime, workerCaps)
 		let taskContext = run
-			? await resolveTaskContext(c, run.task_id ?? null)
+			? await resolveRunContext(c, run)
 			: NULL_TASK_CONTEXT
 
 		while (run && runRequiresSharedCheckout(run, {
@@ -197,7 +219,7 @@ const workers = new Hono<AppEnv>()
 				excludeRunIds: [...skippedRunIds],
 			})
 			taskContext = run
-				? await resolveTaskContext(c, run.task_id ?? null)
+				? await resolveRunContext(c, run)
 				: NULL_TASK_CONTEXT
 		}
 
