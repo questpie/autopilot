@@ -44,6 +44,16 @@ export const ScopeDefaultsSchema = z.object({
 })
 
 /**
+ * Runtime settings that apply at company scope.
+ * Keep this intentionally narrow for the authored `.autopilot/company.yaml`
+ * shape; broader legacy company settings live in `company.ts`.
+ */
+export const CompanyScopeSettingsSchema = z.object({
+	/** Default local worker concurrency for `autopilot start` / `worker start`. */
+	max_concurrent_agents: z.number().int().min(1).default(4),
+})
+
+/**
  * Schema for `.autopilot/company.yaml` — company scope marker and config.
  */
 export const CompanyScopeSchema = z.object({
@@ -53,6 +63,7 @@ export const CompanyScopeSchema = z.object({
 	timezone: z.string().default('UTC'),
 	language: z.string().default('en'),
 	owner: CompanyOwnerSchema.default({}),
+	settings: CompanyScopeSettingsSchema.default({}),
 	defaults: ScopeDefaultsSchema.default({}),
 	/** Desired pack dependencies — resolved by `autopilot sync`. */
 	packs: z.array(PackDependencySchema).default([]),

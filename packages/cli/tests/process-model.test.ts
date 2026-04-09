@@ -7,6 +7,7 @@
 import { test, expect, describe } from 'bun:test'
 import { program } from '../src/index'
 import { createLocalWorker } from '../src/commands/worker'
+import { DEFAULT_LOCAL_WORKER_CONCURRENCY } from '../src/utils/worker-concurrency'
 import type { AutopilotWorker } from '@questpie/autopilot-worker'
 
 describe('process model: server/worker split', () => {
@@ -61,9 +62,12 @@ describe('process model: server/worker split', () => {
 			workDir: '/tmp/test',
 		})
 		const runtimes = worker.getResolvedRuntimes()
+		const capabilities = worker.getCapabilities()
 		expect(runtimes.length).toBe(1)
+		expect(capabilities.length).toBe(1)
 		expect(runtimes[0]!.config.runtime).toBe('claude-code')
 		expect(runtimes[0]!.config.useMcp).toBe(true)
 		expect(runtimes[0]!.resolvedBinaryPath).toBeTruthy()
+		expect(capabilities[0]!.maxConcurrent).toBe(DEFAULT_LOCAL_WORKER_CONCURRENCY)
 	})
 })

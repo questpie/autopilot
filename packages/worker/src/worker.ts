@@ -108,6 +108,10 @@ export class AutopilotWorker {
     return this.resolvedRuntimes
   }
 
+  getCapabilities(): ReadonlyArray<WorkerCapability> {
+    return this.resolvedCapabilities
+  }
+
   getWorkerId(): string | null {
     return this.workerId
   }

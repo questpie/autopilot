@@ -3,6 +3,7 @@ import { AutopilotWorker, type RuntimeConfig } from '@questpie/autopilot-worker'
 import { program } from '../program'
 import { findCompanyRoot } from '../utils/find-root'
 import { success, dim, error, warning, dot, separator } from '../utils/format'
+import { DEFAULT_LOCAL_WORKER_CONCURRENCY, resolveWorkerConcurrency } from '../utils/worker-concurrency'
 
 /** Create a worker for local dev convenience (autopilot start). Uses local dev bypass. */
 export function createLocalWorker(opts: {
@@ -29,7 +30,7 @@ export function createLocalWorker(opts: {
 		pollInterval: 3_000,
 		heartbeatInterval: 15_000,
 		repoRoot: opts.workDir,
-		maxConcurrentRuns: opts.concurrency ?? 1,
+		maxConcurrentRuns: opts.concurrency ?? DEFAULT_LOCAL_WORKER_CONCURRENCY,
 		localDev: true,
 	})
 }
@@ -40,18 +41,20 @@ function printWorkerStatus(worker: AutopilotWorker, opts: {
 	workDir: string
 }) {
 	const resolved = worker.getResolvedRuntimes()
+	const capabilities = worker.getCapabilities()
 	const enrolled = worker.isEnrolled()
 	console.log(`${dot('green')} ${success(`Worker "${opts.name}" connected to ${opts.url}`)}`)
 	console.log('')
 	console.log(dim(`  Worker ID:   ${worker.getWorkerId() ?? 'pending'}`))
 	console.log(dim(`  Auth:        ${enrolled ? 'enrolled (machine credential)' : 'local dev bypass'}`))
 	for (const rt of resolved) {
+		const advertised = capabilities.find((cap) => cap.runtime === rt.config.runtime)
 		console.log(dim(`  Runtime:     ${rt.config.runtime}`))
 		console.log(dim(`  Binary:      ${rt.resolvedBinaryPath}`))
 		console.log(dim(`  Models:      ${rt.capability.models.join(', ') || '(default)'}`))
 		console.log(dim(`  MCP:         ${rt.config.useMcp !== false ? 'enabled' : 'disabled'}`))
 		console.log(dim(`  Sessions:    ${rt.config.sessionPersistence ?? 'local'}`))
-		console.log(dim(`  Concurrency: ${rt.capability.maxConcurrent}`))
+		console.log(dim(`  Concurrency: ${advertised?.maxConcurrent ?? rt.capability.maxConcurrent}`))
 	}
 	console.log(dim(`  Repo root:   ${opts.workDir}`))
 	console.log('')
@@ -71,7 +74,7 @@ workerCmd.addCommand(
 		.option('--runtime <runtime>', 'Runtime to host (claude-code)', 'claude-code')
 		.option('--binary <path>', 'Explicit path to runtime binary')
 		.option('--session-persistence <mode>', 'Session persistence: local or off', 'local')
-		.option('-c, --concurrency <n>', 'Max concurrent runs (default 1)', '1')
+		.option('-c, --concurrency <n>', 'Max concurrent runs (defaults to company setting or 4)')
 		.action(
 			async (opts: {
 				url: string
@@ -80,7 +83,7 @@ workerCmd.addCommand(
 				runtime: string
 				binary?: string
 				sessionPersistence: string
-				concurrency: string
+				concurrency?: string
 			}) => {
 				let worker: AutopilotWorker | null = null
 
@@ -100,10 +103,7 @@ workerCmd.addCommand(
 						sessionPersistence: opts.sessionPersistence as 'local' | 'off',
 					}
 
-					const concurrency = Number.parseInt(opts.concurrency, 10)
-					if (Number.isNaN(concurrency) || concurrency < 1) {
-						throw new Error(`Invalid concurrency value: ${opts.concurrency} — must be a positive integer`)
-					}
+					const concurrency = await resolveWorkerConcurrency(workDir, opts.concurrency)
 
 					worker = new AutopilotWorker({
 						orchestratorUrl: opts.url,

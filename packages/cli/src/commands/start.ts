@@ -3,6 +3,7 @@ import { startServer } from '@questpie/autopilot-orchestrator'
 import { program } from '../program'
 import { findCompanyRoot, findProjectRoot } from '../utils/find-root'
 import { createLocalWorker } from './worker'
+import { resolveWorkerConcurrency } from '../utils/worker-concurrency'
 import { brandHeader, success, dim, error, warning, separator, dot } from '../utils/format'
 import type { AutopilotWorker } from '@questpie/autopilot-worker'
 
@@ -15,9 +16,9 @@ program.addCommand(
 	new Command('start')
 		.description('Start orchestrator + local worker (local dev/demo mode)')
 		.option('-p, --port <port>', 'Server port', '7778')
-		.option('-c, --concurrency <n>', 'Max concurrent runs for local worker', '1')
+		.option('-c, --concurrency <n>', 'Max concurrent runs for local worker (defaults to company setting or 4)')
 		.option('--no-worker', 'Skip starting the local worker')
-		.action(async (opts: { port: string; concurrency: string; worker: boolean }) => {
+		.action(async (opts: { port: string; concurrency?: string; worker: boolean }) => {
 			let worker: AutopilotWorker | null = null
 
 			try {
@@ -32,11 +33,11 @@ program.addCommand(
 
 				// ── 2. Start local worker ─────────────────────────────────────
 				if (opts.worker) {
-					const concurrency = Number.parseInt(opts.concurrency, 10)
+					const concurrency = await resolveWorkerConcurrency(root, opts.concurrency)
 					worker = createLocalWorker({
 						orchestratorUrl,
 						workDir: workerDir,
-						concurrency: Number.isNaN(concurrency) ? 1 : concurrency,
+						concurrency,
 					})
 					await worker.start()
 				}

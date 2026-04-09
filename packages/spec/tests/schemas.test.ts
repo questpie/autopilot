@@ -3,6 +3,7 @@ import { ZodError } from 'zod'
 import {
 	AgentSchema,
 	CompanySchema,
+	CompanyScopeSchema,
 	ConversationResultSchema,
 	HumanSchema,
 	ScheduleSchema,
@@ -44,6 +45,18 @@ describe('CompanySchema', () => {
 				owner: { name: 'X', email: 'not-an-email' },
 			}),
 		).toThrow(ZodError)
+	})
+})
+
+describe('CompanyScopeSchema', () => {
+	test('accepts settings.max_concurrent_agents for authored company config', () => {
+		const result = CompanyScopeSchema.parse({
+			name: 'QUESTPIE',
+			slug: 'questpie',
+			settings: { max_concurrent_agents: 10 },
+		})
+
+		expect(result.settings.max_concurrent_agents).toBe(10)
 	})
 })
 
