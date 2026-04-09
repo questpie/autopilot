@@ -56,6 +56,11 @@ export class WorkspaceManager {
     return this.#repoRoot
   }
 
+  /** True when git worktree isolation is available for this repoRoot. */
+  supportsIsolation(): boolean {
+    return this.isGitRepo()
+  }
+
   /**
    * Acquire an isolated workspace for a run.
    *

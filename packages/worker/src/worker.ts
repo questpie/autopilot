@@ -46,6 +46,19 @@ export interface WorkerConfig {
   workerApi?: WorkerApiConfig | boolean
 }
 
+export function runUsesSharedCheckout(
+  run: Pick<ClaimedRun, 'task_id' | 'workspace_mode'>,
+  opts: {
+    sharedCheckoutEnabled: boolean
+    worktreeIsolationAvailable: boolean
+  },
+): boolean {
+  if (!opts.sharedCheckoutEnabled) return false
+  if (!run.task_id) return true
+  if (!opts.worktreeIsolationAvailable) return true
+  return run.workspace_mode === 'none'
+}
+
 export class AutopilotWorker {
   private workerId: string | null = null
   private machineSecret: string | null = null
@@ -54,6 +67,7 @@ export class AutopilotWorker {
   private running = false
   private polling = false
   private activeRunIds = new Set<string>()
+  private activeSharedCheckoutRunIds = new Set<string>()
   private maxConcurrentRuns: number
   private adapters = new Map<string, RuntimeAdapter>()
   private resolvedCapabilities: WorkerCapability[] = []
@@ -288,24 +302,40 @@ export class AutopilotWorker {
     this.polling = true
 
     try {
+      const sharedCheckoutEnabled = !!this.workspace
+      const worktreeIsolationAvailable = this.workspace?.supportsIsolation() ?? false
+
       // Claim runs until at capacity or no more work available
       while (this.running && this.activeRunIds.size < this.maxConcurrentRuns) {
         try {
           const res = (await this.api('/api/workers/claim', {
             method: 'POST',
-            body: { worker_id: this.workerId },
+            body: {
+              worker_id: this.workerId,
+              shared_checkout_locked: this.activeSharedCheckoutRunIds.size > 0,
+              shared_checkout_enabled: sharedCheckoutEnabled,
+              worktree_isolation_available: worktreeIsolationAvailable,
+            },
           })) as WorkerClaimResponse
 
           if (!res.run) break // no more work available
 
           this.activeRunIds.add(res.run.id)
           const runId = res.run.id
+          const usesSharedCheckout = runUsesSharedCheckout(res.run, {
+            sharedCheckoutEnabled,
+            worktreeIsolationAvailable,
+          })
+          if (usesSharedCheckout) {
+            this.activeSharedCheckoutRunIds.add(runId)
+          }
           this.executeRun(res.run)
             .catch((err) => {
               console.error(`[worker] run ${runId} failed:`, err)
             })
             .finally(() => {
               this.activeRunIds.delete(runId)
+              this.activeSharedCheckoutRunIds.delete(runId)
             })
         } catch (err) {
           console.error('[worker] poll failed:', err)

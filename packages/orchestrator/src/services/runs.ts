@@ -72,6 +72,7 @@ export class RunService {
 		workerId: string,
 		runtime?: string,
 		workerCapabilities?: WorkerCapability[],
+		options?: { excludeRunIds?: string[] },
 	) {
 		const conditions = [eq(runs.status, 'pending')]
 		if (runtime) conditions.push(eq(runs.runtime, runtime))
@@ -83,6 +84,7 @@ export class RunService {
 			.all()
 
 		if (pending.length === 0) return undefined
+		const excluded = new Set(options?.excludeRunIds ?? [])
 
 		// Build a flat set of tags this worker advertises (runtimes + models + explicit tags)
 		const workerTags = new Set<string>()
@@ -92,7 +94,7 @@ export class RunService {
 			for (const t of cap.tags ?? []) workerTags.add(t)
 		}
 
-		const claimable = pending.find((r) => isEligible(r, workerId, workerTags))
+		const claimable = pending.find((r) => !excluded.has(r.id) && isEligible(r, workerId, workerTags))
 
 		if (!claimable) return undefined
 
@@ -110,6 +112,18 @@ export class RunService {
 		if (result.rowsAffected === 0) return undefined
 
 		return this.get(claimable.id)
+	}
+
+	/** Release a claimed run back to pending so another claim attempt can evaluate it later. */
+	async releaseClaim(runId: string): Promise<void> {
+		await this.db
+			.update(runs)
+			.set({
+				status: 'pending',
+				worker_id: null,
+				started_at: null,
+			})
+			.where(and(eq(runs.id, runId), eq(runs.status, 'claimed')))
 	}
 
 	/** Transition a claimed run to running. */

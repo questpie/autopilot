@@ -40,6 +40,9 @@ export const WorkerHeartbeatRequestSchema = z.object({
 export const WorkerClaimRequestSchema = z.object({
 	worker_id: z.string().min(1),
 	runtime: z.string().optional(),
+	shared_checkout_locked: z.boolean().optional(),
+	shared_checkout_enabled: z.boolean().optional(),
+	worktree_isolation_available: z.boolean().optional(),
 })
 
 /**

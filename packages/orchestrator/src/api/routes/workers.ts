@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import {
 	WorkerRegisterRequestSchema,
@@ -35,6 +36,68 @@ function getAuthoritativeWorkerId(
 		workerId: authWorkerId,
 		mismatch: bodyWorkerId !== authWorkerId && bodyWorkerId !== '',
 	}
+}
+
+interface TaskContext {
+	taskTitle: string | null
+	taskDescription: string | null
+	parentBranch: string | null
+	workspaceMode: 'none' | 'isolated_worktree' | null
+}
+
+const NULL_TASK_CONTEXT: TaskContext = {
+	taskTitle: null,
+	taskDescription: null,
+	parentBranch: null,
+	workspaceMode: null,
+}
+
+async function resolveTaskContext(
+	c: Context<AppEnv>,
+	taskId: string | null,
+): Promise<TaskContext> {
+	if (!taskId) return NULL_TASK_CONTEXT
+
+	const { taskService, taskGraphService } = c.get('services')
+	const config = c.get('authoredConfig')
+
+	const task = await taskService.get(taskId)
+
+	let workspaceMode: TaskContext['workspaceMode'] = null
+	if (task?.workflow_id) {
+		workspaceMode = config.workflows.get(task.workflow_id)?.workspace?.mode ?? null
+	}
+
+	let parentBranch: string | null = null
+	if (taskGraphService) {
+		const parents = await taskGraphService.listParents(taskId)
+		if (parents.length > 0) {
+			const safeId = parents[0]!.id.replace(/[^a-zA-Z0-9_-]/g, '_')
+			parentBranch = `autopilot/${safeId}`
+		}
+	}
+
+	return {
+		taskTitle: task?.title ?? null,
+		taskDescription: task?.description ?? null,
+		parentBranch,
+		workspaceMode,
+	}
+}
+
+function runRequiresSharedCheckout(
+	run: { task_id: string | null },
+	opts: {
+		sharedCheckoutEnabled: boolean
+		sharedCheckoutLocked: boolean
+		worktreeIsolationAvailable: boolean
+		workspaceMode: 'none' | 'isolated_worktree' | null
+	},
+): boolean {
+	if (!opts.sharedCheckoutEnabled || !opts.sharedCheckoutLocked) return false
+	if (!run.task_id) return true
+	if (!opts.worktreeIsolationAvailable) return true
+	return opts.workspaceMode === 'none'
 }
 
 const workers = new Hono<AppEnv>()
@@ -82,7 +145,7 @@ const workers = new Hono<AppEnv>()
 	})
 	// POST /workers/claim — claim next pending run (one-at-a-time)
 	.post('/claim', zValidator('json', WorkerClaimRequestSchema), async (c) => {
-		const { runService, workerService, taskService, workflowEngine } = c.get('services')
+		const { runService, workerService, workflowEngine } = c.get('services')
 		const authWorkerId = c.get('workerId')
 		const body = c.req.valid('json')
 
@@ -112,8 +175,32 @@ const workers = new Hono<AppEnv>()
 		const workerCaps = workerRecord?.capabilities
 			? JSON.parse(workerRecord.capabilities)
 			: []
+		const sharedCheckoutLocked = body.shared_checkout_locked === true
+		const sharedCheckoutEnabled = body.shared_checkout_enabled === true
+		const worktreeIsolationAvailable = body.worktree_isolation_available === true
+		const skippedRunIds = new Set<string>()
 
-		const run = await runService.claim(workerId, body.runtime, workerCaps)
+		let run = await runService.claim(workerId, body.runtime, workerCaps)
+		let taskContext = run
+			? await resolveTaskContext(c, run.task_id ?? null)
+			: NULL_TASK_CONTEXT
+
+		while (run && runRequiresSharedCheckout(run, {
+			sharedCheckoutEnabled,
+			sharedCheckoutLocked,
+			worktreeIsolationAvailable,
+			workspaceMode: taskContext.workspaceMode,
+		})) {
+			await runService.releaseClaim(run.id)
+			skippedRunIds.add(run.id)
+			run = await runService.claim(workerId, body.runtime, workerCaps, {
+				excludeRunIds: [...skippedRunIds],
+			})
+			taskContext = run
+				? await resolveTaskContext(c, run.task_id ?? null)
+				: NULL_TASK_CONTEXT
+		}
+
 		if (!run) return c.json({ run: null, lease_id: null }, 200)
 
 		// Create a lease for the claimed run
@@ -127,39 +214,12 @@ const workers = new Hono<AppEnv>()
 		})
 		await workerService.setBusy(workerId)
 
-		// Look up task context if task_id exists
-		let taskTitle: string | null = null
-		let taskDescription: string | null = null
-		let parentBranch: string | null = null
-		let workspaceMode: 'none' | 'isolated_worktree' | null = null
-		if (run.task_id) {
-			const task = await taskService.get(run.task_id)
-			if (task) {
-				taskTitle = task.title
-				taskDescription = task.description ?? null
-
-				// Resolve workspace_mode from workflow config
-				if (task.workflow_id) {
-					const config = c.get('authoredConfig')
-					const workflow = config.workflows.get(task.workflow_id)
-					if (workflow?.workspace?.mode) {
-						workspaceMode = workflow.workspace.mode
-					}
-				}
-			}
-
-			// Resolve parent branch: if this task has a parent (via task_relations),
-			// the parent's worktree branch is autopilot/{parentTaskId}
-			const { taskGraphService } = c.get('services')
-			if (taskGraphService) {
-				const parents = await taskGraphService.listParents(run.task_id)
-				if (parents.length > 0) {
-					const parentTaskId = parents[0]!.id
-					const safeId = parentTaskId.replace(/[^a-zA-Z0-9_-]/g, '_')
-					parentBranch = `autopilot/${safeId}`
-				}
-			}
-		}
+		const {
+			taskTitle,
+			taskDescription,
+			parentBranch,
+			workspaceMode,
+		} = taskContext
 
 		// Resolve agent identity from authored config
 		const config = c.get('authoredConfig')

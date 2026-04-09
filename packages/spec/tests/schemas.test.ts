@@ -281,8 +281,12 @@ describe('API contract schemas', () => {
 		const claim = WorkerClaimRequestSchema.parse({
 			worker_id: 'worker-1',
 			runtime: 'claude-code',
+			shared_checkout_locked: true,
+			shared_checkout_enabled: true,
+			worktree_isolation_available: false,
 		})
 		expect(claim.worker_id).toBe('worker-1')
+		expect(claim.shared_checkout_locked).toBe(true)
 
 		const enroll = WorkerEnrollRequestSchema.parse({
 			token: 'secret',

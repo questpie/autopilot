@@ -488,6 +488,129 @@ describe('query completion on run finish', () => {
 		const query = (await queryRes.json()) as { mutated_repo: boolean }
 		expect(query.mutated_repo).toBe(false)
 	})
+
+	test('worker claim skips shared-checkout runs when shared checkout is already locked', async () => {
+		const workflowId = `wf-isolated-${Date.now()}`
+		const taskId = `task-isolated-${Date.now()}`
+		const isolatedRunId = `run-isolated-${Date.now()}`
+		const workerId = `worker-shared-lock-${Date.now()}`
+		const runtime = `bug11-${Date.now()}`
+
+		DEFAULT_AUTHORED_CONFIG.workflows.set(workflowId, {
+			id: workflowId,
+			steps: [],
+			workspace: { mode: 'isolated_worktree' },
+		} as any)
+
+		try {
+			await app.request(
+				'/api/workers/register',
+				post({
+					id: workerId,
+					capabilities: [{ runtime, models: [], maxConcurrent: 2, tags: [] }],
+				}),
+			)
+
+			const query1Res = await app.request('/api/queries', post({ prompt: 'shared checkout 1', runtime }))
+			const query1 = await query1Res.json() as { run_id: string }
+			const query2Res = await app.request('/api/queries', post({ prompt: 'shared checkout 2', runtime }))
+			const query2 = await query2Res.json() as { run_id: string }
+
+			const firstClaimRes = await app.request(
+				'/api/workers/claim',
+				post({
+					worker_id: workerId,
+					runtime,
+					shared_checkout_locked: false,
+					shared_checkout_enabled: true,
+					worktree_isolation_available: true,
+				}),
+			)
+			const firstClaim = await firstClaimRes.json() as { run: { id: string; task_id: string | null } | null }
+			expect(firstClaim.run?.task_id).toBeNull()
+			expect([query1.run_id, query2.run_id]).toContain(firstClaim.run?.id ?? '')
+
+			await services.taskService.create({
+				id: taskId,
+				title: 'Isolated task',
+				type: 'feature',
+				workflow_id: workflowId,
+				workflow_step: 'run',
+				created_by: FAKE_ACTOR.id,
+			})
+			await services.runService.create({
+				id: isolatedRunId,
+				agent_id: 'default-agent',
+				task_id: taskId,
+				runtime,
+				initiated_by: FAKE_ACTOR.id,
+				instructions: 'Run in isolated worktree',
+			})
+
+			const secondClaimRes = await app.request(
+				'/api/workers/claim',
+				post({
+					worker_id: workerId,
+					runtime,
+					shared_checkout_locked: true,
+					shared_checkout_enabled: true,
+					worktree_isolation_available: true,
+				}),
+			)
+			const secondClaim = await secondClaimRes.json() as { run: { id: string; task_id: string | null } | null }
+			expect(secondClaim.run?.id).toBe(isolatedRunId)
+
+			const deferredQueryIds = [query1.run_id, query2.run_id].filter((id) => id !== firstClaim.run?.id)
+			for (const queryRunId of deferredQueryIds) {
+				const deferredQuery = await services.runService.get(queryRunId)
+				expect(deferredQuery?.status).toBe('pending')
+			}
+		} finally {
+			DEFAULT_AUTHORED_CONFIG.workflows.delete(workflowId)
+		}
+	})
+
+	test('worker claim returns no run when shared checkout is locked and only shared-checkout work remains', async () => {
+		const workerId = `worker-shared-only-${Date.now()}`
+		const runtime = `bug11-shared-${Date.now()}`
+
+		await app.request(
+			'/api/workers/register',
+			post({
+				id: workerId,
+				capabilities: [{ runtime, models: [], maxConcurrent: 2, tags: [] }],
+			}),
+		)
+
+		await app.request('/api/queries', post({ prompt: 'shared only 1', runtime }))
+		await app.request('/api/queries', post({ prompt: 'shared only 2', runtime }))
+
+		const firstClaimRes = await app.request(
+			'/api/workers/claim',
+			post({
+				worker_id: workerId,
+				runtime,
+				shared_checkout_locked: false,
+				shared_checkout_enabled: true,
+				worktree_isolation_available: true,
+			}),
+		)
+		const firstClaim = await firstClaimRes.json() as { run: { id: string } | null }
+		expect(firstClaim.run).not.toBeNull()
+
+		const secondClaimRes = await app.request(
+			'/api/workers/claim',
+			post({
+				worker_id: workerId,
+				runtime,
+				shared_checkout_locked: true,
+				shared_checkout_enabled: true,
+				worktree_isolation_available: true,
+			}),
+		)
+		const secondClaim = await secondClaimRes.json() as { run: { id: string } | null }
+		expect(secondClaim.run).toBeNull()
+	})
 })
 
 describe('task regression', () => {
