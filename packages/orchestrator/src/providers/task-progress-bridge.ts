@@ -300,12 +300,32 @@ export class TaskProgressBridge {
 		const status = computeNormalizedStatus(task)
 		const baseUrl = this.config.orchestratorUrl
 
+		// For blocked (waiting_for_review) tasks, include the last run's summary
+		// so the reviewer knows what they're approving
+		let summary = summarizeLifecycleState(task, event.status)
+		let previewUrl: string | undefined
+		if (status === 'waiting_for_review' || status === 'completed' || status === 'failed') {
+			const runs = await this.runService.list({ task_id: taskId })
+			const lastRun = runs.sort((a, b) =>
+				new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+			)[0]
+			if (lastRun?.summary) {
+				summary = lastRun.summary
+			}
+			if (lastRun) {
+				const artifacts = await this.artifactService.listForRun(lastRun.id)
+				const preview = artifacts.find((a) => a.kind === 'preview_url')
+				if (preview) previewUrl = preview.ref_value
+			}
+		}
+
 		this.lastProgressSent.set(taskId, Date.now())
 
 		for (const target of targets) {
 			await this.sendOrEditProgress(target, task, status, {
 				baseUrl,
-				summary: summarizeLifecycleState(task, event.status),
+				summary,
+				previewUrl,
 			})
 		}
 
