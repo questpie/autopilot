@@ -43,6 +43,7 @@ routeTree.gen.ts
 # Misc
 .cache/
 tmp/
+.worktrees/
 
 local_specs/*
 claude.md
