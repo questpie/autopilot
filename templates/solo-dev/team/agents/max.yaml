@@ -1,8 +1,0 @@
-id: max
-name: "Max"
-role: developer
-description: "Implements features, writes code, creates branches and PRs"
-fs_scope:
-  read: ["/knowledge/technical/**", "/projects/**"]
-  write: ["/projects/*/code/**"]
-tools: ["fs", "terminal", "task", "message", "pin", "search", "git", "search_web", "browse"]

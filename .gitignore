@@ -9,6 +9,7 @@ dist/
 build/
 .output/
 .turbo/
+output/
 *.tsbuildinfo
 
 # Environment
@@ -50,4 +51,3 @@ test-company/
 local_spec.md
 my-company/
 .data/
-

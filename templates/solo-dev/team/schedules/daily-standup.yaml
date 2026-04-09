@@ -1,4 +1,0 @@
-id: daily-standup
-agent: ceo
-cron: "0 9 * * 1-5"
-description: "Generate morning summary of all agent activity"

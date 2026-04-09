@@ -1,5 +1,9 @@
 # Workflow-Based Execution Roadmap
 
+> Status: local engineering note, not canonical product/spec truth.
+> Canonical Autopilot specs live in `/Users/drepkovsky/questpie/specs/autopilot/`.
+> If this file conflicts with the external specs, prefer the external specs.
+
 > Goal: move Autopilot from a workflow-aware orchestrator to a true workflow-based AI execution system.
 > Last updated: 2026-03-31
 

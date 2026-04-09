@@ -1,5 +1,9 @@
 # QUESTPIE Autopilot — Local Development Guide
 
+> Status: local engineering note, not canonical product/spec truth.
+> Canonical Autopilot specs live in `/Users/drepkovsky/questpie/specs/autopilot/`.
+> If this file conflicts with the external specs, prefer the external specs.
+
 > Internal reference for developing the Autopilot monorepo.
 > Last updated: 2026-03-24
 

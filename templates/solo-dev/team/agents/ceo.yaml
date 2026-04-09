@@ -1,8 +1,0 @@
-id: ceo
-name: "CEO Agent"
-role: meta
-description: "Decomposes high-level intents into tasks, manages company structure, proposes workflow changes"
-fs_scope:
-  read: ["/**"]
-  write: ["/team/**", "/dashboard/**"]
-tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]

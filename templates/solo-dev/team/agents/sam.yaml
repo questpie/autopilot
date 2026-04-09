@@ -1,8 +1,0 @@
-id: sam
-name: "Sam"
-role: strategist
-description: "Scopes features, writes specs, defines business requirements"
-fs_scope:
-  read: ["/knowledge/**", "/projects/*/docs/**"]
-  write: ["/projects/*/docs/**"]
-tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]

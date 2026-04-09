@@ -1,8 +1,0 @@
-id: jordan
-name: "Jordan"
-role: design
-description: "Creates UI/UX designs, maintains design system, produces mockups"
-fs_scope:
-  read: ["/knowledge/brand/**", "/projects/*/design/**"]
-  write: ["/projects/*/design/**"]
-tools: ["fs", "terminal", "task", "message", "pin", "search", "search_web", "browse"]
