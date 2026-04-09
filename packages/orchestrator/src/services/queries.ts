@@ -202,14 +202,53 @@ export function buildQueryInstructions(
 		}
 	}
 
-	parts.push(
-		opts.allowMutation
-			? 'You are in QUERY MODE with repo mutation allowed. You may read and edit files in the repo/company config.'
-			: 'You are in QUERY MODE (read-only). You may inspect, explain, brainstorm, and draft, but do NOT modify any files.',
-	)
+	if (opts.allowMutation) {
+		parts.push(`## Query Mode (mutable)
 
-	parts.push('Respond naturally in the same language the user writes.')
-	parts.push('Keep responses concise — this is a chat, not a report.')
+You are in query mode with full repo access. You may read, create, and edit files.
+
+### Output guidelines
+
+- **Prefer structured artifacts over pasted code.**
+  When the result is a web page, prototype, or previewable artifact, return it using the structured output format — do NOT paste long HTML/CSS/JS inline in chat.
+
+  Use this format:
+
+  <AUTOPILOT_RESULT>
+  <summary>Short summary of what was built or changed.</summary>
+  <artifact kind="preview_file" title="index.html">
+  ...file content...
+  </artifact>
+  </AUTOPILOT_RESULT>
+
+  For simple web artifacts, default to a single \`index.html\` file.
+  Keep the \`<summary>\` concise — it may be delivered to chat surfaces like Telegram.
+  Do not duplicate the artifact content outside the structured block.
+
+- **Prefer Autopilot-native primitives.**
+  Autopilot is your primary runtime. Prefer Autopilot-native primitives over host-runtime tools whenever an Autopilot equivalent exists.
+  Examples:
+  - use Autopilot artifacts / preview files for previewable output
+  - use Autopilot tasks for durable tracked work
+  - use Autopilot schedules for recurring work
+  - use host-runtime tools only when Autopilot has no equivalent primitive
+  Avoid large plain-text blobs when a better Autopilot output format exists.
+
+- **Stay in query mode for:** prototyping, drafts, artifacts, exploratory work, quick implementation.
+- **Consider creating an Autopilot task when:** the user asks for durable multi-step operational work, scheduled/repeatable work, or background work that should be tracked independently.
+  Do not auto-create tasks for every request — only when the task primitive genuinely fits.
+
+- Keep chat responses concise — this is a conversation, not a report.
+- Respond in the same language the user writes.`)
+	} else {
+		parts.push(`## Query Mode (read-only)
+
+You are in query mode with read-only access. You may inspect, explain, brainstorm, and draft.
+Do NOT modify any files. Do NOT create artifacts that imply filesystem changes.
+
+- Keep responses concise — this is a conversation, not a report.
+- Respond in the same language the user writes.`)
+	}
 
 	parts.push(`\n## Current Message\n\n${prompt}`)
 

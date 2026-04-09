@@ -239,6 +239,39 @@ const conversations = new Hono<AppEnv>()
 				return c.json({ action: 'session.reset', session_id: session.id }, 200)
 			}
 
+			// ── Detect /read prefix → read-only query mode ──────────────
+			let queryPrompt = result.message
+			let allowMutation = true
+			const readMatch = result.message.match(/^\/(read|readonly)(?:\s+([\s\S]+))?$/i)
+			if (readMatch) {
+				const readContent = readMatch[2]?.trim()
+				if (readContent) {
+					queryPrompt = readContent
+					allowMutation = false
+				} else {
+					// /read with no content — send helpful message
+					if (provider.capabilities.some((cap) => cap.op === 'notify.send')) {
+						invokeProvider(
+							provider,
+							'notify.send',
+							{
+								event_type: 'command_help',
+								severity: 'info',
+								title: '',
+								summary: 'Usage: /read <prompt> — runs a read-only query that cannot modify files.',
+								conversation_id: result.conversation_id,
+								thread_id: result.thread_id,
+							},
+							{ companyRoot },
+							secretService,
+						).catch((err) => {
+							console.warn(`[conversations] /read help send failed:`, err instanceof Error ? err.message : String(err))
+						})
+					}
+					return c.json({ action: 'command.help', command: 'read' }, 200)
+				}
+			}
+
 			// ── Check if session has an active query/run → queue instead of dispatching
 			const activeQuery = await queryService.findActiveForSession(session.id)
 			if (activeQuery && activeQuery.run_id) {
@@ -276,17 +309,17 @@ const conversations = new Hono<AppEnv>()
 				instructionMessages = recent.filter(m => m.id !== userMsg.id)
 			}
 
-			const instructions = buildQueryInstructions(result.message, {
+			const instructions = buildQueryInstructions(queryPrompt, {
 				sessionMessages: instructionMessages,
-				allowMutation: false,
+				allowMutation,
 				hasResume: effectiveResume,
 			})
 
 			// ── Create query with session_id ─────────────────────────────
 			const query = await queryService.create({
-				prompt: result.message,
+				prompt: queryPrompt,
 				agent_id: agentId,
-				allow_repo_mutation: false,
+				allow_repo_mutation: allowMutation,
 				session_id: session.id,
 				created_by: initiator,
 			})

@@ -329,33 +329,31 @@ console.log(JSON.stringify({ ok: false, error: 'delivery failed' }))`
 		expect(defaultChatCalls.length).toBe(0)
 	})
 
-	test('failed notify.send does NOT store system session message', async () => {
+	test('task-scoped run_completed does NOT invoke default-chat (TaskProgressBridge owns it)', async () => {
 		const failInvocationsFile = join(testRoot, 'fail-invocations.jsonl')
 		await writeFile(failInvocationsFile, '')
+		await writeFile(invocationsFile, '')
 
 		const eventBus = new EventBus()
 		const provider = makeConvProviderWithDefaultChat(
-			'notif-fail',
-			'handlers/fail-handler.ts',
-			'default-chat-fail',
+			'notif-task-suppressed',
+			'handlers/ok-handler.ts',
+			'default-chat-suppressed',
 		)
 
-		// Create a run WITH task_id
-		const runId = `run-fail-${Date.now()}`
-
-		// Create a task first (TaskService needs it)
-		const failTaskId = `task-fail-${Date.now()}`
+		const taskId = `task-suppressed-${Date.now()}`
 		await taskService.create({
-			id: failTaskId,
-			title: 'Test task for failure',
+			id: taskId,
+			title: 'Test task suppressed',
 			type: 'development',
 			created_by: 'test',
 		})
 
+		const runId = `run-suppressed-${Date.now()}`
 		await runService.create({
 			id: runId,
 			agent_id: 'dev',
-			task_id: failTaskId,
+			task_id: taskId,
 			runtime: 'claude-code',
 			initiated_by: 'test',
 			instructions: 'test run with task',
@@ -368,7 +366,7 @@ console.log(JSON.stringify({ ok: false, error: 'delivery failed' }))`
 			agents: new Map(),
 			workflows: new Map(),
 			environments: new Map(),
-			providers: new Map([['notif-fail', provider]]),
+			providers: new Map([['notif-task-suppressed', provider]]),
 			capabilityProfiles: new Map(),
 			defaults: { runtime: 'claude-code' },
 		}
@@ -391,101 +389,14 @@ console.log(JSON.stringify({ ok: false, error: 'delivery failed' }))`
 		await new Promise((r) => setTimeout(r, 2000))
 		bridge.stop()
 
-		// The handler was invoked (fails) — check fail-invocations.jsonl
-		const failContent = await Bun.file(failInvocationsFile).text()
-		const failLines = failContent.trim().split('\n').filter(Boolean)
-		expect(failLines.length).toBeGreaterThanOrEqual(1)
-
-		// No session message should have been stored for default chat
-		const defaultChatSession = await sessionService.findByExternal(
-			'notif-fail',
-			'default-chat-fail',
-		)
-		if (defaultChatSession) {
-			const msgs = await sessionMessageService.listRecent(defaultChatSession.id, 100)
-			const systemMsgs = msgs.filter((m) => m.role === 'system')
-			expect(systemMsgs.length).toBe(0)
-		}
-		// If session doesn't exist at all, that also proves no message was stored
-	})
-
-	test('task-scoped default-chat delivery stores system message on success', async () => {
-		await writeFile(invocationsFile, '')
-
-		const eventBus = new EventBus()
-		const provider = makeConvProviderWithDefaultChat(
-			'notif-ok',
-			'handlers/ok-handler.ts',
-			'default-chat-ok',
-		)
-
-		// Create a task and run with task_id
-		const taskId = `task-ok-${Date.now()}`
-		await taskService.create({
-			id: taskId,
-			title: 'Test task for success delivery',
-			type: 'development',
-			created_by: 'test',
-		})
-
-		const runId = `run-ok-${Date.now()}`
-		await runService.create({
-			id: runId,
-			agent_id: 'dev',
-			task_id: taskId,
-			runtime: 'claude-code',
-			initiated_by: 'test',
-			instructions: 'test run with task for success',
-		})
-		await runService.start(runId)
-		await runService.complete(runId, { status: 'completed', summary: 'Task completed successfully' })
-
-		const authoredConfig = {
-			company: {},
-			agents: new Map(),
-			workflows: new Map(),
-			environments: new Map(),
-			providers: new Map([['notif-ok', provider]]),
-			capabilityProfiles: new Map(),
-			defaults: { runtime: 'claude-code' },
-		}
-
-		const bridge = new NotificationBridge(
-			eventBus,
-			authoredConfig,
-			runService,
-			taskService,
-			artifactService,
-			bindingService,
-			{ companyRoot: testRoot },
-			undefined,
-			sessionService,
-			sessionMessageService,
-		)
-		bridge.start()
-
-		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
-		await new Promise((r) => setTimeout(r, 2000))
-		bridge.stop()
-
-		// Handler should have been called with default-chat-ok conversation_id
+		// NotificationBridge no longer sends task-scoped default-chat notifications
+		// (TaskProgressBridge owns that delivery path)
 		const content = await Bun.file(invocationsFile).text()
 		const lines = content.trim().split('\n').filter(Boolean)
 		const defaultChatCalls = lines
 			.map((l) => JSON.parse(l))
-			.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-ok')
-		expect(defaultChatCalls.length).toBeGreaterThanOrEqual(1)
-
-		// A system session message should have been stored
-		const chatSession = await sessionService.findByExternal(
-			'notif-ok',
-			'default-chat-ok',
-		)
-		expect(chatSession).toBeDefined()
-		const msgs = await sessionMessageService.listRecent(chatSession!.id, 100)
-		const systemMsgs = msgs.filter((m) => m.role === 'system')
-		expect(systemMsgs.length).toBeGreaterThanOrEqual(1)
-		expect(systemMsgs[0].content).toContain('run_completed')
+			.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-suppressed')
+		expect(defaultChatCalls.length).toBe(0)
 	})
 
 	test('task binding suppresses duplicate default-chat delivery', async () => {
@@ -1427,5 +1338,779 @@ describe('markdownToTelegramHtml', () => {
 
 	test('converts links', () => {
 		expect(markdownToTelegramHtml('[click](https://example.com)')).toBe('<a href="https://example.com">click</a>')
+	})
+})
+
+// ─── Test: NotificationBridge summary truncation ───────────────────────────
+
+describe('NotificationBridge summary truncation', () => {
+	const testRoot = join(tmpdir(), `qp-notif-trunc-${Date.now()}`)
+	const invocationsFile = join(testRoot, 'notif-trunc-invocations.jsonl')
+
+	let dbResult: CompanyDbResult
+	let runService: RunService
+	let taskService: TaskService
+	let artifactService: ArtifactService
+	let sessionService: SessionService
+	let sessionMessageService: SessionMessageService
+	let bindingService: ConversationBindingService
+
+	const HANDLER_SRC = `import { appendFileSync } from 'node:fs'
+const input = await Bun.stdin.text()
+const envelope = JSON.parse(input)
+appendFileSync('${invocationsFile}', JSON.stringify({
+  op: envelope.op,
+  summary: envelope.payload?.summary,
+  summary_length: (envelope.payload?.summary || '').length,
+  preview_url: envelope.payload?.preview_url || null,
+  task_url: envelope.payload?.task_url || null,
+  event_type: envelope.payload?.event_type,
+}) + '\\n')
+console.log(JSON.stringify({ ok: true }))`
+
+	function makeNotifProvider(): Provider {
+		return {
+			id: 'notif-trunc',
+			name: 'Notif Trunc',
+			kind: 'notification_channel',
+			handler: 'handlers/notif-trunc-handler.ts',
+			capabilities: [{ op: 'notify.send' }],
+			events: [
+				{ types: ['run_completed'], statuses: ['completed', 'failed'] },
+			],
+			config: {},
+			secret_refs: [],
+			description: '',
+		}
+	}
+
+	beforeAll(async () => {
+		await mkdir(join(testRoot, '.autopilot', 'handlers'), { recursive: true })
+		await writeFile(join(testRoot, '.autopilot', 'handlers', 'notif-trunc-handler.ts'), HANDLER_SRC)
+
+		dbResult = await createCompanyDb(testRoot)
+		runService = new RunService(dbResult.db)
+		taskService = new TaskService(dbResult.db)
+		artifactService = new ArtifactService(dbResult.db)
+		sessionService = new SessionService(dbResult.db)
+		sessionMessageService = new SessionMessageService(dbResult.db)
+		bindingService = new ConversationBindingService(dbResult.db)
+	})
+
+	afterAll(async () => {
+		dbResult.raw.close()
+		await rm(testRoot, { recursive: true, force: true })
+	})
+
+	test('long run_completed summary is truncated before provider delivery', async () => {
+		await writeFile(invocationsFile, '')
+
+		const eventBus = new EventBus()
+		const authoredConfig = {
+			company: {},
+			agents: new Map(),
+			workflows: new Map(),
+			environments: new Map(),
+			providers: new Map([['notif-trunc', makeNotifProvider()]]),
+			capabilityProfiles: new Map(),
+			defaults: { runtime: 'claude-code' },
+		}
+
+		const bridge = new NotificationBridge(
+			eventBus,
+			authoredConfig,
+			runService,
+			taskService,
+			artifactService,
+			bindingService,
+			{ companyRoot: testRoot, orchestratorUrl: 'http://localhost:7778' },
+			undefined,
+			sessionService,
+			sessionMessageService,
+		)
+		bridge.start()
+
+		// Create a task + run with a very long summary
+		const taskId = `task-trunc-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Test truncation task',
+			type: 'development',
+			created_by: 'test',
+		})
+
+		const longSummary = 'X'.repeat(5000)
+		const runId = `run-trunc-notif-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			task_id: taskId,
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'test',
+		})
+		await runService.start(runId)
+		await runService.complete(runId, { status: 'completed', summary: longSummary })
+
+		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
+		await new Promise((r) => setTimeout(r, 2000))
+		bridge.stop()
+
+		const content = await Bun.file(invocationsFile).text()
+		const lines = content.trim().split('\n').filter(Boolean)
+		const entries = lines.map((l) => JSON.parse(l))
+
+		const delivery = entries.find((e: Record<string, unknown>) => e.event_type === 'run_completed')
+		expect(delivery).toBeDefined()
+		// Has task_url so should be aggressively truncated
+		expect(delivery.summary_length).toBeLessThanOrEqual(600)
+		expect(delivery.summary).toContain('...')
+	})
+
+	test('long summary with preview_url is aggressively shortened and preview URL survives', async () => {
+		await writeFile(invocationsFile, '')
+
+		const eventBus = new EventBus()
+		const authoredConfig = {
+			company: {},
+			agents: new Map(),
+			workflows: new Map(),
+			environments: new Map(),
+			providers: new Map([['notif-trunc', makeNotifProvider()]]),
+			capabilityProfiles: new Map(),
+			defaults: { runtime: 'claude-code' },
+		}
+
+		const bridge = new NotificationBridge(
+			eventBus,
+			authoredConfig,
+			runService,
+			taskService,
+			artifactService,
+			bindingService,
+			{ companyRoot: testRoot, orchestratorUrl: 'http://localhost:7778' },
+			undefined,
+			sessionService,
+			sessionMessageService,
+		)
+		bridge.start()
+
+		const taskId = `task-trunc-prev-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Preview truncation task',
+			type: 'development',
+			created_by: 'test',
+		})
+
+		const longSummary = 'Y'.repeat(3000)
+		const runId = `run-trunc-prev-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			task_id: taskId,
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'test',
+		})
+		await runService.start(runId)
+		await runService.complete(runId, { status: 'completed', summary: longSummary })
+
+		// Create preview_url artifact
+		await artifactService.create({
+			id: `art-notif-prev-${Date.now()}`,
+			run_id: runId,
+			kind: 'preview_url',
+			title: 'Preview',
+			ref_kind: 'url',
+			ref_value: `http://localhost:7778/api/previews/${runId}/index.html`,
+		})
+
+		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
+		await new Promise((r) => setTimeout(r, 2000))
+		bridge.stop()
+
+		const content = await Bun.file(invocationsFile).text()
+		const lines = content.trim().split('\n').filter(Boolean)
+		const entries = lines.map((l) => JSON.parse(l))
+
+		const delivery = entries.find((e: Record<string, unknown>) => e.event_type === 'run_completed')
+		expect(delivery).toBeDefined()
+		// Aggressively truncated due to preview_url
+		expect(delivery.summary_length).toBeLessThanOrEqual(600)
+		// Preview URL preserved
+		expect(delivery.preview_url).toContain('/api/previews/')
+	})
+})
+
+// ─── Test: QueryResponseBridge summary truncation ──────────────────────────
+
+describe('QueryResponseBridge summary truncation', () => {
+	const testRoot = join(tmpdir(), `qp-bridge-trunc-${Date.now()}`)
+	const invocationsFile = join(testRoot, 'trunc-invocations.jsonl')
+
+	let dbResult: CompanyDbResult
+	let runService: RunService
+	let queryService: QueryService
+	let sessionService: SessionService
+	let sessionMessageService: SessionMessageService
+	let artifactService: ArtifactService
+
+	const HANDLER_SRC = `import { appendFileSync } from 'node:fs'
+const input = await Bun.stdin.text()
+const envelope = JSON.parse(input)
+appendFileSync('${invocationsFile}', JSON.stringify({
+  op: envelope.op,
+  summary: envelope.payload?.summary,
+  summary_length: (envelope.payload?.summary || '').length,
+  preview_url: envelope.payload?.preview_url || null,
+  event_type: envelope.payload?.event_type,
+}) + '\\n')
+console.log(JSON.stringify({ ok: true, external_id: 'ext-trunc-1' }))`
+
+	function makeConvProvider(): Provider {
+		return {
+			id: 'trunc-prov',
+			name: 'Trunc Conv',
+			kind: 'conversation_channel',
+			handler: 'handlers/trunc-handler.ts',
+			capabilities: [{ op: 'conversation.ingest' }, { op: 'notify.send' }],
+			events: [
+				{ types: ['run_completed'], statuses: ['completed', 'failed'] },
+			],
+			config: {},
+			secret_refs: [],
+			description: '',
+		}
+	}
+
+	beforeAll(async () => {
+		await mkdir(join(testRoot, '.autopilot', 'handlers'), { recursive: true })
+		await writeFile(join(testRoot, '.autopilot', 'handlers', 'trunc-handler.ts'), HANDLER_SRC)
+
+		dbResult = await createCompanyDb(testRoot)
+		runService = new RunService(dbResult.db)
+		queryService = new QueryService(dbResult.db)
+		sessionService = new SessionService(dbResult.db)
+		sessionMessageService = new SessionMessageService(dbResult.db)
+		artifactService = new ArtifactService(dbResult.db)
+	})
+
+	afterAll(async () => {
+		dbResult.raw.close()
+		await rm(testRoot, { recursive: true, force: true })
+	})
+
+	function makeBridge() {
+		const eventBus = new EventBus()
+		const authoredConfig = {
+			company: {},
+			agents: new Map(),
+			workflows: new Map(),
+			environments: new Map(),
+			providers: new Map([['trunc-prov', makeConvProvider()]]),
+			capabilityProfiles: new Map(),
+			defaults: { runtime: 'claude-code' },
+		}
+
+		const bridge = new QueryResponseBridge(
+			eventBus,
+			authoredConfig,
+			queryService,
+			runService,
+			sessionService,
+			{ companyRoot: testRoot, orchestratorUrl: 'http://localhost:7778' },
+			undefined,
+			sessionMessageService,
+			artifactService,
+		)
+		return { bridge, eventBus }
+	}
+
+	test('long summary without preview URL is truncated to safe limit', async () => {
+		await writeFile(invocationsFile, '')
+
+		const { bridge, eventBus } = makeBridge()
+		bridge.start()
+
+		const session = await sessionService.findOrCreate({
+			provider_id: 'trunc-prov',
+			external_conversation_id: `chat-trunc-long-${Date.now()}`,
+			mode: 'query',
+		})
+
+		const query = await queryService.create({
+			prompt: 'generate long output',
+			agent_id: 'dev',
+			allow_repo_mutation: true,
+			session_id: session.id,
+			created_by: 'test',
+		})
+
+		const longSummary = 'A'.repeat(5000)
+		const runId = `run-trunc-long-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'test',
+		})
+		await queryService.linkRun(query.id, runId)
+		await runService.start(runId)
+		await runService.complete(runId, { status: 'completed', summary: longSummary })
+
+		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
+		await new Promise((r) => setTimeout(r, 2000))
+		bridge.stop()
+
+		const content = await Bun.file(invocationsFile).text()
+		const lines = content.trim().split('\n').filter(Boolean)
+		const entries = lines.map((l) => JSON.parse(l))
+
+		const response = entries.find((e: Record<string, unknown>) => e.event_type === 'query_response')
+		expect(response).toBeDefined()
+		// Should be truncated — well under 5000
+		expect(response.summary_length).toBeLessThanOrEqual(3510)
+		expect(response.summary.endsWith('...')).toBe(true)
+		expect(response.preview_url).toBeNull()
+	})
+
+	test('long summary with preview URL is aggressively shortened', async () => {
+		await writeFile(invocationsFile, '')
+
+		const { bridge, eventBus } = makeBridge()
+		bridge.start()
+
+		const session = await sessionService.findOrCreate({
+			provider_id: 'trunc-prov',
+			external_conversation_id: `chat-trunc-preview-${Date.now()}`,
+			mode: 'query',
+		})
+
+		const query = await queryService.create({
+			prompt: 'build artifact',
+			agent_id: 'dev',
+			allow_repo_mutation: true,
+			session_id: session.id,
+			created_by: 'test',
+		})
+
+		const longSummary = 'B'.repeat(2000)
+		const runId = `run-trunc-preview-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'test',
+		})
+		await queryService.linkRun(query.id, runId)
+		await runService.start(runId)
+		await runService.complete(runId, { status: 'completed', summary: longSummary })
+
+		// Create a preview_url artifact for this run
+		await artifactService.create({
+			id: `art-preview-${Date.now()}`,
+			run_id: runId,
+			kind: 'preview_url',
+			title: 'Preview',
+			ref_kind: 'url',
+			ref_value: 'http://localhost:7778/api/previews/' + runId + '/index.html',
+		})
+
+		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
+		await new Promise((r) => setTimeout(r, 2000))
+		bridge.stop()
+
+		const content = await Bun.file(invocationsFile).text()
+		const lines = content.trim().split('\n').filter(Boolean)
+		const entries = lines.map((l) => JSON.parse(l))
+
+		const response = entries.find((e: Record<string, unknown>) => e.event_type === 'query_response')
+		expect(response).toBeDefined()
+		// With preview_url, should be aggressively truncated (500 + suffix)
+		expect(response.summary_length).toBeLessThanOrEqual(600)
+		expect(response.summary).toContain('preview')
+		// Preview URL should still be present in payload
+		expect(response.preview_url).toContain('/api/previews/')
+	})
+})
+
+// ─── Test: TaskProgressBridge universal card fallback ───────────────────────
+
+describe('TaskProgressBridge universal card fallback', () => {
+	const testRoot = join(tmpdir(), `qp-bridge-card-${Date.now()}`)
+	const invocationsFile = join(testRoot, 'card-invocations.jsonl')
+
+	let dbResult: CompanyDbResult
+	let runService: RunService
+	let taskService: TaskService
+	let artifactService: ArtifactService
+	let sessionService: SessionService
+	let sessionMessageService: SessionMessageService
+	let bindingService: ConversationBindingService
+
+	beforeAll(async () => {
+		await mkdir(join(testRoot, '.autopilot', 'handlers'), { recursive: true })
+
+		const CARD_HANDLER_SRC = `import { appendFileSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+const input = await Bun.stdin.text()
+const envelope = JSON.parse(input)
+const counterFile = '${join(testRoot, 'card-counter.txt')}'
+let counter = 1
+if (existsSync(counterFile)) {
+  counter = parseInt(readFileSync(counterFile, 'utf-8').trim(), 10) + 1
+}
+writeFileSync(counterFile, String(counter))
+appendFileSync('${invocationsFile}', JSON.stringify({
+  op: envelope.op,
+  event_type: envelope.payload?.event_type,
+  summary: envelope.payload?.summary,
+  conversation_id: envelope.payload?.conversation_id,
+  edit_message_id: envelope.payload?.edit_message_id || null,
+  normalized_status: envelope.payload?.normalized_status || null,
+  counter,
+}) + '\\n')
+console.log(JSON.stringify({ ok: true, external_id: 'ext-card-' + counter }))`
+
+		await writeFile(join(testRoot, '.autopilot', 'handlers', 'card-handler.ts'), CARD_HANDLER_SRC)
+
+		dbResult = await createCompanyDb(testRoot)
+		runService = new RunService(dbResult.db)
+		taskService = new TaskService(dbResult.db)
+		artifactService = new ArtifactService(dbResult.db)
+		sessionService = new SessionService(dbResult.db)
+		sessionMessageService = new SessionMessageService(dbResult.db)
+		bindingService = new ConversationBindingService(dbResult.db)
+	})
+
+	afterAll(async () => {
+		dbResult.raw.close()
+		await rm(testRoot, { recursive: true, force: true })
+	})
+
+	function makeCardProvider(id: string, defaultChatId: string): Provider {
+		return {
+			id,
+			name: id,
+			kind: 'conversation_channel',
+			handler: 'handlers/card-handler.ts',
+			capabilities: [{ op: 'conversation.ingest' }, { op: 'notify.send' }],
+			events: [
+				{ types: ['run_completed'], statuses: ['completed', 'failed'] },
+				{ types: ['run_event'] },
+				{ types: ['task_changed'] },
+			],
+			config: { default_chat_id: defaultChatId },
+			secret_refs: [],
+			description: '',
+		}
+	}
+
+	function makeConfig(providers: Map<string, Provider>) {
+		return {
+			company: {},
+			agents: new Map(),
+			workflows: new Map(),
+			environments: new Map(),
+			providers,
+			capabilityProfiles: new Map(),
+			defaults: { runtime: 'claude-code' },
+		}
+	}
+
+	test('unbound task gets card in default chat', async () => {
+		await writeFile(invocationsFile, '')
+		await writeFile(join(testRoot, 'card-counter.txt'), '0')
+
+		const eventBus = new EventBus()
+		const providers = new Map([['card-prov-1', makeCardProvider('card-prov-1', 'default-chat-card')]])
+
+		const { TaskProgressBridge } = await import('../src/providers/task-progress-bridge')
+		const bridge = new TaskProgressBridge(
+			eventBus,
+			makeConfig(providers),
+			runService,
+			taskService,
+			artifactService,
+			bindingService,
+			{ companyRoot: testRoot, orchestratorUrl: 'http://localhost:7778' },
+			undefined,
+			sessionService,
+			sessionMessageService,
+		)
+		bridge.start()
+
+		// Create task + run (no binding!)
+		const taskId = `task-card-unbound-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Unbound task card test',
+			type: 'development',
+			created_by: 'test',
+		})
+
+		const runId = `run-card-unbound-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			task_id: taskId,
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'test',
+		})
+
+		// Emit task_created
+		eventBus.emit({ type: 'task_created', taskId, title: 'Unbound task card test' })
+		await new Promise((r) => setTimeout(r, 2000))
+
+		bridge.stop()
+
+		const content = await Bun.file(invocationsFile).text()
+		const lines = content.trim().split('\n').filter(Boolean)
+		const entries = lines.map((l) => JSON.parse(l))
+
+		// Should have at least one card sent to default-chat-card
+		const defaultChatCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-card')
+		expect(defaultChatCalls.length).toBeGreaterThanOrEqual(1)
+		expect(defaultChatCalls[0].event_type).toBe('task_progress')
+	})
+
+	test('explicit binding uses binding conversation, not default chat', async () => {
+		await writeFile(invocationsFile, '')
+		await writeFile(join(testRoot, 'card-counter.txt'), '0')
+
+		const eventBus = new EventBus()
+		const providers = new Map([['card-prov-2', makeCardProvider('card-prov-2', 'default-chat-bound')]])
+
+		const { TaskProgressBridge } = await import('../src/providers/task-progress-bridge')
+		const bridge = new TaskProgressBridge(
+			eventBus,
+			makeConfig(providers),
+			runService,
+			taskService,
+			artifactService,
+			bindingService,
+			{ companyRoot: testRoot, orchestratorUrl: 'http://localhost:7778' },
+			undefined,
+			sessionService,
+			sessionMessageService,
+		)
+		bridge.start()
+
+		// Create task WITH explicit binding
+		const taskId = `task-card-bound-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Bound task card test',
+			type: 'development',
+			created_by: 'test',
+		})
+		await bindingService.create({
+			id: `bind-card-${Date.now()}`,
+			provider_id: 'card-prov-2',
+			external_conversation_id: 'explicit-chat-123',
+			external_thread_id: 'thread-123',
+			mode: 'task_thread',
+			task_id: taskId,
+		})
+
+		eventBus.emit({ type: 'task_created', taskId, title: 'Bound task card test' })
+		await new Promise((r) => setTimeout(r, 2000))
+
+		bridge.stop()
+
+		const content = await Bun.file(invocationsFile).text()
+		const lines = content.trim().split('\n').filter(Boolean)
+		const entries = lines.map((l) => JSON.parse(l))
+
+		// Should go to explicit-chat-123, NOT default-chat-bound
+		const explicitCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'explicit-chat-123')
+		const defaultChatCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-bound')
+		expect(explicitCalls.length).toBeGreaterThanOrEqual(1)
+		expect(defaultChatCalls.length).toBe(0)
+	})
+
+	test('failed task card shows failure', async () => {
+		await writeFile(invocationsFile, '')
+		await writeFile(join(testRoot, 'card-counter.txt'), '0')
+
+		const eventBus = new EventBus()
+		const providers = new Map([['card-prov-3', makeCardProvider('card-prov-3', 'default-chat-fail')]])
+
+		const { TaskProgressBridge } = await import('../src/providers/task-progress-bridge')
+		const bridge = new TaskProgressBridge(
+			eventBus,
+			makeConfig(providers),
+			runService,
+			taskService,
+			artifactService,
+			bindingService,
+			{ companyRoot: testRoot, orchestratorUrl: 'http://localhost:7778' },
+			undefined,
+			sessionService,
+			sessionMessageService,
+		)
+		bridge.start()
+
+		const taskId = `task-card-fail-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Failing task',
+			type: 'development',
+			created_by: 'test',
+		})
+
+		const runId = `run-card-fail-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			task_id: taskId,
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'test',
+		})
+		await runService.start(runId)
+		await runService.complete(runId, { status: 'failed', summary: 'Something went wrong' })
+
+		// Update task status to failed
+		await taskService.update(taskId, { status: 'failed' })
+
+		eventBus.emit({ type: 'run_completed', runId, status: 'failed' })
+		await new Promise((r) => setTimeout(r, 2000))
+
+		bridge.stop()
+
+		const content = await Bun.file(invocationsFile).text()
+		const lines = content.trim().split('\n').filter(Boolean)
+		const entries = lines.map((l) => JSON.parse(l))
+
+		const failCard = entries.find((e: Record<string, unknown>) =>
+			e.conversation_id === 'default-chat-fail' && e.event_type === 'task_progress'
+		)
+		expect(failCard).toBeDefined()
+		expect(failCard.normalized_status).toBe('failed')
+	})
+})
+
+// ─── Test: NotificationBridge suppression ──────────────────────────────────
+
+describe('NotificationBridge task-scoped suppression', () => {
+	const testRoot = join(tmpdir(), `qp-notif-suppress-${Date.now()}`)
+	const invocationsFile = join(testRoot, 'suppress-invocations.jsonl')
+
+	let dbResult: CompanyDbResult
+	let runService: RunService
+	let taskService: TaskService
+	let artifactService: ArtifactService
+	let sessionService: SessionService
+	let sessionMessageService: SessionMessageService
+	let bindingService: ConversationBindingService
+
+	beforeAll(async () => {
+		await mkdir(join(testRoot, '.autopilot', 'handlers'), { recursive: true })
+
+		const HANDLER_SRC = `import { appendFileSync } from 'node:fs'
+const input = await Bun.stdin.text()
+const envelope = JSON.parse(input)
+appendFileSync('${invocationsFile}', JSON.stringify({
+  op: envelope.op,
+  event_type: envelope.payload?.event_type,
+  conversation_id: envelope.payload?.conversation_id,
+}) + '\\n')
+console.log(JSON.stringify({ ok: true }))`
+
+		await writeFile(join(testRoot, '.autopilot', 'handlers', 'suppress-handler.ts'), HANDLER_SRC)
+
+		dbResult = await createCompanyDb(testRoot)
+		runService = new RunService(dbResult.db)
+		taskService = new TaskService(dbResult.db)
+		artifactService = new ArtifactService(dbResult.db)
+		sessionService = new SessionService(dbResult.db)
+		sessionMessageService = new SessionMessageService(dbResult.db)
+		bindingService = new ConversationBindingService(dbResult.db)
+	})
+
+	afterAll(async () => {
+		dbResult.raw.close()
+		await rm(testRoot, { recursive: true, force: true })
+	})
+
+	test('NotificationBridge does not send task-scoped default-chat notifications', async () => {
+		await writeFile(invocationsFile, '')
+
+		const eventBus = new EventBus()
+		const provider: Provider = {
+			id: 'suppress-prov',
+			name: 'Suppress Prov',
+			kind: 'conversation_channel',
+			handler: 'handlers/suppress-handler.ts',
+			capabilities: [{ op: 'notify.send' }],
+			events: [
+				{ types: ['run_completed'], statuses: ['completed', 'failed'] },
+			],
+			config: { default_chat_id: 'default-chat-suppress' },
+			secret_refs: [],
+			description: '',
+		}
+
+		const authoredConfig = {
+			company: {},
+			agents: new Map(),
+			workflows: new Map(),
+			environments: new Map(),
+			providers: new Map([['suppress-prov', provider]]),
+			capabilityProfiles: new Map(),
+			defaults: { runtime: 'claude-code' },
+		}
+
+		// Only start NotificationBridge (NOT TaskProgressBridge)
+		const bridge = new NotificationBridge(
+			eventBus,
+			authoredConfig,
+			runService,
+			taskService,
+			artifactService,
+			bindingService,
+			{ companyRoot: testRoot, orchestratorUrl: 'http://localhost:7778' },
+			undefined,
+			sessionService,
+			sessionMessageService,
+		)
+		bridge.start()
+
+		// Create task + run
+		const taskId = `task-suppress-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Suppression test task',
+			type: 'development',
+			created_by: 'test',
+		})
+
+		const runId = `run-suppress-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			task_id: taskId,
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'test',
+		})
+		await runService.start(runId)
+		await runService.complete(runId, { status: 'completed', summary: 'Done' })
+
+		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
+		await new Promise((r) => setTimeout(r, 2000))
+		bridge.stop()
+
+		const content = await Bun.file(invocationsFile).text()
+		const lines = content.trim().split('\n').filter(Boolean)
+		const entries = lines.map((l) => JSON.parse(l))
+
+		// Should NOT have any calls to default-chat-suppress
+		const defaultChatCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-suppress')
+		expect(defaultChatCalls.length).toBe(0)
 	})
 })

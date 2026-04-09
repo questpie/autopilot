@@ -15,6 +15,8 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
+import { sql } from 'drizzle-orm'
+import * as authSchema from '../db/auth-schema'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
@@ -97,6 +99,8 @@ export interface AppConfig {
 	orchestratorUrl?: string
 	/** Raw libSQL client for index.db (search). */
 	indexDbRaw?: Client
+	/** Absolute path to the built operator-web dist directory. */
+	operatorWebDist?: string
 }
 
 const orchestratorPkg = JSON.parse(
@@ -163,6 +167,13 @@ export function createApp(config: AppConfig) {
 
 	// ── Public routes ────────────────────────────────────────────────────
 	app.get('/api/health', (c) => c.json({ ok: true, ts: new Date().toISOString(), version: orchestratorPkg.version }))
+
+	app.get('/api/status', async (c) => {
+		const db = c.get('db')
+		const row = await db.select({ count: sql<number>`count(*)` }).from(authSchema.user).get()
+		const userCount = Number(row?.count ?? 0)
+		return c.json({ userCount, setupCompleted: userCount > 0 })
+	})
 
 	// ── Auth helper (local dev bypass gated behind server-side flag) ─────
 	const userAuth = authMiddleware({ allowLocalDevBypass: config.allowLocalDevBypass ?? false })
@@ -292,6 +303,106 @@ export function createApp(config: AppConfig) {
 		.route('/api/schedules', schedules)
 		.route('/api/queues', queues)
 		.route('/api/search', searchRoute)
+
+	// ── Operator Web SPA serving ────────────────────────────────────────────
+	if (config.operatorWebDist) {
+		const distDir = config.operatorWebDist
+
+		const mimeTypes: Record<string, string> = {
+			'.js': 'text/javascript',
+			'.mjs': 'text/javascript',
+			'.css': 'text/css',
+			'.html': 'text/html',
+			'.json': 'application/json',
+			'.svg': 'image/svg+xml',
+			'.png': 'image/png',
+			'.jpg': 'image/jpeg',
+			'.jpeg': 'image/jpeg',
+			'.gif': 'image/gif',
+			'.ico': 'image/x-icon',
+			'.woff': 'font/woff',
+			'.woff2': 'font/woff2',
+			'.ttf': 'font/ttf',
+			'.otf': 'font/otf',
+			'.webp': 'image/webp',
+			'.avif': 'image/avif',
+			'.webm': 'video/webm',
+			'.mp4': 'video/mp4',
+			'.txt': 'text/plain',
+			'.xml': 'application/xml',
+			'.map': 'application/json',
+		}
+
+		function getMimeType(path: string): string {
+			const dot = path.lastIndexOf('.')
+			if (dot === -1) return 'application/octet-stream'
+			return mimeTypes[path.slice(dot).toLowerCase()] ?? 'application/octet-stream'
+		}
+
+		// Serve static assets from /app/assets/
+		app.get('/app/assets/*', async (c) => {
+			const filePath = c.req.path.replace('/app/', '')
+			const fullPath = resolve(distDir, filePath)
+
+			try {
+				const file = Bun.file(fullPath)
+				if (await file.exists()) {
+					return new Response(file, {
+						headers: { 'Content-Type': getMimeType(fullPath) },
+					})
+				}
+			} catch {
+				// fall through
+			}
+			return c.notFound()
+		})
+
+		// SPA fallback for /app/*
+		app.get('/app/*', async (c) => {
+			const reqPath = c.req.path.replace('/app', '').replace(/^\//, '')
+
+			// Try to serve static file first (for files with extensions)
+			if (reqPath && /\.\w+$/.test(reqPath)) {
+				const fullPath = resolve(distDir, reqPath)
+				try {
+					const file = Bun.file(fullPath)
+					if (await file.exists()) {
+						return new Response(file, {
+							headers: { 'Content-Type': getMimeType(fullPath) },
+						})
+					}
+				} catch {
+					// fall through to index.html
+				}
+			}
+
+			// SPA fallback — serve index.html with injected env
+			const indexPath = resolve(distDir, 'index.html')
+			try {
+				const file = Bun.file(indexPath)
+				if (!(await file.exists())) {
+					return c.json({ error: 'operator-web not built' }, 503)
+				}
+
+				let html = await file.text()
+				const runtimeEnv = {
+					APP_URL: config.orchestratorUrl || env.ORCHESTRATOR_URL || '',
+					API_BASE_URL: '',
+				}
+				html = html.replace(
+					'<script id="__runtime-env__" type="application/json">{}</script>',
+					`<script id="__runtime-env__" type="application/json">${JSON.stringify(runtimeEnv)}</script>`,
+				)
+
+				return c.html(html)
+			} catch {
+				return c.json({ error: 'operator-web not built' }, 503)
+			}
+		})
+
+		// Redirect /app to /app/
+		app.get('/app', (c) => c.redirect('/app/'))
+	}
 
 	return typedApp
 }

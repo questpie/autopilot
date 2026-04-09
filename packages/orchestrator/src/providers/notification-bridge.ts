@@ -1,22 +1,21 @@
 /**
  * Notification bridge — connects orchestrator events to outbound providers.
  *
- * Handles two delivery paths:
- * 1. Generic notification_channel delivery (event-filter matched)
- * 2. Bound conversation_channel delivery (task-scoped via conversation bindings)
+ * Delivers to generic notification_channel providers (event-filter matched).
+ * Task-scoped conversation delivery is owned by TaskProgressBridge.
+ * Query response delivery is owned by QueryResponseBridge.
  *
  * No retry system yet. Failures are logged, not queued.
  */
-import type { AutopilotEvent } from '../events/event-bus'
-import type { EventBus } from '../events/event-bus'
+import type { AutopilotEvent, EventBus } from '../events/event-bus'
 import type { Provider, NotificationPayload, NotificationAction, HandlerResult } from '@questpie/autopilot-spec'
 import type { AuthoredConfig } from '../services/workflow-engine'
 import type { RunService } from '../services/runs'
 import type { TaskService } from '../services/tasks'
 import type { ArtifactService } from '../services/artifacts'
 import type { ConversationBindingService } from '../services/conversation-bindings'
-import type { SessionService } from '../services/sessions'
 import type { SecretService } from '../services/secrets'
+import type { SessionService } from '../services/sessions'
 import type { SessionMessageService } from '../services/session-messages'
 import { invokeProvider, type HandlerRuntimeConfig } from './handler-runtime'
 
@@ -71,58 +70,8 @@ export class NotificationBridge {
 			await this.sendToProvider(provider, payload, runtimeConfig)
 		}
 
-		// 2. Bound conversation_channel delivery (task-scoped outbound)
-		// If the task has task_thread bindings, TaskProgressBridge handles all
-		// delivery for that task — skip both bound and default-chat delivery here.
-		const taskBindings = payload.task_id
-			? await this.conversationBindingService.listForTask(payload.task_id)
-			: []
-		const hasTaskThreadBindings = taskBindings.some((b) => b.mode === 'task_thread')
-
-		if (payload.task_id && !hasTaskThreadBindings) {
-			await this.deliverToBoundConversations(payload, event, runtimeConfig, taskBindings)
-		}
-
-		// 3. Default-chat delivery for conversation_channel providers.
-		// Only for task-scoped events with no explicit binding for that provider;
-		// query responses are delivered by QueryResponseBridge.
-		// Skip entirely when task_thread bindings exist (TaskProgressBridge handles it).
-		if (payload && payload.task_id && !hasTaskThreadBindings) {
-			for (const provider of this.authoredConfig.providers.values()) {
-				if (provider.kind !== 'conversation_channel') continue
-				if (!provider.capabilities.some((c) => c.op === 'notify.send')) continue
-				if (!this.matchesEventFilters(provider, event)) continue
-
-				const defaultChatId = provider.config.default_chat_id
-				if (typeof defaultChatId !== 'string' || !defaultChatId) continue
-
-				// Send notification to default chat
-				const chatPayload: NotificationPayload = {
-					...payload,
-					conversation_id: defaultChatId,
-				}
-				const sendResult = await this.sendToProvider(provider, chatPayload, runtimeConfig)
-
-				// Store system message only if send succeeded
-				if (sendResult?.ok && this.sessionService && this.sessionMessageService) {
-					const chatSession = await this.sessionService.findOrCreate({
-						provider_id: provider.id,
-						external_conversation_id: defaultChatId,
-						mode: 'query',
-					})
-					await this.sessionMessageService.create({
-						session_id: chatSession.id,
-						role: 'system',
-						content: `[${payload.event_type}] ${payload.title}: ${payload.summary}`.slice(0, 2000),
-						metadata: JSON.stringify({
-							task_id: payload.task_id,
-							run_id: payload.run_id,
-							notification_type: payload.event_type,
-						}),
-					})
-				}
-			}
-		}
+		// Task-scoped conversation delivery (bound + default-chat) is owned by TaskProgressBridge.
+		// Query response delivery is owned by QueryResponseBridge.
 	}
 
 	private async sendToProvider(
@@ -145,76 +94,6 @@ export class NotificationBridge {
 				err instanceof Error ? err.message : String(err),
 			)
 			return undefined
-		}
-	}
-
-	/**
-	 * For task-scoped events, look up conversation bindings and deliver
-	 * to bound conversation_channel providers with conversation context.
-	 */
-	private async deliverToBoundConversations(
-		payload: NotificationPayload,
-		event: AutopilotEvent,
-		runtimeConfig: HandlerRuntimeConfig,
-		bindings?: Awaited<ReturnType<ConversationBindingService['listForTask']>>,
-	): Promise<void> {
-		const targetBindings = bindings ?? await this.conversationBindingService.listForTask(payload.task_id!)
-		for (const binding of targetBindings) {
-			// Only task_thread bindings receive task-scoped outbound updates
-			if (binding.mode !== 'task_thread') continue
-
-			const provider = this.authoredConfig.providers.get(binding.provider_id)
-			if (!provider) continue
-			if (provider.kind !== 'conversation_channel') continue
-			if (!provider.capabilities.some((c) => c.op === 'notify.send')) continue
-			if (!this.matchesEventFilters(provider, event)) continue
-
-			// Enrich payload with conversation routing context
-			const boundPayload: NotificationPayload = {
-				...payload,
-				conversation_id: binding.external_conversation_id,
-				thread_id: binding.external_thread_id ?? undefined,
-				binding_mode: binding.mode,
-			}
-
-			const sendResult = await this.sendToProvider(provider, boundPayload, runtimeConfig)
-
-			// Create task_thread session keyed to the real outbound message identity.
-			// The handler's external_id (e.g. Telegram message_id) is the thread anchor —
-			// inbound callbacks/replies will carry this as thread_id, so the session must
-			// match it. Without this, a chat-level session would claim the entire chat as
-			// task_thread, breaking the general-chat = query-first invariant.
-			if (this.sessionService && payload.task_id) {
-				const threadId = sendResult?.external_id || (binding.external_thread_id ?? undefined)
-				if (!threadId) {
-					console.debug(`[notification-bridge] skipping task_thread session for binding ${binding.id}: no thread_id available`)
-					continue
-				}
-				const taskSession = await this.sessionService.findOrCreate({
-					provider_id: binding.provider_id,
-					external_conversation_id: binding.external_conversation_id,
-					external_thread_id: threadId,
-					mode: 'task_thread',
-					task_id: payload.task_id,
-				}).catch((err) => {
-					console.warn(`[notification-bridge] session creation failed for binding ${binding.id}:`, err instanceof Error ? err.message : String(err))
-					return undefined
-				})
-
-				// Store system notification as session message
-				if (this.sessionMessageService && taskSession) {
-					await this.sessionMessageService.create({
-						session_id: taskSession.id,
-						role: 'system',
-						content: `[${payload.event_type}] ${payload.title}: ${payload.summary}`.slice(0, 2000),
-						metadata: JSON.stringify({
-							task_id: payload.task_id,
-							run_id: payload.run_id,
-							notification_type: payload.event_type,
-						}),
-					})
-				}
-			}
 		}
 	}
 
@@ -255,10 +134,20 @@ export class NotificationBridge {
 		return false
 	}
 
-	/**
-	 * Build a normalized notification payload from an orchestrator event.
-	 * Returns null for non-actionable events.
-	 */
+	/** Truncate summary for safe chat delivery. Aggressive when a detail URL exists. */
+	private truncateSummary(summary: string, hasDetailUrl: boolean): string {
+		const AGGRESSIVE_LIMIT = 500
+		const SAFE_LIMIT = 3500
+
+		if (hasDetailUrl && summary.length > AGGRESSIVE_LIMIT) {
+			return summary.slice(0, AGGRESSIVE_LIMIT) + '...\n\nSee task/preview for full details.'
+		}
+		if (summary.length > SAFE_LIMIT) {
+			return summary.slice(0, SAFE_LIMIT) + '...'
+		}
+		return summary
+	}
+
 	private async buildPayload(event: AutopilotEvent): Promise<NotificationPayload | null> {
 		const baseUrl = this.config.orchestratorUrl
 
@@ -270,16 +159,20 @@ export class NotificationBridge {
 				// Look up preview_url artifact for this run
 				const previewUrl = await this.findPreviewUrl(event.runId)
 
+				const rawSummary = run?.summary ?? `Run ${event.runId} ${event.status}`
+				const taskUrl = baseUrl && run?.task_id ? `${baseUrl}/api/tasks/${run.task_id}` : undefined
+				const hasDetailUrl = !!(previewUrl || taskUrl)
+
 				return {
 					orchestrator_url: baseUrl,
 					event_type: 'run_completed',
 					severity: failed ? 'error' : 'info',
 					title: failed ? `Run failed: ${event.runId}` : `Run completed: ${event.runId}`,
-					summary: run?.summary ?? `Run ${event.runId} ${event.status}`,
+					summary: this.truncateSummary(rawSummary, hasDetailUrl),
 					run_id: event.runId,
 					run_url: baseUrl ? `${baseUrl}/api/runs/${event.runId}` : undefined,
 					task_id: run?.task_id ?? undefined,
-					task_url: baseUrl && run?.task_id ? `${baseUrl}/api/tasks/${run.task_id}` : undefined,
+					task_url: taskUrl,
 					agent_id: run?.agent_id ?? undefined,
 					preview_url: previewUrl ?? undefined,
 				}
@@ -290,15 +183,18 @@ export class NotificationBridge {
 
 				const task = await this.taskService.get(event.taskId)
 				const actions = task ? this.resolveNotificationActions(task) : undefined
+				const taskUrl = baseUrl ? `${baseUrl}/api/tasks/${event.taskId}` : undefined
+
+				const rawSummary = task?.title ?? `Task ${event.taskId} is ${event.status}`
 
 				return {
 					orchestrator_url: baseUrl,
 					event_type: 'task_blocked',
 					severity: 'warning',
 					title: `Task needs attention: ${task?.title ?? event.taskId}`,
-					summary: task?.title ?? `Task ${event.taskId} is ${event.status}`,
+					summary: this.truncateSummary(rawSummary, !!taskUrl),
 					task_id: event.taskId,
-					task_url: baseUrl ? `${baseUrl}/api/tasks/${event.taskId}` : undefined,
+					task_url: taskUrl,
 					actions,
 				}
 			}

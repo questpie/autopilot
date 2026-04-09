@@ -197,7 +197,13 @@ if (op === 'notify.send') {
 			`${icon} <b>${escapeHtml(title)}</b>`,
 		]
 
-		if (summary) lines.push('', escapeHtml(summary))
+		// Safety truncation — even if bridge didn't truncate, keep Telegram-safe
+		const hasDetailLink = !!(previewUrl || taskUrl)
+		const summaryLimit = hasDetailLink ? 500 : 3000
+		const safeSummary = summary.length > summaryLimit
+			? summary.slice(0, summaryLimit) + '...'
+			: summary
+		if (safeSummary) lines.push('', escapeHtml(safeSummary))
 		if (previewUrl) lines.push('', `\ud83d\udd17 <a href="${escapeHtml(previewUrl)}">Preview</a>`)
 		if (taskUrl) lines.push(`\ud83d\udcdd <a href="${escapeHtml(taskUrl)}">Task details</a>`)
 

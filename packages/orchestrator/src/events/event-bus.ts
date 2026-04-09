@@ -1,5 +1,6 @@
 export type AutopilotEvent =
 	| { type: 'task_changed'; taskId: string; status: string }
+	| { type: 'task_created'; taskId: string; title: string }
 	| { type: 'run_started'; runId: string; agentId: string }
 	| { type: 'run_event'; runId: string; eventType: string; summary: string }
 	| { type: 'run_completed'; runId: string; status: string }

@@ -265,6 +265,17 @@ console.log(JSON.stringify({
   },
 }))`
 
+	const QUERY_HANDLER = `const input = await Bun.stdin.text()
+const envelope = JSON.parse(input)
+console.log(JSON.stringify({
+  ok: true,
+  metadata: {
+    action: 'query.message',
+    conversation_id: envelope.payload.conversation_id || 'chat-q1',
+    message: envelope.payload.text || '',
+  },
+}))`
+
 	const COMMAND_HANDLER = `const input = await Bun.stdin.text()
 const envelope = JSON.parse(input)
 console.log(JSON.stringify({
@@ -367,6 +378,7 @@ console.log(JSON.stringify({
 		await writeFile(join(companyRoot, '.autopilot', 'handlers', 'noop.ts'), NOOP_HANDLER)
 		await writeFile(join(companyRoot, '.autopilot', 'handlers', 'unbound.ts'), UNBOUND_HANDLER)
 		await writeFile(join(companyRoot, '.autopilot', 'handlers', 'command.ts'), COMMAND_HANDLER)
+		await writeFile(join(companyRoot, '.autopilot', 'handlers', 'query.ts'), QUERY_HANDLER)
 		dbResult = await createCompanyDb(companyRoot)
 	})
 
@@ -789,6 +801,98 @@ console.log(JSON.stringify({
 		)
 		expect(res.status).toBe(409)
 		delete process.env.__TEST_CONV_SECRET_conv8
+	})
+
+	describe('query routing — mutable by default', () => {
+		test('plain conversation message dispatches query with mutation allowed', async () => {
+			const envKey = '__TEST_CONV_SECRET_qmut1'
+			process.env[envKey] = 'secret-qmut1'
+			const providers = new Map([['qmut1', makeProvider('qmut1', 'handlers/query.ts')]])
+			const svc = makeServices()
+			const localApp = buildApp(providers, svc)
+
+			const res = await localApp.request(
+				'/api/conversations/qmut1',
+				post(
+					{ conversation_id: 'chat-q1', text: 'build me a landing page' },
+					{ 'x-provider-secret': 'secret-qmut1' },
+				),
+			)
+			expect(res.status).toBe(200)
+			const body = await res.json() as any
+			expect(body.action).toBe('query.dispatched')
+			expect(body.run_id).toBeDefined()
+
+			// Verify the created query has allow_repo_mutation = true
+			const query = await svc.queryService.get(body.query_id)
+			expect(query).toBeDefined()
+			expect(query!.allow_repo_mutation).toBe(true)
+
+			delete process.env[envKey]
+		})
+
+		test('/read prefix dispatches query with mutation disabled', async () => {
+			const envKey = '__TEST_CONV_SECRET_qread1'
+			process.env[envKey] = 'secret-qread1'
+			const providers = new Map([['qread1', makeProvider('qread1', 'handlers/query.ts')]])
+			const svc = makeServices()
+			const localApp = buildApp(providers, svc)
+
+			const res = await localApp.request(
+				'/api/conversations/qread1',
+				post(
+					{ conversation_id: 'chat-qread', text: '/read explain this file' },
+					{ 'x-provider-secret': 'secret-qread1' },
+				),
+			)
+			expect(res.status).toBe(200)
+			const body = await res.json() as any
+			expect(body.action).toBe('query.dispatched')
+
+			// Verify the query has allow_repo_mutation = false
+			const query = await svc.queryService.get(body.query_id)
+			expect(query).toBeDefined()
+			expect(query!.allow_repo_mutation).toBe(false)
+			// Verify the prompt has the /read prefix stripped
+			expect(query!.prompt).toBe('explain this file')
+
+			delete process.env[envKey]
+		})
+
+		test('/read without content does not dispatch a run', async () => {
+			const envKey = '__TEST_CONV_SECRET_qread2'
+			process.env[envKey] = 'secret-qread2'
+
+			const providerWithNotify: Provider = {
+				id: 'qread2',
+				name: 'qread2',
+				kind: 'conversation_channel',
+				handler: 'handlers/query.ts',
+				capabilities: [{ op: 'conversation.ingest' }, { op: 'notify.send' }],
+				events: [],
+				config: {},
+				secret_refs: [{ name: 'auth_secret', source: 'env', key: '__TEST_CONV_SECRET_qread2' }],
+				description: '',
+			}
+
+			const providers = new Map([['qread2', providerWithNotify]])
+			const svc = makeServices()
+			const localApp = buildApp(providers, svc)
+
+			const res = await localApp.request(
+				'/api/conversations/qread2',
+				post(
+					{ conversation_id: 'chat-qread-empty', text: '/read' },
+					{ 'x-provider-secret': 'secret-qread2' },
+				),
+			)
+			expect(res.status).toBe(200)
+			const body = await res.json() as any
+			expect(body.action).toBe('command.help')
+			expect(body.command).toBe('read')
+
+			delete process.env[envKey]
+		})
 	})
 
 	function makeServices(): Services {

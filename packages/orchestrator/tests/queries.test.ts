@@ -22,6 +22,7 @@ import {
 	QueryRowSchema,
 	RunCompletionSchema,
 } from '@questpie/autopilot-spec'
+import { buildQueryInstructions } from '../src/services/queries'
 import { createCompanyDb, type CompanyDbResult, companySchema, type CompanyDb } from '../src/db'
 import {
 	TaskService,
@@ -284,7 +285,7 @@ describe('POST /api/queries', () => {
 		expect(runRes.status).toBe(200)
 		const run = (await runRes.json()) as { id: string; task_id: string | null; instructions: string }
 		expect(run.task_id).toBeNull()
-		expect(run.instructions).toContain('QUERY MODE')
+		expect(run.instructions).toContain('Query Mode')
 		expect(run.instructions).toContain('List all agents')
 	})
 
@@ -299,7 +300,7 @@ describe('POST /api/queries', () => {
 		const runRes = await app.request(`/api/runs/${body.run_id}`)
 		const run = (await runRes.json()) as { instructions: string }
 		expect(run.instructions).toContain('read-only')
-		expect(run.instructions).not.toContain('repo mutation allowed')
+		expect(run.instructions).not.toContain('mutable')
 	})
 
 	test('mutation-allowed query gets mutation instructions', async () => {
@@ -312,7 +313,7 @@ describe('POST /api/queries', () => {
 
 		const runRes = await app.request(`/api/runs/${body.run_id}`)
 		const run = (await runRes.json()) as { instructions: string }
-		expect(run.instructions).toContain('repo mutation allowed')
+		expect(run.instructions).toContain('mutable')
 	})
 
 	test('uses company default agent when none specified', async () => {
@@ -502,5 +503,37 @@ describe('task regression', () => {
 		expect(res.status).toBe(201)
 		const task = (await res.json()) as { id: string; title: string }
 		expect(task.title).toBe('Independent task')
+	})
+})
+
+describe('buildQueryInstructions', () => {
+	test('mutable query instructions include artifact guidance', () => {
+		const instructions = buildQueryInstructions('build a dashboard', {
+			allowMutation: true,
+			hasResume: false,
+		})
+		expect(instructions).toContain('mutable')
+		expect(instructions).toContain('preview_file')
+		expect(instructions).toContain('AUTOPILOT_RESULT')
+		expect(instructions).toContain('task')
+	})
+
+	test('mutable query instructions include Autopilot-native tooling bias', () => {
+		const instructions = buildQueryInstructions('create a prototype', {
+			allowMutation: true,
+			hasResume: false,
+		})
+		expect(instructions).toContain('Autopilot-native')
+		expect(instructions).not.toContain('read-only')
+	})
+
+	test('read-only query instructions forbid modification', () => {
+		const instructions = buildQueryInstructions('explain this', {
+			allowMutation: false,
+			hasResume: false,
+		})
+		expect(instructions).toContain('read-only')
+		expect(instructions).toContain('Do NOT modify')
+		expect(instructions).not.toContain('mutable')
 	})
 })

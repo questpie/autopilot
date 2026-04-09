@@ -17,6 +17,12 @@ interface MailService {
 function createMailService(): MailService {
 	return {
 		async send(opts) {
+			const hrefMatch = opts.html.match(/href="([^"]+)"/i)
+			const url = hrefMatch?.[1]
+			if (url) {
+				console.log(`[mail] would send to ${opts.to}: ${opts.subject}\n[mail] verification url: ${url}`)
+				return
+			}
 			console.log(`[mail] would send to ${opts.to}: ${opts.subject}`)
 		},
 	}

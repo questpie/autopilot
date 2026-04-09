@@ -1,13 +1,15 @@
 /**
  * Task progress bridge — maintains one editable progress message per task
- * for bound conversations (task_thread mode).
+ * for conversations.
+ *
+ * Delivery targets:
+ * 1. Explicit task_thread bindings — bound conversation delivery
+ * 2. Default-chat fallback — for tasks with no bindings, sends to each
+ *    conversation_channel provider's default_chat_id
  *
  * Instead of sending a new Telegram/Slack message for every run_completed or
  * task_changed event, this bridge sends ONE message per task and edits it
  * in-place as the task progresses through its workflow.
- *
- * Unbound tasks (no task_thread bindings) are ignored — NotificationBridge
- * handles those via default-chat delivery.
  */
 import type { AutopilotEvent, EventBus } from '../events/event-bus'
 import type { Provider, NotificationPayload, NotificationAction, HandlerResult } from '@questpie/autopilot-spec'
@@ -15,13 +17,21 @@ import type { AuthoredConfig } from '../services/workflow-engine'
 import type { RunService } from '../services/runs'
 import type { TaskService } from '../services/tasks'
 import type { ArtifactService } from '../services/artifacts'
-import type { ConversationBindingService, ConversationBindingRow } from '../services/conversation-bindings'
+import type { ConversationBindingService } from '../services/conversation-bindings'
 import type { SecretService } from '../services/secrets'
 import type { SessionService } from '../services/sessions'
 import type { SessionMessageService } from '../services/session-messages'
 import { invokeProvider, type HandlerRuntimeConfig } from './handler-runtime'
 
 type NormalizedStatus = 'working' | 'plan_ready' | 'waiting_for_review' | 'completed' | 'failed'
+
+interface DeliveryTarget {
+	providerId: string
+	conversationId: string
+	threadId?: string
+	bindingId: string
+	isDefaultChat: boolean
+}
 
 function computeNormalizedStatus(task: {
 	status: string
@@ -131,7 +141,53 @@ export class TaskProgressBridge {
 	 */
 	private eventTaskId(event: AutopilotEvent): string | undefined {
 		if (event.type === 'task_changed') return event.taskId
+		if (event.type === 'task_created') return event.taskId
 		return undefined
+	}
+
+	/**
+	 * Resolve delivery targets for a task.
+	 * Returns task_thread bindings if they exist, otherwise synthetic
+	 * default-chat targets for each conversation_channel provider.
+	 */
+	private async resolveDeliveryTargets(taskId: string): Promise<{
+		targets: DeliveryTarget[]
+		hasExplicitBindings: boolean
+	}> {
+		const bindings = await this.conversationBindingService.listForTask(taskId)
+		const taskThreadBindings = bindings.filter((b) => b.mode === 'task_thread')
+
+		if (taskThreadBindings.length > 0) {
+			return {
+				targets: taskThreadBindings.map((b) => ({
+					providerId: b.provider_id,
+					conversationId: b.external_conversation_id,
+					threadId: b.external_thread_id ?? undefined,
+					bindingId: b.id,
+					isDefaultChat: false,
+				})),
+				hasExplicitBindings: true,
+			}
+		}
+
+		// Fallback: default-chat for each conversation_channel provider
+		const targets: DeliveryTarget[] = []
+
+		for (const provider of this.authoredConfig.providers.values()) {
+			if (provider.kind !== 'conversation_channel') continue
+			if (!provider.capabilities.some((c) => c.op === 'notify.send')) continue
+			const defaultChatId = provider.config.default_chat_id
+			if (typeof defaultChatId !== 'string' || !defaultChatId) continue
+
+			targets.push({
+				providerId: provider.id,
+				conversationId: defaultChatId,
+				bindingId: `default:${provider.id}`,
+				isDefaultChat: true,
+			})
+		}
+
+		return { targets, hasExplicitBindings: false }
 	}
 
 	private async handleEvent(event: AutopilotEvent): Promise<void> {
@@ -145,6 +201,9 @@ export class TaskProgressBridge {
 			case 'task_changed':
 				await this.handleTaskChanged(event)
 				break
+			case 'task_created':
+				await this.handleTaskCreated(event)
+				break
 		}
 	}
 
@@ -157,9 +216,8 @@ export class TaskProgressBridge {
 		if (!run?.task_id) return
 
 		const taskId = run.task_id
-		const bindings = await this.conversationBindingService.listForTask(taskId)
-		const taskThreadBindings = bindings.filter((b) => b.mode === 'task_thread')
-		if (taskThreadBindings.length === 0) return
+		const { targets } = await this.resolveDeliveryTargets(taskId)
+		if (targets.length === 0) return
 
 		// Throttle check
 		const lastSent = this.lastProgressSent.get(taskId) ?? 0
@@ -173,8 +231,8 @@ export class TaskProgressBridge {
 
 		this.lastProgressSent.set(taskId, Date.now())
 
-		for (const binding of taskThreadBindings) {
-			await this.sendOrEditProgress(binding, task, status, {
+		for (const target of targets) {
+			await this.sendOrEditProgress(target, task, status, {
 				baseUrl,
 				summary: event.summary.slice(0, 200) || '\u23f3',
 			})
@@ -188,9 +246,8 @@ export class TaskProgressBridge {
 		if (!run?.task_id) return
 
 		const taskId = run.task_id
-		const bindings = await this.conversationBindingService.listForTask(taskId)
-		const taskThreadBindings = bindings.filter((b) => b.mode === 'task_thread')
-		if (taskThreadBindings.length === 0) return
+		const { targets } = await this.resolveDeliveryTargets(taskId)
+		if (targets.length === 0) return
 
 		const task = await this.taskService.get(taskId)
 		if (!task) return
@@ -210,8 +267,8 @@ export class TaskProgressBridge {
 
 		this.lastProgressSent.set(taskId, Date.now())
 
-		for (const binding of taskThreadBindings) {
-			await this.sendOrEditProgress(binding, task, status, {
+		for (const target of targets) {
+			await this.sendOrEditProgress(target, task, status, {
 				baseUrl,
 				summary,
 				previewUrl,
@@ -223,9 +280,8 @@ export class TaskProgressBridge {
 
 	private async handleTaskChanged(event: { type: 'task_changed'; taskId: string; status: string }): Promise<void> {
 		const taskId = event.taskId
-		const bindings = await this.conversationBindingService.listForTask(taskId)
-		const taskThreadBindings = bindings.filter((b) => b.mode === 'task_thread')
-		if (taskThreadBindings.length === 0) return
+		const { targets } = await this.resolveDeliveryTargets(taskId)
+		if (targets.length === 0) return
 
 		const task = await this.taskService.get(taskId)
 		if (!task) return
@@ -235,8 +291,8 @@ export class TaskProgressBridge {
 
 		this.lastProgressSent.set(taskId, Date.now())
 
-		for (const binding of taskThreadBindings) {
-			await this.sendOrEditProgress(binding, task, status, {
+		for (const target of targets) {
+			await this.sendOrEditProgress(target, task, status, {
 				baseUrl,
 				summary: task.title ?? `Task ${taskId} is ${event.status}`,
 			})
@@ -250,20 +306,44 @@ export class TaskProgressBridge {
 		}
 	}
 
+	// ── task_created: initial card ────────────────────────────────────────
+
+	private async handleTaskCreated(event: { type: 'task_created'; taskId: string; title: string }): Promise<void> {
+		const taskId = event.taskId
+
+		const task = await this.taskService.get(taskId)
+		if (!task) return
+
+		const { targets } = await this.resolveDeliveryTargets(taskId)
+		if (targets.length === 0) return
+
+		const status = computeNormalizedStatus(task)
+		const baseUrl = this.config.orchestratorUrl
+
+		this.lastProgressSent.set(taskId, Date.now())
+
+		for (const target of targets) {
+			await this.sendOrEditProgress(target, task, status, {
+				baseUrl,
+				summary: task.title,
+			})
+		}
+	}
+
 	// ── Core send/edit logic ───────────────────────────────────────────────
 
 	private async sendOrEditProgress(
-		binding: ConversationBindingRow,
+		target: DeliveryTarget,
 		task: { id: string; title: string; status: string; workflow_id?: string | null; workflow_step?: string | null },
 		status: NormalizedStatus,
 		opts: { baseUrl?: string; summary: string; previewUrl?: string },
 	): Promise<void> {
-		const provider = this.authoredConfig.providers.get(binding.provider_id)
+		const provider = this.authoredConfig.providers.get(target.providerId)
 		if (!provider) return
 		if (provider.kind !== 'conversation_channel') return
 		if (!provider.capabilities.some((c) => c.op === 'notify.send')) return
 
-		const existingMessageId = this.messageIdByTask.get(task.id)?.get(binding.id)
+		const existingMessageId = this.messageIdByTask.get(task.id)?.get(target.bindingId)
 		const actions = this.resolveNotificationActions(task)
 
 		const payload: NotificationPayload & {
@@ -279,12 +359,11 @@ export class TaskProgressBridge {
 			task_id: task.id,
 			task_url: opts.baseUrl ? `${opts.baseUrl}/api/tasks/${task.id}` : undefined,
 			preview_url: opts.previewUrl,
-			conversation_id: binding.external_conversation_id,
-			thread_id: binding.external_thread_id ?? undefined,
-			binding_mode: 'task_thread',
+			conversation_id: target.conversationId,
+			thread_id: target.threadId,
+			binding_mode: target.isDefaultChat ? undefined : 'task_thread',
 			actions,
 			...(existingMessageId ? { edit_message_id: existingMessageId } : {}),
-			// Extra fields for Telegram handler rendering
 			normalized_status: status,
 			workflow_id: task.workflow_id ?? undefined,
 			workflow_step: task.workflow_step ?? undefined,
@@ -299,15 +378,22 @@ export class TaskProgressBridge {
 			if (!this.messageIdByTask.has(task.id)) {
 				this.messageIdByTask.set(task.id, new Map())
 			}
-			this.messageIdByTask.get(task.id)!.set(binding.id, deliveredMessageId)
+			this.messageIdByTask.get(task.id)!.set(target.bindingId, deliveredMessageId)
 		}
 
-		// Create or update task_thread session + session message
-		await this.updateSession(binding, task, opts.summary, deliveredMessageId)
+		// Create or update session message (skip for default-chat fallback to avoid noise)
+		if (!target.isDefaultChat) {
+			await this.updateSession(
+				{ provider_id: target.providerId, external_conversation_id: target.conversationId, external_thread_id: target.threadId, id: target.bindingId },
+				task,
+				opts.summary,
+				deliveredMessageId,
+			)
+		}
 	}
 
 	private async updateSession(
-		binding: ConversationBindingRow,
+		binding: { provider_id: string; external_conversation_id: string; external_thread_id?: string | null; id: string },
 		task: { id: string },
 		summary: string,
 		deliveredMessageId?: string,

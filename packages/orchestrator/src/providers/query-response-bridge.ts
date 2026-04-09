@@ -184,12 +184,22 @@ export class QueryResponseBridge {
 			if (preview) previewUrl = preview.ref_value
 		}
 
+		// Truncate summary for chat delivery safety (Telegram has 4096 char limit)
+		const MAX_SUMMARY_LENGTH = 3500
+		let deliverySummary = summary
+		if (previewUrl && summary.length > 500) {
+			// When a preview artifact exists, prefer a short summary
+			deliverySummary = summary.slice(0, 500) + '...\n\nSee the preview for full details.'
+		} else if (summary.length > MAX_SUMMARY_LENGTH) {
+			deliverySummary = summary.slice(0, MAX_SUMMARY_LENGTH) + '...'
+		}
+
 		const payload: NotificationPayload = {
 			orchestrator_url: this.config.orchestratorUrl,
 			event_type: 'query_response',
 			severity: failed ? 'error' : 'info',
 			title: failed ? 'Query Failed' : '',
-			summary,
+			summary: deliverySummary,
 			preview_url: previewUrl,
 			conversation_id: session.external_conversation_id,
 			thread_id: session.external_thread_id ?? undefined,
@@ -348,7 +358,7 @@ export class QueryResponseBridge {
 		const { buildQueryInstructions } = await import('../services/queries')
 		const instructions = buildQueryInstructions(batchedPrompt, {
 			sessionMessages: systemMsgs,
-			allowMutation: false,
+			allowMutation: true,
 			hasResume,
 		})
 
@@ -376,7 +386,7 @@ export class QueryResponseBridge {
 		const newQuery = await this.queryService.create({
 			prompt: batchedPrompt,
 			agent_id: agentId,
-			allow_repo_mutation: false,
+			allow_repo_mutation: true,
 			session_id: session.id,
 			created_by: initiator,
 		})

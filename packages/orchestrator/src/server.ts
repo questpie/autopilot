@@ -246,6 +246,7 @@ export async function startServer(options?: StartServerOptions) {
 		allowLocalDevBypass: effectiveBypass,
 		orchestratorUrl,
 		indexDbRaw,
+		operatorWebDist: resolve(import.meta.dir, '..', '..', '..', 'apps', 'operator-web', 'dist'),
 	})
 
 	// ── 9. Start HTTP server ─────────────────────────────────────────────

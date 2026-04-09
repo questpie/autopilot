@@ -262,6 +262,7 @@ export class WorkflowEngine {
 		if (!task) return null
 
 		const result = await this.intake(id)
+		eventBus.emit({ type: 'task_created', taskId: id, title: input.title })
 		return { task: result?.task ?? task, runId: result?.runId ?? null }
 	}
 
