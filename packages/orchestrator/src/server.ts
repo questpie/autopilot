@@ -220,7 +220,7 @@ export async function startServer(options?: StartServerOptions) {
 	workflowEngine.setCheckDependenciesFn((taskId) => dependencyBridge.checkDependencies(taskId))
 
 	// ── 7c. Start scheduler daemon ─────────────────────────────────────
-	const schedulerDaemon = new SchedulerDaemon(scheduleService, workflowEngine, queryService, activityService, authoredConfig)
+	const schedulerDaemon = new SchedulerDaemon(scheduleService, workflowEngine, queryService, runService, activityService, authoredConfig)
 	schedulerDaemon.start()
 
 	// ── 7d. Start search indexer ──────────────────────────────────────

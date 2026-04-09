@@ -5,11 +5,14 @@
  * Each tick finds schedules where next_run_at <= now, checks concurrency policy,
  * creates the task or query, records the execution, and advances next_run_at.
  */
+import { randomBytes } from 'node:crypto'
 import type { ScheduleService, ScheduleRow } from './schedules'
 import { interpolateTemplate } from './schedules'
 import type { WorkflowEngine } from './workflow-engine'
 import type { AuthoredConfig } from './workflow-engine'
 import type { QueryService } from './queries'
+import { buildQueryInstructions } from './queries'
+import type { RunService } from './runs'
 import type { ActivityService } from './activity'
 
 export class SchedulerDaemon {
@@ -20,6 +23,7 @@ export class SchedulerDaemon {
 		private scheduleService: ScheduleService,
 		private workflowEngine: WorkflowEngine,
 		private queryService: QueryService | null,
+		private runService: RunService | null,
 		private activityService: ActivityService | null,
 		private authoredConfig?: AuthoredConfig,
 	) {}
@@ -175,6 +179,9 @@ export class SchedulerDaemon {
 		if (!this.queryService) {
 			throw new Error('query mode requires QueryService but it is not available')
 		}
+		if (!this.runService) {
+			throw new Error('query mode requires RunService but it is not available')
+		}
 
 		let queryTemplate: Record<string, unknown> = {}
 		try {
@@ -189,12 +196,39 @@ export class SchedulerDaemon {
 		)
 		const allowRepoMutation = queryTemplate.allow_repo_mutation === true
 
+		const agentId = schedule.agent_id
+		const initiator = `scheduler:${schedule.id}`
+
 		const query = await this.queryService.create({
 			prompt,
-			agent_id: schedule.agent_id,
+			agent_id: agentId,
 			allow_repo_mutation: allowRepoMutation,
-			created_by: `scheduler:${schedule.id}`,
+			created_by: initiator,
 		})
+
+		// Build instructions and create a run so the query actually executes
+		const instructions = buildQueryInstructions(prompt, {
+			allowMutation: allowRepoMutation,
+			hasResume: false,
+		})
+
+		const agentConfig = agentId && this.authoredConfig
+			? this.authoredConfig.agents.get(agentId)
+			: undefined
+
+		const runId = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
+		await this.runService.create({
+			id: runId,
+			agent_id: agentId ?? '',
+			runtime: this.authoredConfig?.defaults.runtime ?? 'claude-code',
+			model: agentConfig?.model,
+			provider: agentConfig?.provider,
+			variant: agentConfig?.variant,
+			initiated_by: initiator,
+			instructions,
+		})
+
+		await this.queryService.linkRun(query.id, runId)
 
 		await this.scheduleService.recordExecution({
 			schedule_id: schedule.id,
@@ -207,16 +241,17 @@ export class SchedulerDaemon {
 
 		if (this.activityService) {
 			await this.activityService.log({
-				actor: `scheduler:${schedule.id}`,
+				actor: initiator,
 				type: 'schedule_triggered',
 				summary: `Schedule "${schedule.name}" created query ${query.id}`,
 				details: JSON.stringify({
 					schedule_id: schedule.id,
 					query_id: query.id,
+					run_id: runId,
 				}),
 			})
 		}
 
-		console.log(`[scheduler] ${schedule.id} triggered query ${query.id}`)
+		console.log(`[scheduler] ${schedule.id} triggered query ${query.id} with run ${runId}`)
 	}
 }

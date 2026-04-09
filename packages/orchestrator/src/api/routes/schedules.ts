@@ -45,13 +45,14 @@ const schedules = new Hono<AppEnv>()
 		'/:id/trigger',
 		zValidator('param', z.object({ id: z.string() })),
 		async (c) => {
-			const { scheduleService, workflowEngine, queryService, activityService } = c.get('services')
+			const { scheduleService, workflowEngine, queryService, runService, activityService } = c.get('services')
+			const authoredConfig = c.get('authoredConfig')
 			const { id } = c.req.valid('param')
 
 			const schedule = await scheduleService.get(id)
 			if (!schedule) return c.json({ error: 'schedule not found' }, 404)
 
-			const daemon = new SchedulerDaemon(scheduleService, workflowEngine, queryService, activityService)
+			const daemon = new SchedulerDaemon(scheduleService, workflowEngine, queryService, runService, activityService, authoredConfig)
 			try {
 				await daemon.execute(schedule, new Date())
 			} catch (err) {
