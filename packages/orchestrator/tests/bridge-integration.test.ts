@@ -1875,6 +1875,7 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-card-' + counter }))`
 		const defaultChatCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-card')
 		expect(defaultChatCalls.length).toBeGreaterThanOrEqual(1)
 		expect(defaultChatCalls[0].event_type).toBe('task_progress')
+		expect(defaultChatCalls[0].summary).toBe('Working...')
 	})
 
 	test('explicit binding uses binding conversation, not default chat', async () => {

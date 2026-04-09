@@ -241,6 +241,32 @@ describe('Synthetic preview index', () => {
 		expect(html).toContain('report.html</a>')
 	})
 
+	test('html preview file gets html content-type even without explicit mime_type', async () => {
+		const runId = `run-mime-html-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'mime fallback test',
+		})
+
+		await artifactService.create({
+			id: `art-html-fallback-${Date.now()}`,
+			run_id: runId,
+			kind: 'preview_file',
+			title: 'presentation.html',
+			ref_kind: 'inline',
+			ref_value: '<html><body>Deck</body></html>',
+		})
+
+		const res = await app.request(`/api/previews/${runId}/presentation.html`)
+		expect(res.status).toBe(200)
+		expect(res.headers.get('content-type')).toContain('text/html')
+		const body = await res.text()
+		expect(body).toContain('Deck')
+	})
+
 	test('real index.html takes precedence over synthetic listing', async () => {
 		const runId = `run-real-idx-${Date.now()}`
 		await runService.create({

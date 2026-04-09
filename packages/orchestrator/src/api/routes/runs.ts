@@ -182,6 +182,7 @@ const runs = new Hono<AppEnv>()
 			const validArtifactKinds = new Set(ArtifactKindSchema.options)
 			let hasPreviewFiles = false
 			let previewEntry: string | null = null
+			const previewFileTitles: string[] = []
 			if (body.artifacts?.length) {
 				for (const art of body.artifacts) {
 					const normalizedKind = validArtifactKinds.has(art.kind) ? art.kind : 'other'
@@ -203,6 +204,7 @@ const runs = new Hono<AppEnv>()
 					})
 					if (normalizedKind === 'preview_file') {
 						hasPreviewFiles = true
+						previewFileTitles.push(art.title)
 						if (!previewEntry && art.title.endsWith('index.html')) {
 							previewEntry = art.title
 						}
@@ -212,7 +214,11 @@ const runs = new Hono<AppEnv>()
 
 			// Auto-create preview_url artifact if preview files were stored
 			if (hasPreviewFiles) {
-				const entry = previewEntry ?? 'index.html'
+				const singleHtmlEntry = previewFileTitles.length === 1
+					&& /\.(html?)$/i.test(previewFileTitles[0] ?? '')
+					? previewFileTitles[0]!
+					: null
+				const entry = previewEntry ?? singleHtmlEntry ?? 'index.html'
 				// Canonical orchestrator URL for rendered links — not request-derived (reverse proxy / spoofing safe).
 				// Relative-path fallback only when orchestratorUrl is absent (tests, custom embed).
 				const baseUrl = c.get('orchestratorUrl')

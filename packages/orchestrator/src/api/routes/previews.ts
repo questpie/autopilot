@@ -11,40 +11,60 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../app'
 
-const previews = new Hono<AppEnv>()
-	.get('/:runId/*', async (c) => {
-		const { artifactService } = c.get('services')
-		const runId = c.req.param('runId')
-		const filePath = c.req.param('*') || 'index.html'
+// TODO: this should be replaced with a proper MIME type lookup, but this is good enough for now
+function guessMimeType(path: string): string {
+	const lower = path.toLowerCase()
+	if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html; charset=utf-8'
+	if (lower.endsWith('.css')) return 'text/css; charset=utf-8'
+	if (lower.endsWith('.js') || lower.endsWith('.mjs')) return 'text/javascript; charset=utf-8'
+	if (lower.endsWith('.json')) return 'application/json; charset=utf-8'
+	if (lower.endsWith('.svg')) return 'image/svg+xml'
+	if (lower.endsWith('.png')) return 'image/png'
+	if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+	if (lower.endsWith('.woff2')) return 'font/woff2'
+	if (lower.endsWith('.woff')) return 'font/woff'
+	return 'text/plain; charset=utf-8'
+}
 
-		// Look up preview_file artifacts for this run
-		const runArtifacts = await artifactService.listForRun(runId)
-		const previewFiles = runArtifacts.filter(
-			(a) => a.kind === 'preview_file' && a.ref_kind === 'inline',
-		)
+const previews = new Hono<AppEnv>().get('/:runId/*', async (c) => {
+	const { artifactService } = c.get('services')
+	const runId = c.req.param('runId')
+	const routeWildcard = c.req.param('*')
+	const pathPrefix = `/api/previews/${runId}/`
+	const pathDerived =
+		c.req.path.startsWith(pathPrefix) && c.req.path.length > pathPrefix.length
+			? decodeURIComponent(c.req.path.slice(pathPrefix.length))
+			: ''
+	const filePath = routeWildcard || pathDerived || 'index.html'
 
-		const match = previewFiles.find((a) => a.title === filePath)
+	// Look up preview_file artifacts for this run
+	const runArtifacts = await artifactService.listForRun(runId)
+	const previewFiles = runArtifacts.filter(
+		(a) => a.kind === 'preview_file' && a.ref_kind === 'inline',
+	)
 
-		if (match) {
-			return new Response(match.ref_value, {
-				headers: {
-					'Content-Type': match.mime_type || 'text/plain',
-					'Cache-Control': 'public, max-age=3600',
-				},
+	const match = previewFiles.find((a) => a.title === filePath)
+
+	if (match) {
+		return new Response(match.ref_value, {
+			headers: {
+				'Content-Type': match.mime_type || guessMimeType(match.title),
+				'Cache-Control': 'public, max-age=3600',
+			},
+		})
+	}
+
+	// Synthetic index: if index.html was requested but doesn't exist,
+	// and other preview files do exist, render a file listing
+	if (filePath === 'index.html' && previewFiles.length > 0) {
+		const fileLinks = previewFiles
+			.map((a) => {
+				const escaped = a.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+				return `<li><a href="/api/previews/${runId}/${encodeURIComponent(a.title)}">${escaped}</a></li>`
 			})
-		}
+			.join('\n')
 
-		// Synthetic index: if index.html was requested but doesn't exist,
-		// and other preview files do exist, render a file listing
-		if (filePath === 'index.html' && previewFiles.length > 0) {
-			const fileLinks = previewFiles
-				.map((a) => {
-					const escaped = a.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-					return `<li><a href="/api/previews/${runId}/${encodeURIComponent(a.title)}">${escaped}</a></li>`
-				})
-				.join('\n')
-
-			const html = `<!DOCTYPE html>
+		const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -67,10 +87,10 @@ ${fileLinks}
 </body>
 </html>`
 
-			return c.html(html)
-		}
+		return c.html(html)
+	}
 
-		return c.text('Not found', 404)
-	})
+	return c.text('Not found', 404)
+})
 
 export { previews }

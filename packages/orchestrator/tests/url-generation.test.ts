@@ -329,6 +329,42 @@ describe('URL Generation — Configured Base URL', () => {
 		expect(previewArt!.ref_value).not.toContain('http')
 	})
 
+	test('single html preview file becomes the direct preview entry', async () => {
+		const publicUrl = 'https://autopilot.example.com'
+		const app = buildTestApp(companyRoot, dbResult.db, services, publicUrl)
+
+		const createRes = await app.request('/api/runs', post({ agent_id: 'dev', runtime: 'bun' }))
+		const created = (await createRes.json()) as { id: string }
+		const runId = created.id
+		const workerId = `worker-html-${Date.now()}`
+
+		await app.request('/api/workers/register', post({ id: workerId, name: 'HTML Worker' }))
+		await app.request('/api/workers/claim', post({ worker_id: workerId }))
+
+		await app.request(
+			`/api/runs/${runId}/complete`,
+			post({
+				status: 'completed',
+				summary: 'done',
+				artifacts: [
+					{
+						kind: 'preview_file',
+						title: 'presentation.html',
+						ref_kind: 'inline',
+						ref_value: '<html><body>Deck</body></html>',
+					},
+				],
+			}),
+		)
+
+		const artifactsRes = await app.request(`/api/runs/${runId}/artifacts`)
+		const artifacts = (await artifactsRes.json()) as Array<{ kind: string; ref_value: string }>
+		const previewArt = artifacts.find((a) => a.kind === 'preview_url')
+
+		expect(previewArt).not.toBeUndefined()
+		expect(previewArt!.ref_value).toBe(`https://autopilot.example.com/api/previews/${runId}/presentation.html`)
+	})
+
 	// ── Various topology shapes produce correct URLs ─────────────────────
 
 	test.each([

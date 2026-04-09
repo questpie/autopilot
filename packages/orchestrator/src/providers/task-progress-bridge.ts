@@ -45,6 +45,17 @@ function computeNormalizedStatus(task: {
 	return 'working'
 }
 
+function summarizeLifecycleState(
+	task: { workflow_step?: string | null },
+	status: string,
+): string {
+	if (status === 'blocked' || status === 'needs_approval') return 'Waiting for review.'
+	if (status === 'done') return 'Completed.'
+	if (status === 'failed') return 'Failed.'
+	if (task.workflow_step) return `Step: ${task.workflow_step}`
+	return 'Working...'
+}
+
 export class TaskProgressBridge {
 	private unsubscribe: (() => void) | null = null
 
@@ -294,7 +305,7 @@ export class TaskProgressBridge {
 		for (const target of targets) {
 			await this.sendOrEditProgress(target, task, status, {
 				baseUrl,
-				summary: task.title ?? `Task ${taskId} is ${event.status}`,
+				summary: summarizeLifecycleState(task, event.status),
 			})
 		}
 
@@ -325,7 +336,7 @@ export class TaskProgressBridge {
 		for (const target of targets) {
 			await this.sendOrEditProgress(target, task, status, {
 				baseUrl,
-				summary: task.title,
+				summary: summarizeLifecycleState(task, task.status),
 			})
 		}
 	}
