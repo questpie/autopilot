@@ -11,9 +11,9 @@
  * This is generic — works with any conversation_channel provider, not just Telegram.
  */
 import type { AutopilotEvent, EventBus } from '../events/event-bus'
-import type { Provider, NotificationPayload } from '@questpie/autopilot-spec'
+import type { Provider, NotificationPayload, HandlerResult } from '@questpie/autopilot-spec'
 import type { AuthoredConfig } from '../services/workflow-engine'
-import type { QueryService } from '../services/queries'
+import type { QueryService, QueryRow } from '../services/queries'
 import type { RunService } from '../services/runs'
 import type { SessionService, SessionRow } from '../services/sessions'
 import type { SecretService } from '../services/secrets'
@@ -144,27 +144,14 @@ export class QueryResponseBridge {
 		const query = await this.queryService.getByRunIdAnyStatus(event.runId)
 		if (!query) return
 
-		// Find the session that owns this query
-		if (!query.session_id) {
-			console.debug(`[query-response-bridge] query ${query.id} has no session_id — no conversation target`)
-			return
-		}
-		const session = await this.sessionService.get(query.session_id)
-		if (!session || session.status === 'closed') {
-			console.debug(`[query-response-bridge] session ${query.session_id} is closed/missing — skipping response delivery`)
-			return
-		}
-
-		// Resolve the provider
-		const provider = this.authoredConfig.providers.get(session.provider_id)
+		// Resolve delivery target: session-based or default-chat fallback
+		const { provider, conversationId, threadId, session } = await this.resolveDeliveryTarget(query)
 		if (!provider) {
-			console.warn(`[query-response-bridge] provider ${session.provider_id} not found in authored config`)
+			console.debug(`[query-response-bridge] query ${query.id} has no delivery target — no session and no default_chat_id`)
 			return
 		}
-		if (provider.kind !== 'conversation_channel') return
-		if (!provider.capabilities.some((c) => c.op === 'notify.send')) return
 
-		const assistantMsg = this.sessionMessageService
+		const assistantMsg = this.sessionMessageService && session
 			? await this.sessionMessageService.findAssistantForQuery(query.id)
 			: undefined
 		const editMessageId = this.messageIdByRun.get(event.runId) ?? assistantMsg?.external_message_id ?? undefined
@@ -201,17 +188,17 @@ export class QueryResponseBridge {
 			title: failed ? 'Query Failed' : '',
 			summary: deliverySummary,
 			preview_url: previewUrl,
-			conversation_id: session.external_conversation_id,
-			thread_id: session.external_thread_id ?? undefined,
+			conversation_id: conversationId,
+			thread_id: threadId,
 			...(editMessageId ? { edit_message_id: editMessageId } : {}),
 		}
 
 		const sendResult = await this.sendToProvider(provider, payload)
 		const deliveredMessageId = sendResult?.external_id ?? editMessageId
 
-		// Update session resume state from completed run
+		// Update session resume state from completed run (only if we have a session)
 		let updatedSession: SessionRow | undefined
-		if (run) {
+		if (run && session) {
 			updatedSession = await this.sessionService.updateResumeState(
 				session.id,
 				run.runtime_session_ref ?? null,
@@ -269,18 +256,11 @@ export class QueryResponseBridge {
 		const query = await this.queryService.getByRunIdAnyStatus(event.runId)
 		if (!query) return
 
-		// Find the session that owns this query
-		if (!query.session_id) return
-		const session = await this.sessionService.get(query.session_id)
-		if (!session || session.status === 'closed') return
-
-		// Resolve the provider
-		const provider = this.authoredConfig.providers.get(session.provider_id)
+		// Resolve delivery target: session-based or default-chat fallback
+		const { provider, conversationId, threadId, session } = await this.resolveDeliveryTarget(query)
 		if (!provider) return
-		if (provider.kind !== 'conversation_channel') return
-		if (!provider.capabilities.some((c) => c.op === 'notify.send')) return
 
-		const assistantMsg = this.sessionMessageService
+		const assistantMsg = this.sessionMessageService && session
 			? await this.sessionMessageService.findAssistantForQuery(query.id)
 			: undefined
 		const existingMessageId = this.messageIdByRun.get(event.runId) ?? assistantMsg?.external_message_id ?? undefined
@@ -304,8 +284,8 @@ export class QueryResponseBridge {
 			summary: isFirst
 				? '\u23f3'
 				: event.summary.slice(0, 200) || '\u23f3',
-			conversation_id: session.external_conversation_id,
-			thread_id: session.external_thread_id ?? undefined,
+			conversation_id: conversationId,
+			thread_id: threadId,
 			...(existingMessageId ? { edit_message_id: existingMessageId } : {}),
 		}
 
@@ -314,7 +294,7 @@ export class QueryResponseBridge {
 		const deliveredMessageId = result?.external_id ?? existingMessageId
 		if (deliveredMessageId) this.messageIdByRun.set(event.runId, deliveredMessageId)
 
-		// Create/update session message for progress tracking
+		// Create/update session message for progress tracking (only if we have a session)
 		if (this.sessionMessageService && session && isFirst) {
 			const smsg = await this.sessionMessageService.create({
 				session_id: session.id,
@@ -336,10 +316,55 @@ export class QueryResponseBridge {
 		}
 	}
 
+	/**
+	 * Resolve delivery target for a query response.
+	 * 1. If query has session_id → use session's provider + conversation
+	 * 2. Otherwise → fallback to first conversation_channel provider with default_chat_id
+	 */
+	private async resolveDeliveryTarget(query: QueryRow): Promise<{
+		provider: Provider | null
+		conversationId: string
+		threadId: string | undefined
+		session: SessionRow | null
+	}> {
+		// Path 1: session-based delivery
+		if (query.session_id) {
+			const session = await this.sessionService.get(query.session_id)
+			if (session && session.status !== 'closed') {
+				const provider = this.authoredConfig.providers.get(session.provider_id)
+				if (provider?.kind === 'conversation_channel' && provider.capabilities.some((c) => c.op === 'notify.send')) {
+					return {
+						provider,
+						conversationId: session.external_conversation_id,
+						threadId: session.external_thread_id ?? undefined,
+						session,
+					}
+				}
+			}
+		}
+
+		// Path 2: default_chat_id fallback (for scheduled queries, etc.)
+		for (const provider of this.authoredConfig.providers.values()) {
+			if (provider.kind !== 'conversation_channel') continue
+			if (!provider.capabilities.some((c) => c.op === 'notify.send')) continue
+			const defaultChatId = provider.config.default_chat_id
+			if (typeof defaultChatId === 'string' && defaultChatId) {
+				return {
+					provider,
+					conversationId: defaultChatId,
+					threadId: undefined,
+					session: null,
+				}
+			}
+		}
+
+		return { provider: null, conversationId: '', threadId: undefined, session: null }
+	}
+
 	private async drainQueue(
 		session: SessionRow,
 		queued: SessionMessageRow[],
-		previousQuery: import('../services/queries').QueryRow,
+		previousQuery: QueryRow,
 	): Promise<void> {
 		if (!this.sessionMessageService) return
 
@@ -414,7 +439,7 @@ export class QueryResponseBridge {
 		)
 	}
 
-	private async sendToProvider(provider: import('@questpie/autopilot-spec').Provider, payload: NotificationPayload): Promise<import('@questpie/autopilot-spec').HandlerResult | null> {
+	private async sendToProvider(provider: Provider, payload: NotificationPayload): Promise<HandlerResult | null> {
 		const runtimeConfig: HandlerRuntimeConfig = { companyRoot: this.config.companyRoot }
 
 		try {

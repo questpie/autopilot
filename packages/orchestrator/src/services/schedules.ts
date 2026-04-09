@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { eq, and, lte, desc } from 'drizzle-orm'
 import { Cron } from 'croner'
-import { schedules, scheduleExecutions, tasks } from '../db/company-schema'
+import { schedules, scheduleExecutions, tasks, queries } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 
 function _getSchedule(db: CompanyDb, id: string) {
@@ -227,19 +227,32 @@ export class ScheduleService {
 		if (!triggered) return undefined
 
 		// Auto-complete stale triggered executions: if the referenced task/query
-		// is in a terminal state, mark this execution as completed.
-		if (triggered.task_id) {
-			const task = await this.db.select().from(tasks).where(eq(tasks.id, triggered.task_id)).get()
-			if (task && (task.status === 'done' || task.status === 'failed')) {
-				await this.db
-					.update(scheduleExecutions)
-					.set({ status: task.status === 'done' ? 'completed' : 'failed' })
-					.where(eq(scheduleExecutions.id, triggered.id))
-				return undefined // No longer active
-			}
+		// is in a terminal state, mirror its status onto the execution record.
+		const terminalStatus = await this.resolveTerminalStatus(triggered)
+		if (terminalStatus) {
+			await this.db
+				.update(scheduleExecutions)
+				.set({ status: terminalStatus })
+				.where(eq(scheduleExecutions.id, triggered.id))
+			return undefined
 		}
 
 		return triggered
+	}
+
+	/** Check if a triggered execution's task/query has reached a terminal state. */
+	private async resolveTerminalStatus(exec: ScheduleExecutionRow): Promise<'completed' | 'failed' | null> {
+		if (exec.task_id) {
+			const task = await this.db.select().from(tasks).where(eq(tasks.id, exec.task_id)).get()
+			if (task?.status === 'done') return 'completed'
+			if (task?.status === 'failed') return 'failed'
+		}
+		if (exec.query_id) {
+			const query = await this.db.select().from(queries).where(eq(queries.id, exec.query_id)).get()
+			if (query?.status === 'completed') return 'completed'
+			if (query?.status === 'failed') return 'failed'
+		}
+		return null
 	}
 
 	/**
