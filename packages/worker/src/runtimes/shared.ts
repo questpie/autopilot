@@ -6,6 +6,8 @@
  */
 
 import { parseStructuredOutput, getSummary } from '../structured-output'
+import { collectPreviewDir } from '../preview'
+import { resolve } from 'node:path'
 import type { RunArtifact } from '@questpie/autopilot-spec'
 import type { RunContext } from './adapter'
 
@@ -84,16 +86,57 @@ export interface ExtractedResult {
  * Extract structured result from raw agent output text.
  * Parses the <AUTOPILOT_RESULT> block, maps artifacts and output tags.
  * Falls back to raw text as summary if no structured block found.
+ *
+ * When workDir is provided, preview_dir directives are expanded into
+ * concrete preview_file artifacts via collectPreviewDir().
  */
-export function extractResult(rawText: string): ExtractedResult {
+export async function extractResult(rawText: string, workDir?: string | null): Promise<ExtractedResult> {
   const structured = parseStructuredOutput(rawText)
 
-  const artifacts: RunArtifact[] = (structured?.artifacts ?? []).map((a) => ({
-    kind: a.kind,
-    title: a.title,
-    ref_kind: 'inline' as const,
-    ref_value: a.content,
-  }))
+  const artifacts: RunArtifact[] = []
+
+  for (const a of structured?.artifacts ?? []) {
+    if (a.kind === 'preview_dir') {
+      if (!workDir) {
+        console.warn('[extractResult] preview_dir artifact found but no workDir provided — skipping')
+        continue
+      }
+      const dirPath = a.attrs.path
+      if (!dirPath) {
+        console.warn('[extractResult] preview_dir artifact missing "path" attribute — skipping')
+        continue
+      }
+
+      const resolvedPath = resolve(workDir, dirPath)
+      const result = await collectPreviewDir(resolvedPath, {
+        entry: a.attrs.entry,
+      })
+
+      artifacts.push(...result.files)
+
+      // Emit manifest artifact — orchestrator normalizes unknown kinds to "other"
+      artifacts.push({
+        kind: 'preview_dir',
+        title: `preview_dir:${a.title || a.attrs.title || dirPath}`,
+        ref_kind: 'inline',
+        ref_value: JSON.stringify(result.metadata),
+        metadata: {
+          preview_manifest: true,
+          preview_entry: result.metadata.entry || null,
+          source_dir: dirPath,
+        },
+      })
+      continue
+    }
+
+    // Normal artifact — pass through as before
+    artifacts.push({
+      kind: a.kind,
+      title: a.title,
+      ref_kind: 'inline',
+      ref_value: a.content,
+    })
+  }
 
   const outputs = structured && Object.keys(structured.tags).length > 0
     ? structured.tags

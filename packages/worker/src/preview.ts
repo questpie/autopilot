@@ -1,12 +1,14 @@
 /**
- * Preview file collector.
+ * Preview file collectors.
  *
- * After a run completes, reads changed files from the worktree and returns
- * them as inline artifacts for durable storage on the orchestrator.
+ * collectPreviewFiles — reads changed text files from a worktree via git diff.
+ * collectPreviewDir  — recursively collects all files (text + binary) from a directory.
  *
- * Only collects text-based files under a size limit. Binary files are skipped.
+ * Both produce preview_file artifacts for durable storage on the orchestrator.
  */
 
+import { existsSync, readdirSync, statSync } from 'node:fs'
+import { resolve, relative } from 'node:path'
 import type { RunArtifact } from '@questpie/autopilot-spec'
 
 const MAX_FILE_SIZE = 512 * 1024 // 512 KB
@@ -25,6 +27,28 @@ const MIME_BY_EXT: Record<string, string> = {
   md: 'text/markdown',
   txt: 'text/plain',
 }
+
+const BINARY_MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  ico: 'image/x-icon',
+  avif: 'image/avif',
+  woff: 'font/woff',
+  woff2: 'font/woff2',
+  ttf: 'font/ttf',
+  otf: 'font/otf',
+  eot: 'application/vnd.ms-fontobject',
+  wasm: 'application/wasm',
+}
+
+const ALL_MIME: Record<string, string> = { ...MIME_BY_EXT, ...BINARY_MIME_BY_EXT }
+
+const MAX_DIR_FILE_SIZE = 2 * 1024 * 1024     // 2 MB per file
+const MAX_DIR_TOTAL_SIZE = 20 * 1024 * 1024   // 20 MB total
+const MAX_DIR_FILES = 500
 
 function isTextFile(path: string): boolean {
   const ext = path.split('.').pop()?.toLowerCase()
@@ -102,4 +126,134 @@ async function detectDefaultBranch(repoRoot: string): Promise<string | null> {
     if ((await proc.exited) === 0) return candidate
   }
   return null
+}
+
+export interface CollectPreviewDirResult {
+  files: RunArtifact[]
+  metadata: {
+    entry?: string
+    file_count: number
+    total_size: number
+    source_dir: string
+  }
+}
+
+/**
+ * Collect all files in a directory as preview_file artifacts.
+ *
+ * Prefer a single self-contained HTML preview when feasible.
+ * Use preview_dir when the output naturally consists of multiple local assets.
+ */
+export async function collectPreviewDir(
+  dirPath: string,
+  opts?: {
+    entry?: string
+    maxFileSize?: number
+    maxTotalSize?: number
+    maxFiles?: number
+  },
+): Promise<CollectPreviewDirResult> {
+  const maxFileSize = opts?.maxFileSize ?? MAX_DIR_FILE_SIZE
+  const maxTotalSize = opts?.maxTotalSize ?? MAX_DIR_TOTAL_SIZE
+  const maxFiles = opts?.maxFiles ?? MAX_DIR_FILES
+
+  const resolved = resolve(dirPath)
+
+  // Verify directory exists
+  if (!existsSync(resolved)) {
+    throw new Error(`preview_dir: directory does not exist: ${dirPath}`)
+  }
+  const dirStat = statSync(resolved)
+  if (!dirStat.isDirectory()) {
+    throw new Error(`preview_dir: path is not a directory: ${dirPath}`)
+  }
+
+  const entries = readdirSync(resolved, { withFileTypes: true, recursive: true })
+  const artifacts: RunArtifact[] = []
+  let totalSize = 0
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+
+    // parentPath is standard; older Node/Bun versions expose .path instead
+    const parentDir = entry.parentPath ?? ('path' in entry ? String(entry.path) : resolved)
+    const fullPath = resolve(parentDir, entry.name)
+    const relPath = relative(resolved, fullPath)
+
+    // Skip excluded dirs
+    const parts = relPath.split('/')
+    if (parts.some(p => SKIP_DIRS.has(p))) continue
+
+    // Check file count limit
+    if (artifacts.length >= maxFiles) {
+      throw new Error(`preview_dir: file count limit exceeded (max ${maxFiles} files)`)
+    }
+
+    const fileStat = statSync(fullPath)
+    const fileSize = fileStat.size
+
+    // Check individual file size
+    if (fileSize > maxFileSize) {
+      throw new Error(
+        `preview_dir: file "${relPath}" exceeds size limit (${fileSize} bytes > ${maxFileSize} bytes)`
+      )
+    }
+
+    // Check total size
+    totalSize += fileSize
+    if (totalSize > maxTotalSize) {
+      throw new Error(
+        `preview_dir: total size limit exceeded (${totalSize} bytes > ${maxTotalSize} bytes)`
+      )
+    }
+
+    const ext = entry.name.split('.').pop()?.toLowerCase() ?? ''
+    const isText = ext in MIME_BY_EXT
+    const isBinary = ext in BINARY_MIME_BY_EXT
+    const mime = ALL_MIME[ext]
+
+    if (isText) {
+      const content = await Bun.file(fullPath).text()
+      artifacts.push({
+        kind: 'preview_file',
+        title: relPath,
+        ref_kind: 'inline',
+        ref_value: content,
+        mime_type: mime ?? 'text/plain',
+      })
+    } else if (isBinary) {
+      const buf = await Bun.file(fullPath).arrayBuffer()
+      artifacts.push({
+        kind: 'preview_file',
+        title: relPath,
+        ref_kind: 'base64',
+        ref_value: Buffer.from(buf).toString('base64'),
+        mime_type: mime ?? 'application/octet-stream',
+      })
+    } else {
+      // Unknown extension: sniff first 8 KB for null bytes to decide text vs binary
+      const buf = await Bun.file(fullPath).arrayBuffer()
+      const isBinaryContent = new Uint8Array(buf, 0, Math.min(8192, buf.byteLength)).some(b => b === 0)
+
+      artifacts.push({
+        kind: 'preview_file',
+        title: relPath,
+        ref_kind: isBinaryContent ? 'base64' : 'inline',
+        ref_value: isBinaryContent
+          ? Buffer.from(buf).toString('base64')
+          : new TextDecoder().decode(buf),
+        mime_type: isBinaryContent ? 'application/octet-stream' : 'text/plain',
+      })
+    }
+  }
+
+  return {
+    files: artifacts,
+    metadata: {
+      entry: opts?.entry,
+      file_count: artifacts.length,
+      total_size: totalSize,
+      source_dir: dirPath,
+    },
+  }
 }

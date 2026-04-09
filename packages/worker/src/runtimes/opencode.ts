@@ -135,7 +135,7 @@ export class OpenCodeAdapter implements RuntimeAdapter {
         return { summary: 'OpenCode completed with no output' }
       }
 
-      const extracted = extractResult(lastText)
+      const extracted = await extractResult(lastText, context.workDir)
 
       return {
         summary: extracted.summary,

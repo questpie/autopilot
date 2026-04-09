@@ -367,6 +367,61 @@ describe('URL Generation — Configured Base URL', () => {
 
 	// ── Various topology shapes produce correct URLs ─────────────────────
 
+	test('preview_dir manifest entry overrides index.html heuristic', async () => {
+		const publicUrl = 'https://autopilot.example.com'
+		const app = buildTestApp(companyRoot, dbResult.db, services, publicUrl)
+
+		const createRes = await app.request('/api/runs', post({ agent_id: 'dev', runtime: 'bun' }))
+		const created = (await createRes.json()) as { id: string }
+		const runId = created.id
+		const workerId = `worker-manifest-${Date.now()}`
+
+		await app.request('/api/workers/register', post({ id: workerId, name: 'Manifest Worker' }))
+		await app.request('/api/workers/claim', post({ worker_id: workerId }))
+
+		await app.request(
+			`/api/runs/${runId}/complete`,
+			post({
+				status: 'completed',
+				summary: 'done',
+				artifacts: [
+					{
+						kind: 'preview_file',
+						title: 'presentation.html',
+						ref_kind: 'inline',
+						ref_value: '<html><body>Deck</body></html>',
+						mime_type: 'text/html',
+					},
+					{
+						kind: 'preview_file',
+						title: 'styles.css',
+						ref_kind: 'inline',
+						ref_value: 'body{}',
+						mime_type: 'text/css',
+					},
+					{
+						kind: 'preview_dir',
+						title: 'preview_dir:deck',
+						ref_kind: 'inline',
+						ref_value: '{"source_dir":"output/deck","entry":"presentation.html","file_count":2,"total_size":100}',
+						metadata: {
+							preview_manifest: true,
+							preview_entry: 'presentation.html',
+							source_dir: 'output/deck',
+						},
+					},
+				],
+			}),
+		)
+
+		const artifactsRes = await app.request(`/api/runs/${runId}/artifacts`)
+		const artifacts = (await artifactsRes.json()) as Array<{ kind: string; ref_value: string }>
+		const previewArt = artifacts.find((a) => a.kind === 'preview_url')
+
+		expect(previewArt).not.toBeUndefined()
+		expect(previewArt!.ref_value).toBe(`https://autopilot.example.com/api/previews/${runId}/presentation.html`)
+	})
+
 	test.each([
 		['https://autopilot.example.com', 'public DNS'],
 		['http://192.168.1.100:7778', 'LAN IP'],

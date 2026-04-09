@@ -5,6 +5,7 @@ import { z } from 'zod'
  * - file: repo-relative or absolute path on the worker machine (not publicly accessible)
  * - url: external URL (may or may not be public — depends on the service that generated it)
  * - inline: short text stored directly in ref_value (diffs, summaries, test counts)
+ * - base64: binary content encoded as base64 in ref_value (images, fonts, etc.)
  *
  * IMPORTANT: A "url" artifact is NOT automatically publicly shared.
  * It is a reference to wherever the content lives — could be an internal staging URL,
@@ -14,6 +15,7 @@ export const ArtifactRefKindSchema = z.enum([
 	'file',
 	'url',
 	'inline',
+	'base64',
 ])
 
 /** Artifact kinds describe what the artifact represents. */

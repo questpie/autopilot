@@ -159,7 +159,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
         return { summary: 'Claude Code completed with no output' }
       }
 
-      const extracted = extractResult(lastResult)
+      const extracted = await extractResult(lastResult, context.workDir)
 
       return {
         summary: extracted.summary,

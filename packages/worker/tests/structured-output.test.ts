@@ -149,4 +149,50 @@ Add tests
 		expect(result!.tags.risk_assessment).toContain('Low risk')
 		expect(getOutcome(result!)).toBe('revise')
 	})
+
+	test('parses self-closing artifact tag', () => {
+		const result = parseStructuredOutput(`
+<AUTOPILOT_RESULT>
+  <artifact kind="preview_dir" path="output/deck" entry="presentation.html" title="Deck" />
+</AUTOPILOT_RESULT>
+`)
+		expect(result!.artifacts.length).toBe(1)
+		expect(result!.artifacts[0]!.kind).toBe('preview_dir')
+		expect(result!.artifacts[0]!.attrs.path).toBe('output/deck')
+		expect(result!.artifacts[0]!.attrs.entry).toBe('presentation.html')
+		expect(result!.artifacts[0]!.title).toBe('Deck')
+		expect(result!.artifacts[0]!.content).toBe('')
+	})
+
+	test('handles mix of self-closing and open-close artifact tags', () => {
+		const result = parseStructuredOutput(`
+<AUTOPILOT_RESULT>
+  <artifact kind="preview_dir" path="dist" title="Build" />
+  <artifact kind="implementation_prompt" title="Prompt">Do the thing</artifact>
+</AUTOPILOT_RESULT>
+`)
+		expect(result!.artifacts.length).toBe(2)
+		// Open-close tags are extracted first, then self-closing
+		const dirArt = result!.artifacts.find((a) => a.kind === 'preview_dir')
+		const promptArt = result!.artifacts.find((a) => a.kind === 'implementation_prompt')
+		expect(dirArt).toBeDefined()
+		expect(dirArt!.content).toBe('')
+		expect(promptArt).toBeDefined()
+		expect(promptArt!.content).toBe('Do the thing')
+	})
+
+	test('self-closing tag does not pollute simple tags', () => {
+		const result = parseStructuredOutput(`
+<AUTOPILOT_RESULT>
+  <outcome>approved</outcome>
+  <artifact kind="preview_dir" path="dist" title="Build" />
+</AUTOPILOT_RESULT>
+`)
+		expect(result!.artifacts.length).toBe(1)
+		expect(result!.tags.outcome).toBe('approved')
+		// Tags should not contain artifact-related entries
+		expect(result!.tags.artifact).toBeUndefined()
+		expect(result!.tags.kind).toBeUndefined()
+		expect(result!.tags.path).toBeUndefined()
+	})
 })

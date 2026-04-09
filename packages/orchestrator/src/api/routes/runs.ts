@@ -209,6 +209,13 @@ const runs = new Hono<AppEnv>()
 							previewEntry = art.title
 						}
 					}
+					// Explicit entry from preview_dir manifest takes priority
+					if (normalizedKind === 'other' && artMetadata.original_kind === 'preview_dir') {
+						const manifestEntry = artMetadata.preview_entry
+						if (typeof manifestEntry === 'string' && manifestEntry) {
+							previewEntry = manifestEntry
+						}
+					}
 				}
 			}
 

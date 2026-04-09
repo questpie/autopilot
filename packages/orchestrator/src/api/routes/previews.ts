@@ -23,6 +23,14 @@ function guessMimeType(path: string): string {
 	if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
 	if (lower.endsWith('.woff2')) return 'font/woff2'
 	if (lower.endsWith('.woff')) return 'font/woff'
+	if (lower.endsWith('.gif')) return 'image/gif'
+	if (lower.endsWith('.webp')) return 'image/webp'
+	if (lower.endsWith('.ico')) return 'image/x-icon'
+	if (lower.endsWith('.avif')) return 'image/avif'
+	if (lower.endsWith('.ttf')) return 'font/ttf'
+	if (lower.endsWith('.otf')) return 'font/otf'
+	if (lower.endsWith('.eot')) return 'application/vnd.ms-fontobject'
+	if (lower.endsWith('.wasm')) return 'application/wasm'
 	return 'text/plain; charset=utf-8'
 }
 
@@ -40,12 +48,22 @@ const previews = new Hono<AppEnv>().get('/:runId/*', async (c) => {
 	// Look up preview_file artifacts for this run
 	const runArtifacts = await artifactService.listForRun(runId)
 	const previewFiles = runArtifacts.filter(
-		(a) => a.kind === 'preview_file' && a.ref_kind === 'inline',
+		(a) => a.kind === 'preview_file' && (a.ref_kind === 'inline' || a.ref_kind === 'base64'),
 	)
 
 	const match = previewFiles.find((a) => a.title === filePath)
 
 	if (match) {
+		if (match.ref_kind === 'base64') {
+			const bytes = Buffer.from(match.ref_value, 'base64')
+			return new Response(bytes, {
+				headers: {
+					'Content-Type': match.mime_type || guessMimeType(match.title),
+					'Cache-Control': 'public, max-age=3600',
+					'Content-Length': String(bytes.length),
+				},
+			})
+		}
 		return new Response(match.ref_value, {
 			headers: {
 				'Content-Type': match.mime_type || guessMimeType(match.title),

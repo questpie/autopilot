@@ -332,3 +332,172 @@ describe('Synthetic preview index', () => {
 		expect(res.status).toBe(404)
 	})
 })
+
+// ─── Binary Preview Serving Tests ──────────────────────────────────────────
+
+describe('Binary preview serving', () => {
+	const companyRoot = join(tmpdir(), `qp-preview-binary-${Date.now()}`)
+	let dbResult: CompanyDbResult
+	let artifactService: ArtifactService
+	let runService: RunService
+	let app: Hono<AppEnv>
+
+	beforeAll(async () => {
+		await mkdir(join(companyRoot, '.autopilot'), { recursive: true })
+		await writeFile(
+			join(companyRoot, '.autopilot', 'company.yaml'),
+			'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n',
+		)
+		dbResult = await createCompanyDb(companyRoot)
+		artifactService = new ArtifactService(dbResult.db)
+		runService = new RunService(dbResult.db)
+
+		app = new Hono<AppEnv>()
+		app.use(
+			'*',
+			createMiddleware<AppEnv>(async (c, next) => {
+				c.set('services', { artifactService } as any)
+				await next()
+			}),
+		)
+		app.route('/api/previews', previews)
+	})
+
+	afterAll(async () => {
+		dbResult.raw.close()
+		await rm(companyRoot, { recursive: true, force: true })
+	})
+
+	test('base64 image artifact served as binary with correct MIME', async () => {
+		const runId = `run-bin-png-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'binary png test',
+		})
+
+		const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+		await artifactService.create({
+			id: `art-png-${Date.now()}`,
+			run_id: runId,
+			kind: 'preview_file',
+			title: 'logo.png',
+			ref_kind: 'base64',
+			ref_value: pngBytes.toString('base64'),
+			mime_type: 'image/png',
+		})
+
+		const res = await app.request(`/api/previews/${runId}/logo.png`)
+		expect(res.status).toBe(200)
+		expect(res.headers.get('content-type')).toBe('image/png')
+		const body = Buffer.from(await res.arrayBuffer())
+		expect(body).toEqual(pngBytes)
+	})
+
+	test('base64 font artifact served correctly', async () => {
+		const runId = `run-bin-font-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'binary font test',
+		})
+
+		const fontBytes = Buffer.from([0x77, 0x4f, 0x46, 0x32, 0x00, 0x01, 0x00, 0x00])
+		await artifactService.create({
+			id: `art-font-${Date.now()}`,
+			run_id: runId,
+			kind: 'preview_file',
+			title: 'inter.woff2',
+			ref_kind: 'base64',
+			ref_value: fontBytes.toString('base64'),
+			mime_type: 'font/woff2',
+		})
+
+		const res = await app.request(`/api/previews/${runId}/inter.woff2`)
+		expect(res.status).toBe(200)
+		expect(res.headers.get('content-type')).toBe('font/woff2')
+		const body = Buffer.from(await res.arrayBuffer())
+		expect(body).toEqual(fontBytes)
+	})
+
+	test('synthetic listing includes both inline and base64 files', async () => {
+		const runId = `run-bin-listing-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'mixed listing test',
+		})
+
+		await artifactService.create({
+			id: `art-listing-css-${Date.now()}`,
+			run_id: runId,
+			kind: 'preview_file',
+			title: 'styles.css',
+			ref_kind: 'inline',
+			ref_value: 'body { color: red; }',
+			mime_type: 'text/css',
+		})
+
+		const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+		await artifactService.create({
+			id: `art-listing-png-${Date.now()}`,
+			run_id: runId,
+			kind: 'preview_file',
+			title: 'logo.png',
+			ref_kind: 'base64',
+			ref_value: pngBytes.toString('base64'),
+			mime_type: 'image/png',
+		})
+
+		const res = await app.request(`/api/previews/${runId}/index.html`)
+		expect(res.status).toBe(200)
+
+		const html = await res.text()
+		expect(html).toContain('styles.css')
+		expect(html).toContain('logo.png')
+	})
+
+	test('inline text preview still works alongside base64', async () => {
+		const runId = `run-bin-mixed-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'mixed content test',
+		})
+
+		await artifactService.create({
+			id: `art-mixed-html-${Date.now()}`,
+			run_id: runId,
+			kind: 'preview_file',
+			title: 'page.html',
+			ref_kind: 'inline',
+			ref_value: '<html><body>Hello World</body></html>',
+			mime_type: 'text/html',
+		})
+
+		const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+		await artifactService.create({
+			id: `art-mixed-png-${Date.now()}`,
+			run_id: runId,
+			kind: 'preview_file',
+			title: 'image.png',
+			ref_kind: 'base64',
+			ref_value: pngBytes.toString('base64'),
+			mime_type: 'image/png',
+		})
+
+		const res = await app.request(`/api/previews/${runId}/page.html`)
+		expect(res.status).toBe(200)
+		expect(res.headers.get('content-type')).toContain('text/html')
+		const body = await res.text()
+		expect(body).toBe('<html><body>Hello World</body></html>')
+	})
+})

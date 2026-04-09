@@ -142,7 +142,7 @@ export class CodexAdapter implements RuntimeAdapter {
         return { summary: 'Codex completed with no output' }
       }
 
-      const extracted = extractResult(lastAgentMessage)
+      const extracted = await extractResult(lastAgentMessage, context.workDir)
 
       return {
         summary: extracted.summary,

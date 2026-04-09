@@ -45,7 +45,9 @@ export function parseStructuredOutput(text: string): StructuredOutput | null {
 
 	const artifacts = extractArtifacts(block)
 	// Remove artifact tags from block before extracting simple tags (avoid double-parse)
-	const blockWithoutArtifacts = block.replace(/<artifact\s+[^>]*>[\s\S]*?<\/artifact>/gi, '')
+	const blockWithoutArtifacts = block
+		.replace(/<artifact\s+(?:[^>](?!\/))*[^>/]>[\s\S]*?<\/artifact>/gi, '')
+		.replace(/<artifact\s+[\s\S]*?\s*\/>/gi, '')
 	const tags = extractAllTags(blockWithoutArtifacts)
 
 	return { tags, artifacts, prose }
@@ -81,9 +83,11 @@ function extractAllTags(block: string): Record<string, string> {
 /** Extract all <artifact> tags with their attributes and content. */
 function extractArtifacts(block: string): ParsedArtifact[] {
 	const results: ParsedArtifact[] = []
-	const re = /<artifact\s+([^>]*)>([\s\S]*?)<\/artifact>/gi
+
+	// Open-close tags: <artifact ...>content</artifact> (excludes self-closing />)
+	const reOpenClose = /<artifact\s+((?:[^>](?!\/))*[^>/])>([\s\S]*?)<\/artifact>/gi
 	let match: RegExpExecArray | null
-	while ((match = re.exec(block)) !== null) {
+	while ((match = reOpenClose.exec(block)) !== null) {
 		const attrs = parseAttributes(match[1]!)
 		results.push({
 			kind: attrs.kind ?? 'other',
@@ -92,6 +96,19 @@ function extractArtifacts(block: string): ParsedArtifact[] {
 			attrs,
 		})
 	}
+
+	// Self-closing tags: <artifact ... />
+	const reSelfClose = /<artifact\s+([\s\S]*?)\s*\/>/gi
+	while ((match = reSelfClose.exec(block)) !== null) {
+		const attrs = parseAttributes(match[1]!)
+		results.push({
+			kind: attrs.kind ?? 'other',
+			title: attrs.title ?? 'Untitled',
+			content: '',
+			attrs,
+		})
+	}
+
 	return results
 }
 
