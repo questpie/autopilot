@@ -180,6 +180,20 @@ export class WorkerService {
 		}
 	}
 
+	/** Find the active lease for a run (any worker). */
+	async findActiveLeaseByRunId(runId: string) {
+		return this.db
+			.select()
+			.from(workerLeases)
+			.where(
+				and(
+					eq(workerLeases.run_id, runId),
+					eq(workerLeases.status, 'active'),
+				),
+			)
+			.get()
+	}
+
 	/** Find the active lease for a specific run on a specific worker. */
 	async getActiveLeaseForRun(workerId: string, runId: string) {
 		return this.db

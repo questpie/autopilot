@@ -166,6 +166,47 @@ export interface WorkerRegistry {
   getWorkerForRun(runId: string): Promise<WorkerConnection | null>
 }
 
+/**
+ * Default WorkerRegistry that resolves worker connections for runs.
+ *
+ * In local dev mode (`autopilot start`), a single co-located worker API
+ * is registered via setLocalWorker(). The registry checks whether the
+ * run's active lease belongs to that worker and returns the connection.
+ *
+ * Remote workers don't expose callback URLs yet, so non-local workers
+ * return null. This is the integration seam for future remote worker support.
+ */
+export class DefaultWorkerRegistry implements WorkerRegistry {
+  private localWorkerId: string | null = null
+  private localConnection: WorkerConnection | null = null
+  private leaseLookup: ((runId: string) => Promise<{ worker_id: string } | undefined>) | null = null
+
+  /** Wire the lease lookup. Called during server bootstrap. */
+  setLeaseLookup(fn: (runId: string) => Promise<{ worker_id: string } | undefined>): void {
+    this.leaseLookup = fn
+  }
+
+  /** Register the co-located worker API (local dev mode). */
+  setLocalWorker(workerId: string, conn: WorkerConnection): void {
+    this.localWorkerId = workerId
+    this.localConnection = conn
+  }
+
+  async getWorkerForRun(runId: string): Promise<WorkerConnection | null> {
+    if (!this.leaseLookup) return null
+
+    const lease = await this.leaseLookup(runId)
+    if (!lease) return null
+
+    if (this.localConnection && lease.worker_id === this.localWorkerId) {
+      return this.localConnection
+    }
+
+    // Remote workers don't expose callback URLs yet
+    return null
+  }
+}
+
 export interface ReadResult {
   content: Buffer
   mimeType: string

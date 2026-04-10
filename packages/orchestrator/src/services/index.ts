@@ -64,5 +64,5 @@ export type { IndexerConfig } from './indexer'
 export { search } from './search'
 export type { SearchScope, SearchResult } from './search'
 
-export { VfsService, parseVfsUri, validatePath, VfsUriError, VfsSecurityError, VfsNotFoundError, VfsReadOnlyError, VfsEtagMismatchError, VfsScopeError, VfsWorkerUnavailableError } from './vfs'
+export { VfsService, DefaultWorkerRegistry, parseVfsUri, validatePath, VfsUriError, VfsSecurityError, VfsNotFoundError, VfsReadOnlyError, VfsEtagMismatchError, VfsScopeError, VfsWorkerUnavailableError } from './vfs'
 export type { WorkerConnection, WorkerRegistry, ReadResult } from './vfs'

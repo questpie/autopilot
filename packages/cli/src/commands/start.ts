@@ -28,7 +28,7 @@ program.addCommand(
 				const port = Number.parseInt(opts.port, 10)
 
 				// ── 1. Start orchestrator ─────────────────────────────────────
-				const { server, stop: stopServer } = await startServer({ companyRoot: root, port, allowLocalDevBypass: true })
+				const { server, stop: stopServer, workerRegistry } = await startServer({ companyRoot: root, port, allowLocalDevBypass: true })
 				const orchestratorUrl = `http://localhost:${server.port}`
 
 				// ── 2. Start local worker ─────────────────────────────────────
@@ -40,6 +40,15 @@ program.addCommand(
 						concurrency,
 					})
 					await worker.start()
+
+					// Wire the local worker's API into VFS registry so workspace:// reads work
+					const apiServer = worker.getApiServer()
+					if (apiServer) {
+						workerRegistry.setLocalWorker(
+							worker.getWorkerId() ?? 'local-dev',
+							{ baseUrl: `http://localhost:${apiServer.port}`, token: apiServer.token },
+						)
+					}
 				}
 
 				// ── 3. Print status ───────────────────────────────────────────

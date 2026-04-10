@@ -19,6 +19,7 @@ import {
   parseVfsUri,
   validatePath,
   VfsService,
+  DefaultWorkerRegistry,
   VfsUriError,
   VfsSecurityError,
   VfsNotFoundError,
@@ -30,12 +31,8 @@ import {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-/** A no-op worker registry that always returns null. */
-const nullWorkerRegistry: WorkerRegistry = {
-  async getWorkerForRun() {
-    return null
-  },
-}
+/** A no-op worker registry — no lease lookup, no local worker. */
+const nullWorkerRegistry = new DefaultWorkerRegistry()
 
 function createTestApp(vfsService: VfsService) {
   const app = new Hono<AppEnv>()
@@ -367,14 +364,13 @@ describe('Workspace scope', () => {
     mockServer = Bun.serve({ port: 0, fetch: mockApp.fetch })
     const workerBaseUrl = `http://localhost:${mockServer.port}`
 
-    const registry: WorkerRegistry = {
-      async getWorkerForRun(runId: string) {
-        if (runId === 'run-ws-mock') {
-          return { baseUrl: workerBaseUrl, token: 'mock-token' }
-        }
-        return null
-      },
-    }
+    const registry = new DefaultWorkerRegistry()
+    // Simulate a lease lookup that always finds our mock worker
+    registry.setLeaseLookup(async (runId) => {
+      if (runId === 'run-ws-mock') return { worker_id: 'mock-worker' }
+      return undefined
+    })
+    registry.setLocalWorker('mock-worker', { baseUrl: workerBaseUrl, token: 'mock-token' })
 
     // companyRoot doesn't matter here; we only test workspace scope
     svc = new VfsService(tmpdir(), registry)
@@ -432,14 +428,7 @@ describe('VFS routes', () => {
     await writeFile(join(companyRoot, 'context', 'tone.md'), '# Tone\nFriendly.')
     await writeFile(join(companyRoot, 'context', 'rules.md'), '# Rules\nBe kind.')
 
-    // Mock workspace registry that always returns null (no worker for workspace URIs)
-    const mockRegistry: WorkerRegistry = {
-      async getWorkerForRun() {
-        return null
-      },
-    }
-
-    svc = new VfsService(companyRoot, mockRegistry)
+    svc = new VfsService(companyRoot, new DefaultWorkerRegistry())
     app = createTestApp(svc)
   })
 
