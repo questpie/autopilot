@@ -273,32 +273,32 @@ export class TaskService {
 			if (runIds.length > 0) {
 				// 2. Delete run_events + artifacts + worker_leases + run_steers for each run
 				for (const runId of runIds) {
-					tx.delete(runEvents).where(eq(runEvents.run_id, runId)).run()
-					tx.delete(artifacts).where(eq(artifacts.run_id, runId)).run()
-					tx.delete(workerLeases).where(eq(workerLeases.run_id, runId)).run()
-					tx.delete(runSteers).where(eq(runSteers.run_id, runId)).run()
+					await tx.delete(runEvents).where(eq(runEvents.run_id, runId)).run()
+					await tx.delete(artifacts).where(eq(artifacts.run_id, runId)).run()
+					await tx.delete(workerLeases).where(eq(workerLeases.run_id, runId)).run()
+					await tx.delete(runSteers).where(eq(runSteers.run_id, runId)).run()
 				}
 
 				// 3. Delete runs
-				tx.delete(runs).where(eq(runs.task_id, id)).run()
+				await tx.delete(runs).where(eq(runs.task_id, id)).run()
 			}
 
 			// 4. Delete artifacts linked directly to this task (not via run)
-			tx.delete(artifacts).where(eq(artifacts.task_id, id)).run()
+			await tx.delete(artifacts).where(eq(artifacts.task_id, id)).run()
 
 			// 5. Delete task_relations (both directions)
-			tx.delete(taskRelations).where(
+			await tx.delete(taskRelations).where(
 				or(eq(taskRelations.source_task_id, id), eq(taskRelations.target_task_id, id))!
 			).run()
 
 			// 6. Delete conversation bindings
-			tx.delete(conversationBindings).where(eq(conversationBindings.task_id, id)).run()
+			await tx.delete(conversationBindings).where(eq(conversationBindings.task_id, id)).run()
 
 			// 7. Delete schedule_executions referencing this task
-			tx.delete(scheduleExecutions).where(eq(scheduleExecutions.task_id, id)).run()
+			await tx.delete(scheduleExecutions).where(eq(scheduleExecutions.task_id, id)).run()
 
 			// 8. Delete the task itself
-			tx.delete(tasks).where(eq(tasks.id, id)).run()
+			await tx.delete(tasks).where(eq(tasks.id, id)).run()
 		})
 
 		// Clean up orphaned blobs (filesystem + artifact_blobs rows) outside the transaction
