@@ -1,3 +1,4 @@
+import { AppSidebar } from '@/components/app-sidebar'
 import { QUESTPIESpinner } from '@/components/brand'
 import { Toaster } from '@/components/ui/sonner'
 import { checkAuth } from '@/lib/auth-check'
@@ -39,8 +40,11 @@ function AuthPending() {
 
 function AppLayout() {
   return (
-    <>
-      <Outlet />
+    <div className="flex h-screen overflow-hidden bg-background">
+      <AppSidebar />
+      <main className="flex-1 overflow-hidden">
+        <Outlet />
+      </main>
       <Toaster
         position="bottom-right"
         dir="ltr"
@@ -48,6 +52,6 @@ function AppLayout() {
         visibleToasts={5}
         toastOptions={{ duration: 4000 }}
       />
-    </>
+    </div>
   )
 }

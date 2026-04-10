@@ -186,7 +186,7 @@
 }
 
 /* ── Gate hover animations: only on fine pointers ── */
-@media not (hover: hover) and (pointer: fine) {
+@media (pointer: fine) and (hover: none) {
   .hover-animation {
     --hover-scale: 1 !important;
     --hover-y: 0 !important;
