@@ -1,0 +1,8 @@
+{
+	"name": "@questpie/telegram-surface",
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"@questpie/autopilot-spec": "workspace:*"
+	}
+}

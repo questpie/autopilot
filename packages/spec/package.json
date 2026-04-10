@@ -26,7 +26,8 @@
 		".": "./src/index.ts",
 		"./schemas": "./src/schemas/index.ts",
 		"./types": "./src/types/index.ts",
-		"./validate": "./src/validate.ts"
+		"./validate": "./src/validate.ts",
+		"./handler-sdk": "./src/handler-sdk.ts"
 	},
 	"files": [
 		"src/"
