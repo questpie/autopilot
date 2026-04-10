@@ -20,7 +20,27 @@ import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
 import { discoverScopes, resolveConfig } from './config/scope-resolver'
 import { ConfigManager } from './config/config-manager'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, ParentJoinBridge, DependencyBridge, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, SchedulerDaemon, SteerService } from './services'
+import {
+	TaskService,
+	RunService,
+	WorkerService,
+	EnrollmentService,
+	WorkflowEngine,
+	ActivityService,
+	ArtifactService,
+	ConversationBindingService,
+	TaskRelationService,
+	TaskGraphService,
+	ParentJoinBridge,
+	DependencyBridge,
+	SecretService,
+	QueryService,
+	SessionService,
+	SessionMessageService,
+	ScheduleService,
+	SchedulerDaemon,
+	SteerService,
+} from './services'
 import { Indexer } from './services/indexer'
 import type { AuthoredConfig } from './services'
 import { NotificationBridge, QueryResponseBridge, TaskProgressBridge } from './providers'
@@ -46,7 +66,7 @@ export async function startServer(options?: StartServerOptions) {
 	if (!chain.companyRoot) {
 		throw new Error(
 			`No .autopilot/company.yaml found walking up from ${startDir}.\n` +
-			'Create one with: autopilot init',
+				'Create one with: autopilot init',
 		)
 	}
 
@@ -99,7 +119,10 @@ export async function startServer(options?: StartServerOptions) {
 	const workerService = new WorkerService(companyDb)
 	const enrollmentService = new EnrollmentService(companyDb)
 	const activityService = new ActivityService(companyDb)
-	const artifactService = new ArtifactService(companyDb)
+	const { BlobStore } = await import('./services/blob-store')
+	const blobStore = new BlobStore(join(companyRoot, '.data'))
+	const artifactService = new ArtifactService(companyDb, blobStore)
+	taskService.setArtifactService(artifactService)
 	const conversationBindingService = new ConversationBindingService(companyDb)
 	const taskRelationService = new TaskRelationService(companyDb)
 	const secretService = new SecretService(companyDb)
@@ -111,27 +134,35 @@ export async function startServer(options?: StartServerOptions) {
 
 	// ── 6b. Validate master key if shared secrets are in use ────────────
 	if (!hasMasterKey()) {
-		const hasSharedRefs = [...authoredConfig.providers.values()].some(
-			(p) => p.secret_refs.some((r) => r.source === 'shared'),
+		const hasSharedRefs = [...authoredConfig.providers.values()].some((p) =>
+			p.secret_refs.some((r) => r.source === 'shared'),
 		)
 		const hasStoredSecrets = await secretService.hasAny()
 
 		if (hasSharedRefs || hasStoredSecrets) {
 			throw new MasterKeyError(
-				'AUTOPILOT_MASTER_KEY is not set but shared secrets are in use.\n' +
-				(hasSharedRefs ? '  - Authored config contains source:shared secret refs\n' : '') +
-				(hasStoredSecrets ? '  - Encrypted shared secrets exist in the database\n' : '') +
-				'Set AUTOPILOT_MASTER_KEY (64-char hex) or remove shared secret usage.\n' +
-				'Generate one with: openssl rand -hex 32',
+				`AUTOPILOT_MASTER_KEY is not set but shared secrets are in use.\n
+				${hasSharedRefs ? '  - Authored config contains source:shared secret refs\n' : ''}
+				${hasStoredSecrets ? '  - Encrypted shared secrets exist in the database\n' : ''}
+				Set AUTOPILOT_MASTER_KEY (64-char hex) or remove shared secret usage.\n
+				Generate one with: openssl rand -hex 32`,
 			)
 		}
 	}
 
-	const workflowEngine = new WorkflowEngine(authoredConfig, taskService, runService, activityService, artifactService)
+	const workflowEngine = new WorkflowEngine(
+		authoredConfig,
+		taskService,
+		runService,
+		activityService,
+		artifactService,
+	)
 	const taskGraphService = new TaskGraphService(taskService, taskRelationService, workflowEngine)
 
 	// Wire child rollup into workflow engine (breaks circular init dependency)
-	workflowEngine.setChildRollupFn((taskId, relationType) => taskGraphService.childRollup(taskId, relationType))
+	workflowEngine.setChildRollupFn((taskId, relationType) =>
+		taskGraphService.childRollup(taskId, relationType),
+	)
 
 	// Validate config references
 	const configIssues = workflowEngine.validate()
@@ -164,7 +195,7 @@ export async function startServer(options?: StartServerOptions) {
 	if (!env.ORCHESTRATOR_URL && env.NODE_ENV === 'production') {
 		console.warn(
 			'[server] ⚠ ORCHESTRATOR_URL not set in production — preview links, notification URLs, and email links will point to localhost.\n' +
-			'         Set ORCHESTRATOR_URL to the public base URL of this orchestrator (e.g. https://autopilot.example.com).',
+				'         Set ORCHESTRATOR_URL to the public base URL of this orchestrator (e.g. https://autopilot.example.com).',
 		)
 	}
 	const notificationBridge = new NotificationBridge(
@@ -213,20 +244,35 @@ export async function startServer(options?: StartServerOptions) {
 	parentJoinBridge.start()
 
 	// ── 7b2. Start dependency bridge ────────────────────────────────────
-	const dependencyBridge = new DependencyBridge(eventBus, taskRelationService, taskService, workflowEngine)
+	const dependencyBridge = new DependencyBridge(
+		eventBus,
+		taskRelationService,
+		taskService,
+		workflowEngine,
+	)
 	dependencyBridge.start()
 
 	// Wire dependency check into workflow engine
 	workflowEngine.setCheckDependenciesFn((taskId) => dependencyBridge.checkDependencies(taskId))
 
 	// ── 7c. Start scheduler daemon ─────────────────────────────────────
-	const schedulerDaemon = new SchedulerDaemon(scheduleService, workflowEngine, queryService, runService, activityService, authoredConfig)
+	const schedulerDaemon = new SchedulerDaemon(
+		scheduleService,
+		workflowEngine,
+		queryService,
+		runService,
+		activityService,
+		authoredConfig,
+	)
 	schedulerDaemon.start()
 
 	// ── 7d. Start search indexer ──────────────────────────────────────
 	const indexer = new Indexer({ companyDb, indexDb, authoredConfig })
 	indexer.start().catch((err) => {
-		console.error('[server] indexer startup error:', err instanceof Error ? err.message : String(err))
+		console.error(
+			'[server] indexer startup error:',
+			err instanceof Error ? err.message : String(err),
+		)
 	})
 
 	// ── 8. Config hot reload manager ────────────────────────────────────
@@ -244,9 +290,11 @@ export async function startServer(options?: StartServerOptions) {
 	// ── 9. Create Hono app ───────────────────────────────────────────────
 	const effectiveBypass = options?.allowLocalDevBypass && env.NODE_ENV !== 'production'
 	if (options?.allowLocalDevBypass) {
-		console.log(effectiveBypass
-			? '[server] local dev bypass ENABLED (development mode only)'
-			: '[server] ⚠ allowLocalDevBypass requested but ignored in production mode')
+		console.log(
+			effectiveBypass
+				? '[server] local dev bypass ENABLED (development mode only)'
+				: '[server] ⚠ allowLocalDevBypass requested but ignored in production mode',
+		)
 	}
 
 	const app = createApp({
@@ -287,14 +335,21 @@ export async function startServer(options?: StartServerOptions) {
 	try {
 		const staleWorkerIds = await workerService.expireStale(90_000)
 		if (staleWorkerIds.length > 0) {
-			console.log(`[server] startup recovery: marked ${staleWorkerIds.length} stale worker(s) offline`)
+			console.log(
+				`[server] startup recovery: marked ${staleWorkerIds.length} stale worker(s) offline`,
+			)
 		}
 		const leaseRecovery = await workerService.expireStaleAndRecover(failRunOnExpiry)
 		if (leaseRecovery.failedRunIds.length > 0) {
-			console.log(`[server] startup recovery: failed ${leaseRecovery.failedRunIds.length} run(s) from expired leases`)
+			console.log(
+				`[server] startup recovery: failed ${leaseRecovery.failedRunIds.length} run(s) from expired leases`,
+			)
 		}
 	} catch (err) {
-		console.error('[server] startup recovery error:', err instanceof Error ? err.message : String(err))
+		console.error(
+			'[server] startup recovery error:',
+			err instanceof Error ? err.message : String(err),
+		)
 	}
 
 	// ── 11. Periodic lease/worker expiry timer (every 60s) ──────────────────
@@ -309,10 +364,15 @@ export async function startServer(options?: StartServerOptions) {
 				eventBus.emit({ type: 'run_completed', runId, status: 'failed' })
 			})
 			if (result.failedRunIds.length > 0) {
-				console.log(`[server] periodic cleanup: failed ${result.failedRunIds.length} run(s), recovered ${result.recoveredWorkerIds.length} worker(s)`)
+				console.log(
+					`[server] periodic cleanup: failed ${result.failedRunIds.length} run(s), recovered ${result.recoveredWorkerIds.length} worker(s)`,
+				)
 			}
 		} catch (err) {
-			console.error('[server] periodic lease expiry error:', err instanceof Error ? err.message : String(err))
+			console.error(
+				'[server] periodic lease expiry error:',
+				err instanceof Error ? err.message : String(err),
+			)
 		}
 	}, 60_000)
 
@@ -339,5 +399,16 @@ export async function startServer(options?: StartServerOptions) {
 		server.stop()
 	}
 
-	return { server, app, services, companyRoot, auth, db: companyDb, notificationBridge, schedulerDaemon, configManager, stop }
+	return {
+		server,
+		app,
+		services,
+		companyRoot,
+		auth,
+		db: companyDb,
+		notificationBridge,
+		schedulerDaemon,
+		configManager,
+		stop,
+	}
 }

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { eq, and, or, sql, inArray } from 'drizzle-orm'
 import { tasks, runs, runEvents, artifacts, taskRelations, conversationBindings, workerLeases, scheduleExecutions, runSteers } from '../db/company-schema'
 import type { CompanyDb } from '../db'
+import type { ArtifactService } from './artifacts'
 
 /**
  * Slugify a title into a kebab-case ID suitable for git branches and filesystem paths.
@@ -35,7 +36,14 @@ function _getTask(db: CompanyDb, id: string) {
 export type TaskRow = NonNullable<Awaited<ReturnType<typeof _getTask>>>
 
 export class TaskService {
+	#artifactService: ArtifactService | null = null
+
 	constructor(private db: CompanyDb) {}
+
+	/** Inject ArtifactService for blob-aware cascade deletion. */
+	setArtifactService(svc: ArtifactService) {
+		this.#artifactService = svc
+	}
 
 	async create(input: {
 		id: string
@@ -259,7 +267,7 @@ export class TaskService {
 
 		await this.db.transaction(async (tx) => {
 			// 1. Find all runs for this task
-			const taskRuns = tx.select({ id: runs.id }).from(runs).where(eq(runs.task_id, id)).all()
+			const taskRuns = await tx.select({ id: runs.id }).from(runs).where(eq(runs.task_id, id)).all()
 			const runIds = taskRuns.map((r) => r.id)
 
 			if (runIds.length > 0) {
@@ -292,6 +300,11 @@ export class TaskService {
 			// 8. Delete the task itself
 			tx.delete(tasks).where(eq(tasks.id, id)).run()
 		})
+
+		// Clean up orphaned blobs (filesystem + artifact_blobs rows) outside the transaction
+		if (this.#artifactService) {
+			await this.#artifactService.removeOrphanBlobs()
+		}
 
 		return existing
 	}

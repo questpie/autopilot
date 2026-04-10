@@ -8,6 +8,7 @@
  * - preview_url artifact auto-created when preview_files exist
  * - preview works without worker involvement (durable)
  * - 404 for missing files
+ * - blob-backed preview serving
  */
 import { test, expect, describe, beforeAll, afterAll } from 'bun:test'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
@@ -16,7 +17,7 @@ import { tmpdir } from 'node:os'
 import { Hono } from 'hono'
 import { createMiddleware } from 'hono/factory'
 import { createCompanyDb, type CompanyDbResult } from '../src/db'
-import { ArtifactService, RunService } from '../src/services'
+import { ArtifactService, RunService, BlobStore } from '../src/services'
 import { previews } from '../src/api/routes/previews'
 import type { AppEnv } from '../src/api/app'
 
@@ -32,7 +33,8 @@ describe('Durable Previews', () => {
 			'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n',
 		)
 		dbResult = await createCompanyDb(companyRoot)
-		artifactService = new ArtifactService(dbResult.db)
+		const blobStore = new BlobStore(join(companyRoot, '.data'))
+		artifactService = new ArtifactService(dbResult.db, blobStore)
 	})
 
 	afterAll(async () => {
@@ -75,6 +77,7 @@ describe('Durable Previews', () => {
 		const arts = await artifactService.listForRun(RUN_ID)
 		const html = arts.find((a) => a.kind === 'preview_file' && a.title === 'src/index.html')
 		expect(html).toBeDefined()
+		// Small inline content stays in ref_value
 		expect(html!.ref_value).toContain('<h1>Acme</h1>')
 		expect(html!.mime_type).toBe('text/html')
 
@@ -105,12 +108,10 @@ describe('Durable Previews', () => {
 	})
 
 	test('preview content survives without worker — purely DB-backed', async () => {
-		// Simulate: worker sent preview_file, then went offline.
-		// We can still read the content from the artifact.
 		const arts = await artifactService.listForRun(RUN_ID)
 		const html = arts.find((a) => a.kind === 'preview_file' && a.title === 'src/index.html')
 
-		// Content is in ref_value — no worker needed to serve it
+		// Small inline content is in ref_value — no worker needed to serve it
 		expect(html!.ref_value).toContain('<html>')
 		expect(html!.ref_kind).toBe('inline')
 	})
@@ -134,6 +135,7 @@ describe('Durable Previews', () => {
 		const run1Html = run1Arts.find((a) => a.kind === 'preview_file' && a.title === 'src/index.html')
 		const run2Html = run2Arts.find((a) => a.kind === 'preview_file' && a.title === 'src/index.html')
 
+		// Both small inline — content in ref_value
 		expect(run1Html!.ref_value).toContain('Acme')
 		expect(run2Html!.ref_value).toContain('Different run')
 	})
@@ -155,7 +157,8 @@ describe('Synthetic preview index', () => {
 			'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n',
 		)
 		dbResult = await createCompanyDb(companyRoot)
-		artifactService = new ArtifactService(dbResult.db)
+		const blobStore = new BlobStore(join(companyRoot, '.data'))
+		artifactService = new ArtifactService(dbResult.db, blobStore)
 		runService = new RunService(dbResult.db)
 
 		app = new Hono<AppEnv>()
@@ -349,7 +352,8 @@ describe('Binary preview serving', () => {
 			'name: test\nslug: test\nowner:\n  name: Test\n  email: test@test.com\n',
 		)
 		dbResult = await createCompanyDb(companyRoot)
-		artifactService = new ArtifactService(dbResult.db)
+		const blobStore = new BlobStore(join(companyRoot, '.data'))
+		artifactService = new ArtifactService(dbResult.db, blobStore)
 		runService = new RunService(dbResult.db)
 
 		app = new Hono<AppEnv>()
@@ -499,5 +503,31 @@ describe('Binary preview serving', () => {
 		expect(res.headers.get('content-type')).toContain('text/html')
 		const body = await res.text()
 		expect(body).toBe('<html><body>Hello World</body></html>')
+	})
+
+	test('serves blob-backed preview_file correctly', async () => {
+		const largeHtml = '<html>' + 'x'.repeat(8192) + '</html>'
+		const runId = `run-blob-preview-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'blob preview test',
+		})
+
+		await artifactService.create({
+			id: `art-blob-preview-${Date.now()}`,
+			run_id: runId,
+			kind: 'preview_file',
+			title: 'index.html',
+			ref_kind: 'inline',
+			ref_value: largeHtml,
+		})
+
+		const res = await app.request(`/api/previews/${runId}/index.html`)
+		expect(res.status).toBe(200)
+		const body = await res.text()
+		expect(body).toBe(largeHtml)
 	})
 })

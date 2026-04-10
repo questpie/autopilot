@@ -232,6 +232,16 @@ export const workerLeases = sqliteTable(
 	],
 )
 
+// ─── Artifact Blobs ───────────────────────────────────────────────────────
+
+export const artifactBlobs = sqliteTable('artifact_blobs', {
+	id: text('id').primaryKey(),
+	content_hash: text('content_hash').notNull().unique(),
+	storage_key: text('storage_key').notNull().unique(),
+	size: integer('size').notNull(),
+	created_at: text('created_at').notNull(),
+})
+
 // ─── Artifacts ────────────────────────────────────────────────────────────
 
 export const artifacts = sqliteTable(
@@ -246,12 +256,14 @@ export const artifacts = sqliteTable(
 		ref_value: text('ref_value').notNull(),
 		mime_type: text('mime_type'),
 		metadata: text('metadata').default('{}'),
+		blob_id: text('blob_id'), // FK to artifact_blobs.id — null for inline/legacy
 		created_at: text('created_at').notNull(),
 	},
 	(table) => [
 		index('idx_artifacts_run').on(table.run_id),
 		index('idx_artifacts_task').on(table.task_id),
 		index('idx_artifacts_kind').on(table.kind),
+		index('idx_artifacts_blob_id').on(table.blob_id),
 	],
 )
 

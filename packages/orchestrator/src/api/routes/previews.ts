@@ -54,20 +54,13 @@ const previews = new Hono<AppEnv>().get('/:runId/*', async (c) => {
 	const match = previewFiles.find((a) => a.title === filePath)
 
 	if (match) {
-		if (match.ref_kind === 'base64') {
-			const bytes = Buffer.from(match.ref_value, 'base64')
-			return new Response(bytes, {
-				headers: {
-					'Content-Type': match.mime_type || guessMimeType(match.title),
-					'Cache-Control': 'public, max-age=3600',
-					'Content-Length': String(bytes.length),
-				},
-			})
-		}
-		return new Response(match.ref_value, {
+		const content = await artifactService.resolveContent(match)
+		const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8')
+		return new Response(bytes, {
 			headers: {
 				'Content-Type': match.mime_type || guessMimeType(match.title),
 				'Cache-Control': 'public, max-age=3600',
+				'Content-Length': String(bytes.length),
 			},
 		})
 	}

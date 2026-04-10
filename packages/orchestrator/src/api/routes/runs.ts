@@ -58,7 +58,7 @@ const runs = new Hono<AppEnv>()
 			return c.json(events, 200)
 		},
 	)
-	// GET /runs/:id/artifacts — get run artifacts
+	// GET /runs/:id/artifacts — get run artifacts (metadata only, blob content not inlined)
 	.get(
 		'/:id/artifacts',
 		zValidator('param', z.object({ id: z.string() })),
@@ -66,7 +66,28 @@ const runs = new Hono<AppEnv>()
 			const { artifactService } = c.get('services')
 			const { id } = c.req.valid('param')
 			const arts = await artifactService.listForRun(id)
-			return c.json(arts, 200)
+			// Sanitize blob-backed rows: replace internal pointer with empty string
+			const sanitized = arts.map((a) => (a.blob_id ? { ...a, ref_value: '' } : a))
+			return c.json(sanitized, 200)
+		},
+	)
+	// GET /runs/:id/artifacts/:artId/content — resolve and return artifact content
+	.get(
+		'/:id/artifacts/:artId/content',
+		zValidator('param', z.object({ id: z.string(), artId: z.string() })),
+		async (c) => {
+			const { artifactService } = c.get('services')
+			const { artId } = c.req.valid('param')
+			const row = await artifactService.get(artId)
+			if (!row) return c.json({ error: 'artifact not found' }, 404)
+			const content = await artifactService.resolveContent(row)
+			const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8')
+			return new Response(bytes, {
+				headers: {
+					'Content-Type': row.mime_type || 'application/octet-stream',
+					'Content-Length': String(bytes.length),
+				},
+			})
 		},
 	)
 	// POST /runs — create a new pending run

@@ -21,6 +21,7 @@ import {
 	WorkflowEngine,
 	ActivityService,
 	ArtifactService,
+	BlobStore,
 	ConversationBindingService,
 	TaskRelationService,
 	TaskGraphService,
@@ -42,6 +43,7 @@ const DDL = [
 	`DROP TABLE IF EXISTS run_events`,
 	`DROP TABLE IF EXISTS workers`,
 	`DROP TABLE IF EXISTS worker_leases`,
+	`DROP TABLE IF EXISTS artifact_blobs`,
 	`DROP TABLE IF EXISTS artifacts`,
 	`DROP TABLE IF EXISTS shared_secrets`,
 	`DROP TABLE IF EXISTS queries`,
@@ -84,11 +86,17 @@ const DDL = [
 		claimed_at TEXT NOT NULL, expires_at TEXT NOT NULL,
 		status TEXT NOT NULL DEFAULT 'active'
 	)`,
+	`CREATE TABLE artifact_blobs (
+		id TEXT PRIMARY KEY, content_hash TEXT NOT NULL UNIQUE,
+		storage_key TEXT NOT NULL UNIQUE, size INTEGER NOT NULL,
+		created_at TEXT NOT NULL
+	)`,
 	`CREATE TABLE artifacts (
 		id TEXT PRIMARY KEY, run_id TEXT NOT NULL, task_id TEXT,
 		kind TEXT NOT NULL, title TEXT NOT NULL,
 		ref_kind TEXT NOT NULL, ref_value TEXT NOT NULL,
 		mime_type TEXT, metadata TEXT DEFAULT '{}',
+		blob_id TEXT REFERENCES artifact_blobs(id),
 		created_at TEXT NOT NULL
 	)`,
 	`CREATE TABLE shared_secrets (
@@ -200,7 +208,7 @@ describe('URL Generation — Configured Base URL', () => {
 		const workerService = new WorkerService(dbResult.db)
 		const enrollmentService = new EnrollmentService(dbResult.db)
 		const activityService = new ActivityService(dbResult.db)
-		const artifactService = new ArtifactService(dbResult.db)
+		const artifactService = new ArtifactService(dbResult.db, new BlobStore(join(companyRoot, '.data')))
 		const conversationBindingService = new ConversationBindingService(dbResult.db)
 		const taskRelationService = new TaskRelationService(dbResult.db)
 		const secretService = new SecretService(dbResult.db)
@@ -480,7 +488,7 @@ describe('Notification Bridge URL Construction', () => {
 
 		const runService = new RunService(db.db)
 		const taskService = new TaskService(db.db)
-		const artifactService = new ArtifactService(db.db)
+		const artifactService = new ArtifactService(db.db, new BlobStore(join(root, '.data')))
 		const conversationBindingService = new ConversationBindingService(db.db)
 
 		const runId = `run-notif-${Date.now()}`

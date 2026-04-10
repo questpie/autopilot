@@ -16,7 +16,9 @@ export { ActivityService } from './activity'
 export type { ActivityRow } from './activity'
 
 export { ArtifactService } from './artifacts'
-export type { ArtifactRow } from './artifacts'
+export type { ArtifactRow, ArtifactBlobRow } from './artifacts'
+
+export { BlobStore } from './blob-store'
 
 export { ConversationBindingService } from './conversation-bindings'
 export type { ConversationBindingRow } from './conversation-bindings'

@@ -23,7 +23,12 @@ import {
 	WorkflowEngine,
 	ActivityService,
 	ArtifactService,
+	BlobStore,
 	ConversationBindingService,
+	QueryService,
+	SessionService,
+	SessionMessageService,
+	SecretService,
 } from '../src/services'
 import type { AppEnv, Services } from '../src/api/app'
 import type { Actor } from '../src/auth/types'
@@ -117,11 +122,19 @@ describe('artifact kind normalization', () => {
 			)
 		`)
 		await rawClient.execute(`
+			CREATE TABLE IF NOT EXISTS artifact_blobs (
+				id TEXT PRIMARY KEY, content_hash TEXT NOT NULL UNIQUE,
+				storage_key TEXT NOT NULL UNIQUE, size INTEGER NOT NULL,
+				created_at TEXT NOT NULL
+			)
+		`)
+		await rawClient.execute(`
 			CREATE TABLE IF NOT EXISTS artifacts (
 				id TEXT PRIMARY KEY, run_id TEXT NOT NULL, task_id TEXT,
 				kind TEXT NOT NULL, title TEXT NOT NULL,
 				ref_kind TEXT NOT NULL, ref_value TEXT NOT NULL,
 				mime_type TEXT, metadata TEXT DEFAULT '{}',
+				blob_id TEXT REFERENCES artifact_blobs(id),
 				created_at TEXT NOT NULL
 			)
 		`)
@@ -142,7 +155,11 @@ describe('artifact kind normalization', () => {
 
 		const taskService = new TaskService(db)
 		const runService = new RunService(db)
-		artifactService = new ArtifactService(db)
+		const blobStore = new BlobStore(join(companyRoot, '.data'))
+		artifactService = new ArtifactService(db, blobStore)
+		const queryService = new QueryService(db)
+		const sessionService = new SessionService(db)
+		const sessionMessageService = new SessionMessageService(db)
 		const workflowEngine = new WorkflowEngine(
 			{
 				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, defaults: {} },
@@ -162,8 +179,15 @@ describe('artifact kind normalization', () => {
 			activityService: new ActivityService(db),
 			artifactService,
 			conversationBindingService: new ConversationBindingService(db),
-			sessionMessageService: {} as never,
+			taskRelationService: {} as never,
+			taskGraphService: {} as never,
 			workflowEngine,
+			secretService: new SecretService(db),
+			queryService,
+			sessionService,
+			sessionMessageService,
+			scheduleService: {} as never,
+			steerService: {} as never,
 		}
 
 		app = buildTestApp(companyRoot, db, services)

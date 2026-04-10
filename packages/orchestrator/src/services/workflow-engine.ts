@@ -1008,7 +1008,9 @@ export class WorkflowEngine {
 				// Find most recent artifact of this kind (last in array)
 				const found = [...taskArtifacts].reverse().find((a) => a.kind === wantedKind)
 				if (found) {
-					parts.push(`## Input: ${found.title}\n\n${found.ref_value}`)
+					const content = await this.artifactService.resolveContent(found)
+					const textContent = Buffer.isBuffer(content) ? content.toString('utf-8') : content
+					parts.push(`## Input: ${found.title}\n\n${textContent}`)
 				} else {
 					parts.push(`## Input: ${wantedKind}\n\n> **Warning:** Expected artifact "${wantedKind}" was not found. It may not have been produced by a prior step.`)
 				}
