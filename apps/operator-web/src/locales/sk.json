@@ -76,7 +76,8 @@
 		"failed_at_step": "Zlyhalo na kroku {{step}}",
 		"blocked_waiting": "Blokované \u00b7 Čaká na {{task}}",
 		"show_audit": "Zobraziť audit log",
-		"hide_audit": "Skryť audit log"
+		"hide_audit": "Skryť audit log",
+		"reject_placeholder": "Čo treba zmeniť?"
 	},
 	"automations": {
 		"title": "Automatizácie",
@@ -161,6 +162,7 @@
 		"filter_unassigned": "Nepriradené",
 		"upload": "+ Nahrať súbor",
 		"upload_note": "Upload súborov bude dostupný v ďalšej verzii.",
+		"upload_coming_soon": "Upload bude dostupný čoskoro",
 		"search_placeholder": "Hľadať v zdrojoch...",
 		"select_hint": "Vyber zdroj zo zoznamu",
 		"preview": "Náhľad",

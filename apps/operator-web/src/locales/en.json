@@ -233,7 +233,8 @@
 		"failed_at_step": "Failed at step {{step}}",
 		"blocked_waiting": "Blocked \u00b7 Waiting for {{task}}",
 		"show_audit": "Show audit log",
-		"hide_audit": "Hide audit log"
+		"hide_audit": "Hide audit log",
+		"reject_placeholder": "What should be changed?"
 	},
 	"team": {
 		"title": "Team",
@@ -1176,6 +1177,7 @@
 		"filter_unassigned": "Unassigned",
 		"upload": "+ Upload file",
 		"upload_note": "File upload will be available in the next version.",
+		"upload_coming_soon": "Upload coming soon",
 		"search_placeholder": "Search resources...",
 		"select_hint": "Select a resource from the list",
 		"preview": "Preview",

@@ -1,3 +1,14 @@
+/**
+ * API contract types for operator-web.
+ *
+ * These mirror the backend API response shapes from packages/orchestrator.
+ * They are NOT auto-generated from Drizzle schemas — they are manually
+ * maintained API contracts. When the backend changes, these must be updated.
+ *
+ * View models (TaskWithRelations, RunWithArtifacts, etc.) are UI-only
+ * compositions — the backend never returns these directly.
+ */
+
 // ── Task ──
 export interface Task {
   id: string
@@ -193,7 +204,49 @@ export interface ScheduleWithHistory extends Schedule {
   history: ScheduleExecution[]
 }
 
-// ── File tree (no backend API yet, pure view model) ──
+// ── VFS (from packages/spec/src/schemas/vfs.ts) ──
+
+export interface VfsStatResult {
+  uri: string
+  type: 'file' | 'directory'
+  size: number
+  mime_type: string | null
+  writable: boolean
+  etag: string | null
+}
+
+export interface VfsListEntry {
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  size?: number
+  mime_type?: string | null
+}
+
+export interface VfsListResult {
+  uri: string
+  entries: VfsListEntry[]
+}
+
+export interface VfsDiffFile {
+  path: string
+  status: string
+  diff: string
+}
+
+export interface VfsDiffResult {
+  uri: string
+  base: string
+  head: string
+  files: VfsDiffFile[]
+  stats: {
+    files_changed: number
+    insertions: number
+    deletions: number
+  }
+}
+
+// ── File tree view model (composed from VFS list/stat, NOT a backend entity) ──
 export type FileTreeNodeType = 'file' | 'directory' | 'worktree-root'
 export type FileChangeKind = 'added' | 'modified' | 'deleted' | 'unchanged'
 

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { m, AnimatePresence } from 'framer-motion'
 import {
   PaperPlaneRightIcon,
@@ -198,7 +198,7 @@ function TypingIndicator() {
   )
 }
 
-function ToolCardBlock({ card, t }: { card: ToolCard; t: (key: string) => string }) {
+function ToolCardBlock({ card, t, onNavigateToTasks }: { card: ToolCard; t: (key: string) => string; onNavigateToTasks: () => void }) {
   const label =
     card.kind === 'created' ? t('chat.tool_task_created') : t('chat.tool_task_updated')
 
@@ -213,6 +213,7 @@ function ToolCardBlock({ card, t }: { card: ToolCard; t: (key: string) => string
       </p>
       <button
         type="button"
+        onClick={onNavigateToTasks}
         className="mt-1.5 font-heading text-[11px] text-primary hover:underline"
       >
         {t('chat.open_in_tasks')} <ArrowRightIcon className="inline size-3" />
@@ -310,6 +311,7 @@ function InlineFormat({ text }: { text: string }) {
 
 function ChatPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const pendingSeed = useChatSeedStore((s) => s.pendingSeed)
   const clearSeed = useChatSeedStore((s) => s.clearSeed)
 
@@ -320,39 +322,45 @@ function ChatPage() {
     getQueries().then(setQueries)
   }, [])
 
+  // Persist seed conversations as regular conversations
+  const [seedConversations, setSeedConversations] = useState<Conversation[]>([])
+
   // Derive conversations from queries
   const queryConversations = useMemo<Conversation[]>(
     () => queries.map(queryToConversation),
     [queries],
   )
 
-  // Build seed conversation
-  const seedConversation = useMemo<Conversation | null>(() => {
-    if (!pendingSeed) return null
-    return {
-      id: '__seed__',
-      title: pendingSeed.title,
-      lastPreview: pendingSeed.context.slice(0, 60),
-      time: 'Teraz',
-      artifacts: [],
-      messages: [
-        {
-          id: 'seed-bot',
-          role: 'bot',
-          content: pendingSeed.context,
-        },
-      ],
-    }
-  }, [pendingSeed])
-
   const allConversations = useMemo<Conversation[]>(() => {
-    if (!seedConversation) return queryConversations
-    return [seedConversation, ...queryConversations]
-  }, [seedConversation, queryConversations])
+    return [...seedConversations, ...queryConversations]
+  }, [seedConversations, queryConversations])
 
   const [activeId, setActiveId] = useState<string | null>(() =>
-    pendingSeed ? '__seed__' : null
+    pendingSeed ? null : null
   )
+
+  // When a seed arrives, convert it into a persistent conversation, then clear the store
+  useEffect(() => {
+    if (pendingSeed) {
+      const seedConversation: Conversation = {
+        id: `seed_${Date.now()}`,
+        title: pendingSeed.title,
+        lastPreview: pendingSeed.context.slice(0, 80),
+        time: new Date().toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' }),
+        messages: [
+          {
+            id: 'seed-system',
+            role: 'bot',
+            content: pendingSeed.context,
+          },
+        ],
+        artifacts: [],
+      }
+      setSeedConversations(prev => [seedConversation, ...prev])
+      setActiveId(seedConversation.id)
+      clearSeed()
+    }
+  }, [pendingSeed, clearSeed])
 
   // Auto-select first conversation when loaded
   useEffect(() => {
@@ -377,14 +385,6 @@ function ChatPage() {
     }
   }, [selectedArtifactId, allConversations])
 
-  // Auto-select seed when it arrives
-  useEffect(() => {
-    if (pendingSeed) {
-      setActiveId('__seed__')
-      clearSeed()
-    }
-  }, [pendingSeed, clearSeed])
-
   const currentConversation =
     allConversations.find((c) => c.id === activeId) ?? allConversations[0] ?? null
 
@@ -401,6 +401,10 @@ function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeId])
+
+  const handleNavigateToTasks = useCallback(() => {
+    void navigate({ to: '/tasks' })
+  }, [navigate])
 
   const handleArtifactSelect = useCallback((artifactId: string) => {
     setSelectedArtifactId(artifactId)
@@ -523,7 +527,7 @@ function ChatPage() {
                   >
                     {/* Tool card only */}
                     {msg.toolCard && !msg.content && (
-                      <ToolCardBlock card={msg.toolCard} t={t} />
+                      <ToolCardBlock card={msg.toolCard} t={t} onNavigateToTasks={handleNavigateToTasks} />
                     )}
 
                     {/* User message */}
@@ -572,7 +576,7 @@ function ChatPage() {
 
                     {/* Tool card after content */}
                     {msg.toolCard && msg.content && (
-                      <ToolCardBlock card={msg.toolCard} t={t} />
+                      <ToolCardBlock card={msg.toolCard} t={t} onNavigateToTasks={handleNavigateToTasks} />
                     )}
                   </m.div>
                 ))}

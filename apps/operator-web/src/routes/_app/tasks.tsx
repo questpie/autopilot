@@ -17,7 +17,7 @@ import {
   wizardTextareaClass,
 } from '@/components/wizard-dialog'
 import { useChatSeedStore } from '@/stores/chat-seed.store'
-import { getTasks, getTask, getTaskActivity } from '@/api/tasks.api'
+import { getTasks, getTask, getTaskActivity, approveTask, rejectTask } from '@/api/tasks.api'
 import type { Task, TaskWithRelations, Run, RunEvent } from '@/api/types'
 
 export const Route = createFileRoute('/_app/tasks')({
@@ -802,9 +802,11 @@ function StepSubHints({ step, isLast }: { step: StepInstance; isLast: boolean })
 
 // ── Task Detail ──
 
-function TaskDetail({ task }: { task: TaskViewModel }) {
+function TaskDetail({ task, onApprove, onReject }: { task: TaskViewModel; onApprove: (taskId: string) => void; onReject: (taskId: string, message: string) => void }) {
   const { t } = useTranslation()
   const [auditOpen, setAuditOpen] = useState(false)
+  const [rejectMode, setRejectMode] = useState(false)
+  const [rejectMessage, setRejectMessage] = useState('')
 
   return (
     <div className="flex flex-col">
@@ -851,21 +853,58 @@ function TaskDetail({ task }: { task: TaskViewModel }) {
         <div className="border-b border-border/50 px-5 py-4">
           <div className="border border-amber-500/20 bg-amber-500/5 px-4 py-3">
             <p className="text-[13px] font-medium text-foreground">{t('tasks.action_waiting')}</p>
-            <div className="mt-3 flex items-center gap-2">
-              <Button
-                size="sm"
-                className="bg-green-600 text-white hover:bg-green-700"
-              >
-                {t('tasks.action_approve')}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-amber-500/30 text-amber-600 hover:border-amber-500 hover:bg-amber-500/5"
-              >
-                {t('tasks.action_return')}
-              </Button>
-            </div>
+            {rejectMode ? (
+              <div className="mt-3 flex flex-col gap-2">
+                <textarea
+                  value={rejectMessage}
+                  onChange={(e) => setRejectMessage(e.currentTarget.value)}
+                  placeholder={t('tasks.reject_placeholder')}
+                  className="min-h-[60px] w-full resize-none border border-border bg-input/30 px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-500/30 text-amber-600 hover:border-amber-500 hover:bg-amber-500/5"
+                    onClick={() => {
+                      onReject(task.id, rejectMessage)
+                      setRejectMode(false)
+                      setRejectMessage('')
+                    }}
+                  >
+                    {t('tasks.action_return')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setRejectMode(false)
+                      setRejectMessage('')
+                    }}
+                  >
+                    {t('wizard.cancel')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="bg-green-600 text-white hover:bg-green-700"
+                  onClick={() => onApprove(task.id)}
+                >
+                  {t('tasks.action_approve')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-500/30 text-amber-600 hover:border-amber-500 hover:bg-amber-500/5"
+                  onClick={() => setRejectMode(true)}
+                >
+                  {t('tasks.action_return')}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -981,6 +1020,24 @@ function TasksPage() {
     activity: [],
   }))
 
+  function handleApprove(taskId: string) {
+    approveTask(taskId).then(() => {
+      // Optimistic: mark task as running in local state
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'running' } : t))
+      setSelectedDetail(prev => prev ? { ...prev, status: 'running' } : prev)
+      console.log(`Task ${taskId} approved`)
+    })
+  }
+
+  function handleReject(taskId: string, message: string) {
+    rejectTask(taskId, message).then(() => {
+      // Optimistic: mark task as running (agent will re-process)
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'running' } : t))
+      setSelectedDetail(prev => prev ? { ...prev, status: 'running' } : prev)
+      console.log(`Task ${taskId} rejected with message: ${message}`)
+    })
+  }
+
   function handleCreate() {
     setSeed({
       action: 'create_task',
@@ -1048,7 +1105,7 @@ function TasksPage() {
       {/* Right: task detail */}
       <div className="flex-1 overflow-y-auto">
         {selectedDetail ? (
-          <TaskDetail task={selectedDetail} />
+          <TaskDetail task={selectedDetail} onApprove={handleApprove} onReject={handleReject} />
         ) : (
           <EmptyState
             title={t('tasks.select_task')}

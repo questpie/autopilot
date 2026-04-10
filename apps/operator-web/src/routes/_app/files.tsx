@@ -23,7 +23,9 @@ export const Route = createFileRoute('/_app/files')({
   component: FilesPage,
 })
 
-// ── Mock File Tree ──
+// View model composed from VFS list responses. Mock data until wired to GET /api/vfs/
+// FileTreeNode is a UI-only tree shape — VFS returns flat lists per directory.
+// The tree below is hardcoded mock data simulating what buildTreeFromVfsList() would produce.
 
 const MOCK_TREE: FileTreeNode[] = [
   {

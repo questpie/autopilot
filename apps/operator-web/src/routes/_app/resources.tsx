@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 
 import { cn } from '@/lib/utils'
@@ -11,9 +11,13 @@ import { KvList } from '@/components/ui/kv-list'
 import { RelationLink } from '@/components/ui/relation-link'
 import { StatusPill } from '@/components/ui/status-pill'
 import { EmptyState } from '@/components/empty-state'
+import { vfsList } from '@/api/vfs.api'
+import type { VfsListEntry } from '@/api/types'
 
-// No backend API for resources yet. Mock data stays local until
-// resource management API is implemented. See: api/types.ts for future shape.
+// Resources are served via VFS company:// scope (GET /api/vfs/list?uri=company://).
+// VFS list returns VfsListEntry[]; the Resource view model below enriches that with
+// UI-only fields (preview, context, relations) that are mock-composed until the
+// backend returns richer metadata.
 
 // --- Types ---
 
@@ -352,14 +356,31 @@ export const Route = createFileRoute('/_app/resources')({
 
 // --- Page ---
 
+// Enrich VFS entries with locally-maintained mock detail (preview, relations, etc.)
+// Until the backend serves richer resource metadata, detail is mock-composed.
+function enrichVfsEntries(_entries: VfsListEntry[]): Resource[] {
+  // For now, return MOCK_RESOURCES which already mirror the VFS file names.
+  // When the backend adds metadata endpoints, this function will merge
+  // VfsListEntry fields (size, mime_type) with fetched metadata.
+  return MOCK_RESOURCES
+}
+
 function ResourcesPage() {
   const { t } = useTranslation()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [activeFilter, setActiveFilter] = useState<ResourceFilter>('all')
   const [search, setSearch] = useState('')
+  const [resources, setResources] = useState<Resource[]>(MOCK_RESOURCES)
+
+  // Load resource list from VFS company:// scope
+  useEffect(() => {
+    vfsList('company://').then((result) => {
+      setResources(enrichVfsEntries(result.entries))
+    })
+  }, [])
 
   const filtered = useMemo(() => {
-    let items = MOCK_RESOURCES.filter((r) => matchesFilter(r, activeFilter))
+    let items = resources.filter((r) => matchesFilter(r, activeFilter))
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       items = items.filter(
@@ -378,8 +399,9 @@ function ResourcesPage() {
   }
 
   function handleUploadClick() {
-    // Backend not ready yet — inform user
-    alert(t('resources.upload_note'))
+    // VFS write endpoint exists but UI file picker is not wired yet.
+    // Truthful feedback instead of a dead button.
+    alert(t('resources.upload_coming_soon'))
   }
 
   return (

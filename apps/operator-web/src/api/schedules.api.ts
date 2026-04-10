@@ -1,3 +1,6 @@
+// Mock adapter. Returns hardcoded data matching API response shapes.
+// Swap to real API: replace with hc<AppType>('/api/schedules').get().$get() (Hono client)
+
 import type { Schedule, ScheduleWithHistory } from './types'
 import {
   mockSchedules,

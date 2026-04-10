@@ -1,3 +1,6 @@
+// Mock adapter. Returns hardcoded data matching API response shapes.
+// Swap to real API: replace with hc<AppType>('/api/runs').get().$get() (Hono client)
+
 import type { Run, RunWithArtifacts, RunEvent } from './types'
 import { mockRuns, mockRunArtifacts, mockRunEvents } from './mock/runs.mock'
 import { delay } from './mock/delay'
