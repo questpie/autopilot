@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { m } from 'framer-motion'
 import {
   CalendarDotsIcon,
@@ -20,6 +20,8 @@ import {
   wizardTextareaClass,
   wizardSelectClass,
 } from '@/components/wizard-dialog'
+import { getSchedules } from '@/api/schedules.api'
+import type { Schedule } from '@/api/types'
 
 export const Route = createFileRoute('/_app/automations')({
   component: AutomationsPage,
@@ -36,45 +38,50 @@ interface Automation {
   icon: React.ComponentType<{ className?: string; weight?: 'regular' | 'bold' | 'fill' }>
 }
 
-// ── Mock Data ──
+// ── Transform schedule to automation display model ──
 
-const initialAutomations: Automation[] = [
-  {
-    id: '1',
-    title: 'Pondelkový prehľad',
-    description: 'Zhrnutie priorít na tento týždeň',
-    schedule: 'Každý pondelok o 9:00',
-    enabled: true,
-    icon: CalendarDotsIcon,
-  },
-  {
-    id: '2',
-    title: 'Piatkové zhrnutie',
-    description: 'Čo sa tento týždeň podarilo a čo ostáva',
-    schedule: 'Každý piatok o 17:00',
-    enabled: true,
-    icon: ClockIcon,
-  },
-  {
-    id: '3',
-    title: 'Kontrola recenzií',
-    description: 'Denne skontroluje nové recenzie',
-    schedule: 'Denne o 8:00',
-    enabled: true,
-    icon: StarIcon,
-  },
-  {
-    id: '4',
-    title: 'Týždenný content plán',
-    description: 'Automaticky pripraví návrhy príspevkov',
-    schedule: 'Každú nedeľu o 20:00',
-    enabled: false,
-    icon: ArticleIcon,
-  },
-]
+const SCHEDULE_ICONS: Record<string, React.ComponentType<{ className?: string; weight?: 'regular' | 'bold' | 'fill' }>> = {
+  'agent_analytics': StarIcon,
+  'agent_content': ArticleIcon,
+  'agent_procurement': ClockIcon,
+}
+
+function cronToLabel(cron: string): string {
+  const parts = cron.split(' ')
+  const minute = parts[0]
+  const hour = parts[1]
+  const dom = parts[2]
+  const dow = parts[4]
+  const time = `${hour}:${minute?.padStart(2, '0')}`
+
+  if (dom !== '*' && dom === '1') return `Ka\u017ed\u00fd 1. v mesiaci o ${time}`
+  if (dom !== '*') return `Ka\u017ed\u00fd ${dom}. v mesiaci o ${time}`
+  if (dow === '1') return `Ka\u017ed\u00fd pondelok o ${time}`
+  if (dow === '5') return `Ka\u017ed\u00fd piatok o ${time}`
+  if (dow === '0') return `Ka\u017ed\u00fa nede\u013eu o ${time}`
+  if (dow !== '*') return `Ka\u017ed\u00fd t\u00fd\u017ede\u0148 o ${time}`
+  return `Denne o ${time}`
+}
+
+function scheduleToAutomation(schedule: Schedule): Automation {
+  return {
+    id: schedule.id,
+    title: schedule.name,
+    description: schedule.description ?? '',
+    schedule: cronToLabel(schedule.cron),
+    enabled: schedule.enabled,
+    icon: SCHEDULE_ICONS[schedule.agent_id] ?? CalendarDotsIcon,
+  }
+}
 
 function AutomationsPage() {
-  const [automations, setAutomations] = useState(initialAutomations)
+  const [automations, setAutomations] = useState<Automation[]>([])
+
+  useEffect(() => {
+    getSchedules().then((schedules) => {
+      setAutomations(schedules.map(scheduleToAutomation))
+    })
+  }, [])
   const [wizardOpen, setWizardOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')

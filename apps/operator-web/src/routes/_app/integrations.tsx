@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 
 import { cn } from '@/lib/utils'
@@ -12,29 +12,8 @@ import {
 } from '@/components/wizard-dialog'
 import { useTranslation } from '@/lib/i18n'
 import { useChatSeedStore } from '@/stores/chat-seed.store'
-
-const MOCK_INTEGRATIONS = [
-  {
-    icon: '💬',
-    name: 'Telegram',
-    connected: true,
-  },
-  {
-    icon: '📷',
-    name: 'Instagram',
-    connected: false,
-  },
-  {
-    icon: '✉️',
-    name: 'Email',
-    connected: true,
-  },
-  {
-    icon: '🛒',
-    name: 'E-shop',
-    connected: false,
-  },
-]
+import { getIntegrations } from '@/api/integrations.api'
+import type { Integration } from '@/api/types'
 
 export const Route = createFileRoute('/_app/integrations')({
   component: IntegrationsPage,
@@ -44,7 +23,12 @@ function IntegrationsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const setSeed = useChatSeedStore((s) => s.setSeed)
+  const [integrations, setIntegrations] = useState<Integration[]>([])
   const [wizardOpen, setWizardOpen] = useState(false)
+
+  useEffect(() => {
+    getIntegrations().then(setIntegrations)
+  }, [])
   const [service, setService] = useState('instagram')
   const [description, setDescription] = useState('')
 
@@ -74,52 +58,55 @@ function IntegrationsPage() {
       />
 
       <div className="mt-6 flex max-w-2xl flex-col gap-3">
-        {MOCK_INTEGRATIONS.map((integration) => (
-          <div
-            key={integration.name}
-            className="flex items-center gap-4 rounded-xl border border-border bg-card p-4"
-          >
-            <div className="flex size-9 items-center justify-center rounded-none bg-muted text-xl">
-              {integration.icon}
-            </div>
-            <div className="flex-1">
-              <p className="text-[14px] font-medium">{integration.name}</p>
-              <div className="mt-0.5 flex items-center gap-1.5">
-                <span
-                  className={cn(
-                    'inline-block size-1.5 rounded-full',
-                    integration.connected ? 'bg-success' : 'bg-muted-foreground',
-                  )}
-                />
-                <span
-                  className={cn(
-                    'text-[12px]',
-                    integration.connected ? 'text-success' : 'text-muted-foreground',
-                  )}
-                >
-                  {integration.connected ? t('integrations.connected') : t('integrations.disconnected', { name: integration.name })}
-                </span>
-              </div>
-            </div>
-            <Button
-              variant={integration.connected ? 'outline' : 'default'}
-              size="sm"
-              onClick={() => {
-                if (!integration.connected) {
-                  setSeed({
-                    action: 'create_integration',
-                    title: integration.name,
-                    context: t('chat.seed_creating_integration', { service: integration.name }),
-                    fields: { service: integration.name },
-                  })
-                  void navigate({ to: '/chat' })
-                }
-              }}
+        {integrations.map((integration) => {
+          const connected = integration.status === 'connected'
+          return (
+            <div
+              key={integration.id}
+              className="flex items-center gap-4 rounded-xl border border-border bg-card p-4"
             >
-              {integration.connected ? t('integrations.configure') : t('integrations.connect')}
-            </Button>
-          </div>
-        ))}
+              <div className="flex size-9 items-center justify-center rounded-none bg-muted text-xl">
+                {integration.icon}
+              </div>
+              <div className="flex-1">
+                <p className="text-[14px] font-medium">{integration.name}</p>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      'inline-block size-1.5 rounded-full',
+                      connected ? 'bg-success' : 'bg-muted-foreground',
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      'text-[12px]',
+                      connected ? 'text-success' : 'text-muted-foreground',
+                    )}
+                  >
+                    {connected ? t('integrations.connected') : t('integrations.disconnected', { name: integration.name })}
+                  </span>
+                </div>
+              </div>
+              <Button
+                variant={connected ? 'outline' : 'default'}
+                size="sm"
+                onClick={() => {
+                  if (!connected) {
+                    setSeed({
+                      action: 'create_integration',
+                      title: integration.name,
+                      context: t('chat.seed_creating_integration', { service: integration.name }),
+                      fields: { service: integration.name },
+                    })
+                    void navigate({ to: '/chat' })
+                  }
+                }}
+              >
+                {connected ? t('integrations.configure') : t('integrations.connect')}
+              </Button>
+            </div>
+          )
+        })}
 
       </div>
 

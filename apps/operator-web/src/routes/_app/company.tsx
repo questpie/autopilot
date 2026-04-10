@@ -1,16 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/page-header'
 import { useTranslation } from '@/lib/i18n'
 import { useChatSeedStore } from '@/stores/chat-seed.store'
-
-const MOCK_FILES = [
-  { name: 'menu-jar-2026.pdf', size: '240 KB' },
-  { name: 'brand-guidelines.pdf', size: '1.2 MB' },
-  { name: 'o-nas.md', size: '4 KB' },
-]
+import { getCompanyProfile } from '@/api/company.api'
+import type { CompanyProfile } from '@/api/types'
 
 export const Route = createFileRoute('/_app/company')({
   component: CompanyPage,
@@ -21,10 +17,17 @@ function CompanyPage() {
   const navigate = useNavigate()
   const setSeed = useChatSeedStore((s) => s.setSeed)
   const [editing, setEditing] = useState(false)
-  const [companyName, setCompanyName] = useState('Kaviareň Srdcom')
-  const [companyDesc, setCompanyDesc] = useState(
-    'Slovenská kaviareň s domácou atmosférou'
-  )
+  const [profile, setProfile] = useState<CompanyProfile | null>(null)
+  const [companyName, setCompanyName] = useState('')
+  const [companyDesc, setCompanyDesc] = useState('')
+
+  useEffect(() => {
+    getCompanyProfile().then((p) => {
+      setProfile(p)
+      setCompanyName(p.name)
+      setCompanyDesc(p.description)
+    })
+  }, [])
   const [draftName, setDraftName] = useState(companyName)
   const [draftDesc, setDraftDesc] = useState(companyDesc)
 
@@ -130,12 +133,12 @@ function CompanyPage() {
           </p>
 
           <div className="mt-3 border-t border-border pt-3">
-            {MOCK_FILES.map((file) => (
+            {(profile?.knowledge_files ?? []).map((file) => (
               <div
                 key={file.name}
                 className="flex items-center gap-2 py-1.5"
               >
-                <span className="text-[14px]">📄</span>
+                <span className="text-[14px]">{'\u{1F4C4}'}</span>
                 <span className="flex-1 text-[13px]">{file.name}</span>
                 <span className="font-heading text-[11px] text-muted-foreground">
                   {file.size}

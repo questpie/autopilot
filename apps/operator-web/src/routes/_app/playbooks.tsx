@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { ArrowsClockwise, Hand, Play } from '@phosphor-icons/react'
 
@@ -14,11 +14,16 @@ import { useTranslation } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/stores/app.store'
 import { useChatSeedStore } from '@/stores/chat-seed.store'
+import { getPlaybooks } from '@/api/playbooks.api'
+import { getSchedules } from '@/api/schedules.api'
+import type { Playbook } from '@/api/types'
 
-type PlaybookStatus = 'active' | 'draft' | 'disabled'
-type PlaybookTrigger = 'manual' | 'scheduled' | 'on_demand'
+type PlaybookStatus = Playbook['status']
+type PlaybookTrigger = Playbook['trigger']
 
-interface Playbook {
+// ── Display model enriched from Playbook + schedule names ──
+
+interface PlaybookDisplay {
   id: string
   title: string
   desc: string
@@ -27,44 +32,14 @@ interface Playbook {
   linkedAutomation: string | null
   lastUsed: string
   usageCount: number
-  skillId: string
+  skillId: string | null
 }
 
-const MOCK_PLAYBOOKS: Playbook[] = [
-  {
-    id: 'weekly-content',
-    title: 'Týždenný content plán',
-    desc: 'Automaticky pripraví 10 príspevkov pre sociálne siete na základe firemného kontextu a sezónnych tém.',
-    status: 'active',
-    trigger: 'scheduled',
-    linkedAutomation: 'Týždenný content plán',
-    lastUsed: '6. apríla',
-    usageCount: 12,
-    skillId: 'content-plan-weekly',
-  },
-  {
-    id: 'review-analysis',
-    title: 'Analýza recenzií',
-    desc: 'Zhrnie nové recenzie z Google a TripAdvisor, identifikuje trendy a navrhne odpovede na negatívne recenzie.',
-    status: 'active',
-    trigger: 'scheduled',
-    linkedAutomation: 'Kontrola recenzií',
-    lastUsed: '1. apríla',
-    usageCount: 28,
-    skillId: 'review-analyzer',
-  },
-  {
-    id: 'newsletter-prep',
-    title: 'Príprava newslettera',
-    desc: 'Napíše text newslettera podľa šablóny, vyberie témy z nedávnych aktivít a pripraví preview.',
-    status: 'draft',
-    trigger: 'manual',
-    linkedAutomation: null,
-    lastUsed: '28. marca',
-    usageCount: 5,
-    skillId: 'newsletter-draft',
-  },
-]
+function formatDate(iso: string | null): string {
+  if (!iso) return '\u2014'
+  const d = new Date(iso)
+  return `${d.getDate()}. ${['janu\u00e1ra','febru\u00e1ra','marca','apr\u00edla','m\u00e1ja','j\u00fana','j\u00fala','augusta','septembra','okt\u00f3bra','novembra','decembra'][d.getMonth()]}`
+}
 
 const STATUS_LABEL_KEYS: Record<PlaybookStatus, string> = {
   active: 'playbooks.status_active',
@@ -117,9 +92,34 @@ function PlaybooksPage() {
   const navigate = useNavigate()
   const developerMode = useAppStore((s) => s.developerMode)
   const setSeed = useChatSeedStore((s) => s.setSeed)
+  const [playbooks, setPlaybooks] = useState<PlaybookDisplay[]>([])
   const [wizardOpen, setWizardOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+
+  useEffect(() => {
+    Promise.all([getPlaybooks(), getSchedules()]).then(([pbs, schedules]) => {
+      const scheduleNameById = new Map(schedules.map((s) => [s.id, s.name]))
+      setPlaybooks(
+        pbs.map((pb): PlaybookDisplay => {
+          const linkedName = pb.linked_schedule_ids
+            .map((sid) => scheduleNameById.get(sid))
+            .filter(Boolean)[0] ?? null
+          return {
+            id: pb.id,
+            title: pb.name,
+            desc: pb.description,
+            status: pb.status,
+            trigger: pb.trigger,
+            linkedAutomation: linkedName ?? null,
+            lastUsed: formatDate(pb.last_used_at),
+            usageCount: pb.usage_count,
+            skillId: pb.skill_id,
+          }
+        }),
+      )
+    })
+  }, [])
 
   function handleCreate() {
     setSeed({
@@ -145,7 +145,7 @@ function PlaybooksPage() {
       />
 
       <div className="mt-6 flex max-w-2xl flex-col gap-3">
-        {MOCK_PLAYBOOKS.map((playbook) => {
+        {playbooks.map((playbook) => {
           const TriggerIcon = TRIGGER_ICONS[playbook.trigger]
           return (
             <div
@@ -173,7 +173,7 @@ function PlaybooksPage() {
                     {t('playbooks.linked_to', { name: playbook.linkedAutomation })}
                   </p>
                 )}
-                {developerMode && (
+                {developerMode && playbook.skillId && (
                   <p className="font-heading text-[11px] text-muted-foreground">
                     {t('playbooks.skill_id', { id: playbook.skillId })}
                   </p>

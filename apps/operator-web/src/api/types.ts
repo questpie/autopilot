@@ -186,6 +186,41 @@ export interface AutopilotEvent {
   ts?: string
 }
 
+// ── View models for screens without backend API yet ──
+
+export interface Integration {
+  id: string
+  provider: string
+  name: string
+  icon: string
+  status: 'connected' | 'needs_action' | 'disconnected' | 'error'
+  last_sync_at: string | null
+  config: Record<string, unknown>
+  created_at: string
+}
+
+export interface Playbook {
+  id: string
+  name: string
+  description: string
+  status: 'active' | 'draft' | 'disabled'
+  trigger: 'scheduled' | 'manual' | 'on_demand'
+  skill_id: string | null
+  linked_schedule_ids: string[]
+  resource_refs: string[]
+  last_used_at: string | null
+  usage_count: number
+  success_rate: number
+  created_at: string
+}
+
+export interface CompanyProfile {
+  name: string
+  description: string
+  tone: string
+  knowledge_files: Array<{ name: string; size: string; uri: string }>
+}
+
 // ── View Models (derived for UI, NOT in backend) ──
 
 export interface TaskWithRelations extends Task {

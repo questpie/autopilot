@@ -11,46 +11,20 @@ import { KvList } from '@/components/ui/kv-list'
 import { RelationLink } from '@/components/ui/relation-link'
 import { StatusPill } from '@/components/ui/status-pill'
 import { EmptyState } from '@/components/empty-state'
-import { vfsList } from '@/api/vfs.api'
-import type { VfsListEntry } from '@/api/types'
-
-// Resources are served via VFS company:// scope (GET /api/vfs/list?uri=company://).
-// VFS list returns VfsListEntry[]; the Resource view model below enriches that with
-// UI-only fields (preview, context, relations) that are mock-composed until the
-// backend returns richer metadata.
+import { getResources } from '@/api/resources.api'
+import type {
+  ResourceData,
+  ResourceType,
+  ResourceStatus,
+} from '@/api/resources.api'
 
 // --- Types ---
 
-type ResourceType = 'PDF' | 'MD' | 'XLSX' | 'CSV' | 'ZIP' | 'PNG'
-type ResourceStatus = 'indexed' | 'processing' | 'unprocessed'
 type ResourceFilter = 'all' | 'docs' | 'images' | 'data' | 'unassigned'
 
-interface ResourceVersion {
-  version: number
-  date: string
-  current: boolean
-}
-
-interface ResourceRelation {
-  kind: string
-  label: string
-  sublabel?: string
-}
-
-interface Resource {
-  id: string
-  filename: string
-  type: ResourceType
-  size: string
-  status: ResourceStatus
-  date: string
-  description: string | null
+// Resource with UI-only preview field, composed from ResourceData
+interface Resource extends ResourceData {
   preview: React.ReactNode | null
-  contextActive: boolean
-  contextSource: string
-  contextIndexed: string | null
-  relations: ResourceRelation[]
-  versions: ResourceVersion[]
 }
 
 // --- Constants ---
@@ -79,248 +53,127 @@ const STATUS_PILL_MAP: Record<ResourceStatus, 'done' | 'working' | 'pending'> = 
   unprocessed: 'pending',
 }
 
-const MOCK_RESOURCES: Resource[] = [
-  {
-    id: 'r1',
-    filename: 'menu-jar-2026.pdf',
-    type: 'PDF',
-    size: '240 KB',
-    status: 'indexed',
-    date: '8. apr',
-    description:
-      'Aktu\u00e1lne jarn\u00e9 menu s cenami a alerg\u00e9nmi. Pou\u017e\u00edva sa pri tvorbe content pl\u00e1nu a odpoved\u00ed na ot\u00e1zky o ponuke.',
-    preview: (
-      <div className="space-y-2 bg-muted/30 p-4 font-mono text-[12px] text-muted-foreground">
-        <p className="font-medium text-foreground">Jarn\u00e9 menu 2026</p>
-        <div className="space-y-1">
-          <p>Avok\u00e1dov\u00fd toast s vajcom .......... 8,90 \u20ac</p>
-          <p>Matcha latte ........................ 4,50 \u20ac</p>
-          <p>A\u00e7a\u00ed bowl .......................... 9,20 \u20ac</p>
-          <p>Banana bread ....................... 3,80 \u20ac</p>
-          <p>Flat white ......................... 3,60 \u20ac</p>
-        </div>
-        <p className="text-[11px]">Alerg\u00e9ny: 1, 3, 7, 8</p>
+// --- Preview renderers (UI-only, keyed by resource id) ---
+
+const PREVIEW_RENDERERS: Record<string, () => React.ReactNode> = {
+  r1: () => (
+    <div className="space-y-2 bg-muted/30 p-4 font-mono text-[12px] text-muted-foreground">
+      <p className="font-medium text-foreground">Jarn\u00e9 menu 2026</p>
+      <div className="space-y-1">
+        <p>Avok\u00e1dov\u00fd toast s vajcom .......... 8,90 \u20ac</p>
+        <p>Matcha latte ........................ 4,50 \u20ac</p>
+        <p>A\u00e7a\u00ed bowl .......................... 9,20 \u20ac</p>
+        <p>Banana bread ....................... 3,80 \u20ac</p>
+        <p>Flat white ......................... 3,60 \u20ac</p>
       </div>
-    ),
-    contextActive: true,
-    contextSource: 'Manu\u00e1lny upload',
-    contextIndexed: '8. apr 2026, 14:22',
-    relations: [
-      { kind: 'Postup', label: 'T\u00fd\u017edenn\u00fd content pl\u00e1n' },
-      { kind: '\u00daloha', label: 'Content pl\u00e1n na apr\u00edl', sublabel: 'T-142' },
-      { kind: 'Automatiz\u00e1cia', label: 'T\u00fd\u017edenn\u00fd content pl\u00e1n', sublabel: 'S-021' },
-      { kind: '\u00daloha', label: 'Newsletter k svadobnej sez\u00f3ne', sublabel: 'T-147' },
-    ],
-    versions: [
-      { version: 2, date: '8. apr 2026', current: true },
-      { version: 1, date: '15. mar 2026', current: false },
-    ],
-  },
-  {
-    id: 'r2',
-    filename: 'brand-guidelines.pdf',
-    type: 'PDF',
-    size: '1.2 MB',
-    status: 'indexed',
-    date: '2. apr',
-    description:
-      'Firemn\u00fd brand manu\u00e1l \u2014 farby, typografia, logo pou\u017eitie. Pou\u017e\u00edva sa pri tvorbe vizu\u00e1lov a kontrole konzistencie.',
-    preview: (
-      <div className="space-y-2 bg-muted/30 p-4 font-mono text-[12px] text-muted-foreground">
-        <p className="font-medium text-foreground">Brand Guidelines v3</p>
-        <p>Prim\u00e1rna farba: #2D5A3D</p>
-        <p>Sekund\u00e1rna farba: #F5E6D3</p>
-        <p>Font: Inter, fallback sans-serif</p>
-      </div>
-    ),
-    contextActive: true,
-    contextSource: 'Manu\u00e1lny upload',
-    contextIndexed: '2. apr 2026, 09:15',
-    relations: [
-      { kind: 'Postup', label: 'T\u00fd\u017edenn\u00fd content pl\u00e1n' },
-    ],
-    versions: [
-      { version: 3, date: '2. apr 2026', current: true },
-      { version: 2, date: '10. jan 2026', current: false },
-      { version: 1, date: '5. nov 2025', current: false },
-    ],
-  },
-  {
-    id: 'r3',
-    filename: 'o-nas.md',
-    type: 'MD',
-    size: '4 KB',
-    status: 'indexed',
-    date: '15. mar',
-    description:
-      'Stru\u010dn\u00fd popis firmy, hist\u00f3ria, hodnoty. Z\u00e1kladn\u00fd kontext pre v\u0161etky odpovede agenta.',
-    preview: (
-      <div className="space-y-1.5 bg-muted/30 p-4 text-[12px] text-muted-foreground">
-        <p className="font-medium text-foreground">O n\u00e1s</p>
-        <p>
-          Kavi\u00e1re\u0148 Slnie\u010dnica je rodinn\u00e1 kavi\u00e1re\u0148 v centre Bratislavy. Od roku 2018 pon\u00fakame
-          v\u00fdberov\u00fa k\u00e1vu, denn\u00e9 menu a priestor pre komunitn\u00e9 podujatia.
-        </p>
-      </div>
-    ),
-    contextActive: true,
-    contextSource: 'Manu\u00e1lny upload',
-    contextIndexed: '15. mar 2026, 11:00',
-    relations: [
-      { kind: '\u00daloha', label: 'Aktualiz\u00e1cia webov\u00e9ho textu', sublabel: 'T-098' },
-    ],
-    versions: [
-      { version: 1, date: '15. mar 2026', current: true },
-    ],
-  },
-  {
-    id: 'r4',
-    filename: 'cennik-2026.xlsx',
-    type: 'XLSX',
-    size: '56 KB',
-    status: 'indexed',
-    date: '10. mar',
-    description: 'Kompletn\u00fd cenn\u00edk produktov a slu\u017eieb na rok 2026.',
-    preview: (
-      <div className="overflow-x-auto bg-muted/30 p-4">
-        <table className="w-full font-mono text-[11px]">
-          <thead>
-            <tr className="border-b border-border/50 text-left text-muted-foreground">
-              <th className="pb-1.5 pr-4">Polo\u017eka</th>
-              <th className="pb-1.5 pr-4">Cena</th>
-              <th className="pb-1.5">Kateg\u00f3ria</th>
-            </tr>
-          </thead>
-          <tbody className="text-foreground">
-            <tr className="border-b border-border/30">
-              <td className="py-1 pr-4">Espresso</td>
-              <td className="py-1 pr-4">2,40 \u20ac</td>
-              <td className="py-1">K\u00e1va</td>
-            </tr>
-            <tr className="border-b border-border/30">
-              <td className="py-1 pr-4">Flat white</td>
-              <td className="py-1 pr-4">3,60 \u20ac</td>
-              <td className="py-1">K\u00e1va</td>
-            </tr>
-            <tr className="border-b border-border/30">
-              <td className="py-1 pr-4">Croissant</td>
-              <td className="py-1 pr-4">2,80 \u20ac</td>
-              <td className="py-1">Pe\u010divo</td>
-            </tr>
-            <tr>
-              <td className="py-1 pr-4">A\u00e7a\u00ed bowl</td>
-              <td className="py-1 pr-4">9,20 \u20ac</td>
-              <td className="py-1">Raňajky</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    ),
-    contextActive: true,
-    contextSource: 'Manu\u00e1lny upload',
-    contextIndexed: '10. mar 2026, 16:45',
-    relations: [],
-    versions: [
-      { version: 1, date: '10. mar 2026', current: true },
-    ],
-  },
-  {
-    id: 'r5',
-    filename: 'dodavatelia.csv',
-    type: 'CSV',
-    size: '12 KB',
-    status: 'processing',
-    date: '1. mar',
-    description: 'Zoznam dod\u00e1vate\u013eov s kontaktmi a podmienkami.',
-    preview: (
-      <div className="overflow-x-auto bg-muted/30 p-4">
-        <table className="w-full font-mono text-[11px]">
-          <thead>
-            <tr className="border-b border-border/50 text-left text-muted-foreground">
-              <th className="pb-1.5 pr-4">N\u00e1zov</th>
-              <th className="pb-1.5 pr-4">Kontakt</th>
-              <th className="pb-1.5">Kateg\u00f3ria</th>
-            </tr>
-          </thead>
-          <tbody className="text-foreground">
-            <tr className="border-b border-border/30">
-              <td className="py-1 pr-4">Coffee Import s.r.o.</td>
-              <td className="py-1 pr-4">info@coffeeimport.sk</td>
-              <td className="py-1">K\u00e1va</td>
-            </tr>
-            <tr className="border-b border-border/30">
-              <td className="py-1 pr-4">BIO Farm\u00e1r</td>
-              <td className="py-1 pr-4">objednavky@biofarmar.sk</td>
-              <td className="py-1">Potraviny</td>
-            </tr>
-            <tr>
-              <td className="py-1 pr-4">Pack &amp; Go</td>
-              <td className="py-1 pr-4">info@packgo.sk</td>
-              <td className="py-1">Obaly</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    ),
-    contextActive: false,
-    contextSource: 'Manu\u00e1lny upload',
-    contextIndexed: null,
-    relations: [],
-    versions: [
-      { version: 1, date: '1. mar 2026', current: true },
-    ],
-  },
-  {
-    id: 'r6',
-    filename: 'foto-kaviaren-2026.zip',
-    type: 'ZIP',
-    size: '8.4 MB',
-    status: 'unprocessed',
-    date: '28. feb',
-    description: 'Fotografie interi\u00e9ru a exteri\u00e9ru kavi\u00e1rne pre marketing.',
-    preview: (
-      <div className="flex items-center justify-center bg-muted/30 px-4 py-8 text-[12px] text-muted-foreground">
-        Arch\u00edv \u2014 n\u00e1h\u013ead nedostupn\u00fd
-      </div>
-    ),
-    contextActive: false,
-    contextSource: 'Manu\u00e1lny upload',
-    contextIndexed: null,
-    relations: [],
-    versions: [
-      { version: 1, date: '28. feb 2026', current: true },
-    ],
-  },
-  {
-    id: 'r7',
-    filename: 'svadobna-sezona-brief.md',
-    type: 'MD',
-    size: '2.1 KB',
-    status: 'indexed',
-    date: '20. mar',
-    description:
-      'Brief pre svadobn\u00fa sez\u00f3nu \u2014 \u0161peci\u00e1lna ponuka, komunik\u00e1cia, cie\u013eov\u00e1 skupina.',
-    preview: (
-      <div className="space-y-1.5 bg-muted/30 p-4 text-[12px] text-muted-foreground">
-        <p className="font-medium text-foreground">Svadobn\u00e1 sez\u00f3na 2026</p>
-        <p>
-          Od m\u00e1ja do septembra pon\u00fakame \u0161peci\u00e1lne svadobn\u00e9 bal\u00edky: dezerty na objedn\u00e1vku,
-          catering pre mal\u00e9 oslavy, person\u00e1lne ozdoby.
-        </p>
-      </div>
-    ),
-    contextActive: true,
-    contextSource: 'Manu\u00e1lny upload',
-    contextIndexed: '20. mar 2026, 08:30',
-    relations: [
-      { kind: '\u00daloha', label: 'Newsletter k svadobnej sez\u00f3ne', sublabel: 'T-147' },
-      { kind: 'Postup', label: 'Pr\u00edprava newslettera' },
-    ],
-    versions: [
-      { version: 1, date: '20. mar 2026', current: true },
-    ],
-  },
-]
+      <p className="text-[11px]">Alerg\u00e9ny: 1, 3, 7, 8</p>
+    </div>
+  ),
+  r2: () => (
+    <div className="space-y-2 bg-muted/30 p-4 font-mono text-[12px] text-muted-foreground">
+      <p className="font-medium text-foreground">Brand Guidelines v3</p>
+      <p>Prim\u00e1rna farba: #2D5A3D</p>
+      <p>Sekund\u00e1rna farba: #F5E6D3</p>
+      <p>Font: Inter, fallback sans-serif</p>
+    </div>
+  ),
+  r3: () => (
+    <div className="space-y-1.5 bg-muted/30 p-4 text-[12px] text-muted-foreground">
+      <p className="font-medium text-foreground">O n\u00e1s</p>
+      <p>
+        Kavi\u00e1re\u0148 Slnie\u010dnica je rodinn\u00e1 kavi\u00e1re\u0148 v centre Bratislavy. Od roku 2018 pon\u00fakame
+        v\u00fdberov\u00fa k\u00e1vu, denn\u00e9 menu a priestor pre komunitn\u00e9 podujatia.
+      </p>
+    </div>
+  ),
+  r4: () => (
+    <div className="overflow-x-auto bg-muted/30 p-4">
+      <table className="w-full font-mono text-[11px]">
+        <thead>
+          <tr className="border-b border-border/50 text-left text-muted-foreground">
+            <th className="pb-1.5 pr-4">Polo\u017eka</th>
+            <th className="pb-1.5 pr-4">Cena</th>
+            <th className="pb-1.5">Kateg\u00f3ria</th>
+          </tr>
+        </thead>
+        <tbody className="text-foreground">
+          <tr className="border-b border-border/30">
+            <td className="py-1 pr-4">Espresso</td>
+            <td className="py-1 pr-4">2,40 \u20ac</td>
+            <td className="py-1">K\u00e1va</td>
+          </tr>
+          <tr className="border-b border-border/30">
+            <td className="py-1 pr-4">Flat white</td>
+            <td className="py-1 pr-4">3,60 \u20ac</td>
+            <td className="py-1">K\u00e1va</td>
+          </tr>
+          <tr className="border-b border-border/30">
+            <td className="py-1 pr-4">Croissant</td>
+            <td className="py-1 pr-4">2,80 \u20ac</td>
+            <td className="py-1">Pe\u010divo</td>
+          </tr>
+          <tr>
+            <td className="py-1 pr-4">A\u00e7a\u00ed bowl</td>
+            <td className="py-1 pr-4">9,20 \u20ac</td>
+            <td className="py-1">{`Ra\u0148ajky`}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  ),
+  r5: () => (
+    <div className="overflow-x-auto bg-muted/30 p-4">
+      <table className="w-full font-mono text-[11px]">
+        <thead>
+          <tr className="border-b border-border/50 text-left text-muted-foreground">
+            <th className="pb-1.5 pr-4">N\u00e1zov</th>
+            <th className="pb-1.5 pr-4">Kontakt</th>
+            <th className="pb-1.5">Kateg\u00f3ria</th>
+          </tr>
+        </thead>
+        <tbody className="text-foreground">
+          <tr className="border-b border-border/30">
+            <td className="py-1 pr-4">Coffee Import s.r.o.</td>
+            <td className="py-1 pr-4">info@coffeeimport.sk</td>
+            <td className="py-1">K\u00e1va</td>
+          </tr>
+          <tr className="border-b border-border/30">
+            <td className="py-1 pr-4">BIO Farm\u00e1r</td>
+            <td className="py-1 pr-4">objednavky@biofarmar.sk</td>
+            <td className="py-1">Potraviny</td>
+          </tr>
+          <tr>
+            <td className="py-1 pr-4">Pack &amp; Go</td>
+            <td className="py-1 pr-4">info@packgo.sk</td>
+            <td className="py-1">Obaly</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  ),
+  r6: () => (
+    <div className="flex items-center justify-center bg-muted/30 px-4 py-8 text-[12px] text-muted-foreground">
+      Arch\u00edv \u2014 n\u00e1h\u013ead nedostupn\u00fd
+    </div>
+  ),
+  r7: () => (
+    <div className="space-y-1.5 bg-muted/30 p-4 text-[12px] text-muted-foreground">
+      <p className="font-medium text-foreground">Svadobn\u00e1 sez\u00f3na 2026</p>
+      <p>
+        Od m\u00e1ja do septembra pon\u00fakame \u0161peci\u00e1lne svadobn\u00e9 bal\u00edky: dezerty na objedn\u00e1vku,
+        catering pre mal\u00e9 oslavy, person\u00e1lne ozdoby.
+      </p>
+    </div>
+  ),
+}
+
+// Enrich ResourceData from adapter with UI-only preview JSX
+function enrichWithPreview(data: ResourceData[]): Resource[] {
+  return data.map((d) => ({
+    ...d,
+    preview: PREVIEW_RENDERERS[d.id] ? PREVIEW_RENDERERS[d.id]() : null,
+  }))
+}
 
 // --- Filter helpers ---
 
@@ -356,26 +209,17 @@ export const Route = createFileRoute('/_app/resources')({
 
 // --- Page ---
 
-// Enrich VFS entries with locally-maintained mock detail (preview, relations, etc.)
-// Until the backend serves richer resource metadata, detail is mock-composed.
-function enrichVfsEntries(_entries: VfsListEntry[]): Resource[] {
-  // For now, return MOCK_RESOURCES which already mirror the VFS file names.
-  // When the backend adds metadata endpoints, this function will merge
-  // VfsListEntry fields (size, mime_type) with fetched metadata.
-  return MOCK_RESOURCES
-}
-
 function ResourcesPage() {
   const { t } = useTranslation()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [activeFilter, setActiveFilter] = useState<ResourceFilter>('all')
   const [search, setSearch] = useState('')
-  const [resources, setResources] = useState<Resource[]>(MOCK_RESOURCES)
+  const [resources, setResources] = useState<Resource[]>([])
 
-  // Load resource list from VFS company:// scope
+  // Load resource data from adapter
   useEffect(() => {
-    vfsList('company://').then((result) => {
-      setResources(enrichVfsEntries(result.entries))
+    getResources().then((data) => {
+      setResources(enrichWithPreview(data))
     })
   }, [])
 
@@ -390,7 +234,7 @@ function ResourcesPage() {
       )
     }
     return items
-  }, [activeFilter, search])
+  }, [resources, activeFilter, search])
 
   const selected = filtered[selectedIndex] ?? filtered[0] ?? null
 
