@@ -83,6 +83,9 @@ export class WorkflowEngine {
 	/** Guard against concurrent advance() calls for the same task. */
 	private advancing = new Set<string>()
 
+	/** Serialize triggerNextInQueue() per queue to prevent race-driven double-dispatch. */
+	private queueLocks = new Map<string, Promise<void>>()
+
 	/** Injected rollup function — avoids circular dependency with TaskGraphService. */
 	private childRollupFn?: (taskId: string, relationType?: string) => Promise<ChildRollup>
 
@@ -947,6 +950,18 @@ export class WorkflowEngine {
 	 * in the same queue should be started.
 	 */
 	async triggerNextInQueue(queueName: string): Promise<void> {
+		// Serialize per queue to prevent parallel completions from double-dispatching.
+		const prev = this.queueLocks.get(queueName) ?? Promise.resolve()
+		const next = prev.then(() => this._triggerNextInQueueUnsafe(queueName))
+		// Swallow in the chain so a failed trigger doesn't block subsequent queue releases.
+		// The error still propagates to the caller via the unwrapped `next` below.
+		this.queueLocks.set(queueName, next.catch((err) => {
+			console.warn(`[workflow-engine] queue "${queueName}" trigger failed:`, err instanceof Error ? err.message : String(err))
+		}))
+		await next
+	}
+
+	private async _triggerNextInQueueUnsafe(queueName: string): Promise<void> {
 		const queueConfig = (this.config.queues ?? {})[queueName]
 		const priorityOrder = queueConfig?.priority_order ?? 'fifo'
 		const maxConcurrent = queueConfig?.max_concurrent ?? 1
