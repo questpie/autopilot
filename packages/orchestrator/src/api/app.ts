@@ -20,7 +20,7 @@ import * as authSchema from '../db/auth-schema'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, SteerService, AuthoredConfig } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, SteerService, AuthoredConfig, VfsService } from '../services'
 import type { Client } from '@libsql/client'
 import type { Actor } from '../auth/types'
 import { authMiddleware, isLocalhostRequest, resolveActor as resolveActorFn } from './middleware/auth'
@@ -41,6 +41,7 @@ import { sessionsRoute } from './routes/sessions'
 import { schedules } from './routes/schedules'
 import { queues } from './routes/queues'
 import { searchRoute } from './routes/search'
+import { vfs } from './routes/vfs'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ export interface Services {
 	sessionMessageService: SessionMessageService
 	scheduleService: ScheduleService
 	steerService: SteerService
+	vfsService: VfsService
 }
 
 export interface AppEnv {
@@ -290,6 +292,10 @@ export function createApp(config: AppConfig) {
 	// ── Search routes (user auth — operator surface) ─────────────────
 	app.use('/api/search', userAuth)
 
+	// ── VFS routes (user auth — operator surface) ────────────────────
+	app.use('/api/vfs/*', userAuth)
+	app.use('/api/vfs', userAuth)
+
 	// ── Conversation routes ──────────────────────────────────────────────
 	// Binding management requires user auth; inbound /:providerId is self-authenticated via provider secret
 	app.use('/api/conversations/bindings', userAuth)
@@ -319,6 +325,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/schedules', schedules)
 		.route('/api/queues', queues)
 		.route('/api/search', searchRoute)
+		.route('/api/vfs', vfs)
 
 	// ── Operator Web SPA serving ────────────────────────────────────────────
 	if (config.operatorWebDist) {

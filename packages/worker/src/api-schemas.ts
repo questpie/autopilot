@@ -26,6 +26,10 @@ export const FilesQuerySchema = z.object({
   path: z.string().optional(),
 })
 
+export const FileReadQuerySchema = z.object({
+  path: z.string().min(1),
+})
+
 // ─── Response schemas ──────────────────────────────────────────────────────
 
 export const HealthResponseSchema = z.object({
@@ -123,4 +127,5 @@ export type DriftSummary = z.infer<typeof DriftSummarySchema>
 export type FileDiff = z.infer<typeof FileDiffSchema>
 export type DiffResult = z.infer<typeof DiffResultSchema>
 export type FileEntry = z.infer<typeof FileEntrySchema>
+export type FileReadQuery = z.infer<typeof FileReadQuerySchema>
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>

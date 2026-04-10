@@ -78,3 +78,29 @@ export {
 	RunSteerSchema,
 } from './api-contracts'
 export { SkillManifestSchema, SkillEntrySchema, SkillHintSchema } from './skill'
+export {
+	VfsSchemeSchema,
+	VfsParsedUriSchema,
+	VfsStatQuerySchema,
+	VfsStatResponseSchema,
+	VfsListQuerySchema,
+	VfsListEntrySchema,
+	VfsListResponseSchema,
+	VfsReadQuerySchema,
+	VfsWriteQuerySchema,
+	VfsWriteResponseSchema,
+	VfsDiffQuerySchema,
+	VfsDiffFileSchema,
+	VfsDiffResponseSchema,
+	VfsErrorResponseSchema,
+} from './vfs'
+export type {
+	VfsScheme,
+	VfsParsedUri,
+	VfsStatResponse,
+	VfsListEntry,
+	VfsListResponse,
+	VfsWriteResponse,
+	VfsDiffResponse,
+	VfsErrorResponse,
+} from './vfs'

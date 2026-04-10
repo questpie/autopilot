@@ -40,7 +40,9 @@ import {
 	ScheduleService,
 	SchedulerDaemon,
 	SteerService,
+	VfsService,
 } from './services'
+import type { WorkerRegistry } from './services'
 import { Indexer } from './services/indexer'
 import type { AuthoredConfig } from './services'
 import { NotificationBridge, QueryResponseBridge, TaskProgressBridge } from './providers'
@@ -132,6 +134,13 @@ export async function startServer(options?: StartServerOptions) {
 	const scheduleService = new ScheduleService(companyDb)
 	const steerService = new SteerService(companyDb)
 
+	// Worker registry stub — workspace scope requires a worker API callback URL.
+	// This will be replaced with a real implementation when workers expose an API.
+	const workerRegistry: WorkerRegistry = {
+		async getWorkerForRun(_runId) { return null },
+	}
+	const vfsService = new VfsService(companyRoot, workerRegistry)
+
 	// ── 6b. Validate master key if shared secrets are in use ────────────
 	if (!hasMasterKey()) {
 		const hasSharedRefs = [...authoredConfig.providers.values()].some((p) =>
@@ -187,6 +196,7 @@ export async function startServer(options?: StartServerOptions) {
 		sessionMessageService,
 		scheduleService,
 		steerService,
+		vfsService,
 	}
 
 	// ── 7. Start notification bridge ─────────────────────────────────────

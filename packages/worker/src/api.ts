@@ -13,7 +13,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { validator as zValidator } from 'hono-openapi'
 import { existsSync } from 'node:fs'
-import { readdir, stat } from 'node:fs/promises'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import type { WorkspaceManager } from './workspace'
 import type { ResolvedRuntime } from './runtime-config'
@@ -21,6 +21,7 @@ import {
 	RunIdParamSchema,
 	DiffQuerySchema,
 	FilesQuerySchema,
+	FileReadQuerySchema,
 	type RuntimeStatus,
 	type WorkerStatus,
 	type WorkspaceEntry,
@@ -156,6 +157,48 @@ function generateToken(): string {
 	const bytes = new Uint8Array(32)
 	crypto.getRandomValues(bytes)
 	return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+// ─── MIME / text helpers ───────────────────────────────────────────────────
+
+const TEXT_EXTENSIONS = new Set([
+	'.txt', '.md', '.markdown', '.json', '.yaml', '.yml', '.toml',
+	'.xml', '.html', '.htm', '.css', '.scss', '.less',
+	'.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
+	'.py', '.rb', '.go', '.rs', '.java', '.kt', '.swift', '.c', '.cpp', '.h',
+	'.sh', '.bash', '.zsh', '.fish',
+	'.sql', '.graphql', '.gql',
+	'.env', '.gitignore', '.dockerignore', '.editorconfig',
+	'.csv', '.tsv', '.log', '.conf', '.cfg', '.ini',
+	'.svelte', '.vue', '.astro',
+	'.lock', '.prisma',
+])
+
+const MIME_MAP: Record<string, string> = {
+	'.txt': 'text/plain', '.md': 'text/markdown', '.markdown': 'text/markdown',
+	'.json': 'application/json', '.yaml': 'application/yaml', '.yml': 'application/yaml',
+	'.toml': 'application/toml', '.xml': 'application/xml',
+	'.html': 'text/html', '.htm': 'text/html', '.css': 'text/css',
+	'.js': 'text/javascript', '.jsx': 'text/javascript', '.mjs': 'text/javascript',
+	'.ts': 'text/typescript', '.tsx': 'text/typescript',
+	'.py': 'text/x-python', '.rb': 'text/x-ruby', '.go': 'text/x-go',
+	'.rs': 'text/x-rust', '.java': 'text/x-java', '.sh': 'text/x-shellscript',
+	'.sql': 'text/x-sql', '.csv': 'text/csv',
+	'.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
+	'.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+	'.pdf': 'application/pdf', '.zip': 'application/zip',
+}
+
+function getMimeType(filePath: string): string {
+	const dot = filePath.lastIndexOf('.')
+	if (dot === -1) return 'application/octet-stream'
+	return MIME_MAP[filePath.slice(dot).toLowerCase()] ?? 'application/octet-stream'
+}
+
+function isTextFile(filePath: string): boolean {
+	const dot = filePath.lastIndexOf('.')
+	if (dot === -1) return false
+	return TEXT_EXTENSIONS.has(filePath.slice(dot).toLowerCase())
 }
 
 // ─── API Factory ────────────────────────────────────────────────────────────
@@ -385,6 +428,66 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 				})
 
 				return c.json(entries, 200)
+			},
+		)
+
+		// ── GET /workspaces/:runId/file ──────────────────────────────────────
+		.get(
+			'/workspaces/:runId/file',
+			zValidator('param', RunIdParamSchema),
+			zValidator('query', FileReadQuerySchema),
+			async (c) => {
+				const workspace = deps.getWorkspace()
+				if (!workspace) {
+					return c.json({ error: 'no workspace manager configured' }, 404)
+				}
+
+				const { runId } = c.req.valid('param')
+				if (!workspace.exists(runId)) {
+					return c.json({ error: `workspace for run ${runId} not found` }, 404)
+				}
+
+				const wtPath = workspace.worktreePath(runId)
+				const { path: filePath } = c.req.valid('query')
+
+				// Prevent path traversal
+				const targetFile = join(wtPath, filePath)
+				const resolved = resolve(targetFile)
+				const resolvedRoot = resolve(wtPath)
+				if (!resolved.startsWith(resolvedRoot + '/') && resolved !== resolvedRoot) {
+					return c.json({ error: 'path traversal not allowed' }, 400)
+				}
+
+				// Block dangerous paths
+				const blockedSegments = new Set(['.git', '.worktrees', 'node_modules'])
+				for (const seg of filePath.split('/')) {
+					if (blockedSegments.has(seg) || seg.startsWith('.env')) {
+						return c.json({ error: `access to ${seg} is blocked` }, 403)
+					}
+				}
+
+				if (!existsSync(targetFile)) {
+					return c.json({ error: 'file not found' }, 404)
+				}
+
+				const fileStat = await stat(targetFile)
+				if (!fileStat.isFile()) {
+					return c.json({ error: 'path is not a file (use /files for directories)' }, 400)
+				}
+
+				const mimeType = getMimeType(filePath)
+				const fileContent = await readFile(targetFile)
+
+				return new Response(fileContent, {
+					status: 200,
+					headers: {
+						'Content-Type': mimeType,
+						'Content-Length': String(fileStat.size),
+						'X-Vfs-Size': String(fileStat.size),
+						'X-Vfs-Type': 'file',
+						'X-Vfs-Text': isTextFile(filePath) ? 'true' : 'false',
+					},
+				})
 			},
 		)
 
