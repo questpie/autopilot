@@ -1,59 +1,16 @@
+import { useState, useEffect } from 'react'
 import { m } from 'framer-motion'
 import { FlowArrowIcon } from '@phosphor-icons/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { staggerContainer, staggerItem } from '@/lib/motion'
 import { useTranslation } from '@/lib/i18n'
+import { getWorkflows } from '@/api/workflows.api'
+import type { Workflow, WorkflowStep } from '@/api/types'
 
 export const Route = createFileRoute('/_app/workflows')({
   component: WorkflowsPage,
 })
-
-// ── Mock Data ──
-
-interface WorkflowStep {
-  name: string
-  type: 'trigger' | 'action' | 'condition'
-}
-
-interface Workflow {
-  id: string
-  name: string
-  steps: WorkflowStep[]
-}
-
-const mockWorkflows: Workflow[] = [
-  {
-    id: '1',
-    name: 'review-response',
-    steps: [
-      { name: 'on: new_review', type: 'trigger' },
-      { name: 'analyze_sentiment', type: 'action' },
-      { name: 'if: negative', type: 'condition' },
-      { name: 'escalate_to_owner', type: 'action' },
-    ],
-  },
-  {
-    id: '2',
-    name: 'weekly-report',
-    steps: [
-      { name: 'on: schedule(friday 17:00)', type: 'trigger' },
-      { name: 'collect_metrics', type: 'action' },
-      { name: 'generate_summary', type: 'action' },
-      { name: 'send_to_slack', type: 'action' },
-    ],
-  },
-  {
-    id: '3',
-    name: 'content-pipeline',
-    steps: [
-      { name: 'on: manual_trigger', type: 'trigger' },
-      { name: 'draft_posts', type: 'action' },
-      { name: 'if: approved', type: 'condition' },
-      { name: 'schedule_publish', type: 'action' },
-    ],
-  },
-]
 
 function StepBadge({ type }: { type: WorkflowStep['type'] }) {
   return (
@@ -72,6 +29,12 @@ function StepBadge({ type }: { type: WorkflowStep['type'] }) {
 
 function WorkflowsPage() {
   const { t } = useTranslation()
+  const [workflows, setWorkflows] = useState<Workflow[]>([])
+
+  useEffect(() => {
+    getWorkflows().then(setWorkflows)
+  }, [])
+
   return (
     <div className="flex-1 overflow-y-auto p-8">
       <m.div variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-6">
@@ -81,7 +44,7 @@ function WorkflowsPage() {
         </m.div>
 
         <m.div variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-3">
-          {mockWorkflows.map((wf) => (
+          {workflows.map((wf) => (
             <m.div
               key={wf.id}
               variants={staggerItem}

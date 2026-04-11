@@ -221,6 +221,50 @@ export interface CompanyProfile {
   knowledge_files: Array<{ name: string; size: string; uri: string }>
 }
 
+// ── Workflow ──
+
+export interface WorkflowStep {
+  name: string
+  type: 'trigger' | 'action' | 'condition'
+}
+
+export interface Workflow {
+  id: string
+  name: string
+  steps: WorkflowStep[]
+}
+
+// ── Script ──
+
+export interface Script {
+  id: string
+  name: string
+  description: string
+  runtime: 'bun' | 'node' | 'python3' | 'bash'
+  entry_point: string
+  inputs: Array<{ name: string; type: string; required: boolean }>
+  outputs: Array<{ name: string; type: string }>
+  linked_workflow_ids: string[]
+  linked_task_ids: string[]
+  last_run_at: string | null
+  created_at: string
+}
+
+// ── Playbook step/execution (mock view models) ──
+
+export interface PlaybookStep {
+  name: string
+  description: string
+  type: 'gather' | 'execute' | 'review' | 'deliver'
+}
+
+export interface PlaybookExecution {
+  date: string
+  task_id: string
+  status: 'completed' | 'failed'
+  outcome: string
+}
+
 // ── View Models (derived for UI, NOT in backend) ──
 
 export interface TaskWithRelations extends Task {
