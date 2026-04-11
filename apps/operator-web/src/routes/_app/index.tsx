@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { m } from 'framer-motion'
 import { ArrowUpIcon, PlusIcon, EyeIcon } from '@phosphor-icons/react'
 import { createFileRoute } from '@tanstack/react-router'
@@ -7,52 +7,12 @@ import { useSession } from '@/hooks/use-session'
 import { useTranslation } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { staggerContainer, staggerItem } from '@/lib/motion'
+import { getHomeDashboard } from '@/api/home.api'
+import type { HomeDashboard } from '@/api/home.api'
 
 export const Route = createFileRoute('/_app/')({
   component: HomePage,
 })
-
-// ── Mock Data ──
-
-const attentionItems = [
-  {
-    id: '1',
-    title: 'Content plán na apríl',
-    description: '10 príspevkov pre Instagram a Facebook je pripravených.',
-    status: 'ready' as const,
-    actions: [{ label: 'view', type: 'view' as const }],
-  },
-  {
-    id: '2',
-    title: 'Newsletter k svadobnej sezóne',
-    description: 'Návrh textu je pripravený. Skontroluj a schváľ.',
-    status: 'needs-input' as const,
-    actions: [
-      { label: 'approve', type: 'approve' as const },
-      { label: 'change', type: 'change' as const },
-    ],
-  },
-]
-
-const workingItems = [
-  { id: '1', title: 'Promo texty na víkendovú akciu', elapsed: '3 min' },
-  { id: '2', title: 'Analýza recenzií za marec', elapsed: '1 min' },
-]
-
-const doneItems = [
-  {
-    id: '1',
-    title: 'Checklist pred víkendovou akciou',
-    description: '15 položiek, vrátane zásobovania.',
-    time: 'Dnes o 8:15',
-  },
-  {
-    id: '2',
-    title: 'Inzerát na novú baristku',
-    description: 'Text inzerátu + návrh kde ho zverejniť.',
-    time: 'Včera',
-  },
-]
 
 // ── Components ──
 
@@ -88,8 +48,15 @@ function HomePage() {
   const { user } = useSession()
   const { t } = useTranslation()
   const [chatInput, setChatInput] = useState('')
+  const [dashboard, setDashboard] = useState<HomeDashboard | null>(null)
 
-  const attentionCount = attentionItems.length
+  useEffect(() => {
+    getHomeDashboard().then(setDashboard)
+  }, [])
+
+  if (!dashboard) return null
+
+  const attentionCount = dashboard.attention.length
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -110,7 +77,7 @@ function HomePage() {
             <m.div variants={staggerItem} className="flex flex-col gap-3">
               <SectionLabel>{t('home.waiting_for_you')}</SectionLabel>
               <div className="flex flex-col gap-2">
-                {attentionItems.map((item) => (
+                {dashboard.attention.map((item) => (
                   <m.div
                     key={item.id}
                     variants={staggerItem}
@@ -153,7 +120,7 @@ function HomePage() {
             <m.div variants={staggerItem} className="flex flex-col gap-3">
               <SectionLabel>{t('home.working_on')}</SectionLabel>
               <div className="flex flex-col gap-1">
-                {workingItems.map((item) => (
+                {dashboard.working.map((item) => (
                   <m.div
                     key={item.id}
                     variants={staggerItem}
@@ -175,7 +142,7 @@ function HomePage() {
             <m.div variants={staggerItem} className="flex flex-col gap-3">
               <SectionLabel>{t('home.recently_done')}</SectionLabel>
               <div className="flex flex-col gap-2">
-                {doneItems.map((item) => (
+                {dashboard.done.map((item) => (
                   <m.div
                     key={item.id}
                     variants={staggerItem}

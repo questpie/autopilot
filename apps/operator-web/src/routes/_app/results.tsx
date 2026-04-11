@@ -229,7 +229,21 @@ function ResultRow({ item, isSelected, t }: { item: ResultItem; isSelected: bool
   )
 }
 
-function ResultDetail({ item, t }: { item: ResultItem; t: (key: string) => string }) {
+function ResultDetail({
+  item,
+  t,
+  approvedIds,
+  returnedIds,
+  onApprove,
+  onReturn,
+}: {
+  item: ResultItem
+  t: (key: string) => string
+  approvedIds: Set<string>
+  returnedIds: Set<string>
+  onApprove: (id: string) => void
+  onReturn: (id: string) => void
+}) {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -325,13 +339,23 @@ function ResultDetail({ item, t }: { item: ResultItem; t: (key: string) => strin
             { label: t('results.steps'), value: String(item.steps) },
           ]}
         />
-        {item.status === 'draft' && (
+        {item.status === 'draft' && !approvedIds.has(item.id) && !returnedIds.has(item.id) && (
           <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-3">
             <span className="text-[12px] text-amber-500">{t('results.awaiting_approval')}</span>
             <div className="flex gap-2">
-              <Button size="xs">{t('actions.approve')}</Button>
-              <Button variant="ghost" size="xs">{t('results.return')}</Button>
+              <Button size="xs" onClick={() => onApprove(item.id)}>{t('actions.approve')}</Button>
+              <Button variant="ghost" size="xs" onClick={() => onReturn(item.id)}>{t('results.return')}</Button>
             </div>
+          </div>
+        )}
+        {approvedIds.has(item.id) && (
+          <div className="mt-3 flex items-center gap-2 border-t border-border/50 pt-3">
+            <span className="text-[12px] text-green-500">{'\u2713'} Schválené</span>
+          </div>
+        )}
+        {returnedIds.has(item.id) && (
+          <div className="mt-3 flex items-center gap-2 border-t border-border/50 pt-3">
+            <span className="text-[12px] text-amber-500">{'\u21A9'} Vrátené</span>
           </div>
         )}
       </div>
@@ -364,6 +388,8 @@ function ResultsPage() {
   const [filter, setFilter] = useState<FilterValue>('all')
   const [search, setSearch] = useState('')
   const [results, setResults] = useState<ResultItem[]>([])
+  const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set())
+  const [returnedIds, setReturnedIds] = useState<Set<string>>(new Set())
 
   // Load completed runs from adapter
   useEffect(() => {
@@ -504,7 +530,14 @@ function ResultsPage() {
       {/* Right panel — detail */}
       <div className="flex w-1/2 flex-col overflow-y-auto p-6">
         {selectedItem ? (
-          <ResultDetail item={selectedItem} t={t} />
+          <ResultDetail
+            item={selectedItem}
+            t={t}
+            approvedIds={approvedIds}
+            returnedIds={returnedIds}
+            onApprove={(id) => setApprovedIds((prev) => new Set(prev).add(id))}
+            onReturn={(id) => setReturnedIds((prev) => new Set(prev).add(id))}
+          />
         ) : (
           <EmptyState
             title={t('results.empty_title')}

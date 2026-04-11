@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/lib/i18n'
 import { useChatSeedStore } from '@/stores/chat-seed.store'
 import {
-  mockConversations,
+  getConversations,
   type MockConversation,
   type MockMessage,
   type MockArtifact,
@@ -36,7 +36,7 @@ import {
   type MockArtifactRef,
   type MockTaskSummary,
   type ConversationType,
-} from '@/api/mock/conversations.mock'
+} from '@/api/conversations.api'
 
 export const Route = createFileRoute('/_app/chat')({
   component: ChatPage,
@@ -463,8 +463,13 @@ function ChatPage() {
   const pendingSeed = useChatSeedStore((s) => s.pendingSeed)
   const clearSeed = useChatSeedStore((s) => s.clearSeed)
 
-  // Local mock state — all conversations
-  const [conversations, setConversations] = useState<MockConversation[]>(mockConversations)
+  // Local state — all conversations (loaded from adapter)
+  const [conversations, setConversations] = useState<MockConversation[]>([])
+
+  // Load conversations from adapter
+  useEffect(() => {
+    getConversations().then(setConversations)
+  }, [])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState('')
