@@ -46,7 +46,7 @@ function SettingsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto p-8">
-      <PageHeader title={t('settings.title')} />
+      <PageHeader title={t('settings.title')} subtitle={t('settings.subtitle')} />
 
       <div className="mt-6 flex max-w-2xl flex-col gap-3">
         <SettingsCard

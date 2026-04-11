@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
-import { m } from 'framer-motion'
 import { FlowArrowIcon } from '@phosphor-icons/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
-import { staggerContainer, staggerItem } from '@/lib/motion'
 import { useTranslation } from '@/lib/i18n'
+import { PageHeader } from '@/components/page-header'
 import { getWorkflows } from '@/api/workflows.api'
 import type { Workflow, WorkflowStep } from '@/api/types'
 
@@ -37,17 +36,13 @@ function WorkflowsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto p-8">
-      <m.div variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-6">
-        <m.div variants={staggerItem} className="flex flex-col gap-1">
-          <h1 className="text-[22px] font-bold tracking-tight">{t('advanced.workflows_title')}</h1>
-          <p className="text-[14px] text-muted-foreground">{t('advanced.workflows_subtitle')}</p>
-        </m.div>
+      <div className="flex flex-col gap-6">
+        <PageHeader title={t('advanced.workflows_title')} subtitle={t('advanced.workflows_subtitle')} />
 
-        <m.div variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
           {workflows.map((wf) => (
-            <m.div
+            <div
               key={wf.id}
-              variants={staggerItem}
               className="rounded-xl border border-border bg-card p-4"
             >
               <div className="mb-3 flex items-center gap-2">
@@ -63,10 +58,10 @@ function WorkflowsPage() {
                   </div>
                 ))}
               </div>
-            </m.div>
+            </div>
           ))}
-        </m.div>
-      </m.div>
+        </div>
+      </div>
     </div>
   )
 }

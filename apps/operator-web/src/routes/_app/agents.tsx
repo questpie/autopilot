@@ -1,8 +1,7 @@
-import { m } from 'framer-motion'
 import { RobotIcon } from '@phosphor-icons/react'
 import { createFileRoute } from '@tanstack/react-router'
-import { staggerContainer, staggerItem } from '@/lib/motion'
 import { useTranslation } from '@/lib/i18n'
+import { PageHeader } from '@/components/page-header'
 
 export const Route = createFileRoute('/_app/agents')({
   component: AgentsPage,
@@ -21,7 +20,7 @@ interface Agent {
 const mockAgents: Agent[] = [
   {
     id: '1',
-    name: 'Hlavný asistent',
+    name: 'Hlavny asistent',
     role: 'orchestrator',
     model: 'claude-sonnet-4-20250514',
     capabilities: ['chat', 'tasks', 'automations'],
@@ -46,23 +45,16 @@ function AgentsPage() {
   const { t } = useTranslation()
   return (
     <div className="flex-1 overflow-y-auto p-8">
-      <m.div variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-6">
-        <m.div variants={staggerItem} className="flex flex-col gap-1">
-          <h1 className="text-[22px] font-bold tracking-tight">{t('advanced.agents_title')}</h1>
-          <p className="text-[14px] text-muted-foreground">{t('advanced.agents_subtitle')}</p>
-        </m.div>
+      <div className="flex flex-col gap-6">
+        <PageHeader title={t('advanced.agents_title')} subtitle={t('advanced.agents_subtitle')} />
 
-        <m.div
-          variants={staggerContainer}
-          initial="initial"
-          animate="animate"
+        <div
           className="grid gap-2"
           style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}
         >
           {mockAgents.map((agent) => (
-            <m.div
+            <div
               key={agent.id}
-              variants={staggerItem}
               className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
             >
               <div className="flex items-center gap-3">
@@ -85,10 +77,10 @@ function AgentsPage() {
                   </span>
                 ))}
               </div>
-            </m.div>
+            </div>
           ))}
-        </m.div>
-      </m.div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -1,9 +1,8 @@
-import { m } from 'framer-motion'
 import { GearSixIcon, KeyIcon, CircleIcon } from '@phosphor-icons/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
-import { staggerContainer, staggerItem } from '@/lib/motion'
 import { useTranslation } from '@/lib/i18n'
+import { PageHeader } from '@/components/page-header'
 
 export const Route = createFileRoute('/_app/runtime')({
   component: RuntimePage,
@@ -56,16 +55,11 @@ function RuntimePage() {
   const { t } = useTranslation()
   return (
     <div className="flex-1 overflow-y-auto p-8">
-      <m.div variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-8">
-        <m.div variants={staggerItem} className="flex flex-col gap-1">
-          <h1 className="text-[22px] font-bold tracking-tight">{t('advanced.runtime_title')}</h1>
-          <p className="text-[14px] text-muted-foreground">
-            {t('advanced.runtime_subtitle')}
-          </p>
-        </m.div>
+      <div className="flex flex-col gap-8">
+        <PageHeader title={t('advanced.runtime_title')} subtitle={t('advanced.runtime_subtitle')} />
 
         {/* Workers */}
-        <m.div variants={staggerItem} className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <GearSixIcon className="size-4 text-primary" weight="bold" />
             <h2 className="font-heading text-[13px] font-medium uppercase tracking-wider">{t('advanced.workers')}</h2>
@@ -86,10 +80,10 @@ function RuntimePage() {
               </div>
             ))}
           </div>
-        </m.div>
+        </div>
 
         {/* Secrets */}
-        <m.div variants={staggerItem} className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <KeyIcon className="size-4 text-primary" weight="bold" />
             <h2 className="font-heading text-[13px] font-medium uppercase tracking-wider">
@@ -114,8 +108,8 @@ function RuntimePage() {
               </div>
             ))}
           </div>
-        </m.div>
-      </m.div>
+        </div>
+      </div>
     </div>
   )
 }

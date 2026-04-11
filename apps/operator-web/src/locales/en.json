@@ -750,6 +750,7 @@
 		"workflow_template": "New workflow template",
 		"workflow_no_workflows": "No workflows found",
 		"workflow_no_workflows_desc": "Create a workflow YAML file to get started",
+		"subtitle": "Language, preferences, user roles and developer mode",
 		"users": "Users",
 		"users_desc": "Manage users and their permissions",
 		"manage": "Manage",

@@ -57,13 +57,16 @@ function IntegrationsPage() {
         }
       />
 
-      <div className="mt-6 flex max-w-2xl flex-col gap-3">
-        {integrations.map((integration) => {
+      <div className="mt-6 flex max-w-2xl flex-col">
+        {integrations.map((integration, i) => {
           const connected = integration.status === 'connected'
           return (
             <div
               key={integration.id}
-              className="flex items-center gap-4 rounded-xl border border-border bg-card p-4"
+              className={cn(
+                'flex items-center gap-4 px-1 py-3',
+                i < integrations.length - 1 && 'border-b border-border',
+              )}
             >
               <div className="flex size-9 items-center justify-center rounded-none bg-muted text-xl">
                 {integration.icon}

@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
-import { m } from 'framer-motion'
 import { ArrowUpIcon, PlusIcon, EyeIcon } from '@phosphor-icons/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/page-header'
 import { useSession } from '@/hooks/use-session'
 import { useTranslation } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
-import { staggerContainer, staggerItem } from '@/lib/motion'
 import { getHomeDashboard } from '@/api/home.api'
 import type { HomeDashboard } from '@/api/home.api'
 
@@ -61,26 +60,21 @@ function HomePage() {
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[720px] px-10 py-8">
-          <m.div variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-8">
+        <div className="max-w-3xl p-8">
+          <div className="flex flex-col gap-8">
             {/* Greeting */}
-            <m.div variants={staggerItem} className="flex flex-col gap-1">
-              <h1 className="text-2xl font-bold tracking-tight">
-                {t('home.greeting', { name: user?.name ?? t('common.user') })}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {t('home.attention_count', { count: attentionCount })}
-              </p>
-            </m.div>
+            <PageHeader
+              title={t('home.greeting', { name: user?.name ?? t('common.user') })}
+              subtitle={t('home.attention_count', { count: attentionCount })}
+            />
 
             {/* Waiting for you */}
-            <m.div variants={staggerItem} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3">
               <SectionLabel>{t('home.waiting_for_you')}</SectionLabel>
               <div className="flex flex-col gap-2">
                 {dashboard.attention.map((item) => (
-                  <m.div
+                  <div
                     key={item.id}
-                    variants={staggerItem}
                     className={cn(
                       'flex items-start gap-3 rounded-xl border border-border bg-card p-4',
                       item.status === 'needs-input' && 'border-l-2 border-l-amber-500',
@@ -111,19 +105,18 @@ function HomePage() {
                         </Button>
                       ))}
                     </div>
-                  </m.div>
+                  </div>
                 ))}
               </div>
-            </m.div>
+            </div>
 
             {/* Working on */}
-            <m.div variants={staggerItem} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3">
               <SectionLabel>{t('home.working_on')}</SectionLabel>
               <div className="flex flex-col gap-1">
                 {dashboard.working.map((item) => (
-                  <m.div
+                  <div
                     key={item.id}
-                    variants={staggerItem}
                     className="flex items-center gap-3 px-1 py-2"
                   >
                     <span className="relative flex size-4 shrink-0 items-center justify-center">
@@ -133,19 +126,18 @@ function HomePage() {
                     <span className="font-heading text-[11px] text-muted-foreground">
                       {item.elapsed}
                     </span>
-                  </m.div>
+                  </div>
                 ))}
               </div>
-            </m.div>
+            </div>
 
             {/* Recently done */}
-            <m.div variants={staggerItem} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3">
               <SectionLabel>{t('home.recently_done')}</SectionLabel>
               <div className="flex flex-col gap-2">
                 {dashboard.done.map((item) => (
-                  <m.div
+                  <div
                     key={item.id}
-                    variants={staggerItem}
                     className="flex items-start gap-3 rounded-xl border border-border bg-card p-4"
                   >
                     <StatusDot status="done" />
@@ -156,17 +148,17 @@ function HomePage() {
                     <span className="shrink-0 font-heading text-[11px] text-muted-foreground">
                       {item.time}
                     </span>
-                  </m.div>
+                  </div>
                 ))}
               </div>
-            </m.div>
-          </m.div>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Chat input - sticky bottom */}
-      <div className="shrink-0 border-t border-border bg-background px-10 py-4">
-        <div className="mx-auto flex max-w-[720px] items-center gap-2">
+      <div className="shrink-0 border-t border-border bg-background px-8 py-4">
+        <div className="flex max-w-3xl items-center gap-2">
           <Button variant="outline" size="sm">
             <PlusIcon data-icon="inline-start" weight="bold" />
             {t('home.new_task')}

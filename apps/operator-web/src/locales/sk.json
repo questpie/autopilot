@@ -253,6 +253,7 @@
 	},
 	"settings": {
 		"title": "Nastavenia",
+		"subtitle": "Jazyk, preferencie, pou\u017e\u00edvate\u013esk\u00e9 role a developer mode",
 		"users": "Používatelia",
 		"users_desc": "Správa používateľov a ich oprávnení",
 		"manage": "Spravovať",
