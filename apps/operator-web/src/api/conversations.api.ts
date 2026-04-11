@@ -19,7 +19,8 @@ import {
   type ConversationType,
 } from './mock/conversations.mock'
 
-// Re-export types so route file doesn't need to know about mock module
+// Re-export types so route file doesn't need to know about mock module.
+// ConversationType is a UI presentation type — see mock file for mapping to backend SessionMode.
 export type {
   MockConversation,
   MockMessage,

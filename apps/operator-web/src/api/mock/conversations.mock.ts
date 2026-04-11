@@ -3,6 +3,12 @@
  * Covers: query, task-backed thread, discussion/feedback thread.
  */
 
+/**
+ * UI-only conversation display type. Not a backend contract.
+ * - `query` maps to SessionMode `query`.
+ * - `task` maps to SessionMode `task_thread` (explicit task progress).
+ * - `discussion` maps to SessionMode `task_thread` (discussion-style task).
+ */
 export type ConversationType = 'query' | 'task' | 'discussion'
 
 export type MockMessageRole = 'user' | 'bot' | 'system'

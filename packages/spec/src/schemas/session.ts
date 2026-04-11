@@ -1,5 +1,11 @@
 import { z } from 'zod'
 
+/**
+ * Backend session mode.
+ * - `query`: stateless question/answer — no durable task binding.
+ * - `task_thread`: session bound to a task (includes discussion-style conversations,
+ *   which the UI may present as a distinct "discussion" type).
+ */
 export const SessionModeSchema = z.enum(['query', 'task_thread'])
 
 export const SessionStatusSchema = z.enum(['active', 'closed'])

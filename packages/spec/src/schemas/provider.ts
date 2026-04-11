@@ -219,7 +219,12 @@ export const NotificationPayloadSchema = z.object({
 	conversation_id: z.string().optional(),
 	/** Bound thread ID (for conversation_channel outbound delivery). */
 	thread_id: z.string().optional(),
-	/** Binding mode. */
+	/**
+	 * Conversation binding mode hint for provider delivery.
+	 * - `task_thread`: message targets a task-bound thread (progress, approvals, discussion).
+	 * - `intent_intake`: message targets an intent-intake surface (workflow selection).
+	 * Omitted when delivering to the default chat surface.
+	 */
 	binding_mode: z.enum(['task_thread', 'intent_intake']).optional(),
 	/** Normalized task actions available for this notification. */
 	actions: z.array(NotificationActionSchema).optional(),

@@ -276,7 +276,7 @@ export const conversationBindings = sqliteTable(
 		provider_id: text('provider_id').notNull(),
 		external_conversation_id: text('external_conversation_id').notNull(),
 		external_thread_id: text('external_thread_id'),
-		mode: text('mode').notNull(), // task_thread | intent_intake
+		mode: text('mode').notNull(), // task_thread | intent_intake (provider-facing binding mode, distinct from session mode)
 		task_id: text('task_id'),
 		metadata: text('metadata').default('{}'),
 		created_at: text('created_at').notNull(),
@@ -379,7 +379,7 @@ export const sessions = sqliteTable(
 		provider_id: text('provider_id').notNull(),
 		external_conversation_id: text('external_conversation_id').notNull(),
 		external_thread_id: text('external_thread_id').notNull(), // real thread ID or '__chat__' sentinel
-		mode: text('mode').notNull(), // query | task_thread
+		mode: text('mode').notNull(), // query | task_thread (discussion is task_thread with discussion-style task)
 		task_id: text('task_id'),
 
 		status: text('status').notNull().default('active'), // active | closed
