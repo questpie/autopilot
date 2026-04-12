@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { PlusIcon } from '@phosphor-icons/react'
+import { PlusIcon, XIcon } from '@phosphor-icons/react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { ToggleSwitch } from '@/components/ui/toggle-switch'
@@ -157,10 +157,12 @@ function ScheduleDetail({
   detail,
   playbooks,
   onTrigger,
+  onExecutionClick,
 }: {
   detail: ScheduleWithHistory
   playbooks: Playbook[]
   onTrigger: () => void
+  onExecutionClick: (exec: ScheduleExecution) => void
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -251,18 +253,18 @@ function ScheduleDetail({
             <FlatList
               items={sortedHistory}
               renderRow={(exec) => (
-                <div className="flex items-center gap-3 px-0 py-2">
+                <button
+                  type="button"
+                  onClick={() => onExecutionClick(exec)}
+                  className="flex w-full items-center gap-3 px-0 py-2 text-left hover:bg-muted/10 transition-colors cursor-pointer"
+                >
                   <span className="shrink-0 font-mono text-[11px] text-muted-foreground/60">{exec.id.slice(-8)}</span>
                   <StatusPill status={executionStatusToPill(exec.status)} label={exec.status} />
                   <span className="font-mono text-[11px] text-muted-foreground">{formatDateTime(exec.triggered_at)}</span>
                   {exec.task_id && (
-                    <button
-                      type="button"
-                      className="font-mono text-[11px] text-primary hover:underline"
-                      onClick={() => void navigate({ to: '/tasks', search: { taskId: exec.task_id } })}
-                    >
+                    <span className="font-mono text-[11px] text-primary">
                       {exec.task_id.slice(-12)}
-                    </button>
+                    </span>
                   )}
                   {exec.error && (
                     <span className="text-[11px] text-red-500">{exec.error}</span>
@@ -270,7 +272,7 @@ function ScheduleDetail({
                   {exec.skip_reason && (
                     <span className="text-[11px] text-muted-foreground">{exec.skip_reason}</span>
                   )}
-                </div>
+                </button>
               )}
             />
           </div>
@@ -325,15 +327,166 @@ function ScheduleDetail({
   )
 }
 
+// ── Execution Detail Sheet ──
+
+function ExecutionDetailSheet({
+  execution,
+  scheduleName,
+  onClose,
+  onNavigateToTask,
+  onNavigateToChat,
+}: {
+  execution: ScheduleExecution
+  scheduleName: string
+  onClose: () => void
+  onNavigateToTask: (taskId: string) => void
+  onNavigateToChat: (queryId: string) => void
+}) {
+  function renderOutcome() {
+    switch (execution.status) {
+      case 'completed':
+        if (execution.task_id) {
+          return (
+            <div className="flex flex-col gap-1">
+              <span className="text-[13px] text-foreground">Task vytvoreny</span>
+              <span className="font-mono text-[11px] text-muted-foreground">{execution.task_id}</span>
+            </div>
+          )
+        }
+        if (execution.query_id) {
+          return (
+            <div className="flex flex-col gap-1">
+              <span className="text-[13px] text-foreground">Query odoslany</span>
+              <span className="font-mono text-[11px] text-muted-foreground">{execution.query_id}</span>
+            </div>
+          )
+        }
+        return <span className="text-[13px] text-foreground">Dokoncene</span>
+      case 'triggered':
+        return <span className="text-[13px] text-foreground">Beziaci</span>
+      case 'skipped':
+        return (
+          <div className="flex flex-col gap-1">
+            <span className="text-[13px] text-foreground">Preskoceny</span>
+            {execution.skip_reason && (
+              <span className="text-[12px] text-muted-foreground">{execution.skip_reason}</span>
+            )}
+          </div>
+        )
+      case 'failed':
+        return (
+          <div className="flex flex-col gap-1">
+            <span className="text-[13px] text-red-500">Zlyhalo</span>
+            {execution.error && (
+              <span className="text-[12px] text-red-500/80">{execution.error}</span>
+            )}
+          </div>
+        )
+    }
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
+      {/* Sheet */}
+      <div className="fixed right-0 top-0 z-50 flex h-full w-[420px] flex-col border-l border-border bg-background shadow-lg transition-transform duration-200">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div>
+            <h3 className="text-[15px] font-medium text-foreground">Execution detail</h3>
+            <span className="font-mono text-[11px] text-muted-foreground">{scheduleName}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-7 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <XIcon className="size-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Status section */}
+          <div className="border-b border-border/50 px-5 py-4">
+            <SectionHeader>Stav</SectionHeader>
+            <div className="mt-3">
+              <KvList
+                items={[
+                  { label: 'Status', value: <StatusPill status={executionStatusToPill(execution.status)} label={execution.status} /> },
+                  { label: 'Spustene', value: formatDateTime(execution.triggered_at) },
+                  { label: 'Trvanie', value: execution.status === 'completed' ? '2m 14s' : execution.status === 'triggered' ? 'prebieha...' : '\u2014' },
+                  { label: 'Trigger', value: 'Planovane (cron)' },
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Outcome section */}
+          <div className="border-b border-border/50 px-5 py-4">
+            <SectionHeader>Vysledok</SectionHeader>
+            <div className="mt-3">
+              {renderOutcome()}
+            </div>
+          </div>
+
+          {/* Linked entity section */}
+          {(execution.task_id || execution.query_id) && (
+            <div className="border-b border-border/50 px-5 py-4">
+              <SectionHeader>Nadvazujuca akcia</SectionHeader>
+              <div className="mt-3">
+                {execution.task_id && (
+                  <Button size="sm" onClick={() => onNavigateToTask(execution.task_id!)}>
+                    Otvorit task
+                  </Button>
+                )}
+                {execution.query_id && (
+                  <Button size="sm" onClick={() => onNavigateToChat(execution.query_id!)}>
+                    Otvorit konverzaciu
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* No action state */}
+          {!execution.task_id && !execution.query_id && execution.status !== 'triggered' && (
+            <div className="border-b border-border/50 px-5 py-4">
+              <SectionHeader>Nadvazujuca akcia</SectionHeader>
+              <p className="mt-3 text-[12px] text-muted-foreground">Ziadna nadvazujuca akcia</p>
+            </div>
+          )}
+
+          {/* Execution ID */}
+          <div className="px-5 py-4">
+            <SectionHeader>Identifikator</SectionHeader>
+            <div className="mt-3">
+              <KvList
+                items={[
+                  { label: 'Execution ID', value: <span className="font-mono text-[11px]">{execution.id}</span> },
+                  { label: 'Schedule ID', value: <span className="font-mono text-[11px]">{execution.schedule_id}</span> },
+                ]}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ── Page ──
 
 function AutomationsPage() {
+  const navigate = useNavigate()
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [executions, setExecutions] = useState<Map<string, ScheduleExecution | undefined>>(new Map())
   const [detail, setDetail] = useState<ScheduleWithHistory | null>(null)
   const [playbooks, setPlaybooks] = useState<Playbook[]>([])
+  const [selectedExecution, setSelectedExecution] = useState<ScheduleExecution | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -476,6 +629,7 @@ function AutomationsPage() {
             detail={detail}
             playbooks={playbooks}
             onTrigger={handleTrigger}
+            onExecutionClick={(exec) => setSelectedExecution(exec)}
           />
         ) : (
           <EmptyState
@@ -542,6 +696,16 @@ function AutomationsPage() {
           </div>
         </div>
       </WizardDialog>
+
+      {selectedExecution && detail && (
+        <ExecutionDetailSheet
+          execution={selectedExecution}
+          scheduleName={detail.name}
+          onClose={() => setSelectedExecution(null)}
+          onNavigateToTask={(taskId) => void navigate({ to: '/tasks', search: { taskId } })}
+          onNavigateToChat={() => void navigate({ to: '/chat' })}
+        />
+      )}
     </div>
   )
 }

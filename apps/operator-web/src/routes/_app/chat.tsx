@@ -20,6 +20,8 @@ import {
   ArrowUpRightIcon,
   ClockIcon,
   LightningIcon,
+  SidebarSimpleIcon,
+  XIcon,
 } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import { fadeInUp, EASING, DURATION } from '@/lib/motion'
@@ -440,14 +442,15 @@ function InlineFormat({ text }: { text: string }) {
 function ConversationTypeIndicator({ type, taskRef }: { type: ConversationType; taskRef?: { taskId: string } }) {
   if (type === 'task') {
     return (
-      <span className="shrink-0 font-mono text-[10px] text-muted-foreground bg-muted/30 px-1 py-0.5">
+      <span className="shrink-0 font-mono text-[10px] text-muted-foreground bg-primary/10 border border-primary/20 px-1.5 py-0.5">
         {taskRef?.taskId ?? 'T-???'}
       </span>
     )
   }
   if (type === 'discussion') {
     return (
-      <span className="shrink-0 font-heading text-[10px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1 shrink-0 font-heading text-[10px] text-muted-foreground bg-muted/20 px-1.5 py-0.5">
+        <ChatCircleDotsIcon className="size-2.5" />
         Diskusia {taskRef?.taskId ? `· ${taskRef.taskId}` : ''}
       </span>
     )
@@ -475,6 +478,8 @@ function ChatPage() {
   const [inputValue, setInputValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [rightTab, setRightTab] = useState<RightPanelTab>('artifact')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [rightPanelOpen, setRightPanelOpen] = useState(false)
   // Track resolved action requests: messageId -> resolution label
   const [resolvedActions, setResolvedActions] = useState<Record<string, string>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -538,11 +543,16 @@ function ChatPage() {
     } else {
       setSelectedArtifactId(null)
     }
-    // Reset right panel tab based on conversation type
+    // Reset right panel tab and visibility based on conversation type
     if (conv && (conv.type === 'task' || conv.type === 'discussion') && conv.taskSummary) {
       setRightTab('task')
+      setRightPanelOpen(true)
+    } else if (conv && conv.artifacts.length > 0) {
+      setRightTab('artifact')
+      setRightPanelOpen(true)
     } else {
       setRightTab('artifact')
+      setRightPanelOpen(false)
     }
   }, [activeId, conversations])
 
@@ -570,6 +580,7 @@ function ChatPage() {
   const handleArtifactSelect = useCallback((artifactId: string) => {
     setSelectedArtifactId(artifactId)
     setRightTab('artifact')
+    setRightPanelOpen(true)
   }, [])
 
   const handleConversationSelect = useCallback((id: string) => {
@@ -641,7 +652,10 @@ function ChatPage() {
   return (
     <div className="flex h-full">
       {/* ── Left rail: Conversation list ── */}
-      <div className="flex w-[260px] min-w-[260px] flex-col border-r border-border">
+      <div className={cn(
+        'flex flex-col border-r border-border transition-all duration-200',
+        sidebarCollapsed ? 'w-0 min-w-0 overflow-hidden border-r-0' : 'w-[260px] min-w-[260px]'
+      )}>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-[13px] font-semibold text-foreground">
@@ -676,7 +690,9 @@ function ChatPage() {
               onClick={() => handleConversationSelect(conv.id)}
               className={cn(
                 'flex w-full flex-col gap-0.5 border-b border-border/50 px-4 py-3 text-left transition-colors hover:bg-muted/10',
-                activeId === conv.id && 'bg-muted/20'
+                activeId === conv.id && 'bg-muted/20',
+                conv.type === 'task' && 'border-l-2 border-l-primary/40',
+                conv.type === 'discussion' && 'border-l-2 border-l-muted-foreground/30'
               )}
             >
               <div className="flex items-center justify-between gap-2">
@@ -705,14 +721,39 @@ function ChatPage() {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Chat header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <span className="truncate text-[14px] font-semibold text-foreground">
-            {currentConversation?.title ?? ''}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-success" />
-            <span className="font-heading text-[11px] text-muted-foreground">
-              {t('chat.online')}
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((v) => !v)}
+              className="shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <SidebarSimpleIcon className="size-4" />
+            </button>
+            <span className="truncate text-[14px] font-semibold text-foreground">
+              {currentConversation?.title ?? ''}
             </span>
+            {currentConversation && currentConversation.type !== 'query' && (
+              <span className="shrink-0 font-heading text-[11px] text-muted-foreground bg-muted/20 px-1.5 py-0.5">
+                {currentConversation.type === 'task' ? 'Uloha' : 'Diskusia'}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {(hasTaskSummary || showArtifactTab) && (
+              <button
+                type="button"
+                onClick={() => setRightPanelOpen((v) => !v)}
+                className="shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <SidebarSimpleIcon weight={rightPanelOpen ? 'fill' : 'regular'} className="size-4 -scale-x-100" />
+              </button>
+            )}
+            <div className="flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-success" />
+              <span className="font-heading text-[11px] text-muted-foreground">
+                {t('chat.online')}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -880,7 +921,10 @@ function ChatPage() {
       </div>
 
       {/* ── Right: Artifact / Task summary panel ── */}
-      <div className="flex w-[380px] min-w-[380px] flex-col border-l border-border">
+      <div className={cn(
+        'flex flex-col border-l border-border transition-all duration-200',
+        rightPanelOpen ? 'w-[380px] min-w-[380px]' : 'w-0 min-w-0 overflow-hidden border-l-0'
+      )}>
         {/* Tab bar (when both artifact and task summary available) */}
         {showRightPanelTabs && (
           <div className="flex border-b border-border">
@@ -907,6 +951,26 @@ function ChatPage() {
               )}
             >
               {t('chat.tab_task')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRightPanelOpen(false)}
+              className="shrink-0 px-2.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <XIcon className="size-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Close button header (when no tabs) */}
+        {!showRightPanelTabs && rightPanelOpen && (
+          <div className="flex items-center justify-end border-b border-border px-3 py-2">
+            <button
+              type="button"
+              onClick={() => setRightPanelOpen(false)}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <XIcon className="size-3.5" />
             </button>
           </div>
         )}
