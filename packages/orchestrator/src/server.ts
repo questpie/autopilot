@@ -39,6 +39,7 @@ import {
 	SessionMessageService,
 	ScheduleService,
 	SchedulerDaemon,
+	ScriptService,
 	SteerService,
 	VfsService,
 	DefaultWorkerRegistry,
@@ -105,11 +106,12 @@ export async function startServer(options?: StartServerOptions) {
 		capabilityProfiles: resolved.capabilityProfiles,
 		skills: resolved.skills,
 		context: resolved.context,
+		scripts: resolved.scripts,
 		defaults: resolved.defaults,
 		queues: resolved.company.queues ?? {},
 	}
 	console.log(
-		`[server] config loaded: ${resolved.agents.size} agents, ${resolved.workflows.size} workflows, ${resolved.environments.size} environments, ${resolved.providers.size} providers, ${resolved.skills.size} skills, ${resolved.context.size} context files`,
+		`[server] config loaded: ${resolved.agents.size} agents, ${resolved.workflows.size} workflows, ${resolved.environments.size} environments, ${resolved.providers.size} providers, ${resolved.skills.size} skills, ${resolved.context.size} context files, ${resolved.scripts.size} scripts`,
 	)
 
 	// ── 5. Create auth ───────────────────────────────────────────────────
@@ -132,6 +134,7 @@ export async function startServer(options?: StartServerOptions) {
 	const sessionService = new SessionService(companyDb)
 	const sessionMessageService = new SessionMessageService(companyDb)
 	const scheduleService = new ScheduleService(companyDb)
+	const scriptService = new ScriptService(authoredConfig)
 	const steerService = new SteerService(companyDb)
 
 	const workerRegistry = new DefaultWorkerRegistry()
@@ -191,6 +194,7 @@ export async function startServer(options?: StartServerOptions) {
 		sessionService,
 		sessionMessageService,
 		scheduleService,
+		scriptService,
 		steerService,
 		vfsService,
 	}

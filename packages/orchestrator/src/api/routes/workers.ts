@@ -14,7 +14,7 @@ import {
 	SecretRefSchema,
 	ResolvedCapabilitiesSchema,
 } from '@questpie/autopilot-spec'
-import type { ExternalAction, SecretRef, ResolvedCapabilities } from '@questpie/autopilot-spec'
+import type { ExternalAction, SecretRef, ResolvedCapabilities, StandaloneScript } from '@questpie/autopilot-spec'
 import { z } from 'zod'
 import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
@@ -251,6 +251,8 @@ const workers = new Hono<AppEnv>()
 
 		// Split targeting blob into constraints vs post-run hooks
 		const { constraints, actions, secretRefs, resolvedCapabilities } = splitTargeting(run.targeting)
+		const { scriptService } = c.get('services')
+		const resolvedScripts = resolveStandaloneScripts(actions, scriptService)
 
 		// ─── Context assembly ──────────────────────────────────────────
 		// 1. Resolve injected context: capability_profiles.context names → actual content
@@ -323,6 +325,7 @@ const workers = new Hono<AppEnv>()
 					targeting: constraints,
 					actions,
 					secret_refs: secretRefs,
+					resolved_scripts: resolvedScripts,
 					resolved_shared_secrets: resolvedSharedSecrets,
 					resolved_capabilities: resolvedCapabilities,
 					workspace_mode: workspaceMode,
@@ -394,6 +397,23 @@ const EMPTY_TARGETING: SplitTargetingResult = {
 	actions: [],
 	secretRefs: [],
 	resolvedCapabilities: undefined,
+}
+
+function resolveStandaloneScripts(
+	actions: ExternalAction[],
+	scriptService: { resolveRef(scriptId: string): StandaloneScript | undefined },
+): StandaloneScript[] {
+	const resolved = new Map<string, StandaloneScript>()
+	for (const action of actions) {
+		if (action.kind !== 'script_ref') continue
+		const script = scriptService.resolveRef(action.script_id)
+		if (!script) {
+			console.warn(`[workers/claim] script_ref "${action.script_id}" not found in authored scripts`)
+			continue
+		}
+		resolved.set(script.id, script)
+	}
+	return [...resolved.values()]
 }
 
 function splitTargeting(raw: string | null | undefined): SplitTargetingResult {

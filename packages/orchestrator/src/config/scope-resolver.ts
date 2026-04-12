@@ -20,10 +20,21 @@ import {
 	EnvironmentSchema,
 	ProviderSchema,
 	CapabilityProfileSchema,
+	StandaloneScriptSchema,
 	PATHS,
 	loadSkillEntries,
 } from '@questpie/autopilot-spec'
-import type { CompanyScope, ProjectScope, Agent, Workflow, Environment, Provider, CapabilityProfile, SkillEntry } from '@questpie/autopilot-spec'
+import type {
+	CompanyScope,
+	ProjectScope,
+	Agent,
+	Workflow,
+	Environment,
+	Provider,
+	CapabilityProfile,
+	SkillEntry,
+	StandaloneScript,
+} from '@questpie/autopilot-spec'
 import type { z, ZodTypeDef } from 'zod'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -44,6 +55,7 @@ export interface ResolvedConfig {
 	capabilityProfiles: Map<string, CapabilityProfile>
 	skills: Map<string, SkillEntry>
 	context: Map<string, string>
+	scripts: Map<string, StandaloneScript>
 	/** Resolved defaults (project overrides company). */
 	defaults: { runtime: string; workflow?: string; task_assignee?: string }
 }
@@ -155,6 +167,10 @@ export async function loadContextFromRoot(root: string) {
 	return loadTextDir(join(root, PATHS.CONTEXT_DIR))
 }
 
+export async function loadScriptsFromRoot(root: string) {
+	return loadYamlDir(join(root, PATHS.SCRIPTS_DIR), StandaloneScriptSchema)
+}
+
 // ─── Merge ─────────────────────────────────────────────────────────────────
 
 function mergeMapById<T extends { id: string }>(base: T[], overlay: T[]): Map<string, T> {
@@ -186,6 +202,7 @@ export async function resolveConfig(chain: ScopeChain): Promise<ResolvedConfig> 
 	const companyCapProfiles = companyRoot ? await loadCapabilityProfilesFromRoot(companyRoot) : []
 	const companySkills = companyRoot ? await loadSkillsFromRoot(companyRoot) : new Map<string, SkillEntry>()
 	const companyContext = companyRoot ? await loadContextFromRoot(companyRoot) : new Map<string, string>()
+	const companyScripts = companyRoot ? await loadScriptsFromRoot(companyRoot) : []
 
 	// Load from project root (if different from company root)
 	const projectRoot = chain.projectRoot
@@ -197,6 +214,7 @@ export async function resolveConfig(chain: ScopeChain): Promise<ResolvedConfig> 
 	const projectCapProfiles = hasProjectRoot ? await loadCapabilityProfilesFromRoot(projectRoot) : []
 	const projectSkills = hasProjectRoot ? await loadSkillsFromRoot(projectRoot) : new Map<string, SkillEntry>()
 	const projectContext = hasProjectRoot ? await loadContextFromRoot(projectRoot) : new Map<string, string>()
+	const projectScripts = hasProjectRoot ? await loadScriptsFromRoot(projectRoot) : []
 
 	// Merge: project overrides company
 	const project = chain.project
@@ -215,6 +233,7 @@ export async function resolveConfig(chain: ScopeChain): Promise<ResolvedConfig> 
 		capabilityProfiles: mergeMapById(companyCapProfiles, projectCapProfiles),
 		skills: mergeMaps(companySkills, projectSkills),
 		context: mergeMaps(companyContext, projectContext),
+		scripts: mergeMapById(companyScripts, projectScripts),
 		defaults,
 	}
 }

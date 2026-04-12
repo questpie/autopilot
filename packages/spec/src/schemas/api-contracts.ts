@@ -3,6 +3,7 @@ import { ExecutionTargetSchema } from './workflow'
 import { ExternalActionSchema } from './external-action'
 import { SecretRefSchema } from './secret-ref'
 import { ResolvedCapabilitiesSchema } from './capability-profile'
+import { StandaloneScriptSchema } from './script'
 
 // ─── Shared ────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,7 @@ export const ClaimedRunSchema = z.object({
 	// ─── Post-run hooks (separated from targeting) ─────────────────
 	actions: z.array(ExternalActionSchema).default([]),
 	secret_refs: z.array(SecretRefSchema).default([]),
+	resolved_scripts: z.array(StandaloneScriptSchema).default([]),
 
 	// ─── Pre-resolved shared secrets ───────���───────────────────────
 	/**

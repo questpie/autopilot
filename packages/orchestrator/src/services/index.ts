@@ -52,6 +52,7 @@ export { ScheduleService, computeNextRun, interpolateTemplate } from './schedule
 export type { ScheduleRow, ScheduleExecutionRow } from './schedules'
 
 export { SchedulerDaemon } from './scheduler-daemon'
+export { ScriptService } from './scripts'
 
 export { WorkflowEngine } from './workflow-engine'
 export type { AuthoredConfig, IntakeResult, AdvanceResult } from './workflow-engine'

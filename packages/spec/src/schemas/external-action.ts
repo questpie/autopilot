@@ -62,10 +62,27 @@ export const ScriptResultSchema = z.object({
 	outputs: z.record(z.string()).optional(),
 })
 
+export const ScriptRefActionSchema = z.object({
+	kind: z.literal('script_ref'),
+	/** ID of a standalone script defined in .autopilot/scripts/. */
+	script_id: z.string().min(1),
+	/** Override arguments for this invocation. */
+	args: z.array(z.string()).default([]),
+	/** Override timeout for this invocation. */
+	timeout_ms: z.number().int().positive().optional(),
+	/** Additional env vars for this invocation. */
+	env: z.record(z.string()).optional(),
+	/** Additional secret env refs for this invocation. */
+	secret_env: z.record(z.string()).optional(),
+	/** Artifact titles to pass as input. */
+	input_artifacts: z.array(z.string()).optional(),
+})
+
 // ─── Discriminated union ───────────────────────────────────────────────────
 
 /** A side-effecting external action executed by the worker after a run step. */
 export const ExternalActionSchema = z.discriminatedUnion('kind', [
 	WebhookActionSchema,
 	ScriptActionSchema,
+	ScriptRefActionSchema,
 ])

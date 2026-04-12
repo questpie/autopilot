@@ -3,7 +3,16 @@
  * Secret refs are resolved locally on the worker.
  */
 
-import type { ExternalAction, WebhookAction, WorkerEvent, SecretRef, RunArtifact } from '@questpie/autopilot-spec'
+import type {
+	ExternalAction,
+	RunArtifact,
+	ScriptAction,
+	ScriptRefAction,
+	SecretRef,
+	StandaloneScript,
+	WebhookAction,
+	WorkerEvent,
+} from '@questpie/autopilot-spec'
 import { resolveSecretRefs } from '../secrets'
 import { executeScriptAction, type ScriptActionContext, type ScriptActionResult } from './script'
 
@@ -29,6 +38,8 @@ export interface ExecuteActionsOptions {
 	workspacePath?: string
 	/** Artifacts from the just-completed run (for script input_artifacts). */
 	runArtifacts?: RunArtifact[]
+	/** Pre-resolved standalone script definitions for script_ref actions. */
+	resolvedScripts?: StandaloneScript[]
 }
 
 /**
@@ -36,7 +47,7 @@ export interface ExecuteActionsOptions {
  * Returns merged result from all script actions.
  */
 export async function executeActions(opts: ExecuteActionsOptions): Promise<ActionsMergedResult> {
-	const { actions, emitEvent, workspacePath, runArtifacts = [] } = opts
+	const { actions, emitEvent, workspacePath, runArtifacts = [], resolvedScripts = [] } = opts
 	const { resolved: secrets, errors } = resolveSecretRefs(
 		opts.secretRefs ?? [],
 		opts.preResolvedSharedSecrets,
@@ -82,6 +93,39 @@ export async function executeActions(opts: ExecuteActionsOptions): Promise<Actio
 				break
 			}
 
+			case 'script_ref': {
+				if (!workspacePath) {
+					throw new Error(
+						`Script ref action "${action.script_id}" requires a workspace but none is available`,
+					)
+				}
+				const scriptDef = resolvedScripts.find((s) => s.id === action.script_id)
+				if (!scriptDef) {
+					throw new Error(`Script ref "${action.script_id}" not found in resolved_scripts`)
+				}
+				const mergedAction = resolveScriptRef(action, scriptDef)
+				const ctx: ScriptActionContext = { workspacePath, secrets, runArtifacts }
+				try {
+					const result = await executeScriptAction(mergedAction, ctx, emitEvent)
+					mergeScriptResult(merged, result, scriptDef.entry_point)
+					emitEvent({
+						type: 'external_action',
+						summary: `Script ref ${action.script_id}: success`,
+						metadata: {
+							action_kind: 'script_ref',
+							script_id: action.script_id,
+							runner: scriptDef.runner,
+							artifacts_count: result.artifacts.length,
+							outputs_count: Object.keys(result.outputs).length,
+						},
+					})
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					throw new Error(`Script ref action "${action.script_id}" failed: ${msg}`)
+				}
+				break
+			}
+
 			default:
 				emitEvent({
 					type: 'external_action',
@@ -91,6 +135,19 @@ export async function executeActions(opts: ExecuteActionsOptions): Promise<Actio
 	}
 
 	return merged
+}
+
+function resolveScriptRef(ref: ScriptRefAction, script: StandaloneScript): ScriptAction {
+	return {
+		kind: 'script',
+		script: script.entry_point,
+		runner: script.runner,
+		args: ref.args.length > 0 ? ref.args : [],
+		timeout_ms: ref.timeout_ms ?? script.sandbox?.timeout_ms,
+		env: { ...script.env, ...ref.env },
+		secret_env: { ...script.secret_env, ...ref.secret_env },
+		input_artifacts: ref.input_artifacts,
+	}
 }
 
 // ─── Output merge with collision detection ─────────────────────────────────

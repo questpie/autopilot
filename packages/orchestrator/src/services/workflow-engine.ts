@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities, QueueConfig, RetryPolicy, SkillEntry } from '@questpie/autopilot-spec'
+import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities, QueueConfig, RetryPolicy, SkillEntry, StandaloneScript } from '@questpie/autopilot-spec'
 import { classifyRunError } from './error-classifier'
 import { slugifyTaskId } from './tasks'
 import type { TaskService, TaskRow } from './tasks'
@@ -22,6 +22,8 @@ export interface AuthoredConfig {
 	skills: Map<string, SkillEntry>
 	/** Loaded context file content (name → content) from .autopilot/context/ */
 	context: Map<string, string>
+	/** Parsed standalone scripts from .autopilot/scripts/ */
+	scripts: Map<string, StandaloneScript>
 	defaults: { runtime: string; workflow?: string; task_assignee?: string }
 	/** Named queue configs from company scope. Empty record if unset. */
 	queues?: Record<string, QueueConfig>

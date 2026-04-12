@@ -79,6 +79,7 @@ export class ConfigManager {
 				capabilityProfiles: newResolved.capabilityProfiles,
 				skills: newResolved.skills,
 				context: newResolved.context,
+				scripts: newResolved.scripts,
 				defaults: newResolved.defaults,
 				queues: newResolved.company.queues ?? {},
 			}
@@ -93,6 +94,7 @@ export class ConfigManager {
 			this.config.capabilityProfiles = newConfig.capabilityProfiles
 			this.config.skills = newConfig.skills
 			this.config.context = newConfig.context
+			this.config.scripts = newConfig.scripts
 			this.config.defaults = newConfig.defaults
 			this.config.queues = newConfig.queues
 
@@ -101,7 +103,7 @@ export class ConfigManager {
 			this.reloadCount++
 
 			console.log(
-				`[config] reloaded (${newConfig.agents.size} agents, ${newConfig.workflows.size} workflows, ${newConfig.environments.size} environments, ${newConfig.providers.size} providers, ${newConfig.skills.size} skills)`,
+				`[config] reloaded (${newConfig.agents.size} agents, ${newConfig.workflows.size} workflows, ${newConfig.environments.size} environments, ${newConfig.providers.size} providers, ${newConfig.skills.size} skills, ${newConfig.scripts.size} scripts)`,
 			)
 
 			this.onReload?.(this.config)

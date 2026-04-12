@@ -537,6 +537,7 @@ export class AutopilotWorker {
       preResolvedSharedSecrets: run.resolved_shared_secrets ?? {},
       workspacePath: workspacePath ?? undefined,
       runArtifacts,
+      resolvedScripts: run.resolved_scripts ?? [],
     })
   }
 

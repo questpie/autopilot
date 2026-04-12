@@ -10,7 +10,20 @@ export {
 	SharedSecretMetadataSchema,
 } from './secret-ref'
 export { CapabilityProfileSchema, ResolvedCapabilitiesSchema } from './capability-profile'
-export { ExternalActionSchema, WebhookActionSchema, ScriptActionSchema, ScriptRunnerSchema, ScriptResultSchema } from './external-action'
+export {
+	ExternalActionSchema,
+	WebhookActionSchema,
+	ScriptActionSchema,
+	ScriptRefActionSchema,
+	ScriptRunnerSchema,
+	ScriptResultSchema,
+} from './external-action'
+export {
+	StandaloneScriptSchema,
+	ScriptInputSchema,
+	ScriptOutputSchema,
+	ScriptSandboxSchema,
+} from './script'
 export { ArtifactSchema, ArtifactKindSchema, ArtifactRefKindSchema, RunArtifactSchema } from './artifact'
 export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema } from './company'
 export { CompanyScopeSchema, CompanyScopeSettingsSchema, ProjectScopeSchema, ScopeDefaultsSchema, QueueConfigSchema, ConversationCommandConfigSchema } from './scope'

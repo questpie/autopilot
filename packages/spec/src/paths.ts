@@ -17,6 +17,7 @@ export const PATHS = {
 	CAPABILITIES_DIR: '.autopilot/capabilities',
 	SKILLS_DIR: '.autopilot/skills',
 	CONTEXT_DIR: '.autopilot/context',
+	SCRIPTS_DIR: '.autopilot/scripts',
 
 	// Pack distribution
 	REGISTRIES_CONFIG: '.autopilot/registries.yaml',
