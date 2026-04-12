@@ -1,7 +1,11 @@
 /**
  * Enhanced mock conversations for demo.
  * Covers: query, task-backed thread, discussion/feedback thread.
+ *
+ * All types here use real backend contract types from @/api/types.
  */
+
+import type { Session, SessionMessage, Artifact } from '@/api/types'
 
 /**
  * UI-only conversation display type. Not a backend contract.
@@ -9,157 +13,145 @@
  * - `task` maps to SessionMode `task_thread` (explicit task progress).
  * - `discussion` maps to SessionMode `task_thread` (discussion-style task).
  */
-export type ConversationType = 'query' | 'task' | 'discussion'
+export type ConversationDisplayType = 'query' | 'task' | 'discussion'
 
-export type MockMessageRole = 'user' | 'bot' | 'system'
-
-export interface MockToolCard {
-  kind: 'created' | 'updated'
-  taskId: string
-  taskTitle: string
-}
-
-export interface MockArtifactRef {
-  artifactId: string
-  label: string
-}
-
-export type MockArtifactType = 'document' | 'table' | 'code'
-
-export interface MockArtifact {
+export interface TaskSummaryView {
   id: string
-  title: string
-  type: MockArtifactType
-  content: string
-}
-
-export interface MockTaskEvent {
-  kind: 'step_completed' | 'waiting_for_review' | 'step_started' | 'promoted'
-  stepLabel: string
-  detail?: string
-}
-
-export interface MockActionRequest {
-  kind: 'approve_reject' | 'return_approve'
-  label: string
-}
-
-export interface MockMessage {
-  id: string
-  role: MockMessageRole
-  content: string
-  toolCard?: MockToolCard
-  artifactRef?: MockArtifactRef
-  typing?: boolean
-  taskEvent?: MockTaskEvent
-  actionRequest?: MockActionRequest
-}
-
-export interface MockTaskSummary {
-  taskId: string
   title: string
   status: string
-  currentStep: string
-  totalSteps: number
-  completedSteps: number
-  outputs: string[]
+  workflow_step: string | null
+  runs_total: number
+  runs_completed: number
 }
 
-export interface MockConversation {
+export interface QuerySummaryView {
   id: string
-  type: ConversationType
+  status: string
+  run_id: string | null
+  promoted_task_id?: string | null
+}
+
+export interface ConversationViewModel {
+  session: Session
+  displayType: ConversationDisplayType
   title: string
   lastPreview: string
   time: string
-  taskRef?: { taskId: string; taskTitle: string }
-  promotedTo?: { taskId: string; taskTitle: string }
-  messages: MockMessage[]
-  artifacts: MockArtifact[]
-  taskSummary?: MockTaskSummary
+  messages: SessionMessage[]
+  artifacts: Artifact[]
+  task: TaskSummaryView | null
+  queries: QuerySummaryView[]
 }
 
 // ── Conversation 1: "Content plan na april" — query promoted to task ──
 
-const conv1Messages: MockMessage[] = [
+const session1: Session = {
+  id: 'conv-1',
+  provider_id: 'demo',
+  external_conversation_id: 'conv-1',
+  external_thread_id: null,
+  mode: 'task_thread',
+  task_id: 'T-142',
+  status: 'active',
+  created_at: '2026-04-12T09:42:00Z',
+  updated_at: '2026-04-12T09:55:00Z',
+  metadata: '{}',
+  runtime_session_ref: null,
+  preferred_worker_id: null,
+}
+
+const conv1Messages: SessionMessage[] = [
   {
     id: 'c1-m1',
+    session_id: 'conv-1',
     role: 'user',
     content: 'Priprav mi content plan na april. Chcem pokryť blog, social media aj newsletter.',
+    query_id: null,
+    external_message_id: null,
+    metadata: '{}',
+    created_at: '2026-04-12T09:42:10Z',
   },
   {
     id: 'c1-m2',
-    role: 'bot',
+    session_id: 'conv-1',
+    role: 'assistant',
     content: 'Rozumiem, pozriem sa na naše existujúce zdroje a pripravím plán. Dám ti návrh rozdelený podľa kanálov.',
+    query_id: null,
+    external_message_id: null,
+    metadata: '{}',
+    created_at: '2026-04-12T09:42:20Z',
   },
   {
     id: 'c1-m3',
-    role: 'bot',
+    session_id: 'conv-1',
+    role: 'assistant',
     content: '',
-    toolCard: {
-      kind: 'created',
-      taskId: 'T-142',
-      taskTitle: 'Content plán na apríl',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"tool_card":{"kind":"created","task_id":"T-142","task_title":"Content plán na apríl"}}',
+    created_at: '2026-04-12T09:42:30Z',
   },
   {
     id: 'c1-m4',
-    role: 'bot',
+    session_id: 'conv-1',
+    role: 'assistant',
     content: '',
-    taskEvent: {
-      kind: 'promoted',
-      stepLabel: 'Konverzácia bola povýšená na úlohu',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"worker_event":{"type":"progress","summary":"Konverzácia bola povýšená na úlohu"}}',
+    created_at: '2026-04-12T09:42:40Z',
   },
   {
     id: 'c1-m5',
-    role: 'bot',
+    session_id: 'conv-1',
+    role: 'assistant',
     content: '',
-    taskEvent: {
-      kind: 'step_completed',
-      stepLabel: 'Analýza zdrojov',
-      detail: 'Spracovaných 12 existujúcich článkov a 3 content piliere',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"worker_event":{"type":"progress","summary":"Analýza zdrojov: Spracovaných 12 existujúcich článkov a 3 content piliere"}}',
+    created_at: '2026-04-12T09:43:00Z',
   },
   {
     id: 'c1-m6',
-    role: 'bot',
+    session_id: 'conv-1',
+    role: 'assistant',
     content: '',
-    taskEvent: {
-      kind: 'step_completed',
-      stepLabel: 'Návrh štruktúry',
-      detail: 'Blog: 8 článkov, Social: 24 postov, Newsletter: 4 edície',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"worker_event":{"type":"progress","summary":"Návrh štruktúry: Blog: 8 článkov, Social: 24 postov, Newsletter: 4 edície"}}',
+    created_at: '2026-04-12T09:44:00Z',
   },
   {
     id: 'c1-m7',
-    role: 'bot',
+    session_id: 'conv-1',
+    role: 'assistant',
     content: 'Plán je pripravený. Navrhol som 8 blog článkov, 24 social media postov a 4 newslettery. Rozpis je v artefakte.',
-    artifactRef: {
-      artifactId: 'c1-art-1',
-      label: 'Content plán — apríl 2026',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"artifact_refs":[{"artifact_id":"c1-art-1","title":"Content plán — apríl 2026"}]}',
+    created_at: '2026-04-12T09:50:00Z',
   },
   {
     id: 'c1-m8',
-    role: 'bot',
+    session_id: 'conv-1',
+    role: 'assistant',
     content: '',
-    taskEvent: {
-      kind: 'waiting_for_review',
-      stepLabel: 'Čaká na schválenie',
-    },
-    actionRequest: {
-      kind: 'approve_reject',
-      label: 'Schváliť content plán?',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"worker_event":{"type":"approval_needed","summary":"Čaká na schválenie"}}',
+    created_at: '2026-04-12T09:55:00Z',
   },
 ]
 
-const conv1Artifacts: MockArtifact[] = [
+const conv1Artifacts: Artifact[] = [
   {
     id: 'c1-art-1',
+    run_id: 'run-c1-1',
+    task_id: 'T-142',
+    kind: 'doc',
     title: 'Content plán — apríl 2026',
-    type: 'document',
-    content: `# Content plán — apríl 2026
+    ref_kind: 'inline',
+    ref_value: `# Content plán — apríl 2026
 
 ## Blog (8 článkov)
 
@@ -192,87 +184,123 @@ const conv1Artifacts: MockArtifact[] = [
 
 **Celkový objem:** 36 content kusov
 **Odhadovaný čas:** 18 hodín agentovej práce`,
+    mime_type: 'text/markdown',
+    metadata: '{}',
+    blob_id: null,
+    created_at: '2026-04-12T09:50:00Z',
   },
 ]
 
-const conv1: MockConversation = {
-  id: 'conv-1',
-  type: 'task',
+const conv1: ConversationViewModel = {
+  session: session1,
+  displayType: 'task',
   title: 'Content plán na apríl',
   lastPreview: 'Plán je pripravený — 8 článkov, 24 postov, 4 newslettery',
   time: '09:42',
-  promotedTo: { taskId: 'T-142', taskTitle: 'Content plán na apríl' },
   messages: conv1Messages,
   artifacts: conv1Artifacts,
-  taskSummary: {
-    taskId: 'T-142',
+  task: {
+    id: 'T-142',
     title: 'Content plán na apríl',
     status: 'waiting',
-    currentStep: 'Schválenie',
-    totalSteps: 4,
-    completedSteps: 3,
-    outputs: ['Content plán — apríl 2026'],
+    workflow_step: 'Schválenie',
+    runs_total: 4,
+    runs_completed: 3,
   },
+  queries: [
+    { id: 'q-c1-1', status: 'completed', run_id: 'run-c1-1', promoted_task_id: 'T-142' },
+  ],
 }
 
 // ── Conversation 2: "Newsletter feedback" — discussion on T-147 ──
 
-const conv2Messages: MockMessage[] = [
+const session2: Session = {
+  id: 'conv-2',
+  provider_id: 'demo',
+  external_conversation_id: 'conv-2',
+  external_thread_id: null,
+  mode: 'task_thread',
+  task_id: 'T-147',
+  status: 'active',
+  created_at: '2026-04-12T08:15:00Z',
+  updated_at: '2026-04-12T08:45:00Z',
+  metadata: '{}',
+  runtime_session_ref: null,
+  preferred_worker_id: null,
+}
+
+const conv2Messages: SessionMessage[] = [
   {
     id: 'c2-m1',
+    session_id: 'conv-2',
     role: 'system',
     content: 'Diskusia k úlohe T-147 · Newsletter k svadobnej sezóne',
+    query_id: null,
+    external_message_id: null,
+    metadata: '{}',
+    created_at: '2026-04-12T08:15:00Z',
   },
   {
     id: 'c2-m2',
-    role: 'bot',
+    session_id: 'conv-2',
+    role: 'assistant',
     content: 'Pripravil som draft newslettera k svadobnej sezóne. Prosím o review pred odoslaním.',
-    actionRequest: {
-      kind: 'return_approve',
-      label: 'Review newsletter draft',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"worker_event":{"type":"approval_needed","summary":"Review newsletter draft"}}',
+    created_at: '2026-04-12T08:15:30Z',
   },
   {
     id: 'c2-m3',
+    session_id: 'conv-2',
     role: 'user',
     content: 'Predmet je príliš dlhý, skráť ho na max 50 znakov. A v sekcii "Pre nevestu" chýba zmienka o degustačnom menu.',
+    query_id: null,
+    external_message_id: null,
+    metadata: '{}',
+    created_at: '2026-04-12T08:20:00Z',
   },
   {
     id: 'c2-m4',
-    role: 'bot',
+    session_id: 'conv-2',
+    role: 'assistant',
     content: '',
-    taskEvent: {
-      kind: 'step_started',
-      stepLabel: 'Úprava draftu',
-      detail: 'Skracujem predmet a dopĺňam sekciu Pre nevestu',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"worker_event":{"type":"tool_use","summary":"Úprava draftu: Skracujem predmet a dopĺňam sekciu Pre nevestu"}}',
+    created_at: '2026-04-12T08:25:00Z',
   },
   {
     id: 'c2-m5',
-    role: 'bot',
+    session_id: 'conv-2',
+    role: 'assistant',
     content: 'Hotovo. Predmet skrátený na "Svadobná sezóna: výnimočné chvíle" (42 znakov). Doplnená zmienka o degustačnom menu s cenami.',
-    artifactRef: {
-      artifactId: 'c2-art-1',
-      label: 'Newsletter draft v2',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"artifact_refs":[{"artifact_id":"c2-art-1","title":"Newsletter draft v2"}]}',
+    created_at: '2026-04-12T08:35:00Z',
   },
   {
     id: 'c2-m6',
-    role: 'bot',
+    session_id: 'conv-2',
+    role: 'assistant',
     content: '',
-    actionRequest: {
-      kind: 'return_approve',
-      label: 'Schváliť upravený draft?',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"worker_event":{"type":"approval_needed","summary":"Schváliť upravený draft?"}}',
+    created_at: '2026-04-12T08:45:00Z',
   },
 ]
 
-const conv2Artifacts: MockArtifact[] = [
+const conv2Artifacts: Artifact[] = [
   {
     id: 'c2-art-1',
+    run_id: 'run-c2-1',
+    task_id: 'T-147',
+    kind: 'doc',
     title: 'Newsletter draft v2',
-    type: 'document',
-    content: `# Svadobná sezóna: výnimočné chvíle
+    ref_kind: 'inline',
+    ref_value: `# Svadobná sezóna: výnimočné chvíle
 
 Predmet: Svadobná sezóna: výnimočné chvíle
 
@@ -302,54 +330,81 @@ Objednaj svadobný balíček do konca mája a získaj 15% zľavu na candy bar.
 ---
 
 S láskou, váš kaviarnový tím`,
+    mime_type: 'text/markdown',
+    metadata: '{}',
+    blob_id: null,
+    created_at: '2026-04-12T08:35:00Z',
   },
 ]
 
-const conv2: MockConversation = {
-  id: 'conv-2',
-  type: 'discussion',
+const conv2: ConversationViewModel = {
+  session: session2,
+  displayType: 'discussion',
   title: 'Newsletter feedback',
   lastPreview: 'Predmet skrátený, doplnené degustačné menu',
   time: '08:15',
-  taskRef: { taskId: 'T-147', taskTitle: 'Newsletter k svadobnej sezóne' },
   messages: conv2Messages,
   artifacts: conv2Artifacts,
-  taskSummary: {
-    taskId: 'T-147',
+  task: {
+    id: 'T-147',
     title: 'Newsletter k svadobnej sezóne',
     status: 'waiting',
-    currentStep: 'Review',
-    totalSteps: 3,
-    completedSteps: 2,
-    outputs: ['Newsletter draft v2'],
+    workflow_step: 'Review',
+    runs_total: 3,
+    runs_completed: 2,
   },
+  queries: [],
 }
 
 // ── Conversation 3: "Ako vyzeral marec?" — simple query ──
 
-const conv3Messages: MockMessage[] = [
+const session3: Session = {
+  id: 'conv-3',
+  provider_id: 'demo',
+  external_conversation_id: 'conv-3',
+  external_thread_id: null,
+  mode: 'query',
+  task_id: null,
+  status: 'active',
+  created_at: '2026-04-11T15:00:00Z',
+  updated_at: '2026-04-11T15:10:00Z',
+  metadata: '{}',
+  runtime_session_ref: null,
+  preferred_worker_id: null,
+}
+
+const conv3Messages: SessionMessage[] = [
   {
     id: 'c3-m1',
+    session_id: 'conv-3',
     role: 'user',
     content: 'Ako vyzeral marec? Daj mi prehľad toho, čo sa podarilo a kde máme medzery.',
+    query_id: null,
+    external_message_id: null,
+    metadata: '{}',
+    created_at: '2026-04-11T15:00:00Z',
   },
   {
     id: 'c3-m2',
-    role: 'bot',
+    session_id: 'conv-3',
+    role: 'assistant',
     content: 'Pozrel som sa na marcové dáta. Tu je zhrnutie:',
-    artifactRef: {
-      artifactId: 'c3-art-1',
-      label: 'Marcový prehľad',
-    },
+    query_id: null,
+    external_message_id: null,
+    metadata: '{"artifact_refs":[{"artifact_id":"c3-art-1","title":"Marcový prehľad"}]}',
+    created_at: '2026-04-11T15:05:00Z',
   },
 ]
 
-const conv3Artifacts: MockArtifact[] = [
+const conv3Artifacts: Artifact[] = [
   {
     id: 'c3-art-1',
+    run_id: 'run-c3-1',
+    task_id: null,
+    kind: 'doc',
     title: 'Marcový prehľad',
-    type: 'document',
-    content: `# Marec 2026 — prehľad
+    ref_kind: 'inline',
+    ref_value: `# Marec 2026 — prehľad
 
 ## Čo sa podarilo
 
@@ -375,17 +430,23 @@ const conv3Artifacts: MockArtifact[] = [
 - Znížiť frekvenciu newslettera na 3× mesačne
 - Nahradiť slabé formáty krátkym videom
 - Pridať A/B testovanie predmetov emailov`,
+    mime_type: 'text/markdown',
+    metadata: '{}',
+    blob_id: null,
+    created_at: '2026-04-11T15:05:00Z',
   },
 ]
 
-const conv3: MockConversation = {
-  id: 'conv-3',
-  type: 'query',
+const conv3: ConversationViewModel = {
+  session: session3,
+  displayType: 'query',
   title: 'Ako vyzeral marec?',
   lastPreview: 'Blog +23%, newsletter open rate 34.2%, social engagement 4.1%',
   time: 'Včera',
   messages: conv3Messages,
   artifacts: conv3Artifacts,
+  task: null,
+  queries: [{ id: 'q-c3-1', status: 'completed', run_id: 'run-c3-1', promoted_task_id: null }],
 }
 
-export const mockConversations: MockConversation[] = [conv1, conv2, conv3]
+export const mockConversations: ConversationViewModel[] = [conv1, conv2, conv3]

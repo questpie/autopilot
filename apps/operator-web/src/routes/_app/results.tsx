@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { m } from 'framer-motion'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
+import { ListDetail, ListPanel } from '@/components/list-detail'
 import { useTranslation } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { staggerContainer, staggerItem } from '@/lib/motion'
@@ -13,6 +14,7 @@ import { FlatList } from '@/components/ui/flat-list'
 import { RelationLink } from '@/components/ui/relation-link'
 import { Button } from '@/components/ui/button'
 import { getRuns, getRun } from '@/api/runs.api'
+import { getTasks } from '@/api/tasks.api'
 import type { Run, Artifact } from '@/api/types'
 
 export const Route = createFileRoute('/_app/results')({
@@ -53,7 +55,7 @@ interface ResultItem {
   duration: string
   agent_name: string
   thread_name: string
-  playbook_name: string | null
+  scheduled_by: string | null
 }
 
 // ── Transform helpers ──
@@ -80,13 +82,13 @@ function getDateGroup(dateStr: string): 'today' | 'yesterday' | 'last_week' {
   return 'last_week'
 }
 
-function formatTimeDisplay(dateStr: string): string {
+function formatTimeDisplay(dateStr: string, locale: string): string {
   const date = new Date(dateStr)
   const group = getDateGroup(dateStr)
   if (group === 'today' || group === 'yesterday') {
-    return date.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
   }
-  return date.toLocaleDateString('sk-SK', { weekday: 'short', hour: '2-digit', minute: '2-digit' })
+  return date.toLocaleDateString(locale, { weekday: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 function artifactFileExtension(mimeType: string | null, title: string): string {
@@ -121,7 +123,7 @@ function agentIdToName(agentId: string): string {
   return 'Agent'
 }
 
-function runToResultItem(run: Run, artifacts: Artifact[]): ResultItem {
+function runToResultItem(run: Run, artifacts: Artifact[], locale: string): ResultItem {
   const type: ResultType = run.task_id ? 'task' : 'query'
   const sourceId = run.task_id ?? run.id
 
@@ -138,7 +140,7 @@ function runToResultItem(run: Run, artifacts: Artifact[]): ResultItem {
     summary: run.summary ?? '',
     created_at: run.created_at,
     completed_at: run.ended_at,
-    time_display: formatTimeDisplay(run.created_at),
+    time_display: formatTimeDisplay(run.created_at, locale),
     date_group: getDateGroup(run.created_at),
     artifacts: artifacts.map(artifactToVM),
     tokens: run.tokens_input + run.tokens_output,
@@ -146,7 +148,7 @@ function runToResultItem(run: Run, artifacts: Artifact[]): ResultItem {
     duration: formatDuration(run.started_at, run.ended_at),
     agent_name: agentIdToName(run.agent_id),
     thread_name: run.summary ?? run.id,
-    playbook_name: null,
+    scheduled_by: null,
   }
 }
 
@@ -244,6 +246,8 @@ function ResultDetail({
   onApprove: (id: string) => void
   onReturn: (id: string) => void
 }) {
+  const navigate = useNavigate()
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -278,23 +282,21 @@ function ResultDetail({
             ...(item.task_id
               ? [{
                   label: t('results.prov_task'),
-                  value: <RelationLink label={item.source_id} sublabel={item.title} />,
+                  value: <RelationLink
+                    label={item.source_id}
+                    sublabel={item.title}
+                    onClick={() => void navigate({ to: '/tasks', search: { taskId: item.task_id ?? '' } })}
+                  />,
                 }]
               : []),
             {
-              label: 'Run',
+              label: t('results.label_run'),
               value: (
                 <span className="font-heading text-[11px] text-muted-foreground">
                   {item.run_id}
                 </span>
               ),
             },
-            ...(item.playbook_name
-              ? [{
-                  label: t('results.prov_playbook'),
-                  value: <RelationLink label={item.playbook_name} />,
-                }]
-              : []),
           ]}
         />
       </div>
@@ -333,9 +335,9 @@ function ResultDetail({
         <SectionHeader>{t('results.run_detail')}</SectionHeader>
         <KvList
           items={[
-            { label: 'Agent', value: item.agent_name },
+            { label: t('results.label_agent'), value: item.agent_name },
             { label: t('results.duration'), value: item.duration },
-            { label: 'Tokens', value: item.tokens.toLocaleString() },
+            { label: t('results.label_tokens'), value: item.tokens.toLocaleString() },
             { label: t('results.steps'), value: String(item.steps) },
           ]}
         />
@@ -350,12 +352,12 @@ function ResultDetail({
         )}
         {approvedIds.has(item.id) && (
           <div className="mt-3 flex items-center gap-2 border-t border-border/50 pt-3">
-            <span className="text-[12px] text-green-500">{'\u2713'} Schválené</span>
+            <span className="text-[12px] text-green-500">{'\u2713'} {t('results.approved')}</span>
           </div>
         )}
         {returnedIds.has(item.id) && (
           <div className="mt-3 flex items-center gap-2 border-t border-border/50 pt-3">
-            <span className="text-[12px] text-amber-500">{'\u21A9'} Vrátené</span>
+            <span className="text-[12px] text-amber-500">{'\u21A9'} {t('results.returned')}</span>
           </div>
         )}
       </div>
@@ -364,16 +366,20 @@ function ResultDetail({
       <div className="flex flex-col gap-2">
         <SectionHeader>{t('results.related')}</SectionHeader>
         <div className="flex flex-col gap-1">
-          {item.type === 'automation' && (
+          {item.scheduled_by && (
             <RelationLink
               label={t('results.source_schedule')}
-              sublabel={item.source_id}
+              sublabel={item.scheduled_by}
+              onClick={() => void navigate({ to: '/automations', search: { scheduleId: item.scheduled_by ?? undefined } })}
             />
           )}
-          <RelationLink
-            label={t('results.other_from_source')}
-            sublabel={item.source_id}
-          />
+          {item.task_id && (
+            <RelationLink
+              label={t('results.prov_task')}
+              sublabel={item.task_id}
+              onClick={() => void navigate({ to: '/tasks', search: { taskId: item.task_id ?? '' } })}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -383,7 +389,8 @@ function ResultDetail({
 // ── Main Page ──
 
 function ResultsPage() {
-  const { t } = useTranslation()
+  const { t, i18n: i18nInstance } = useTranslation()
+  const locale = i18nInstance.language
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [filter, setFilter] = useState<FilterValue>('all')
   const [search, setSearch] = useState('')
@@ -393,16 +400,29 @@ function ResultsPage() {
 
   // Load completed runs from adapter
   useEffect(() => {
-    getRuns({ status: 'completed' }).then((completedRuns) => {
-      // For each completed run, fetch its artifacts
-      const detailPromises = completedRuns.map((run) =>
-        getRun(run.id).then((detail) => {
-          if (!detail) return runToResultItem(run, [])
-          return runToResultItem(run, detail.artifacts)
-        })
-      )
-      return Promise.all(detailPromises)
-    }).then(setResults)
+    Promise.all([
+      getRuns({ status: 'completed' }).then((completedRuns) => {
+        const detailPromises = completedRuns.map((run) =>
+          getRun(run.id).then((detail) => {
+            if (!detail) return runToResultItem(run, [], locale)
+            return runToResultItem(run, detail.artifacts, locale)
+          })
+        )
+        return Promise.all(detailPromises)
+      }),
+      getTasks(),
+    ]).then(([items, loadedTasks]) => {
+      const enriched = items.map((item) => {
+        if (item.task_id) {
+          const task = loadedTasks.find((t) => t.id === item.task_id)
+          if (task?.scheduled_by) {
+            return { ...item, scheduled_by: task.scheduled_by }
+          }
+        }
+        return item
+      })
+      setResults(enriched)
+    })
   }, [])
 
   const filtered = results.filter((r) => {
@@ -456,56 +476,57 @@ function ResultsPage() {
   }
 
   return (
-    <div className="flex h-full flex-1 overflow-hidden">
-      {/* Left panel — list */}
-      <div className="flex w-1/2 flex-col border-r border-border/50">
-        <m.div
-          variants={staggerContainer}
-          initial="initial"
-          animate="animate"
-          className="flex flex-col gap-3 p-6 pb-3"
-        >
-          <m.div variants={staggerItem}>
-            <PageHeader
-              title={t('results.title')}
-              actions={
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value)
-                    setSelectedIndex(0)
-                  }}
-                  placeholder={t('common.search')}
-                  className="h-7 w-48 rounded-none border border-border bg-transparent px-2.5 font-heading text-[12px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+    <ListDetail
+      listSize={50}
+      list={
+        <ListPanel
+          header={
+            <m.div
+              variants={staggerContainer}
+              initial="initial"
+              animate="animate"
+              className="flex flex-col gap-3"
+            >
+              <m.div variants={staggerItem}>
+                <PageHeader
+                  title={t('results.title')}
+                  actions={
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => {
+                        setSearch(e.target.value)
+                        setSelectedIndex(0)
+                      }}
+                      placeholder={t('common.search')}
+                      className="h-7 w-48 rounded-none border border-border bg-transparent px-2.5 font-heading text-[12px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                    />
+                  }
                 />
-              }
-            />
-          </m.div>
-
-          <m.div variants={staggerItem} className="flex gap-1">
-            {FILTER_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                className={cn(
-                  'rounded-none px-2.5 py-1 font-heading text-[11px] font-medium transition-colors',
-                  filter === opt.value
-                    ? 'bg-foreground/10 text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-                onClick={() => {
-                  setFilter(opt.value)
-                  setSelectedIndex(0)
-                }}
-              >
-                {t(opt.i18nKey)}
-              </button>
-            ))}
-          </m.div>
-        </m.div>
-
-        <div className="flex-1 overflow-y-auto">
+              </m.div>
+              <m.div variants={staggerItem} className="flex gap-1">
+                {FILTER_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={cn(
+                      'rounded-none px-2.5 py-1 font-heading text-[11px] font-medium transition-colors',
+                      filter === opt.value
+                        ? 'bg-foreground/10 text-foreground'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                    onClick={() => {
+                      setFilter(opt.value)
+                      setSelectedIndex(0)
+                    }}
+                  >
+                    {t(opt.i18nKey)}
+                  </button>
+                ))}
+              </m.div>
+            </m.div>
+          }
+        >
           {filtered.length === 0 ? (
             <EmptyState
               title={t('results.empty_title')}
@@ -524,27 +545,27 @@ function ResultsPage() {
               </m.div>
             </m.div>
           )}
+        </ListPanel>
+      }
+      detail={
+        <div className="p-6">
+          {selectedItem ? (
+            <ResultDetail
+              item={selectedItem}
+              t={t}
+              approvedIds={approvedIds}
+              returnedIds={returnedIds}
+              onApprove={(id) => setApprovedIds((prev) => new Set(prev).add(id))}
+              onReturn={(id) => setReturnedIds((prev) => new Set(prev).add(id))}
+            />
+          ) : (
+            <EmptyState
+              title={t('results.empty_title')}
+              description={t('results.empty_desc')}
+            />
+          )}
         </div>
-      </div>
-
-      {/* Right panel — detail */}
-      <div className="flex w-1/2 flex-col overflow-y-auto p-6">
-        {selectedItem ? (
-          <ResultDetail
-            item={selectedItem}
-            t={t}
-            approvedIds={approvedIds}
-            returnedIds={returnedIds}
-            onApprove={(id) => setApprovedIds((prev) => new Set(prev).add(id))}
-            onReturn={(id) => setReturnedIds((prev) => new Set(prev).add(id))}
-          />
-        ) : (
-          <EmptyState
-            title={t('results.empty_title')}
-            description={t('results.empty_desc')}
-          />
-        )}
-      </div>
-    </div>
+      }
+    />
   )
 }

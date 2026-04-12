@@ -30,6 +30,8 @@ export interface ResourceData {
   contextIndexed: string | null
   relations: ResourceRelation[]
   versions: ResourceVersion[]
+  preview_content?: string
+  preview_mime?: string
 }
 
 export const mockResources: ResourceData[] = [
@@ -55,6 +57,8 @@ export const mockResources: ResourceData[] = [
       { version: 2, date: '8. apr 2026', current: true },
       { version: 1, date: '15. mar 2026', current: false },
     ],
+    preview_content: `# Jarn\u00e9 menu 2026\n\nAvok\u00e1dov\u00fd toast s vajcom .......... 8,90 \u20ac\nMatcha latte ........................ 4,50 \u20ac\nAça\u00ed bowl .......................... 9,20 \u20ac\nBanana bread ....................... 3,80 \u20ac\nFlat white ......................... 3,60 \u20ac\n\nAlerg\u00e9ny: 1, 3, 7, 8`,
+    preview_mime: 'text/markdown',
   },
   {
     id: 'r2',
@@ -76,6 +80,8 @@ export const mockResources: ResourceData[] = [
       { version: 2, date: '10. jan 2026', current: false },
       { version: 1, date: '5. nov 2025', current: false },
     ],
+    preview_content: `# Brand Guidelines v3\n\nPrim\u00e1rna farba: #2D5A3D\nSekundr\u00e1na farba: #F5E6D3\nFont: Inter, fallback sans-serif`,
+    preview_mime: 'text/markdown',
   },
   {
     id: 'r3',
@@ -95,6 +101,8 @@ export const mockResources: ResourceData[] = [
     versions: [
       { version: 1, date: '15. mar 2026', current: true },
     ],
+    preview_content: `# O n\u00e1s\n\nKaviar\u0148 Slnie\u010dnica je rodinn\u00e1 kaviar\u0148 v centre Bratislavy. Od roku 2018 pon\u00fakame v\u00fdberov\u00fa k\u00e1vu, denn\u00e9 menu a priestor pre komunitn\u00e9 podujatia.`,
+    preview_mime: 'text/markdown',
   },
   {
     id: 'r4',
@@ -111,6 +119,8 @@ export const mockResources: ResourceData[] = [
     versions: [
       { version: 1, date: '10. mar 2026', current: true },
     ],
+    preview_content: `Polo\u017eka,Cena,Kateg\u00f3ria\nEspresso,2.40 \u20ac,K\u00e1va\nFlat white,3.60 \u20ac,K\u00e1va\nCroissant,2.80 \u20ac,Pe\u010divo\nAça\u00ed bowl,9.20 \u20ac,Ra\u0148ajky`,
+    preview_mime: 'text/csv',
   },
   {
     id: 'r5',
@@ -127,6 +137,8 @@ export const mockResources: ResourceData[] = [
     versions: [
       { version: 1, date: '1. mar 2026', current: true },
     ],
+    preview_content: `N\u00e1zov,Kontakt,Kateg\u00f3ria\nCoffee Import s.r.o.,info@coffeeimport.sk,K\u00e1va\nBIO Farm\u00e1r,objednavky@biofarmar.sk,Potraviny\nPack & Go,info@packgo.sk,Obaly`,
+    preview_mime: 'text/csv',
   },
   {
     id: 'r6',
@@ -163,5 +175,7 @@ export const mockResources: ResourceData[] = [
     versions: [
       { version: 1, date: '20. mar 2026', current: true },
     ],
+    preview_content: `# Svadobn\u00e1 sez\u00f3na 2026\n\nOd m\u00e1ja do septembra pon\u00fakame \u0161peci\u00e1lne svadobn\u00e9 bal\u00edky: dezerty na objedn\u00e1vku, catering pre mal\u00e9 oslavy, person\u00e1lne ozdoby.`,
+    preview_mime: 'text/markdown',
   },
 ]

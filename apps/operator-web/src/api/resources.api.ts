@@ -19,10 +19,3 @@ export async function getResources(): Promise<ResourceData[]> {
   await delay(80)
   return mockResources
 }
-
-export async function getResource(
-  id: string,
-): Promise<ResourceData | null> {
-  await delay(60)
-  return mockResources.find((r) => r.id === id) ?? null
-}

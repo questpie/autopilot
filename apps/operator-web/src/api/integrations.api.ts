@@ -9,10 +9,3 @@ export async function getIntegrations(): Promise<Integration[]> {
   await delay(80)
   return mockIntegrations
 }
-
-export async function getIntegration(
-  id: string,
-): Promise<Integration | null> {
-  await delay(60)
-  return mockIntegrations.find((i) => i.id === id) ?? null
-}

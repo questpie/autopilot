@@ -152,6 +152,30 @@ export const mockWorkspaceTree: FileTreeNode[] = [
   },
   { path: 'package.json', name: 'package.json', type: 'file', change: 'unchanged', size: 1240, mime_type: 'application/json', linked_task_id: null, linked_run_id: null },
   { path: 'tsconfig.json', name: 'tsconfig.json', type: 'file', change: 'unchanged', size: 480, mime_type: 'application/json', linked_task_id: null, linked_run_id: null },
+  // Task-generated artifacts (ref_value paths from mockTaskArtifacts)
+  {
+    path: 'artifacts',
+    name: 'artifacts',
+    type: 'directory',
+    change: 'unchanged',
+    size: null,
+    mime_type: null,
+    linked_task_id: null,
+    linked_run_id: null,
+    children: [
+      // tsk_01 — Newsletter draft r1
+      { path: 'artifacts/newsletter-draft.md', name: 'newsletter-draft.md', type: 'file', change: 'unchanged', size: 4300, mime_type: 'text/markdown', linked_task_id: 'tsk_01JR8VQM3K0000000000000001', linked_run_id: 'run_01JR8VQM3K0000000000000003' },
+      { path: 'artifacts/subject-lines.txt', name: 'subject-lines.txt', type: 'file', change: 'unchanged', size: 512, mime_type: 'text/plain', linked_task_id: 'tsk_01JR8VQM3K0000000000000001', linked_run_id: 'run_01JR8VQM3K0000000000000003' },
+      // tsk_01 — Newsletter draft r2 (post-rejection)
+      { path: 'artifacts/newsletter-draft-v2.md', name: 'newsletter-draft-v2.md', type: 'file', change: 'modified', size: 4608, mime_type: 'text/markdown', linked_task_id: 'tsk_01JR8VQM3K0000000000000001', linked_run_id: 'run_01JR8VQM3K0000000000000004' },
+      { path: 'artifacts/subject-lines-v2.txt', name: 'subject-lines-v2.txt', type: 'file', change: 'modified', size: 614, mime_type: 'text/plain', linked_task_id: 'tsk_01JR8VQM3K0000000000000001', linked_run_id: 'run_01JR8VQM3K0000000000000004' },
+      // tsk_04 — Content plan april
+      { path: 'artifacts/content-plan-april.md', name: 'content-plan-april.md', type: 'file', change: 'unchanged', size: 7373, mime_type: 'text/markdown', linked_task_id: 'tsk_01JR8VQM3K0000000000000004', linked_run_id: 'run_01JR8VQM3K0000000000000009' },
+      { path: 'artifacts/posts-april.csv', name: 'posts-april.csv', type: 'file', change: 'unchanged', size: 3240, mime_type: 'text/csv', linked_task_id: 'tsk_01JR8VQM3K0000000000000004', linked_run_id: 'run_01JR8VQM3K0000000000000009' },
+      // tsk_05 — Partial competitors data (failed task)
+      { path: 'artifacts/competitors-partial.csv', name: 'competitors-partial.csv', type: 'file', change: 'unchanged', size: 1820, mime_type: 'text/csv', linked_task_id: 'tsk_01JR8VQM3K0000000000000005', linked_run_id: 'run_01JR8VQM3K0000000000000007' },
+    ],
+  },
 ]
 
 // ── Mock code content for file preview ──
@@ -247,6 +271,76 @@ export async function collectPreviewDir(
 
   return buildPreviewArtifacts(files, maxFileSize)
 }`,
+  // Task artifact file previews
+  'artifacts/newsletter-draft.md': `# Newsletter — Svadobná sezóna 2026
+
+Milí priatelia Kaviarne Kveta,
+
+Jar je tu a s ňou prichádza najkrajšie obdobie roka — svadobná sezóna! 💐
+
+Chceme vás pozvať na naše špeciálne **svadobné menu**, ktoré sme pripravili
+špeciálne pre tento výnimočný čas.
+
+## Čo ponúkame
+
+- Torty na mieru podľa vášho vkusu
+- Svadobný aperitív pre hostí
+- Exkluzívny catering pre malé slávnosti (do 30 osôb)
+
+Rezervácie: 0900 123 456
+
+_Tím Kaviarne Kveta_`,
+  'artifacts/subject-lines.txt': `Variant A: Svadobná sezóna v Kaviarni Kveta — rezervujte si termín!
+Variant B: 🌸 Jaro, svadby a naša nová ponuka — pre vás
+Variant C: Špeciálna ponuka pre svadobnú sezónu 2026`,
+  'artifacts/newsletter-draft-v2.md': `# Newsletter — Svadobná sezóna 2026
+
+Milí priatelia Kaviarne Kveta,
+
+Jar je tu a s ňou prichádza najkrajšie obdobie roka — svadobná sezóna!
+
+Chceme vás pozvať na naše špeciálne **svadobné menu**, ktoré sme pripravili
+špeciálne pre tento výnimočný čas.
+
+## Čo ponúkame
+
+- Torty na mieru podľa vášho vkusu
+- Svadobný aperitív pre hostí
+- Exkluzívny catering pre malé slávnosti (do 30 osôb)
+
+Rezervácie: 0900 123 456
+
+_Tím Kaviarne Kveta_`,
+  'artifacts/subject-lines-v2.txt': `Variant A: Svadobná sezóna v Kaviarni Kveta
+Variant B: Jaro, svadby a naša nová ponuka
+Variant C: Špeciálna ponuka 2026`,
+  'artifacts/content-plan-april.md': `# Content plán — Apríl 2026
+
+## Instagram (10 príspevkov)
+
+| Dátum | Téma | Formát |
+|-------|------|--------|
+| 1. apr | Aprílové menu | Foto |
+| 5. apr | Zákulisie prípravy | Reels |
+| 8. apr | Jarne špeciality | Karusel |
+| 12. apr | Zákaznícky príbeh | Story |
+| 15. apr | Barista tip | Reels |
+| 19. apr | Svadobná ponuka | Foto |
+| 22. apr | Nová káva mesiaca | Foto |
+| 25. apr | Za scénou | Reels |
+| 28. apr | Víkendová špeciálna ponuka | Story |
+| 30. apr | Aprílové zhrnutie | Karusel |`,
+  'artifacts/posts-april.csv': `date,platform,type,topic,status
+2026-04-01,instagram,photo,Aprílové menu,planned
+2026-04-05,instagram,reels,Zákulisie prípravy,planned
+2026-04-08,instagram,carousel,Jarne špeciality,planned
+2026-04-12,instagram,story,Zákaznícky príbeh,planned
+2026-04-15,instagram,reels,Barista tip,planned`,
+  'artifacts/competitors-partial.csv': `name,address,avg_price,rating,notes
+Kafé Modrá,Hlavná 12,4.20,4.3,Silná espresso ponuka
+Espresso Bar,Námestie 5,3.80,4.1,Lacnejšia alternatíva
+Kavička,Sadová 8,4.50,4.6,Prémiová káva — priamy súper
+# Nedokončené — timeout pred stiahnutím zvyšných 2 konkurentov`,
 }
 
 // ── Mock diff data ──
@@ -329,10 +423,6 @@ export const mockHistory: Record<string, FileCommitEntry[]> = {
     { hash: 'abc123f', message: 'Add tests for preview collection', time: '2h ago' },
   ],
 }
-
-// ── Task worktree file tree (used by Tasks detail screen) ──
-
-export const mockFileTree: FileTreeNode[] = [
   {
     path: '/worktrees/tsk_01JR8VQM3K0000000000000001',
     name: 'T-147 Newsletter k svadobnej sezóne',

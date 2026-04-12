@@ -7,9 +7,9 @@ export const Route = createFileRoute('/_app/agents')({
   component: AgentsPage,
 })
 
-// ── Mock Data ──
+// ── Agent catalog entry (view model — not backed by a live API yet) ──
 
-interface Agent {
+interface AgentEntry {
   id: string
   name: string
   role: string
@@ -17,24 +17,24 @@ interface Agent {
   capabilities: string[]
 }
 
-const mockAgents: Agent[] = [
+const AGENT_CATALOG: AgentEntry[] = [
   {
-    id: '1',
-    name: 'Hlavny asistent',
+    id: 'orchestrator',
+    name: 'Main assistant',
     role: 'orchestrator',
     model: 'claude-sonnet-4-20250514',
     capabilities: ['chat', 'tasks', 'automations'],
   },
   {
-    id: '2',
+    id: 'content-writer',
     name: 'Content writer',
     role: 'specialist',
     model: 'claude-sonnet-4-20250514',
     capabilities: ['copywriting', 'social-media'],
   },
   {
-    id: '3',
-    name: 'Analytik',
+    id: 'analyst',
+    name: 'Analyst',
     role: 'specialist',
     model: 'claude-haiku-4-20250414',
     capabilities: ['reviews', 'reports', 'data'],
@@ -46,19 +46,19 @@ function AgentsPage() {
   return (
     <div className="flex-1 overflow-y-auto p-8">
       <div className="flex flex-col gap-6">
-        <PageHeader title={t('advanced.agents_title')} subtitle={t('advanced.agents_subtitle')} />
+        <PageHeader title={t('agents.title')} subtitle={t('agents.subtitle')} />
 
         <div
           className="grid gap-2"
           style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}
         >
-          {mockAgents.map((agent) => (
+          {AGENT_CATALOG.map((agent) => (
             <div
               key={agent.id}
-              className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
+              className="flex flex-col gap-3 border border-border bg-card p-4"
             >
               <div className="flex items-center gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/8">
+                <div className="flex size-9 shrink-0 items-center justify-center border border-primary/25 bg-primary/8">
                   <RobotIcon className="size-[18px] text-primary" weight="bold" />
                 </div>
                 <div className="flex flex-col">
@@ -71,7 +71,7 @@ function AgentsPage() {
                 {agent.capabilities.map((cap) => (
                   <span
                     key={cap}
-                    className="rounded-none border border-border bg-muted px-1.5 py-0.5 font-heading text-[10px] text-muted-foreground"
+                    className="border border-border bg-muted px-1.5 py-0.5 font-heading text-[10px] text-muted-foreground"
                   >
                     {cap}
                   </span>

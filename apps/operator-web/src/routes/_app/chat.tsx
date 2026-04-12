@@ -30,15 +30,12 @@ import { useTranslation } from '@/lib/i18n'
 import { useChatSeedStore } from '@/stores/chat-seed.store'
 import {
   getConversations,
-  type MockConversation,
-  type MockMessage,
-  type MockArtifact,
-  type MockArtifactType,
-  type MockToolCard,
-  type MockArtifactRef,
-  type MockTaskSummary,
-  type ConversationType,
+  type ConversationViewModel,
+  type ConversationDisplayType,
+  type TaskSummaryView,
 } from '@/api/conversations.api'
+import type { SessionMessage, Artifact, ArtifactKind, WorkerEventType } from '@/api/types'
+import { parseMessageMetadata } from '@/api/parse'
 
 export const Route = createFileRoute('/_app/chat')({
   component: ChatPage,
@@ -51,19 +48,42 @@ const messageEntrance = {
   transition: { duration: DURATION.normal, ease: EASING.enter },
 }
 
-const ARTIFACT_TYPE_ICONS: Record<MockArtifactType, typeof FileTextIcon> = {
-  document: FileTextIcon,
-  table: TableIcon,
-  code: CodeIcon,
+const ARTIFACT_KIND_ICONS: Partial<Record<ArtifactKind, typeof FileTextIcon>> = {
+  doc: FileTextIcon,
+  diff_summary: TableIcon,
+  changed_file: CodeIcon,
+  test_report: TableIcon,
+  validation_report: TableIcon,
+  implementation_prompt: CodeIcon,
+  preview_file: FileTextIcon,
+  preview_url: FileTextIcon,
+  external_receipt: FileTextIcon,
+  other: FileTextIcon,
 }
 
-const ARTIFACT_TYPE_LABELS: Record<MockArtifactType, string> = {
-  document: 'Dokument',
-  table: 'Tabuľka',
-  code: 'Kód',
+const ARTIFACT_KIND_I18N_KEYS: Partial<Record<ArtifactKind, string>> = {
+  doc: 'chat.artifact_kind_doc',
+  diff_summary: 'chat.artifact_kind_diff_summary',
+  changed_file: 'chat.artifact_kind_changed_file',
+  test_report: 'chat.artifact_kind_test_report',
+  validation_report: 'chat.artifact_kind_validation_report',
+  implementation_prompt: 'chat.artifact_kind_implementation_prompt',
+  preview_file: 'chat.artifact_kind_preview_file',
+  preview_url: 'chat.artifact_kind_preview_url',
+  external_receipt: 'chat.artifact_kind_external_receipt',
+  other: 'chat.artifact_kind_other',
 }
 
-function findArtifact(conversations: MockConversation[], artifactId: string): MockArtifact | undefined {
+function artifactIcon(kind: ArtifactKind): typeof FileTextIcon {
+  return ARTIFACT_KIND_ICONS[kind] ?? FileTextIcon
+}
+
+function artifactLabel(kind: ArtifactKind, t: (key: string) => string): string {
+  const key = ARTIFACT_KIND_I18N_KEYS[kind]
+  return key ? t(key) : kind
+}
+
+function findArtifact(conversations: ConversationViewModel[], artifactId: string): Artifact | undefined {
   for (const conv of conversations) {
     const found = conv.artifacts.find((a) => a.id === artifactId)
     if (found) return found
@@ -71,28 +91,45 @@ function findArtifact(conversations: MockConversation[], artifactId: string): Mo
   return undefined
 }
 
-// ── Sub-components ──
+// ── Metadata extractors ──
 
-function TypingIndicator() {
-  return (
-    <div className="flex items-center gap-1.5 px-1 py-2">
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="size-1.5 rounded-full bg-muted-foreground animate-bounce-dot"
-          style={{ animationDelay: `${i * 0.15}s` }}
-        />
-      ))}
-    </div>
-  )
+function getWorkerEvent(msg: SessionMessage): { type: WorkerEventType; summary: string } | null {
+  const parsed = parseMessageMetadata(msg)
+  const evt = parsed.worker_event
+  if (evt && typeof evt === 'object' && 'type' in evt) {
+    return evt as { type: WorkerEventType; summary: string }
+  }
+  return null
 }
+
+function getArtifactRefs(msg: SessionMessage): Array<{ artifact_id: string; title: string }> {
+  const parsed = parseMessageMetadata(msg)
+  const refs = parsed.artifact_refs
+  return Array.isArray(refs) ? (refs as Array<{ artifact_id: string; title: string }>) : []
+}
+
+function getToolCard(msg: SessionMessage): { kind: 'created' | 'updated'; task_id: string; task_title: string } | null {
+  const parsed = parseMessageMetadata(msg)
+  const card = parsed.tool_card
+  if (card && typeof card === 'object' && 'kind' in card) {
+    return card as { kind: 'created' | 'updated'; task_id: string; task_title: string }
+  }
+  return null
+}
+
+function isApprovalNeeded(msg: SessionMessage): boolean {
+  const evt = getWorkerEvent(msg)
+  return evt?.type === 'approval_needed'
+}
+
+// ── Sub-components ──
 
 function ToolCardBlock({
   card,
   t,
   onNavigateToTasks,
 }: {
-  card: MockToolCard
+  card: { kind: 'created' | 'updated'; task_id: string; task_title: string }
   t: (key: string) => string
   onNavigateToTasks: () => void
 }) {
@@ -106,7 +143,7 @@ function ToolCardBlock({
         <span className="font-heading">{label}</span>
       </div>
       <p className="mt-1 font-heading text-[12px] text-foreground">
-        {card.taskId} &middot; {card.taskTitle}
+        {card.task_id} &middot; {card.task_title}
       </p>
       <button
         type="button"
@@ -123,65 +160,62 @@ function ArtifactLink({
   artifactRef,
   onSelect,
 }: {
-  artifactRef: MockArtifactRef
+  artifactRef: { artifact_id: string; title: string }
   onSelect: (id: string) => void
 }) {
   return (
     <button
       type="button"
-      onClick={() => onSelect(artifactRef.artifactId)}
+      onClick={() => onSelect(artifactRef.artifact_id)}
       className="ml-1 font-heading text-[13px] text-primary hover:underline"
     >
-      [{artifactRef.label}]
+      [{artifactRef.title}]
     </button>
   )
 }
 
-function TaskEventBlock({ event }: { event: MockMessage['taskEvent'] }) {
-  if (!event) return null
-
-  const iconMap = {
-    step_completed: CheckCircleIcon,
-    waiting_for_review: ClockIcon,
-    step_started: LightningIcon,
-    promoted: ArrowUpRightIcon,
+function WorkerEventBlock({ event }: { event: { type: WorkerEventType; summary: string } }) {
+  const iconMap: Partial<Record<WorkerEventType, typeof CheckCircleIcon>> = {
+    completed: CheckCircleIcon,
+    approval_needed: ClockIcon,
+    tool_use: LightningIcon,
+    progress: ArrowUpRightIcon,
+    started: LightningIcon,
+    error: ArrowCounterClockwiseIcon,
   }
 
-  const colorMap = {
-    step_completed: 'text-success',
-    waiting_for_review: 'text-warning',
-    step_started: 'text-primary',
-    promoted: 'text-primary',
+  const colorMap: Partial<Record<WorkerEventType, string>> = {
+    completed: 'text-success',
+    approval_needed: 'text-warning',
+    tool_use: 'text-primary',
+    progress: 'text-primary',
+    started: 'text-primary',
+    error: 'text-destructive',
   }
 
-  const Icon = iconMap[event.kind]
-  const color = colorMap[event.kind]
+  const Icon = iconMap[event.type] ?? ArrowUpRightIcon
+  const color = colorMap[event.type] ?? 'text-muted-foreground'
 
   return (
     <div className="my-1.5 flex items-start gap-2 py-1">
       <Icon weight="fill" className={cn('mt-0.5 size-3.5 shrink-0', color)} />
       <div>
-        <span className="font-heading text-[12px] text-foreground">{event.stepLabel}</span>
-        {event.detail && (
-          <p className="text-[11px] text-muted-foreground">{event.detail}</p>
-        )}
+        <span className="font-heading text-[12px] text-foreground">{event.summary}</span>
       </div>
     </div>
   )
 }
 
-function ActionButtons({
-  actionRequest,
+function ApprovalButtons({
   onApprove,
   onReturn,
   resolved,
 }: {
-  actionRequest: MockMessage['actionRequest']
   onApprove: () => void
   onReturn: () => void
   resolved: string | null
 }) {
-  if (!actionRequest) return null
+  const { t } = useTranslation()
 
   if (resolved) {
     return (
@@ -194,38 +228,21 @@ function ActionButtons({
 
   return (
     <div className="mt-2 flex items-center gap-2">
-      {actionRequest.kind === 'approve_reject' && (
-        <>
-          <Button size="sm" onClick={onApprove}>
-            <CheckCircleIcon className="size-3.5" />
-            {/* Schváliť */}
-            Schváliť
-          </Button>
-          <Button variant="outline" size="sm" onClick={onReturn}>
-            <ArrowCounterClockwiseIcon className="size-3.5" />
-            Vrátiť na úpravu
-          </Button>
-        </>
-      )}
-      {actionRequest.kind === 'return_approve' && (
-        <>
-          <Button variant="outline" size="sm" onClick={onReturn}>
-            <ArrowCounterClockwiseIcon className="size-3.5" />
-            Vrátiť na úpravu
-          </Button>
-          <Button size="sm" onClick={onApprove}>
-            <CheckCircleIcon className="size-3.5" />
-            Schváliť
-          </Button>
-        </>
-      )}
+      <Button variant="outline" size="sm" onClick={onReturn}>
+        <ArrowCounterClockwiseIcon className="size-3.5" />
+        {t('chat.return_for_changes')}
+      </Button>
+      <Button size="sm" onClick={onApprove}>
+        <CheckCircleIcon className="size-3.5" />
+        {t('chat.approve')}
+      </Button>
     </div>
   )
 }
 
-function TaskProgressStrip({ summary }: { summary: MockTaskSummary }) {
-  const progressPct = summary.totalSteps > 0
-    ? Math.round((summary.completedSteps / summary.totalSteps) * 100)
+function TaskProgressStrip({ task }: { task: TaskSummaryView }) {
+  const progressPct = task.runs_total > 0
+    ? Math.round((task.runs_completed / task.runs_total) * 100)
     : 0
 
   const statusColors: Record<string, string> = {
@@ -242,15 +259,15 @@ function TaskProgressStrip({ summary }: { summary: MockTaskSummary }) {
         <div className="flex-1">
           <div className="flex items-center justify-between">
             <span className="font-heading text-[12px] text-foreground">
-              {summary.taskId} &middot; {summary.currentStep}
+              {task.id} &middot; {task.workflow_step ?? '—'}
             </span>
             <span className="font-heading text-[11px] text-muted-foreground">
-              {summary.completedSteps}/{summary.totalSteps}
+              {task.runs_completed}/{task.runs_total}
             </span>
           </div>
           <div className="mt-1 h-1 w-full bg-muted/30">
             <div
-              className={cn('h-full transition-all', statusColors[summary.status] ?? 'bg-primary')}
+              className={cn('h-full transition-all', statusColors[task.status] ?? 'bg-primary')}
               style={{ width: `${progressPct}%` }}
             />
           </div>
@@ -269,20 +286,20 @@ function PromotedBanner({
   taskTitle: string
   onNavigate: () => void
 }) {
+  const { t } = useTranslation()
+
   return (
     <div className="border-b border-border bg-primary/5 px-5 py-2">
       <div className="mx-auto flex max-w-[640px] items-center justify-between">
         <span className="text-[12px] text-muted-foreground">
-          Táto konverzácia vytvorila úlohu{' '}
-          <span className="font-heading text-foreground">{taskId}</span>
-          {' '}&middot; {taskTitle}
+          {t('chat.promoted_banner_text', { taskId, taskTitle })}
         </span>
         <button
           type="button"
           onClick={onNavigate}
           className="font-heading text-[11px] text-primary hover:underline"
         >
-          Otvoriť <ArrowRightIcon className="inline size-3" />
+          {t('chat.promoted_banner_open')} <ArrowRightIcon className="inline size-3" />
         </button>
       </div>
     </div>
@@ -298,15 +315,15 @@ function DiscussionHeader({
   taskTitle: string
   onNavigate: () => void
 }) {
+  const { t } = useTranslation()
+
   return (
     <div className="border-b border-border bg-muted/10 px-5 py-2">
       <div className="mx-auto flex max-w-[640px] items-center justify-between">
         <div className="flex items-center gap-2">
           <ChatCircleDotsIcon className="size-3.5 text-muted-foreground" />
           <span className="text-[12px] text-muted-foreground">
-            Diskusia k{' '}
-            <span className="font-heading text-foreground">{taskId}</span>
-            {' '}&middot; {taskTitle}
+            {t('chat.discussion_header_text', { taskId, taskTitle })}
           </span>
         </div>
         <button
@@ -314,58 +331,52 @@ function DiscussionHeader({
           onClick={onNavigate}
           className="font-heading text-[11px] text-primary hover:underline"
         >
-          Otvoriť úlohu <ArrowRightIcon className="inline size-3" />
+          {t('chat.discussion_header_open')} <ArrowRightIcon className="inline size-3" />
         </button>
       </div>
     </div>
   )
 }
 
-type RightPanelTab = 'artifact' | 'task'
+type RightPanelTab = 'artifacts' | 'tasks'
 
-function TaskSummaryPanel({ summary }: { summary: MockTaskSummary }) {
-  const statusLabels: Record<string, string> = {
-    running: 'Pracuje sa',
-    waiting: 'Čaká na schválenie',
-    done: 'Hotové',
-    failed: 'Zlyhalo',
-  }
+function TaskSummaryPanel({ task }: { task: TaskSummaryView }) {
+  const { t } = useTranslation()
+
+  const statusLabel = (() => {
+    switch (task.status) {
+      case 'running': return t('chat.task_status_running')
+      case 'waiting': return t('chat.task_status_waiting')
+      case 'done': return t('chat.task_status_done')
+      case 'failed': return t('chat.task_status_failed')
+      default: return task.status
+    }
+  })()
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto p-5">
       <div className="mb-4">
-        <span className="font-heading text-[11px] text-muted-foreground">{summary.taskId}</span>
-        <h3 className="mt-0.5 text-[14px] font-semibold text-foreground">{summary.title}</h3>
+        <span className="font-heading text-[11px] text-muted-foreground">{task.id}</span>
+        <h3 className="mt-0.5 text-[14px] font-semibold text-foreground">{task.title}</h3>
       </div>
 
       <div className="space-y-3">
         <div>
-          <span className="font-heading text-[11px] text-muted-foreground">Stav</span>
-          <p className="text-[13px] text-foreground">{statusLabels[summary.status] ?? summary.status}</p>
+          <span className="font-heading text-[11px] text-muted-foreground">{t('chat.task_summary_status')}</span>
+          <p className="text-[13px] text-foreground">{statusLabel}</p>
         </div>
 
         <div>
-          <span className="font-heading text-[11px] text-muted-foreground">Aktuálny krok</span>
-          <p className="text-[13px] text-foreground">{summary.currentStep}</p>
+          <span className="font-heading text-[11px] text-muted-foreground">{t('chat.task_summary_current_step')}</span>
+          <p className="text-[13px] text-foreground">{task.workflow_step ?? '—'}</p>
         </div>
 
         <div>
-          <span className="font-heading text-[11px] text-muted-foreground">Priebeh</span>
+          <span className="font-heading text-[11px] text-muted-foreground">{t('chat.task_summary_progress')}</span>
           <p className="text-[13px] text-foreground">
-            {summary.completedSteps} z {summary.totalSteps} krokov
+            {t('chat.task_summary_progress_value', { completed: task.runs_completed, total: task.runs_total })}
           </p>
         </div>
-
-        {summary.outputs.length > 0 && (
-          <div>
-            <span className="font-heading text-[11px] text-muted-foreground">Výstupy</span>
-            {summary.outputs.map((output) => (
-              <p key={output} className="text-[13px] text-foreground">
-                &middot; {output}
-              </p>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )
@@ -439,19 +450,28 @@ function InlineFormat({ text }: { text: string }) {
 
 // ── Conversation type indicators ──
 
-function ConversationTypeIndicator({ type, taskRef }: { type: ConversationType; taskRef?: { taskId: string } }) {
+function ConversationTypeIndicator({
+  type,
+  taskId,
+}: {
+  type: ConversationDisplayType
+  taskId?: string
+}) {
+  const { t } = useTranslation()
+
   if (type === 'task') {
     return (
       <span className="shrink-0 font-mono text-[10px] text-muted-foreground bg-primary/10 border border-primary/20 px-1.5 py-0.5">
-        {taskRef?.taskId ?? 'T-???'}
+        {taskId ?? 'T-???'}
       </span>
     )
   }
+
   if (type === 'discussion') {
     return (
       <span className="inline-flex items-center gap-1 shrink-0 font-heading text-[10px] text-muted-foreground bg-muted/20 px-1.5 py-0.5">
         <ChatCircleDotsIcon className="size-2.5" />
-        Diskusia {taskRef?.taskId ? `· ${taskRef.taskId}` : ''}
+        {t('chat.conversation_type_discussion')} {taskId ? `· ${taskId}` : ''}
       </span>
     )
   }
@@ -461,13 +481,14 @@ function ConversationTypeIndicator({ type, taskRef }: { type: ConversationType; 
 // ── Main Component ──
 
 function ChatPage() {
-  const { t } = useTranslation()
+  const { t, i18n: i18nInstance } = useTranslation()
+  const locale = i18nInstance.language
   const navigate = useNavigate()
   const pendingSeed = useChatSeedStore((s) => s.pendingSeed)
   const clearSeed = useChatSeedStore((s) => s.clearSeed)
 
   // Local state — all conversations (loaded from adapter)
-  const [conversations, setConversations] = useState<MockConversation[]>([])
+  const [conversations, setConversations] = useState<ConversationViewModel[]>([])
 
   // Load conversations from adapter
   useEffect(() => {
@@ -477,10 +498,10 @@ function ChatPage() {
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  const [rightTab, setRightTab] = useState<RightPanelTab>('artifact')
+  const [rightTab, setRightTab] = useState<RightPanelTab>('artifacts')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
-  // Track resolved action requests: messageId -> resolution label
+  // Track resolved approval requests: messageId -> resolution label
   const [resolvedActions, setResolvedActions] = useState<Record<string, string>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -489,37 +510,79 @@ function ChatPage() {
   useEffect(() => {
     if (pendingSeed) {
       const seedId = `seed_${Date.now()}`
-      const seedConv: MockConversation = {
+      const now = new Date().toISOString()
+      const seedSession = {
         id: seedId,
-        type: 'query',
-        title: pendingSeed.title,
-        lastPreview: pendingSeed.context.slice(0, 80),
-        time: new Date().toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' }),
-        messages: [
-          {
-            id: `${seedId}-bot`,
-            role: 'bot',
-            content: pendingSeed.context,
-          },
-        ],
-        artifacts: [],
+        provider_id: 'demo',
+        external_conversation_id: seedId,
+        external_thread_id: null,
+        mode: 'query' as const,
+        task_id: null as string | null,
+        status: 'active' as const,
+        created_at: now,
+        updated_at: now,
+        metadata: '{}',
+        runtime_session_ref: null,
+        preferred_worker_id: null,
       }
 
-      // If seed action is task-related, add a tool card
+      const seedMessages: SessionMessage[] = [
+        {
+          id: `${seedId}-assistant`,
+          session_id: seedId,
+          role: 'assistant',
+          content: pendingSeed.context,
+          query_id: null,
+          external_message_id: null,
+          metadata: '{}',
+          created_at: now,
+        },
+      ]
+
+      const seedConv: ConversationViewModel = {
+        session: seedSession,
+        displayType: 'query',
+        title: pendingSeed.title,
+        lastPreview: pendingSeed.context.slice(0, 80),
+        time: new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
+        messages: seedMessages,
+        artifacts: [],
+        task: null,
+        queries: [],
+      }
+
+      // If seed action is task-related, add a tool card message
       if (pendingSeed.action === 'create_task') {
         const taskId = `T-${150 + Math.floor(Math.random() * 50)}`
-        seedConv.messages.push({
-          id: `${seedId}-tool`,
-          role: 'bot',
-          content: '',
-          toolCard: {
-            kind: 'created',
-            taskId,
-            taskTitle: pendingSeed.title,
+        seedConv.messages = [
+          ...seedConv.messages,
+          {
+            id: `${seedId}-tool`,
+            session_id: seedId,
+            role: 'assistant',
+            content: '',
+            query_id: null,
+            external_message_id: null,
+            metadata: JSON.stringify({
+              tool_card: {
+                kind: 'created',
+                task_id: taskId,
+                task_title: pendingSeed.title,
+              },
+            }),
+            created_at: now,
           },
-        })
-        seedConv.promotedTo = { taskId, taskTitle: pendingSeed.title }
-        seedConv.type = 'task'
+        ]
+        seedConv.session = { ...seedConv.session, task_id: taskId, mode: 'task_thread' }
+        seedConv.displayType = 'task'
+        seedConv.task = {
+          id: taskId,
+          title: pendingSeed.title,
+          status: 'running',
+          workflow_step: null,
+          runs_total: 0,
+          runs_completed: 0,
+        }
       }
 
       setConversations((prev) => [seedConv, ...prev])
@@ -531,33 +594,33 @@ function ChatPage() {
   // Auto-select first conversation
   useEffect(() => {
     if (activeId === null && conversations.length > 0) {
-      setActiveId(conversations[0].id)
+      setActiveId(conversations[0].session.id)
     }
   }, [activeId, conversations])
 
   // Auto-select artifact when switching conversations
   useEffect(() => {
-    const conv = conversations.find((c) => c.id === activeId)
+    const conv = conversations.find((c) => c.session.id === activeId)
     if (conv && conv.artifacts.length > 0) {
       setSelectedArtifactId(conv.artifacts[conv.artifacts.length - 1].id)
     } else {
       setSelectedArtifactId(null)
     }
     // Reset right panel tab and visibility based on conversation type
-    if (conv && (conv.type === 'task' || conv.type === 'discussion') && conv.taskSummary) {
-      setRightTab('task')
+    if (conv && (conv.displayType === 'task' || conv.displayType === 'discussion') && conv.task) {
+      setRightTab('tasks')
       setRightPanelOpen(true)
     } else if (conv && conv.artifacts.length > 0) {
-      setRightTab('artifact')
+      setRightTab('artifacts')
       setRightPanelOpen(true)
     } else {
-      setRightTab('artifact')
+      setRightTab('artifacts')
       setRightPanelOpen(false)
     }
   }, [activeId, conversations])
 
   const currentConversation =
-    conversations.find((c) => c.id === activeId) ?? conversations[0] ?? null
+    conversations.find((c) => c.session.id === activeId) ?? conversations[0] ?? null
 
   const selectedArtifact = selectedArtifactId
     ? findArtifact(conversations, selectedArtifactId)
@@ -579,7 +642,7 @@ function ChatPage() {
 
   const handleArtifactSelect = useCallback((artifactId: string) => {
     setSelectedArtifactId(artifactId)
-    setRightTab('artifact')
+    setRightTab('artifacts')
     setRightPanelOpen(true)
   }, [])
 
@@ -597,15 +660,21 @@ function ChatPage() {
   const handleSendMessage = useCallback(() => {
     if (!inputValue.trim() || !activeId) return
 
-    const newMsg: MockMessage = {
+    const now = new Date().toISOString()
+    const newMsg: SessionMessage = {
       id: `usr_${Date.now()}`,
+      session_id: activeId,
       role: 'user',
       content: inputValue.trim(),
+      query_id: null,
+      external_message_id: null,
+      metadata: '{}',
+      created_at: now,
     }
 
     setConversations((prev) =>
       prev.map((c) => {
-        if (c.id !== activeId) return c
+        if (c.session.id !== activeId) return c
         return {
           ...c,
           messages: [...c.messages, newMsg],
@@ -623,31 +692,53 @@ function ChatPage() {
 
   const handleNewConversation = useCallback(() => {
     const newId = `new_${Date.now()}`
-    const newConv: MockConversation = {
-      id: newId,
-      type: 'query',
+    const now = new Date().toISOString()
+    const newConv: ConversationViewModel = {
+      session: {
+        id: newId,
+        provider_id: 'demo',
+        external_conversation_id: newId,
+        external_thread_id: null,
+        mode: 'query',
+        task_id: null,
+        status: 'active',
+        created_at: now,
+        updated_at: now,
+        metadata: '{}',
+        runtime_session_ref: null,
+        preferred_worker_id: null,
+      },
+      displayType: 'query',
       title: t('chat.new_conversation_title'),
       lastPreview: '',
-      time: new Date().toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' }),
+      time: new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
       messages: [],
       artifacts: [],
+      task: null,
+      queries: [],
     }
     setConversations((prev) => [newConv, ...prev])
     setActiveId(newId)
-  }, [t])
+  }, [t, locale])
 
   const handleApprove = useCallback((messageId: string) => {
-    setResolvedActions((prev) => ({ ...prev, [messageId]: 'Schválené' }))
-  }, [])
+    setResolvedActions((prev) => ({ ...prev, [messageId]: t('chat.approved') }))
+  }, [t])
 
   const handleReturn = useCallback((messageId: string) => {
-    setResolvedActions((prev) => ({ ...prev, [messageId]: 'Vrátené na úpravu' }))
-  }, [])
+    setResolvedActions((prev) => ({ ...prev, [messageId]: t('chat.returned') }))
+  }, [t])
 
-  // Right panel has tabs when there's a task summary
-  const hasTaskSummary = currentConversation?.taskSummary != null
-  const showArtifactTab = selectedArtifact != null
-  const showRightPanelTabs = hasTaskSummary && showArtifactTab
+  // Right panel has tabs when there are both tasks and artifacts
+  const hasTaskSummary = currentConversation?.task != null
+  const hasArtifacts = currentConversation != null && currentConversation.artifacts.length > 0
+  const showRightPanelTabs = hasTaskSummary && hasArtifacts
+
+  // Derive promoted task from queries
+  const promotedQuery = currentConversation?.queries.find((q) => q.promoted_task_id != null)
+  const promotedTask = promotedQuery && currentConversation?.task && currentConversation.displayType !== 'discussion'
+    ? { taskId: currentConversation.task.id, taskTitle: currentConversation.task.title }
+    : null
 
   return (
     <div className="flex h-full">
@@ -685,14 +776,14 @@ function ChatPage() {
         <div className="flex-1 overflow-y-auto">
           {filteredConversations.map((conv) => (
             <button
-              key={conv.id}
+              key={conv.session.id}
               type="button"
-              onClick={() => handleConversationSelect(conv.id)}
+              onClick={() => handleConversationSelect(conv.session.id)}
               className={cn(
                 'flex w-full flex-col gap-0.5 border-b border-border/50 px-4 py-3 text-left transition-colors hover:bg-muted/10',
-                activeId === conv.id && 'bg-muted/20',
-                conv.type === 'task' && 'border-l-2 border-l-primary/40',
-                conv.type === 'discussion' && 'border-l-2 border-l-muted-foreground/30'
+                activeId === conv.session.id && 'bg-muted/20',
+                conv.displayType === 'task' && 'border-l-2 border-l-primary/40',
+                conv.displayType === 'discussion' && 'border-l-2 border-l-muted-foreground/30'
               )}
             >
               <div className="flex items-center justify-between gap-2">
@@ -708,8 +799,8 @@ function ChatPage() {
                   {conv.lastPreview}
                 </span>
                 <ConversationTypeIndicator
-                  type={conv.type}
-                  taskRef={conv.taskRef ?? conv.promotedTo}
+                  type={conv.displayType}
+                  taskId={conv.task?.id}
                 />
               </div>
             </button>
@@ -732,14 +823,14 @@ function ChatPage() {
             <span className="truncate text-[14px] font-semibold text-foreground">
               {currentConversation?.title ?? ''}
             </span>
-            {currentConversation && currentConversation.type !== 'query' && (
+            {currentConversation && currentConversation.displayType !== 'query' && (
               <span className="shrink-0 font-heading text-[11px] text-muted-foreground bg-muted/20 px-1.5 py-0.5">
-                {currentConversation.type === 'task' ? 'Uloha' : 'Diskusia'}
+                {currentConversation.displayType === 'task' ? t('chat.conversation_type_task') : t('chat.conversation_type_discussion')}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {(hasTaskSummary || showArtifactTab) && (
+            {(hasTaskSummary || hasArtifacts) && (
               <button
                 type="button"
                 onClick={() => setRightPanelOpen((v) => !v)}
@@ -758,26 +849,26 @@ function ChatPage() {
         </div>
 
         {/* Promoted banner */}
-        {currentConversation?.promotedTo && (
+        {promotedTask && (
           <PromotedBanner
-            taskId={currentConversation.promotedTo.taskId}
-            taskTitle={currentConversation.promotedTo.taskTitle}
+            taskId={promotedTask.taskId}
+            taskTitle={promotedTask.taskTitle}
             onNavigate={handleNavigateToTasks}
           />
         )}
 
         {/* Discussion header */}
-        {currentConversation?.type === 'discussion' && currentConversation.taskRef && (
+        {currentConversation?.displayType === 'discussion' && currentConversation.task && (
           <DiscussionHeader
-            taskId={currentConversation.taskRef.taskId}
-            taskTitle={currentConversation.taskRef.taskTitle}
+            taskId={currentConversation.task.id}
+            taskTitle={currentConversation.task.title}
             onNavigate={handleNavigateToTasks}
           />
         )}
 
         {/* Task progress strip */}
-        {currentConversation?.taskSummary && currentConversation.type === 'task' && (
-          <TaskProgressStrip summary={currentConversation.taskSummary} />
+        {currentConversation?.task && currentConversation.displayType === 'task' && (
+          <TaskProgressStrip task={currentConversation.task} />
         )}
 
         {/* Messages */}
@@ -792,49 +883,52 @@ function ChatPage() {
                 transition={{ duration: DURATION.fast }}
                 className="mx-auto flex max-w-[640px] flex-col gap-3"
               >
-                {currentConversation.messages.map((msg) => (
-                  <m.div
-                    key={msg.id}
-                    {...messageEntrance}
-                    className={cn(
-                      'max-w-[85%]',
-                      msg.role === 'user' && 'self-end',
-                      msg.role === 'bot' && 'self-start',
-                      msg.role === 'system' && 'self-center max-w-full'
-                    )}
-                  >
-                    {/* System message */}
-                    {msg.role === 'system' && (
-                      <div className="py-2 text-center">
-                        <span className="font-heading text-[11px] text-muted-foreground">
+                {currentConversation.messages.map((msg) => {
+                  const workerEvent = getWorkerEvent(msg)
+                  const artifactRefs = getArtifactRefs(msg)
+                  const toolCard = getToolCard(msg)
+                  const approvalNeeded = isApprovalNeeded(msg)
+
+                  return (
+                    <m.div
+                      key={msg.id}
+                      {...messageEntrance}
+                      className={cn(
+                        'max-w-[85%]',
+                        msg.role === 'user' && 'self-end',
+                        msg.role === 'assistant' && 'self-start',
+                        msg.role === 'system' && 'self-center max-w-full'
+                      )}
+                    >
+                      {/* System message */}
+                      {msg.role === 'system' && (
+                        <div className="py-2 text-center">
+                          <span className="font-heading text-[11px] text-muted-foreground">
+                            {msg.content}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Worker event (non-approval) with no content */}
+                      {workerEvent && !approvalNeeded && !msg.content && !toolCard && (
+                        <WorkerEventBlock event={workerEvent} />
+                      )}
+
+                      {/* Tool card only */}
+                      {toolCard && !msg.content && !workerEvent && (
+                        <ToolCardBlock card={toolCard} t={t} onNavigateToTasks={handleNavigateToTasks} />
+                      )}
+
+                      {/* User message */}
+                      {msg.role === 'user' && msg.content && (
+                        <div className="rounded-none border border-primary/15 bg-primary/8 px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground">
                           {msg.content}
-                        </span>
-                      </div>
-                    )}
+                        </div>
+                      )}
 
-                    {/* Task event */}
-                    {msg.taskEvent && !msg.content && !msg.toolCard && (
-                      <TaskEventBlock event={msg.taskEvent} />
-                    )}
-
-                    {/* Tool card only */}
-                    {msg.toolCard && !msg.content && !msg.taskEvent && (
-                      <ToolCardBlock card={msg.toolCard} t={t} onNavigateToTasks={handleNavigateToTasks} />
-                    )}
-
-                    {/* User message */}
-                    {msg.role === 'user' && msg.content && (
-                      <div className="rounded-none border border-primary/15 bg-primary/8 px-3.5 py-2.5 text-[13px] leading-relaxed text-foreground">
-                        {msg.content}
-                      </div>
-                    )}
-
-                    {/* Bot message */}
-                    {msg.role === 'bot' && msg.content && (
-                      <div className="py-1">
-                        {msg.typing ? (
-                          <TypingIndicator />
-                        ) : (
+                      {/* Assistant message */}
+                      {msg.role === 'assistant' && msg.content && (
+                        <div className="py-1">
                           <>
                             <span
                               className="text-[13px] leading-relaxed text-muted-foreground [&_strong]:text-foreground"
@@ -842,51 +936,43 @@ function ChatPage() {
                                 __html: msg.content.replace(/\n/g, '<br/>'),
                               }}
                             />
-                            {msg.artifactRef && (
-                              <>
+                            {artifactRefs.map((ref) => (
+                              <span key={ref.artifact_id}>
                                 <span className="text-[13px] text-muted-foreground">
                                   {' '}
                                   &rarr;
                                 </span>
                                 <ArtifactLink
-                                  artifactRef={msg.artifactRef}
+                                  artifactRef={ref}
                                   onSelect={handleArtifactSelect}
                                 />
-                              </>
-                            )}
+                              </span>
+                            ))}
                           </>
-                        )}
-                      </div>
-                    )}
+                        </div>
+                      )}
 
-                    {/* Bot typing (no content) */}
-                    {msg.role === 'bot' && !msg.content && msg.typing && (
-                      <div className="py-1">
-                        <TypingIndicator />
-                      </div>
-                    )}
+                      {/* Tool card after content */}
+                      {toolCard && msg.content && (
+                        <ToolCardBlock card={toolCard} t={t} onNavigateToTasks={handleNavigateToTasks} />
+                      )}
 
-                    {/* Tool card after content */}
-                    {msg.toolCard && msg.content && (
-                      <ToolCardBlock card={msg.toolCard} t={t} onNavigateToTasks={handleNavigateToTasks} />
-                    )}
+                      {/* Worker event after content (non-approval) */}
+                      {workerEvent && !approvalNeeded && msg.content && (
+                        <WorkerEventBlock event={workerEvent} />
+                      )}
 
-                    {/* Task event after content */}
-                    {msg.taskEvent && msg.content && (
-                      <TaskEventBlock event={msg.taskEvent} />
-                    )}
-
-                    {/* Action buttons */}
-                    {msg.actionRequest && (
-                      <ActionButtons
-                        actionRequest={msg.actionRequest}
-                        onApprove={() => handleApprove(msg.id)}
-                        onReturn={() => handleReturn(msg.id)}
-                        resolved={resolvedActions[msg.id] ?? null}
-                      />
-                    )}
-                  </m.div>
-                ))}
+                      {/* Approval buttons */}
+                      {approvalNeeded && (
+                        <ApprovalButtons
+                          onApprove={() => handleApprove(msg.id)}
+                          onReturn={() => handleReturn(msg.id)}
+                          resolved={resolvedActions[msg.id] ?? null}
+                        />
+                      )}
+                    </m.div>
+                  )
+                })}
                 <div ref={messagesEndRef} />
               </m.div>
             )}
@@ -920,37 +1006,40 @@ function ChatPage() {
         </div>
       </div>
 
-      {/* ── Right: Artifact / Task summary panel ── */}
+      {/* ── Right: Artifacts / Tasks panel ── */}
       <div className={cn(
         'flex flex-col border-l border-border transition-all duration-200',
         rightPanelOpen ? 'w-[380px] min-w-[380px]' : 'w-0 min-w-0 overflow-hidden border-l-0'
       )}>
-        {/* Tab bar (when both artifact and task summary available) */}
+        {/* Tab bar (when both tasks and artifacts are available) */}
         {showRightPanelTabs && (
           <div className="flex border-b border-border">
             <button
               type="button"
-              onClick={() => setRightTab('artifact')}
+              onClick={() => setRightTab('artifacts')}
               className={cn(
                 'flex-1 py-2.5 text-center font-heading text-[12px] transition-colors',
-                rightTab === 'artifact'
+                rightTab === 'artifacts'
                   ? 'border-b-2 border-primary text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              {t('chat.tab_artifact')}
+              {t('chat.tab_artifacts')}
+              {currentConversation && currentConversation.artifacts.length > 0 && (
+                <span className="ml-1 text-muted-foreground/60">{currentConversation.artifacts.length}</span>
+              )}
             </button>
             <button
               type="button"
-              onClick={() => setRightTab('task')}
+              onClick={() => setRightTab('tasks')}
               className={cn(
                 'flex-1 py-2.5 text-center font-heading text-[12px] transition-colors',
-                rightTab === 'task'
+                rightTab === 'tasks'
                   ? 'border-b-2 border-primary text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              {t('chat.tab_task')}
+              {t('chat.tab_tasks')}
             </button>
             <button
               type="button"
@@ -962,7 +1051,7 @@ function ChatPage() {
           </div>
         )}
 
-        {/* Close button header (when no tabs) */}
+        {/* Close button header (when only one type of content) */}
         {!showRightPanelTabs && rightPanelOpen && (
           <div className="flex items-center justify-end border-b border-border px-3 py-2">
             <button
@@ -975,65 +1064,84 @@ function ChatPage() {
           </div>
         )}
 
-        {/* Task summary (no tabs, task/discussion without artifacts) */}
-        {hasTaskSummary && !showRightPanelTabs && rightTab === 'task' && currentConversation?.taskSummary && (
-          <TaskSummaryPanel summary={currentConversation.taskSummary} />
+        {/* ── Tasks tab content ── */}
+        {rightTab === 'tasks' && currentConversation?.task && (
+          <TaskSummaryPanel task={currentConversation.task} />
         )}
 
-        {/* Task summary (with tabs) */}
-        {showRightPanelTabs && rightTab === 'task' && currentConversation?.taskSummary && (
-          <TaskSummaryPanel summary={currentConversation.taskSummary} />
-        )}
+        {/* ── Artifacts tab content ── */}
+        {rightTab === 'artifacts' && currentConversation ? (
+          currentConversation.artifacts.length > 0 ? (
+            <div className="flex flex-1 flex-col overflow-hidden">
+              {/* Artifact list */}
+              <div className="flex flex-col border-b border-border">
+                {currentConversation.artifacts.map((art) => {
+                  const Icon = artifactIcon(art.kind)
+                  const isSelected = art.id === selectedArtifactId
+                  return (
+                    <button
+                      key={art.id}
+                      type="button"
+                      onClick={() => setSelectedArtifactId(art.id)}
+                      className={cn(
+                        'flex items-center gap-2.5 px-4 py-2.5 text-left transition-colors',
+                        isSelected ? 'bg-muted/30' : 'hover:bg-muted/10'
+                      )}
+                    >
+                      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[12px] font-medium text-foreground">{art.title}</div>
+                        <div className="text-[11px] text-muted-foreground">{artifactLabel(art.kind, t)}</div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
 
-        {/* Artifact view */}
-        {rightTab === 'artifact' && selectedArtifact ? (
-          <>
-            {/* Artifact header */}
-            <div className="flex items-center gap-3 border-b border-border px-5 py-3">
-              <h3 className="flex-1 truncate text-[14px] font-semibold text-foreground">
-                {selectedArtifact.title}
-              </h3>
-              <span className="inline-flex items-center gap-1 bg-muted/30 px-2 py-0.5 font-heading text-[11px] text-muted-foreground">
-                {(() => {
-                  const Icon = ARTIFACT_TYPE_ICONS[selectedArtifact.type]
-                  return <Icon className="size-3" />
-                })()}
-                {ARTIFACT_TYPE_LABELS[selectedArtifact.type]}
-              </span>
-            </div>
+              {/* Selected artifact preview */}
+              {selectedArtifact ? (
+                <>
+                  <div className="flex-1 overflow-y-auto p-5">
+                    {selectedArtifact.ref_kind === 'inline'
+                      ? renderMarkdown(selectedArtifact.ref_value)
+                      : (
+                        <p className="text-[12px] text-muted-foreground">{selectedArtifact.ref_value}</p>
+                      )
+                    }
+                  </div>
 
-            {/* Artifact content */}
-            <div className="flex-1 overflow-y-auto p-5">
-              {renderMarkdown(selectedArtifact.content)}
+                  <div className="flex items-center gap-2 border-t border-border px-5 py-3">
+                    <Button variant="outline" size="sm">
+                      <DownloadSimpleIcon className="size-3.5" />
+                      {t('chat.artifact_download')}
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      <CopyIcon className="size-3.5" />
+                      {t('chat.artifact_copy')}
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      <FloppyDiskIcon className="size-3.5" />
+                      {t('chat.artifact_save')}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-1 items-center justify-center px-5">
+                  <p className="text-center text-[12px] text-muted-foreground">
+                    {t('chat.artifact_select')}
+                  </p>
+                </div>
+              )}
             </div>
-
-            {/* Artifact actions */}
-            <div className="flex items-center gap-2 border-t border-border px-5 py-3">
-              <Button variant="outline" size="sm">
-                <DownloadSimpleIcon className="size-3.5" />
-                {t('chat.artifact_download')}
-              </Button>
-              <Button variant="outline" size="sm">
-                <CopyIcon className="size-3.5" />
-                {t('chat.artifact_copy')}
-              </Button>
-              <Button variant="outline" size="sm">
-                <FloppyDiskIcon className="size-3.5" />
-                {t('chat.artifact_save')}
-              </Button>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-5">
+              <FileTextIcon className="size-8 text-muted-foreground/30" />
+              <p className="text-center text-[12px] text-muted-foreground">
+                {t('chat.artifact_empty')}
+              </p>
             </div>
-          </>
-        ) : rightTab === 'artifact' && !selectedArtifact && !hasTaskSummary ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-5">
-            <FileTextIcon className="size-8 text-muted-foreground/30" />
-            <p className="text-center text-[12px] text-muted-foreground">
-              {t('chat.artifact_empty')}
-            </p>
-          </div>
+          )
         ) : null}
-
-        {/* Empty state when no artifact and no task summary */}
-        {!selectedArtifact && !hasTaskSummary && rightTab === 'artifact' ? null : null}
       </div>
     </div>
   )

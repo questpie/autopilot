@@ -1,8 +1,6 @@
 import { create } from 'zustand'
 
 type SeedAction =
-  | 'create_playbook'
-  | 'edit_playbook'
   | 'create_integration'
   | 'refine_tone'
   | 'refine_company'

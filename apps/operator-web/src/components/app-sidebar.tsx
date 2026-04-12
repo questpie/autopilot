@@ -6,16 +6,14 @@ import {
   ArrowsClockwise,
   File,
   Buildings,
-  FolderSimple,
-  BookOpen,
   Link as LinkIcon,
   GearSix,
   Folder,
   Robot,
   Gear,
   Lightning,
+  Code,
 } from '@phosphor-icons/react'
-import { useAppStore } from '@/stores/app.store'
 import { useSession } from '@/hooks/use-session'
 import { useTranslation } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -31,7 +29,6 @@ interface NavItem {
 interface NavSection {
   labelKey?: string
   items: NavItem[]
-  devOnly?: boolean
 }
 
 const NAV_SECTIONS: NavSection[] = [
@@ -44,6 +41,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     items: [
       { to: '/tasks', labelKey: 'nav.tasks', icon: CheckSquare },
+      { to: '/workflows', labelKey: 'nav.workflows', icon: Gear },
       { to: '/automations', labelKey: 'nav.automations', icon: ArrowsClockwise },
       { to: '/results', labelKey: 'nav.results', icon: File },
     ],
@@ -51,19 +49,16 @@ const NAV_SECTIONS: NavSection[] = [
   {
     labelKey: 'nav.workspace',
     items: [
+      { to: '/files', labelKey: 'nav.files', icon: Folder },
       { to: '/company', labelKey: 'nav.company', icon: Buildings },
-      { to: '/resources', labelKey: 'nav.resources', icon: FolderSimple },
-      { to: '/playbooks', labelKey: 'nav.playbooks', icon: BookOpen },
       { to: '/integrations', labelKey: 'nav.integrations', icon: LinkIcon },
     ],
   },
   {
-    labelKey: 'nav.advanced',
-    devOnly: true,
+    labelKey: 'nav.technical',
     items: [
-      { to: '/files', labelKey: 'nav.files', icon: Folder },
+      { to: '/scripts', labelKey: 'nav.scripts', icon: Code },
       { to: '/agents', labelKey: 'nav.agents', icon: Robot },
-      { to: '/workflows', labelKey: 'nav.workflows', icon: Gear },
       { to: '/runtime', labelKey: 'nav.runtime', icon: Lightning },
     ],
   },
@@ -139,7 +134,6 @@ function UserSection() {
 }
 
 export function AppSidebar() {
-  const developerMode = useAppStore((s) => s.developerMode)
   const { t } = useTranslation()
 
   return (
@@ -155,8 +149,6 @@ export function AppSidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-1">
         {NAV_SECTIONS.map((section, sectionIndex) => {
-          if (section.devOnly && !developerMode) return null
-
           return (
             <div key={section.labelKey ?? sectionIndex} className="mb-1">
               {section.labelKey && (

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { PlusIcon, XIcon } from '@phosphor-icons/react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { ToggleSwitch } from '@/components/ui/toggle-switch'
 import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
+import { ListDetail, ListPanel } from '@/components/list-detail'
 import { StatusPill, type StatusPillStatus } from '@/components/ui/status-pill'
 import { SectionHeader } from '@/components/ui/section-header'
 import { KvList } from '@/components/ui/kv-list'
@@ -20,11 +22,16 @@ import {
   wizardSelectClass,
 } from '@/components/wizard-dialog'
 import { getSchedules, getSchedule, toggleSchedule, triggerSchedule } from '@/api/schedules.api'
-import { getPlaybooks } from '@/api/playbooks.api'
-import type { Schedule, ScheduleWithHistory, ScheduleExecution, Playbook } from '@/api/types'
+import { getWorkflows } from '@/api/workflows.api'
+import type { Schedule, ScheduleWithHistory, ScheduleExecution, Workflow } from '@/api/types'
+
+const automationsSearchSchema = z.object({
+  scheduleId: z.string().optional(),
+})
 
 export const Route = createFileRoute('/_app/automations')({
   component: AutomationsPage,
+  validateSearch: (search) => automationsSearchSchema.parse(search),
 })
 
 // ── Filter types ──
@@ -42,7 +49,7 @@ const FILTER_LABEL_KEYS: Record<FilterKey, string> = {
 
 // ── Helpers ──
 
-function cronToLabel(cron: string): string {
+function cronToLabel(cron: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const parts = cron.split(' ')
   const minute = parts[0]
   const hour = parts[1]
@@ -50,19 +57,19 @@ function cronToLabel(cron: string): string {
   const dow = parts[4]
   const time = `${hour}:${minute?.padStart(2, '0')}`
 
-  if (dom !== '*' && dom === '1') return `Kazdy 1. v mesiaci o ${time}`
-  if (dom !== '*') return `Kazdy ${dom}. v mesiaci o ${time}`
-  if (dow === '1') return `Kazdy pondelok o ${time}`
-  if (dow === '5') return `Kazdy piatok o ${time}`
-  if (dow === '0') return `Kazdu nedelu o ${time}`
-  if (dow !== '*') return `Kazdy tyzden o ${time}`
-  return `Denne o ${time}`
+  if (dom !== '*' && dom === '1') return t('automations.cron_monthly_first', { time })
+  if (dom !== '*') return t('automations.cron_monthly', { dom, time })
+  if (dow === '1') return t('automations.cron_monday', { time })
+  if (dow === '5') return t('automations.cron_friday', { time })
+  if (dow === '0') return t('automations.cron_sunday', { time })
+  if (dow !== '*') return t('automations.cron_weekly', { time })
+  return t('automations.cron_daily', { time })
 }
 
-function formatDateTime(iso: string | null): string {
+function formatDateTime(iso: string | null, locale: string): string {
   if (!iso) return '\u2014'
   const d = new Date(iso)
-  return d.toLocaleString('sk-SK', {
+  return d.toLocaleString(locale, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -109,6 +116,7 @@ function ScheduleRow({
   onClick: () => void
   onToggle: () => void
 }) {
+  const { t } = useTranslation()
   const colors = scheduleStatusColor(schedule, lastExecution)
 
   return (
@@ -130,7 +138,7 @@ function ScheduleRow({
           <div className="truncate text-[13px] font-medium text-foreground">{schedule.name}</div>
           <div className="truncate text-[12px] text-muted-foreground">{schedule.description}</div>
           <div className="mt-0.5 flex items-center gap-2">
-            <span className="font-mono text-[11px] text-muted-foreground">{cronToLabel(schedule.cron)}</span>
+            <span className="font-mono text-[11px] text-muted-foreground">{cronToLabel(schedule.cron, t)}</span>
             <span className="font-mono text-[11px] text-muted-foreground/50">{schedule.id}</span>
           </div>
         </div>
@@ -155,17 +163,18 @@ function ScheduleRow({
 
 function ScheduleDetail({
   detail,
-  playbooks,
+  workflows,
   onTrigger,
   onExecutionClick,
 }: {
   detail: ScheduleWithHistory
-  playbooks: Playbook[]
+  workflows: Workflow[]
   onTrigger: () => void
   onExecutionClick: (exec: ScheduleExecution) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n: i18nInstance } = useTranslation()
   const navigate = useNavigate()
+  const locale = i18nInstance.language
 
   const lastExecution = detail.history.length > 0
     ? detail.history.reduce((a, b) => (a.triggered_at > b.triggered_at ? a : b))
@@ -177,10 +186,9 @@ function ScheduleDetail({
     : colors.label === 'error' ? 'failed'
     : 'pending'
 
-  // Find linked playbook by workflow_id match
-  const linkedPlaybook = detail.workflow_id
-    ? playbooks.find((pb) => pb.linked_schedule_ids.includes(detail.id))
-    : null
+  const linkedWorkflow = detail.workflow_id
+    ? workflows.find((w) => w.id === detail.workflow_id)
+    : undefined
 
   // Collect task IDs from executions
   const createdTaskIds = detail.history
@@ -217,12 +225,12 @@ function ScheduleDetail({
         <div className="mt-3">
           <KvList
             items={[
-              { label: 'Cron', value: <span className="font-mono text-[12px]">{detail.cron}</span> },
-              { label: 'Timezone', value: detail.timezone },
-              { label: 'Mode', value: detail.mode },
-              { label: 'Concurrency', value: detail.concurrency_policy },
-              ...(detail.workflow_id ? [{ label: 'Workflow ID', value: <span className="font-mono text-[12px]">{detail.workflow_id}</span> }] : []),
-              { label: 'Agent ID', value: <span className="font-mono text-[12px]">{detail.agent_id}</span> },
+              { label: t('automations.label_cron'), value: <span className="font-mono text-[12px]">{detail.cron}</span> },
+              { label: t('automations.label_timezone'), value: detail.timezone },
+              { label: t('automations.label_mode'), value: detail.mode },
+              { label: t('automations.label_concurrency'), value: detail.concurrency_policy },
+              ...(detail.workflow_id ? [{ label: t('automations.label_workflow_id'), value: <span className="font-mono text-[12px]">{detail.workflow_id}</span> }] : []),
+              { label: t('automations.label_agent_id'), value: <span className="font-mono text-[12px]">{detail.agent_id}</span> },
             ]}
           />
         </div>
@@ -233,7 +241,7 @@ function ScheduleDetail({
         <SectionHeader>{t('automations.next_run')}</SectionHeader>
         <div className="mt-3 flex items-center justify-between">
           <span className="text-[15px] font-medium text-foreground">
-            {detail.enabled ? formatDateTime(detail.next_run_at) : '\u2014'}
+            {detail.enabled ? formatDateTime(detail.next_run_at, locale) : '\u2014'}
           </span>
           <Button
             size="sm"
@@ -260,7 +268,7 @@ function ScheduleDetail({
                 >
                   <span className="shrink-0 font-mono text-[11px] text-muted-foreground/60">{exec.id.slice(-8)}</span>
                   <StatusPill status={executionStatusToPill(exec.status)} label={exec.status} />
-                  <span className="font-mono text-[11px] text-muted-foreground">{formatDateTime(exec.triggered_at)}</span>
+                  <span className="font-mono text-[11px] text-muted-foreground">{formatDateTime(exec.triggered_at, locale)}</span>
                   {exec.task_id && (
                     <span className="font-mono text-[11px] text-primary">
                       {exec.task_id.slice(-12)}
@@ -288,7 +296,7 @@ function ScheduleDetail({
               <RelationLink
                 key={ct.taskId}
                 label={ct.taskId}
-                sublabel={formatDateTime(ct.triggeredAt)}
+                sublabel={formatDateTime(ct.triggeredAt, locale)}
                 onClick={() => void navigate({ to: '/tasks', search: { taskId: ct.taskId } })}
               />
             ))}
@@ -296,15 +304,15 @@ function ScheduleDetail({
         </div>
       )}
 
-      {/* Linked playbook */}
-      {linkedPlaybook && (
+      {/* Linked workflow (FE-derived from schedule.workflow_id) */}
+      {linkedWorkflow && (
         <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('automations.linked_playbook')}</SectionHeader>
+          <SectionHeader>{t('automations.linked_workflow')}</SectionHeader>
           <div className="mt-3">
             <RelationLink
-              label={linkedPlaybook.name}
-              sublabel={linkedPlaybook.id}
-              onClick={() => void navigate({ to: '/playbooks', search: { playbookId: linkedPlaybook.id } })}
+              label={linkedWorkflow.name}
+              sublabel={linkedWorkflow.description}
+              onClick={() => void navigate({ to: '/workflows', search: { workflowId: linkedWorkflow.id } })}
             />
           </div>
         </div>
@@ -316,7 +324,7 @@ function ScheduleDetail({
         <div className="mt-3">
           <KvList
             items={[
-              { label: 'Concurrency', value: detail.concurrency_policy },
+              { label: t('automations.label_concurrency'), value: detail.concurrency_policy },
               ...(lastExecution?.error ? [{ label: t('automations.last_error'), value: <span className="text-red-500">{lastExecution.error}</span> }] : []),
               ...(lastExecution?.skip_reason ? [{ label: t('automations.skip_reason'), value: lastExecution.skip_reason }] : []),
             ]}
@@ -342,13 +350,16 @@ function ExecutionDetailSheet({
   onNavigateToTask: (taskId: string) => void
   onNavigateToChat: (queryId: string) => void
 }) {
+  const { t, i18n: i18nInstance } = useTranslation()
+  const locale = i18nInstance.language
+
   function renderOutcome() {
     switch (execution.status) {
       case 'completed':
         if (execution.task_id) {
           return (
             <div className="flex flex-col gap-1">
-              <span className="text-[13px] text-foreground">Task vytvoreny</span>
+              <span className="text-[13px] text-foreground">{t('automations.exec_task_created')}</span>
               <span className="font-mono text-[11px] text-muted-foreground">{execution.task_id}</span>
             </div>
           )
@@ -356,18 +367,18 @@ function ExecutionDetailSheet({
         if (execution.query_id) {
           return (
             <div className="flex flex-col gap-1">
-              <span className="text-[13px] text-foreground">Query odoslany</span>
+              <span className="text-[13px] text-foreground">{t('automations.exec_query_sent')}</span>
               <span className="font-mono text-[11px] text-muted-foreground">{execution.query_id}</span>
             </div>
           )
         }
-        return <span className="text-[13px] text-foreground">Dokoncene</span>
+        return <span className="text-[13px] text-foreground">{t('automations.exec_completed')}</span>
       case 'triggered':
-        return <span className="text-[13px] text-foreground">Beziaci</span>
+        return <span className="text-[13px] text-foreground">{t('automations.exec_running')}</span>
       case 'skipped':
         return (
           <div className="flex flex-col gap-1">
-            <span className="text-[13px] text-foreground">Preskoceny</span>
+            <span className="text-[13px] text-foreground">{t('automations.exec_skipped')}</span>
             {execution.skip_reason && (
               <span className="text-[12px] text-muted-foreground">{execution.skip_reason}</span>
             )}
@@ -376,7 +387,7 @@ function ExecutionDetailSheet({
       case 'failed':
         return (
           <div className="flex flex-col gap-1">
-            <span className="text-[13px] text-red-500">Zlyhalo</span>
+            <span className="text-[13px] text-red-500">{t('automations.exec_failed')}</span>
             {execution.error && (
               <span className="text-[12px] text-red-500/80">{execution.error}</span>
             )}
@@ -394,7 +405,7 @@ function ExecutionDetailSheet({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
-            <h3 className="text-[15px] font-medium text-foreground">Execution detail</h3>
+            <h3 className="text-[15px] font-medium text-foreground">{t('automations.exec_detail_title')}</h3>
             <span className="font-mono text-[11px] text-muted-foreground">{scheduleName}</span>
           </div>
           <button
@@ -410,14 +421,14 @@ function ExecutionDetailSheet({
         <div className="flex-1 overflow-y-auto">
           {/* Status section */}
           <div className="border-b border-border/50 px-5 py-4">
-            <SectionHeader>Stav</SectionHeader>
+            <SectionHeader>{t('automations.exec_status')}</SectionHeader>
             <div className="mt-3">
               <KvList
                 items={[
-                  { label: 'Status', value: <StatusPill status={executionStatusToPill(execution.status)} label={execution.status} /> },
-                  { label: 'Spustene', value: formatDateTime(execution.triggered_at) },
-                  { label: 'Trvanie', value: execution.status === 'completed' ? '2m 14s' : execution.status === 'triggered' ? 'prebieha...' : '\u2014' },
-                  { label: 'Trigger', value: 'Planovane (cron)' },
+                  { label: t('automations.label_status'), value: <StatusPill status={executionStatusToPill(execution.status)} label={execution.status} /> },
+                  { label: t('automations.exec_triggered_at'), value: formatDateTime(execution.triggered_at, locale) },
+                  { label: t('automations.exec_duration'), value: execution.status === 'completed' ? '2m 14s' : execution.status === 'triggered' ? t('automations.exec_running') : '\u2014' },
+                  { label: t('automations.label_trigger'), value: t('automations.exec_trigger_cron') },
                 ]}
               />
             </div>
@@ -425,7 +436,7 @@ function ExecutionDetailSheet({
 
           {/* Outcome section */}
           <div className="border-b border-border/50 px-5 py-4">
-            <SectionHeader>Vysledok</SectionHeader>
+            <SectionHeader>{t('automations.exec_outcome')}</SectionHeader>
             <div className="mt-3">
               {renderOutcome()}
             </div>
@@ -434,16 +445,16 @@ function ExecutionDetailSheet({
           {/* Linked entity section */}
           {(execution.task_id || execution.query_id) && (
             <div className="border-b border-border/50 px-5 py-4">
-              <SectionHeader>Nadvazujuca akcia</SectionHeader>
+              <SectionHeader>{t('automations.exec_follow_up')}</SectionHeader>
               <div className="mt-3">
                 {execution.task_id && (
                   <Button size="sm" onClick={() => onNavigateToTask(execution.task_id!)}>
-                    Otvorit task
+                    {t('automations.exec_open_task')}
                   </Button>
                 )}
                 {execution.query_id && (
                   <Button size="sm" onClick={() => onNavigateToChat(execution.query_id!)}>
-                    Otvorit konverzaciu
+                    {t('automations.exec_open_chat')}
                   </Button>
                 )}
               </div>
@@ -453,19 +464,19 @@ function ExecutionDetailSheet({
           {/* No action state */}
           {!execution.task_id && !execution.query_id && execution.status !== 'triggered' && (
             <div className="border-b border-border/50 px-5 py-4">
-              <SectionHeader>Nadvazujuca akcia</SectionHeader>
-              <p className="mt-3 text-[12px] text-muted-foreground">Ziadna nadvazujuca akcia</p>
+              <SectionHeader>{t('automations.exec_follow_up')}</SectionHeader>
+              <p className="mt-3 text-[12px] text-muted-foreground">{t('automations.exec_no_follow_up')}</p>
             </div>
           )}
 
           {/* Execution ID */}
           <div className="px-5 py-4">
-            <SectionHeader>Identifikator</SectionHeader>
+            <SectionHeader>{t('automations.exec_identifier')}</SectionHeader>
             <div className="mt-3">
               <KvList
                 items={[
-                  { label: 'Execution ID', value: <span className="font-mono text-[11px]">{execution.id}</span> },
-                  { label: 'Schedule ID', value: <span className="font-mono text-[11px]">{execution.schedule_id}</span> },
+                  { label: t('automations.label_execution_id'), value: <span className="font-mono text-[11px]">{execution.id}</span> },
+                  { label: t('automations.label_schedule_id'), value: <span className="font-mono text-[11px]">{execution.schedule_id}</span> },
                 ]}
               />
             </div>
@@ -485,7 +496,7 @@ function AutomationsPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [executions, setExecutions] = useState<Map<string, ScheduleExecution | undefined>>(new Map())
   const [detail, setDetail] = useState<ScheduleWithHistory | null>(null)
-  const [playbooks, setPlaybooks] = useState<Playbook[]>([])
+  const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [selectedExecution, setSelectedExecution] = useState<ScheduleExecution | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [name, setName] = useState('')
@@ -493,12 +504,13 @@ function AutomationsPage() {
   const [frequency, setFrequency] = useState('daily')
   const [time, setTime] = useState('09:00')
   const { t } = useTranslation()
+  const { scheduleId: deepLinkScheduleId } = Route.useSearch()
 
-  // Load schedules + playbooks
+  // Load schedules + workflows
   useEffect(() => {
-    Promise.all([getSchedules(), getPlaybooks()]).then(([scheds, pbs]) => {
+    Promise.all([getSchedules(), getWorkflows()]).then(([scheds, wfs]) => {
       setSchedules(scheds)
-      setPlaybooks(pbs)
+      setWorkflows(wfs)
 
       // Load last execution status for each schedule
       const exMap = new Map<string, ScheduleExecution | undefined>()
@@ -516,10 +528,14 @@ function AutomationsPage() {
 
   // Auto-select first
   useEffect(() => {
-    if (schedules.length > 0 && selectedId === null) {
-      setSelectedId(schedules[0].id)
+    if (schedules.length === 0) return
+    if (selectedId !== null) return
+    if (deepLinkScheduleId && schedules.some((s) => s.id === deepLinkScheduleId)) {
+      setSelectedId(deepLinkScheduleId)
+      return
     }
-  }, [schedules, selectedId])
+    setSelectedId(schedules[0].id)
+  }, [schedules, selectedId, deepLinkScheduleId])
 
   // Load detail when selection changes
   useEffect(() => {
@@ -569,39 +585,42 @@ function AutomationsPage() {
   }
 
   return (
-    <div className="flex h-full flex-1 overflow-hidden">
-      {/* Left: schedule list */}
-      <div className="flex w-[45%] shrink-0 flex-col border-r border-border/50">
-        <div className="shrink-0 border-b border-border/50 px-5 py-4">
-          <PageHeader
-            title={t('automations.title')}
-            actions={
-              <Button variant="outline" size="sm" onClick={() => setWizardOpen(true)}>
-                <PlusIcon data-icon="inline-start" weight="bold" />
-                {t('automations.add')}
-              </Button>
-            }
-          />
-          <div className="mt-3 flex items-center gap-1">
-            {FILTER_KEYS.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setActiveFilter(key)}
-                className={cn(
-                  'font-heading text-[12px] px-2.5 py-1 transition-colors',
-                  activeFilter === key
-                    ? 'bg-muted/50 text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {t(FILTER_LABEL_KEYS[key])}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
+    <>
+    <ListDetail
+      listSize={40}
+      list={
+        <ListPanel
+          header={
+            <>
+              <PageHeader
+                title={t('automations.title')}
+                actions={
+                  <Button variant="outline" size="sm" onClick={() => setWizardOpen(true)}>
+                    <PlusIcon data-icon="inline-start" weight="bold" />
+                    {t('automations.add')}
+                  </Button>
+                }
+              />
+              <div className="mt-3 flex items-center gap-1">
+                {FILTER_KEYS.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveFilter(key)}
+                    className={cn(
+                      'font-heading text-[12px] px-2.5 py-1 transition-colors',
+                      activeFilter === key
+                        ? 'bg-muted/50 text-foreground'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {t(FILTER_LABEL_KEYS[key])}
+                  </button>
+                ))}
+              </div>
+            </>
+          }
+        >
           {filteredSchedules.length === 0 ? (
             <EmptyState
               title={t('automations.empty_title')}
@@ -614,20 +633,18 @@ function AutomationsPage() {
                 schedule={schedule}
                 lastExecution={executions.get(schedule.id)}
                 selected={schedule.id === selectedId}
-                onClick={() => setSelectedId(schedule.id)}
+                onClick={() => { setSelectedId(schedule.id); void navigate({ to: '/automations', search: { scheduleId: schedule.id }, replace: true }) }}
                 onToggle={() => handleToggle(schedule.id)}
               />
             ))
           )}
-        </div>
-      </div>
-
-      {/* Right: schedule detail */}
-      <div className="flex-1 overflow-y-auto">
-        {detail ? (
+        </ListPanel>
+      }
+      detail={
+        detail ? (
           <ScheduleDetail
             detail={detail}
-            playbooks={playbooks}
+            workflows={workflows}
             onTrigger={handleTrigger}
             onExecutionClick={(exec) => setSelectedExecution(exec)}
           />
@@ -636,8 +653,9 @@ function AutomationsPage() {
             title={t('automations.select')}
             description={t('automations.select_desc')}
           />
-        )}
-      </div>
+        )
+      }
+    />
 
       {/* Automation creation wizard */}
       <WizardDialog
@@ -706,6 +724,6 @@ function AutomationsPage() {
           onNavigateToChat={() => void navigate({ to: '/chat' })}
         />
       )}
-    </div>
+    </>
   )
 }

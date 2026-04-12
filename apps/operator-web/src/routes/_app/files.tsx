@@ -1,23 +1,32 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { z } from 'zod'
 import {
   FileTextIcon,
-  FolderIcon,
-  FolderOpenIcon,
-  CaretRightIcon,
-  CaretDownIcon,
+  FileIcon,
   ImageIcon,
   FileCodeIcon,
   TableIcon,
+  FolderIcon,
+  FolderOpenIcon,
   TreeStructureIcon,
+  FileArrowDownIcon,
+  CaretRightIcon,
+  CaretDownIcon,
   MagnifyingGlassIcon,
 } from '@phosphor-icons/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/i18n'
+import { Button } from '@/components/ui/button'
 import { SectionHeader } from '@/components/ui/section-header'
 import { KvList } from '@/components/ui/kv-list'
 import { RelationLink } from '@/components/ui/relation-link'
-import type { FileTreeNode, FileChangeKind } from '@/api/types'
+import { StatusPill } from '@/components/ui/status-pill'
+import { EmptyState } from '@/components/empty-state'
+import { FileViewer } from '@/components/file-viewer'
+import { ListDetail, ListPanel } from '@/components/list-detail'
+import { getResources } from '@/api/resources.api'
+import type { ResourceData, ResourceType, ResourceStatus } from '@/api/resources.api'
 import {
   getWorkspaceTree,
   getFileCode,
@@ -25,17 +34,52 @@ import {
   getFileHistory,
 } from '@/api/files.api'
 import type { FileDiffInfo, FileCommitEntry } from '@/api/files.api'
+import type { FileTreeNode, FileChangeKind } from '@/api/types'
+
+// ── Route ──
+
+const filesSearchSchema = z.object({
+  // Workspace file path to pre-select (matches artifact ref_value)
+  path: z.string().optional(),
+  // Force scope: 'workspace' to skip company files and jump straight to workspace tree
+  scope: z.enum(['workspace', 'company']).optional(),
+})
 
 export const Route = createFileRoute('/_app/files')({
   component: FilesPage,
+  validateSearch: (search) => filesSearchSchema.parse(search),
 })
 
-// ── Helpers ──
+// ─────────────────────────────────────────────
+// Shared utilities
+// ─────────────────────────────────────────────
 
-type Scope = 'all' | 'worktrees' | 'outputs' | 'generated'
+type ResourceFilter = 'all' | 'docs' | 'images' | 'data'
 
-function formatSize(bytes: number | null): string {
-  if (bytes === null) return '—'
+const TYPE_FILTER: Record<ResourceType, ResourceFilter> = {
+  PDF: 'docs',
+  MD: 'docs',
+  XLSX: 'data',
+  CSV: 'data',
+  ZIP: 'docs',
+  PNG: 'images',
+}
+
+const STATUS_PILL_MAP: Record<ResourceStatus, 'done' | 'working' | 'pending'> = {
+  indexed: 'done',
+  processing: 'working',
+  unprocessed: 'pending',
+}
+
+const STATUS_I18N: Record<ResourceStatus, string> = {
+  indexed: 'files.status_indexed',
+  processing: 'files.status_processing',
+  unprocessed: 'files.status_unprocessed',
+}
+
+function formatSize(bytes: number | null | string): string {
+  if (bytes === null || bytes === undefined) return '—'
+  if (typeof bytes === 'string') return bytes
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -46,23 +90,11 @@ function getFileExtension(name: string): string {
   return dot >= 0 ? name.slice(dot) : ''
 }
 
-function isCodeFile(name: string): boolean {
-  const ext = getFileExtension(name)
-  return ['.ts', '.tsx', '.js', '.jsx', '.json', '.css', '.html', '.yaml', '.yml'].includes(ext)
-}
-
 function changeLetter(change: FileChangeKind): string | null {
   if (change === 'added') return 'A'
   if (change === 'modified') return 'M'
   if (change === 'deleted') return 'D'
   return null
-}
-
-function changeColor(change: FileChangeKind): string {
-  if (change === 'added') return 'text-green-500'
-  if (change === 'modified') return 'text-amber-500'
-  if (change === 'deleted') return 'text-red-500'
-  return ''
 }
 
 function changeBgColor(change: FileChangeKind): string {
@@ -83,678 +115,738 @@ function findNode(nodes: FileTreeNode[], path: string): FileTreeNode | null {
   return null
 }
 
-function filterTree(
-  nodes: FileTreeNode[],
-  searchQuery: string,
-  changedOnly: boolean,
-  scope: Scope,
-): FileTreeNode[] {
-  const lowerQuery = searchQuery.toLowerCase()
+// ─────────────────────────────────────────────
+// Unified file icon function
+// ─────────────────────────────────────────────
 
-  function matches(node: FileTreeNode): boolean {
-    if (changedOnly && node.type === 'file' && node.change === 'unchanged') return false
-    if (lowerQuery && !node.name.toLowerCase().includes(lowerQuery)) {
-      // Check if any child matches
-      if (node.children) {
-        return node.children.some((c) => matches(c) || hasMatchingChild(c))
-      }
-      return false
-    }
-    return true
-  }
+type PhosphorIcon = typeof FileTextIcon
 
-  function hasMatchingChild(node: FileTreeNode): boolean {
-    if (!node.children) return false
-    return node.children.some((c) => matches(c) || hasMatchingChild(c))
-  }
-
-  function filterNodes(nodes: FileTreeNode[]): FileTreeNode[] {
-    return nodes
-      .filter((n) => matches(n) || hasMatchingChild(n))
-      .map((n) => {
-        if (!n.children) return n
-        return { ...n, children: filterNodes(n.children) }
-      })
-  }
-
-  let roots = nodes
-  if (scope === 'worktrees') {
-    roots = nodes.filter((n) => n.path === '.worktrees')
-  } else if (scope === 'outputs' || scope === 'generated') {
-    roots = [] // No mock data for these scopes
-  }
-
-  return filterNodes(roots)
+function fileIcon(
+  name: string,
+  opts: { isDir?: boolean; isWorktreeRoot?: boolean; expanded?: boolean } = {},
+): PhosphorIcon {
+  if (opts.isWorktreeRoot) return TreeStructureIcon
+  if (opts.isDir) return opts.expanded ? FolderOpenIcon : FolderIcon
+  const ext = getFileExtension(name).toLowerCase()
+  if (ext === '.pdf') return FileIcon
+  if (['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'].includes(ext)) return ImageIcon
+  if (['.xlsx', '.csv'].includes(ext)) return TableIcon
+  if (['.ts', '.tsx', '.js', '.jsx', '.py', '.sh'].includes(ext)) return FileCodeIcon
+  if (['.zip', '.tar', '.gz'].includes(ext)) return FileArrowDownIcon
+  return FileTextIcon
 }
 
-// ── Syntax Highlighting (simple token-based) ──
+// ─────────────────────────────────────────────
+// Selection type
+// ─────────────────────────────────────────────
 
-interface CodeToken {
-  text: string
-  className: string
-}
+type SelectedItem =
+  | { kind: 'company-file'; resource: ResourceData }
+  | { kind: 'workspace-file'; path: string }
 
-const KEYWORDS = new Set([
-  'import', 'export', 'from', 'function', 'const', 'let', 'var',
-  'if', 'else', 'return', 'async', 'await', 'for', 'of', 'in',
-  'new', 'type', 'interface', 'extends', 'implements', 'class',
-  'default', 'void', 'null', 'undefined', 'true', 'false',
-])
+// ─────────────────────────────────────────────
+// Unified FileRow — one component for both scopes
+// ─────────────────────────────────────────────
 
-const TYPE_NAMES = new Set([
-  'Promise', 'string', 'number', 'boolean', 'Set', 'Record',
-  'PreviewArtifact', 'WalkOptions', 'Array',
-])
-
-function tokenizeLine(line: string): CodeToken[] {
-  const tokens: CodeToken[] = []
-  let i = 0
-
-  while (i < line.length) {
-    // Comment
-    if (line[i] === '/' && line[i + 1] === '/') {
-      tokens.push({ text: line.slice(i), className: 'text-muted-foreground italic' })
-      break
-    }
-    // Block comment start
-    if (line[i] === '/' && line[i + 1] === '*') {
-      const end = line.indexOf('*/', i + 2)
-      if (end >= 0) {
-        tokens.push({ text: line.slice(i, end + 2), className: 'text-muted-foreground italic' })
-        i = end + 2
-        continue
-      }
-      tokens.push({ text: line.slice(i), className: 'text-muted-foreground italic' })
-      break
-    }
-    if (line[i] === '*' && (i === 0 || line.slice(0, i).trim() === '')) {
-      // JSDoc line
-      tokens.push({ text: line.slice(i), className: 'text-muted-foreground italic' })
-      break
-    }
-    // String (single or double quote or backtick)
-    if (line[i] === "'" || line[i] === '"' || line[i] === '`') {
-      const quote = line[i]
-      let j = i + 1
-      while (j < line.length && line[j] !== quote) {
-        if (line[j] === '\\') j++
-        j++
-      }
-      tokens.push({ text: line.slice(i, j + 1), className: 'text-green-500' })
-      i = j + 1
-      continue
-    }
-    // Number
-    if (/\d/.test(line[i]) && (i === 0 || /[\s(,=+\-*/<>[\]{}:]/.test(line[i - 1]))) {
-      let j = i
-      while (j < line.length && /[\d._]/.test(line[j])) j++
-      tokens.push({ text: line.slice(i, j), className: 'text-amber-500' })
-      i = j
-      continue
-    }
-    // Word
-    if (/[a-zA-Z_$]/.test(line[i])) {
-      let j = i
-      while (j < line.length && /[a-zA-Z0-9_$]/.test(line[j])) j++
-      const word = line.slice(i, j)
-      if (KEYWORDS.has(word)) {
-        tokens.push({ text: word, className: 'text-primary' })
-      } else if (TYPE_NAMES.has(word)) {
-        tokens.push({ text: word, className: 'text-blue-500' })
-      } else {
-        tokens.push({ text: word, className: '' })
-      }
-      i = j
-      continue
-    }
-    // Everything else
-    tokens.push({ text: line[i], className: '' })
-    i++
-  }
-
-  return tokens
-}
-
-// ── Components ──
-
-function FileIcon({ node }: { node: FileTreeNode }) {
-  if (node.type === 'directory') return <FolderIcon className="size-3.5 text-primary/70" weight="bold" />
-  if (node.type === 'worktree-root') return <TreeStructureIcon className="size-3.5 text-primary" weight="bold" />
-  const ext = getFileExtension(node.name)
-  if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return <FileCodeIcon className="size-3.5 text-muted-foreground" />
-  if (['.png', '.jpg', '.svg'].includes(ext)) return <ImageIcon className="size-3.5 text-muted-foreground" />
-  if (['.csv'].includes(ext)) return <TableIcon className="size-3.5 text-muted-foreground" />
-  return <FileTextIcon className="size-3.5 text-muted-foreground" />
-}
-
-function ChangeMarker({ change }: { change: FileChangeKind }) {
-  const letter = changeLetter(change)
-  if (!letter) return null
-  return (
-    <span className={cn('font-heading text-[9px] font-bold', changeColor(change))}>
-      ({letter})
-    </span>
-  )
-}
-
-function TreeItem({
-  node,
-  depth,
-  expanded,
+function FileRow({
+  icon: IconComp,
+  iconClass,
+  name,
+  sublabel,
+  metaLeft,
+  metaRight,
   selected,
-  onToggle,
-  onSelect,
+  depth,
+  caretExpanded,
+  hasChildren,
+  isDir,
+  onClick,
 }: {
-  node: FileTreeNode
-  depth: number
-  expanded: boolean
-  selected: boolean
-  onToggle: (path: string) => void
-  onSelect: (path: string) => void
+  icon: PhosphorIcon
+  iconClass?: string
+  name: string
+  sublabel?: string
+  metaLeft?: React.ReactNode
+  metaRight?: React.ReactNode
+  selected?: boolean
+  depth?: number
+  caretExpanded?: boolean
+  hasChildren?: boolean
+  isDir?: boolean
+  onClick: () => void
 }) {
-  const isDir = node.type === 'directory' || node.type === 'worktree-root'
-  const hasChildren = Boolean(node.children && node.children.length > 0)
-
+  const paddingLeft = depth ? 16 + depth * 16 : 16
   return (
     <button
       type="button"
+      style={{ paddingLeft }}
       className={cn(
-        'flex w-full items-center gap-1.5 py-[3px] pr-2 text-left text-[12px] transition-colors hover:bg-muted/20',
+        'flex w-full items-center gap-2.5 border-b border-border/50 py-2 pr-4 text-left transition-colors hover:bg-muted/20',
         selected && 'bg-muted/30',
+        isDir && 'bg-muted/5',
       )}
-      style={{ paddingLeft: `${8 + depth * 16}px` }}
-      onClick={() => {
-        if (isDir && hasChildren) onToggle(node.path)
-        onSelect(node.path)
-      }}
+      onClick={onClick}
     >
-      {isDir && hasChildren ? (
-        expanded ? (
-          <CaretDownIcon className="size-3 shrink-0 text-muted-foreground" />
-        ) : (
-          <CaretRightIcon className="size-3 shrink-0 text-muted-foreground" />
-        )
-      ) : (
-        <span className="size-3 shrink-0" />
-      )}
-      {isDir && expanded ? (
-        <FolderOpenIcon className="size-3.5 shrink-0 text-primary/70" weight="bold" />
-      ) : (
-        <FileIcon node={node} />
-      )}
-      <span className={cn(
-        'min-w-0 truncate font-mono',
-        node.type === 'worktree-root' && 'font-semibold text-primary',
-      )}>
-        {node.name}{node.type === 'worktree-root' ? '/' : ''}
-      </span>
-      <ChangeMarker change={node.change} />
+      {/* Caret for expandable dirs — occupies fixed width so icons stay aligned */}
+      {hasChildren !== undefined
+        ? (hasChildren
+          ? (caretExpanded
+            ? <CaretDownIcon className="size-3 shrink-0 text-muted-foreground" />
+            : <CaretRightIcon className="size-3 shrink-0 text-muted-foreground" />)
+          : <span className="size-3 shrink-0" />)
+        : null}
+      <IconComp
+        className={cn('size-[18px] shrink-0', iconClass ?? 'text-muted-foreground')}
+        weight={isDir ? 'bold' : 'regular'}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[13px] font-medium text-foreground">
+          {name}
+        </div>
+        {sublabel && (
+          <div className="truncate text-[12px] text-muted-foreground">{sublabel}</div>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {metaLeft}
+        {metaRight}
+      </div>
     </button>
   )
 }
 
-function TreeView({
-  nodes,
+// ─────────────────────────────────────────────
+// Workspace file row (recursive)
+// ─────────────────────────────────────────────
+
+function WsFileRow({
+  node,
   depth,
   expandedDirs,
   selectedPath,
   onToggle,
   onSelect,
 }: {
-  nodes: FileTreeNode[]
+  node: FileTreeNode
   depth: number
   expandedDirs: Set<string>
   selectedPath: string | null
-  onToggle: (path: string) => void
-  onSelect: (path: string) => void
+  onToggle: (p: string) => void
+  onSelect: (p: string) => void
 }) {
-  return (
-    <>
-      {nodes.map((node) => {
-        const isDir = node.type === 'directory' || node.type === 'worktree-root'
-        const expanded = expandedDirs.has(node.path)
-        return (
-          <div key={node.path}>
-            <TreeItem
-              node={node}
-              depth={depth}
-              expanded={expanded}
-              selected={selectedPath === node.path}
-              onToggle={onToggle}
-              onSelect={onSelect}
-            />
-            {isDir && expanded && node.children && (
-              <TreeView
-                nodes={node.children}
-                depth={depth + 1}
-                expandedDirs={expandedDirs}
-                selectedPath={selectedPath}
-                onToggle={onToggle}
-                onSelect={onSelect}
-              />
-            )}
-          </div>
-        )
-      })}
-    </>
-  )
-}
+  const isDir = node.type === 'directory' || node.type === 'worktree-root'
+  const expanded = expandedDirs.has(node.path)
+  const changeLet = changeLetter(node.change)
 
-function CodeViewer({ code }: { code: string }) {
-  const lines = code.split('\n')
-  return (
-    <div className="overflow-auto font-mono text-[12px] leading-[20px]">
-      {lines.map((line, i) => {
-        const tokens = tokenizeLine(line)
-        return (
-          <div key={i} className="flex hover:bg-muted/10">
-            <span className="inline-block w-[42px] shrink-0 select-none pr-3 text-right text-muted-foreground/50">
-              {i + 1}
-            </span>
-            <span className="whitespace-pre">
-              {tokens.map((token, j) => (
-                <span key={j} className={token.className || undefined}>{token.text}</span>
-              ))}
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+  const Icon = fileIcon(node.name, {
+    isDir: node.type === 'directory',
+    isWorktreeRoot: node.type === 'worktree-root',
+    expanded,
+  })
 
-function DirListing({
-  node,
-  onSelect,
-}: {
-  node: FileTreeNode
-  onSelect: (path: string) => void
-}) {
-  const { t } = useTranslation()
-  if (!node.children || node.children.length === 0) return null
+  const iconClass = node.type === 'worktree-root'
+    ? 'text-primary'
+    : isDir
+    ? 'text-primary/70'
+    : 'text-muted-foreground'
 
   return (
-    <div className="flex flex-col">
-      <div className="border-b border-border px-4 py-2">
-        <span className="font-heading text-[11px] uppercase tracking-[0.5px] text-muted-foreground">
-          {t('files.dir_contents')}
-        </span>
-      </div>
-      {node.children.map((child) => (
-        <button
+    <div>
+      <FileRow
+        icon={Icon}
+        iconClass={iconClass}
+        name={`${node.name}${isDir ? '/' : ''}`}
+        sublabel={undefined}
+        metaLeft={
+          changeLet
+            ? <span className={cn('font-heading text-[10px] border px-1.5 py-0.5', changeBgColor(node.change))}>{changeLet}</span>
+            : undefined
+        }
+        metaRight={
+          !isDir
+            ? <span className="font-heading text-[11px] text-muted-foreground">{formatSize(node.size)}</span>
+            : undefined
+        }
+        selected={selectedPath === node.path}
+        depth={depth}
+        caretExpanded={expanded}
+        hasChildren={isDir ? true : undefined}
+        isDir={isDir}
+        onClick={() => {
+          if (isDir) onToggle(node.path)
+          onSelect(node.path)
+        }}
+      />
+      {isDir && expanded && node.children?.map((child) => (
+        <WsFileRow
           key={child.path}
-          type="button"
-          className="flex items-center gap-3 border-b border-border/50 px-4 py-2 text-left transition-colors hover:bg-muted/20"
-          onClick={() => onSelect(child.path)}
-        >
-          <FileIcon node={child} />
-          <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{child.name}</span>
-          {child.change !== 'unchanged' && (
-            <span className={cn('font-heading text-[10px] border px-1.5 py-0.5', changeBgColor(child.change))}>
-              {changeLetter(child.change)}
-            </span>
-          )}
-          <span className="font-heading text-[11px] text-muted-foreground">
-            {formatSize(child.size)}
-          </span>
-        </button>
+          node={child}
+          depth={depth + 1}
+          expandedDirs={expandedDirs}
+          selectedPath={selectedPath}
+          onToggle={onToggle}
+          onSelect={onSelect}
+        />
       ))}
     </div>
   )
 }
 
-function CenterPane({
-  node,
-  codeContent,
-  onSelect,
+// ─────────────────────────────────────────────
+// Section header for list scopes
+// ─────────────────────────────────────────────
+
+function ScopeHeader({
+  title,
+  description,
+  collapsible,
+  expanded,
+  onToggle,
 }: {
-  node: FileTreeNode | null
-  codeContent: Record<string, string>
-  onSelect: (path: string) => void
+  title: string
+  description: string
+  collapsible?: boolean
+  expanded?: boolean
+  onToggle?: () => void
 }) {
+  const inner = (
+    <div className={cn('flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/10', collapsible && 'hover:bg-muted/20 transition-colors')}>
+      {collapsible && (
+        expanded
+          ? <CaretDownIcon className="size-3 shrink-0 text-muted-foreground" />
+          : <CaretRightIcon className="size-3 shrink-0 text-muted-foreground" />
+      )}
+      <div className="min-w-0">
+        <div className="font-heading text-[11px] uppercase tracking-[0.5px] text-muted-foreground">{title}</div>
+        <div className="text-[11px] text-muted-foreground/60">{description}</div>
+      </div>
+    </div>
+  )
+
+  if (collapsible) {
+    return (
+      <button type="button" className="w-full text-left" onClick={onToggle}>
+        {inner}
+      </button>
+    )
+  }
+  return inner
+}
+
+// ─────────────────────────────────────────────
+// Detail panels
+// ─────────────────────────────────────────────
+
+function CompanyDetail({ resource }: { resource: ResourceData }) {
   const { t } = useTranslation()
-
-  if (!node) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-[13px] text-muted-foreground">
-        {t('files.no_preview')}
-      </div>
-    )
-  }
-
-  // Directory
-  if (node.type === 'directory' || node.type === 'worktree-root') {
-    return (
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-          <FileIcon node={node} />
-          <span className="font-mono text-[12px] text-muted-foreground">{node.path}/</span>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <DirListing node={node} onSelect={onSelect} />
-        </div>
-      </div>
-    )
-  }
-
-  // Code file
-  const code = codeContent[node.path]
-  if (code || isCodeFile(node.name)) {
-    return (
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-          <span className="font-mono text-[12px] text-muted-foreground">{node.path}</span>
-          <div className="flex items-center gap-3">
-            <span className="font-heading text-[11px] text-muted-foreground">{formatSize(node.size)}</span>
-            {node.change !== 'unchanged' && (
-              <span className={cn('font-heading text-[10px] border px-1.5 py-0.5', changeBgColor(node.change))}>
-                {changeLetter(node.change)}
-              </span>
-            )}
+  const Icon = fileIcon(resource.filename)
+  return (
+    <div className="flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 border-b border-border/50 px-5 py-4">
+        <div className="flex items-start gap-3">
+          <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <h2 className="text-[18px] font-medium text-foreground">{resource.filename}</h2>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[11px] text-muted-foreground">{resource.type} · {resource.size} · {resource.date}</span>
+              <StatusPill
+                status={STATUS_PILL_MAP[resource.status]}
+                label={t(STATUS_I18N[resource.status])}
+                pulse={resource.status === 'processing'}
+              />
+            </div>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-3">
-          {code ? (
-            <CodeViewer code={code} />
-          ) : (
-            <div className="flex items-center justify-center py-12 text-[13px] text-muted-foreground">
-              {t('files.no_preview')}
+        {resource.description && (
+          <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{resource.description}</p>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {/* Preview — primary */}
+        <div className="border-b border-border/50 px-5 py-4">
+          <SectionHeader>{t('files.detail_preview')}</SectionHeader>
+          <div className="mt-3 border border-border/50 bg-muted/10">
+            <FileViewer
+              path={resource.filename}
+              content={resource.preview_content}
+              mime={resource.preview_mime}
+            />
+          </div>
+        </div>
+
+        {/* Relations */}
+        {resource.relations.length > 0 && (
+          <div className="border-b border-border/50 px-5 py-4">
+            <SectionHeader>{t('files.detail_where_used')}</SectionHeader>
+            <div className="mt-3 flex flex-col gap-2">
+              {resource.relations.map((rel, i) => (
+                <div key={i} className="flex items-baseline gap-2">
+                  <span className="shrink-0 font-heading text-[11px] text-muted-foreground">{rel.kind}:</span>
+                  <RelationLink label={rel.label} sublabel={rel.sublabel} />
+                </div>
+              ))}
             </div>
+          </div>
+        )}
+
+        {/* Versions */}
+        {resource.versions.length > 0 && (
+          <div className="px-5 py-4">
+            <SectionHeader>{t('files.detail_versions')}</SectionHeader>
+            <div className="mt-3 flex flex-col gap-1">
+              {resource.versions.map((v) => (
+                <div key={v.version} className="flex items-baseline gap-2 py-1 text-[12px]">
+                  <span className={cn('font-medium', v.current ? 'text-foreground' : 'text-muted-foreground')}>
+                    v{v.version}{v.current && <span className="ml-1 font-heading text-[11px] text-muted-foreground">({t('files.label_current')})</span>}
+                  </span>
+                  <span className="font-mono text-[11px] text-muted-foreground">{v.date}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function WorkspaceDetail({
+  node, codeContent, diffs, historyMap,
+}: {
+  node: FileTreeNode
+  codeContent: Record<string, string>
+  diffs: Record<string, FileDiffInfo>
+  historyMap: Record<string, FileCommitEntry[]>
+}) {
+  const { t } = useTranslation()
+  const isDir = node.type === 'directory' || node.type === 'worktree-root'
+  const diff = diffs[node.path]
+  const history = historyMap[node.path] ?? []
+  const code = codeContent[node.path]
+  const changeLet = changeLetter(node.change)
+
+  const Icon = fileIcon(node.name, {
+    isDir: node.type === 'directory',
+    isWorktreeRoot: node.type === 'worktree-root',
+  })
+
+  return (
+    <div className="flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 border-b border-border/50 px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" weight={isDir ? 'bold' : 'regular'} />
+            <div className="min-w-0">
+              <h2 className="text-[18px] font-medium text-foreground break-all">{node.name}{isDir ? '/' : ''}</h2>
+              <div className="mt-1 font-mono text-[11px] text-muted-foreground/70">{node.path}</div>
+              <div className="mt-1 font-heading text-[11px] text-muted-foreground">{formatSize(node.size)} · {node.mime_type ?? 'unknown'}</div>
+            </div>
+          </div>
+          {changeLet && (
+            <span className={cn('mt-1 shrink-0 font-heading text-[10px] border px-1.5 py-0.5', changeBgColor(node.change))}>{changeLet}</span>
           )}
         </div>
       </div>
-    )
-  }
 
-  // Fallback
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
-      <FileTextIcon className="size-8" />
-      <span className="font-mono text-[13px]">{node.name}</span>
-      <span className="text-[12px]">{formatSize(node.size)}</span>
-    </div>
-  )
-}
-
-function RightPane({
-  node,
-  diffs,
-  history: historyMap,
-}: {
-  node: FileTreeNode | null
-  diffs: Record<string, FileDiffInfo>
-  history: Record<string, FileCommitEntry[]>
-}) {
-  const { t } = useTranslation()
-
-  if (!node || node.type === 'directory') {
-    return (
-      <div className="flex items-center justify-center text-[12px] text-muted-foreground">
-        {t('files.no_preview')}
-      </div>
-    )
-  }
-
-  const diff = diffs[node.path]
-  const history = historyMap[node.path] ?? []
-
-  return (
-    <div className="flex flex-col gap-5 overflow-y-auto p-4">
-      {/* File info */}
-      <div className="flex flex-col gap-2">
-        <SectionHeader>{t('files.info')}</SectionHeader>
-        <KvList
-          items={[
-            { label: 'Path', value: <span className="truncate font-mono text-[12px]">{node.path}</span> },
-            { label: 'Size', value: formatSize(node.size) },
-            { label: 'Type', value: node.mime_type ?? 'unknown' },
-            { label: 'Change', value: node.change !== 'unchanged' ? (
-              <span className={cn('font-heading text-[11px] border px-1.5 py-0.5', changeBgColor(node.change))}>
-                {changeLetter(node.change)}
-              </span>
-            ) : <span className="text-muted-foreground">—</span> },
-          ]}
-        />
-      </div>
-
-      {/* Diff summary */}
-      {diff && (
-        <div className="flex flex-col gap-2">
-          <SectionHeader>{t('files.diff')}</SectionHeader>
-          <div className="flex items-center gap-3 text-[12px]">
-            <span className="font-mono text-green-500">{t('files.lines_added', { count: diff.added })}</span>
-            <span className="font-mono text-red-500">{t('files.lines_deleted', { count: diff.deleted })}</span>
+      <div className="flex-1 overflow-y-auto">
+        {isDir ? (
+          /* Directory listing */
+          <div className="flex flex-col">
+            {(node.children ?? []).length > 0
+              ? (node.children ?? []).map((child) => {
+                  const ChildIcon = fileIcon(child.name, {
+                    isDir: child.type === 'directory',
+                    isWorktreeRoot: child.type === 'worktree-root',
+                  })
+                  const childChangeLet = changeLetter(child.change)
+                  return (
+                    <div key={child.path} className="flex items-center gap-2.5 border-b border-border/50 px-4 py-2">
+                      <ChildIcon className="size-[18px] shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{child.name}</span>
+                      {childChangeLet && (
+                        <span className={cn('font-heading text-[10px] border px-1.5 py-0.5', changeBgColor(child.change))}>{childChangeLet}</span>
+                      )}
+                      <span className="font-heading text-[11px] text-muted-foreground">{formatSize(child.size)}</span>
+                    </div>
+                  )
+                })
+              : (
+                <div className="flex items-center justify-center py-12 text-[12px] text-muted-foreground">{t('files.empty_title')}</div>
+              )}
           </div>
-          <div className="overflow-hidden rounded-none border border-border bg-muted/10 p-2 font-mono text-[11px] leading-[18px]">
-            {diff.hunks.map((hunk, i) => (
-              <div
-                key={i}
-                className={cn(
-                  hunk.type === 'add' && 'text-green-500',
-                  hunk.type === 'delete' && 'text-red-500',
-                  hunk.type === 'context' && 'text-muted-foreground',
-                )}
-              >
-                {hunk.type === 'add' && '+ '}
-                {hunk.type === 'delete' && '- '}
-                {hunk.type === 'context' && '  '}
-                {hunk.text}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+        ) : (
+          <>
+            {/* Preview — always first */}
+            <div className="border-b border-border/50">
+              <FileViewer path={node.path} content={code} mime={node.mime_type ?? undefined} />
+            </div>
 
-      {/* Linked context */}
-      {(node.linked_task_id || node.linked_run_id) && (
-        <div className="flex flex-col gap-2">
-          <SectionHeader>{t('files.context')}</SectionHeader>
-          <KvList
-            items={[
-              ...(node.linked_task_id ? [
-                {
-                  label: 'Task',
-                  value: (
-                    <RelationLink
-                      label="Promo texty na vikendovu akciu"
-                      sublabel={node.linked_task_id}
-                    />
-                  ),
-                },
-              ] : []),
-              ...(node.linked_run_id ? [
-                {
-                  label: 'Run',
-                  value: <RelationLink label={node.linked_run_id} />,
-                },
-              ] : []),
-              ...(node.path.includes('.worktrees/') ? [
-                { label: 'Worktree', value: <span className="font-mono text-[12px]">.worktrees/T-151</span> },
-                { label: 'Branch', value: <span className="font-mono text-[12px]">task/T-151</span> },
-                { label: 'Commit', value: <span className="font-mono text-[12px]">abc123f</span> },
-              ] : []),
-            ]}
-          />
-        </div>
-      )}
-
-      {/* History */}
-      {history.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <SectionHeader>{t('files.history')}</SectionHeader>
-          <div className="flex flex-col gap-1.5">
-            {history.slice(0, 3).map((commit) => (
-              <div key={commit.hash} className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] text-primary">{commit.hash}</span>
-                  <span className="text-[11px] text-muted-foreground">{commit.time}</span>
+            {/* Diff — shown only when file has changes */}
+            {diff && node.change !== 'unchanged' && (
+              <div className="border-b border-border/50 px-5 py-4">
+                <SectionHeader>{t('files.detail_changes')}</SectionHeader>
+                <div className="mt-3 flex items-center gap-3 text-[12px]">
+                  <span className="font-mono text-green-500">{t('files.lines_added', { count: diff.added })}</span>
+                  <span className="font-mono text-red-500">{t('files.lines_deleted', { count: diff.deleted })}</span>
                 </div>
-                <span className="text-[12px] text-foreground">{commit.message}</span>
+                <div className="mt-3 overflow-hidden border border-border bg-muted/10 p-2 font-mono text-[11px] leading-[18px]">
+                  {diff.hunks.map((hunk, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        hunk.type === 'add' && 'text-green-500',
+                        hunk.type === 'delete' && 'text-red-500',
+                        hunk.type === 'context' && 'text-muted-foreground',
+                      )}
+                    >
+                      {hunk.type === 'add' ? '+ ' : hunk.type === 'delete' ? '- ' : '  '}{hunk.text}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
+
+            {/* Info */}
+            <div className="border-b border-border/50 px-5 py-4">
+              <SectionHeader>{t('files.detail_info')}</SectionHeader>
+              <div className="mt-3">
+                <KvList items={[
+                  { label: t('files.label_path'), value: <span className="truncate font-mono text-[12px]">{node.path}</span> },
+                  { label: t('files.label_size'), value: formatSize(node.size) },
+                  { label: t('files.label_type'), value: node.mime_type ?? 'unknown' },
+                  ...(node.change !== 'unchanged'
+                    ? [{ label: t('files.label_change'), value: <span className={cn('font-heading text-[11px] border px-1.5 py-0.5', changeBgColor(node.change))}>{changeLetter(node.change)}</span> }]
+                    : []),
+                ]} />
+              </div>
+            </div>
+
+            {/* Context links */}
+            {(node.linked_task_id ?? node.linked_run_id) && (
+              <div className="border-b border-border/50 px-5 py-4">
+                <SectionHeader>{t('files.context')}</SectionHeader>
+                <div className="mt-3">
+                  <KvList items={[
+                    ...(node.linked_task_id ? [{ label: t('files.label_task'), value: <RelationLink label="Promo texty na víkendovú akciu" sublabel={node.linked_task_id} /> }] : []),
+                    ...(node.linked_run_id ? [{ label: t('files.label_run'), value: <RelationLink label={node.linked_run_id} /> }] : []),
+                    ...(node.path.includes('.worktrees/') ? [
+                      { label: t('files.label_worktree'), value: <span className="font-mono text-[12px]">.worktrees/T-151</span> },
+                      { label: t('files.label_branch'), value: <span className="font-mono text-[12px]">task/T-151</span> },
+                      { label: t('files.label_commit'), value: <span className="font-mono text-[12px]">abc123f</span> },
+                    ] : []),
+                  ]} />
+                </div>
+              </div>
+            )}
+
+            {/* History */}
+            {history.length > 0 && (
+              <div className="px-5 py-4">
+                <SectionHeader>{t('files.detail_history')}</SectionHeader>
+                <div className="mt-3 flex flex-col gap-1.5">
+                  {history.slice(0, 3).map((commit) => (
+                    <div key={commit.hash} className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] text-primary">{commit.hash}</span>
+                        <span className="text-[11px] text-muted-foreground">{commit.time}</span>
+                      </div>
+                      <span className="text-[12px] text-foreground">{commit.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
 
-// ── Main Page ──
+// ─────────────────────────────────────────────
+// Main page
+// ─────────────────────────────────────────────
+
+const RESOURCE_FILTERS: ResourceFilter[] = ['all', 'docs', 'images', 'data']
+const RESOURCE_FILTER_KEYS: Record<ResourceFilter, string> = {
+  all: 'files.filter_all',
+  docs: 'files.filter_docs',
+  images: 'files.filter_images',
+  data: 'files.filter_data',
+}
+
+function matchesResourceFilter(resource: ResourceData, filter: ResourceFilter): boolean {
+  if (filter === 'all') return true
+  return TYPE_FILTER[resource.type] === filter
+}
+
+function flattenTree(nodes: FileTreeNode[]): FileTreeNode[] {
+  const result: FileTreeNode[] = []
+  for (const node of nodes) {
+    result.push(node)
+    if (node.children) {
+      result.push(...flattenTree(node.children))
+    }
+  }
+  return result
+}
 
 function FilesPage() {
   const { t } = useTranslation()
+  const { path: deepLinkPath, scope: deepLinkScope } = Route.useSearch()
 
+  // Data
+  const [resources, setResources] = useState<ResourceData[]>([])
   const [tree, setTree] = useState<FileTreeNode[]>([])
   const [codeContent, setCodeContent] = useState<Record<string, string>>({})
   const [diffs, setDiffs] = useState<Record<string, FileDiffInfo>>({})
   const [historyMap, setHistoryMap] = useState<Record<string, FileCommitEntry[]>>({})
+
+  // Workspace tree expansion
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
-    new Set(['packages', 'packages/worker', 'packages/worker/src', '.worktrees', '.worktrees/T-151'])
+    new Set(['.worktrees', '.worktrees/T-151', 'packages', 'packages/worker', 'packages/worker/src', 'artifacts']),
   )
-  const [selectedPath, setSelectedPath] = useState<string | null>('packages/worker/src/preview.ts')
-  const [scope, setScope] = useState<Scope>('all')
-  const [changedOnly, setChangedOnly] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(true)
 
-  // Load all file data from adapters
-  useEffect(() => {
-    getWorkspaceTree().then(setTree)
-  }, [])
+  // Selection
+  const [selected, setSelected] = useState<SelectedItem | null>(null)
+  // Track whether deep-link has been applied (so it fires once after data loads)
+  const [deepLinkApplied, setDeepLinkApplied] = useState(false)
 
-  // Load code, diff, history for selected file
+  // Filters / search
+  const [activeFilter, setActiveFilter] = useState<ResourceFilter>('all')
+  const [search, setSearch] = useState('')
+
   useEffect(() => {
-    if (!selectedPath) return
-    // Only fetch if not already cached
-    if (!(selectedPath in codeContent)) {
-      getFileCode(selectedPath).then((code) => {
-        if (code !== null) {
-          setCodeContent((prev) => ({ ...prev, [selectedPath]: code }))
-        }
+    getResources().then((res) => {
+      setResources(res)
+      // Only auto-select first company file when there is no deep-link
+      if (!deepLinkPath && deepLinkScope !== 'workspace' && res.length > 0) {
+        setSelected({ kind: 'company-file', resource: res[0] })
+      }
+    })
+  }, [deepLinkPath, deepLinkScope])
+  useEffect(() => { getWorkspaceTree().then(setTree) }, [])
+
+  // Lazy-load code/diff/history for selected workspace file
+  const selectedWsPath = useMemo(() => {
+    if (selected?.kind === 'workspace-file') return selected.path
+    return null
+  }, [selected])
+
+  useEffect(() => {
+    if (!selectedWsPath) return
+    if (!(selectedWsPath in codeContent)) {
+      getFileCode(selectedWsPath).then((code) => {
+        if (code !== null) setCodeContent((prev) => ({ ...prev, [selectedWsPath]: code }))
       })
     }
-    if (!(selectedPath in diffs)) {
-      getFileDiff(selectedPath).then((diff) => {
-        if (diff !== null) {
-          setDiffs((prev) => ({ ...prev, [selectedPath]: diff }))
-        }
+    if (!(selectedWsPath in diffs)) {
+      getFileDiff(selectedWsPath).then((diff) => {
+        if (diff !== null) setDiffs((prev) => ({ ...prev, [selectedWsPath]: diff }))
       })
     }
-    if (!(selectedPath in historyMap)) {
-      getFileHistory(selectedPath).then((history) => {
-        if (history.length > 0) {
-          setHistoryMap((prev) => ({ ...prev, [selectedPath]: history }))
-        }
+    if (!(selectedWsPath in historyMap)) {
+      getFileHistory(selectedWsPath).then((history) => {
+        if (history.length > 0) setHistoryMap((prev) => ({ ...prev, [selectedWsPath]: history }))
       })
     }
-  }, [selectedPath])
+  }, [selectedWsPath])
+
+  // Apply deep-link once tree is loaded
+  useEffect(() => {
+    if (deepLinkApplied || tree.length === 0) return
+    if (!deepLinkPath) return
+    // Expand parent dirs so the target file is visible
+    const parts = deepLinkPath.split('/')
+    const dirsToExpand: string[] = []
+    for (let i = 1; i < parts.length; i++) {
+      dirsToExpand.push(parts.slice(0, i).join('/'))
+    }
+    setExpandedDirs((prev) => {
+      const next = new Set(prev)
+      for (const d of dirsToExpand) next.add(d)
+      return next
+    })
+    setWorkspaceExpanded(true)
+    const node = findNode(tree, deepLinkPath)
+    if (node && node.type !== 'directory' && node.type !== 'worktree-root') {
+      setSelected({ kind: 'workspace-file', path: deepLinkPath })
+    }
+    setDeepLinkApplied(true)
+  }, [deepLinkPath, deepLinkApplied, tree])
 
   const toggleDir = useCallback((path: string) => {
     setExpandedDirs((prev) => {
       const next = new Set(prev)
-      if (next.has(path)) {
-        next.delete(path)
-      } else {
-        next.add(path)
-      }
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
       return next
     })
   }, [])
 
-  const filteredTree = useMemo(
-    () => filterTree(tree, searchQuery, changedOnly, scope),
-    [tree, searchQuery, changedOnly, scope],
-  )
+  // Filtered company resources
+  const filteredResources = useMemo(() => {
+    let items = resources.filter((r) => matchesResourceFilter(r, activeFilter))
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      items = items.filter(
+        (r) => r.filename.toLowerCase().includes(q) || (r.description ?? '').toLowerCase().includes(q),
+      )
+    }
+    return items
+  }, [resources, activeFilter, search])
 
-  const selectedNode = useMemo(
-    () => (selectedPath ? findNode(tree, selectedPath) : null),
-    [tree, selectedPath],
-  )
+  // Filtered workspace files (flat search when searching)
+  const filteredWsNodes = useMemo(() => {
+    if (!search.trim()) return tree
+    const q = search.trim().toLowerCase()
+    return flattenTree(tree).filter((n) => n.name.toLowerCase().includes(q))
+  }, [tree, search])
 
-  const scopes: Array<{ key: Scope; label: string }> = [
-    { key: 'all', label: t('files.scope_all') },
-    { key: 'worktrees', label: t('files.scope_worktrees') },
-    { key: 'outputs', label: t('files.scope_outputs') },
-    { key: 'generated', label: t('files.scope_generated') },
-  ]
+  const selectedWsNode = useMemo(() => {
+    if (selected?.kind === 'workspace-file') return findNode(tree, selected.path)
+    return null
+  }, [selected, tree])
+
+  const selectedResourceItem = selected?.kind === 'company-file' ? selected.resource : null
 
   return (
-    <div className="flex h-full flex-1 overflow-hidden">
-      {/* Left pane: File tree */}
-      <div className="flex w-[240px] shrink-0 flex-col border-r border-border">
-        {/* Header */}
-        <div className="flex flex-col gap-2 border-b border-border px-3 py-3">
-          <h2 className="font-heading text-[15px] font-bold tracking-tight">{t('files.title')}</h2>
+    <ListDetail
+      listSize={40}
+      list={
+        <ListPanel
+          header={
+            <>
+              <div className="flex items-center justify-between">
+                <h2 className="font-heading text-[14px] font-bold tracking-tight">{t('files.title')}</h2>
+                <Button size="sm" variant="ghost" onClick={() => alert(t('files.viewer_download'))}>
+                  +
+                </Button>
+              </div>
+              {/* Search */}
+              <div className="relative mt-3">
+                <MagnifyingGlassIcon className="absolute left-0 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t('files.search')}
+                  className="h-7 w-full bg-transparent pl-5 font-heading text-[12px] text-foreground outline-none placeholder:text-muted-foreground/60"
+                />
+              </div>
+              {/* Filters */}
+              <div className="mt-2 flex flex-wrap gap-1">
+                {RESOURCE_FILTERS.map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setActiveFilter(f)}
+                    className={cn(
+                      'font-heading text-[11px] px-2 py-0.5 transition-colors',
+                      activeFilter === f
+                        ? 'bg-foreground text-background'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {t(RESOURCE_FILTER_KEYS[f])}
+                  </button>
+                ))}
+              </div>
+            </>
+          }
+        >
+          {filteredResources.length === 0 && filteredWsNodes.length === 0 ? (
+            <EmptyState title={t('files.empty_title')} description={t('files.empty_desc')} />
+          ) : (
+            <>
+              {/* Company files section */}
+              {filteredResources.length > 0 && (
+                <>
+                  <ScopeHeader
+                    title={t('files.scope_company')}
+                    description={t('files.scope_company_desc')}
+                  />
+                  {filteredResources.map((resource) => {
+                    const Icon = fileIcon(resource.filename)
+                    return (
+                      <FileRow
+                        key={resource.id}
+                        icon={Icon}
+                        name={resource.filename}
+                        sublabel={resource.description ?? resource.type}
+                        metaRight={
+                          <div className="flex items-center gap-2">
+                            <span className="font-heading text-[11px] text-muted-foreground">{resource.size}</span>
+                            <StatusPill
+                              status={STATUS_PILL_MAP[resource.status]}
+                              label={t(STATUS_I18N[resource.status])}
+                              pulse={resource.status === 'processing'}
+                            />
+                          </div>
+                        }
+                        selected={selected?.kind === 'company-file' && selected.resource.id === resource.id}
+                        onClick={() => setSelected({ kind: 'company-file', resource })}
+                      />
+                    )
+                  })}
+                </>
+              )}
 
-          {/* Scope chips */}
-          <div className="flex flex-wrap gap-1">
-            {scopes.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                className={cn(
-                  'font-heading text-[10px] px-2 py-0.5 transition-colors',
-                  scope === s.key
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-                onClick={() => setScope(s.key)}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Search */}
-          <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder={t('files.search')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-muted/20 py-1 pl-7 pr-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+              {/* Task files section — collapsible */}
+              {tree.length > 0 && (
+                <>
+                  <ScopeHeader
+                    title={t('files.scope_workspace')}
+                    description={t('files.scope_workspace_desc')}
+                    collapsible
+                    expanded={workspaceExpanded}
+                    onToggle={() => setWorkspaceExpanded((v) => !v)}
+                  />
+                  {workspaceExpanded && (search.trim() ? filteredWsNodes : tree).map((node) => (
+                    <WsFileRow
+                      key={node.path}
+                      node={node}
+                      depth={0}
+                      expandedDirs={expandedDirs}
+                      selectedPath={selected?.kind === 'workspace-file' ? selected.path : null}
+                      onToggle={toggleDir}
+                      onSelect={(path) => {
+                        const n = findNode(tree, path)
+                        if (!n) return
+                        const isDir = n.type === 'directory' || n.type === 'worktree-root'
+                        if (!isDir) setSelected({ kind: 'workspace-file', path })
+                      }}
+                    />
+                  ))}
+                </>
+              )}
+            </>
+          )}
+        </ListPanel>
+      }
+      detail={
+        selectedResourceItem ? (
+          <CompanyDetail resource={selectedResourceItem} />
+        ) : selectedWsNode ? (
+          <WorkspaceDetail
+            node={selectedWsNode}
+            codeContent={codeContent}
+            diffs={diffs}
+            historyMap={historyMap}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <EmptyState
+              title={t('files.title')}
+              description={t('files.empty_desc')}
             />
           </div>
-
-          {/* Changed only toggle */}
-          <button
-            type="button"
-            className={cn(
-              'flex items-center gap-1.5 font-heading text-[10px] transition-colors',
-              changedOnly ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
-            )}
-            onClick={() => setChangedOnly(!changedOnly)}
-          >
-            <span className={cn(
-              'size-2.5 rounded-sm border transition-colors',
-              changedOnly ? 'border-primary bg-primary' : 'border-muted-foreground/40',
-            )} />
-            {t('files.changed_only')}
-          </button>
-        </div>
-
-        {/* Tree */}
-        <div className="flex-1 overflow-y-auto py-1">
-          <TreeView
-            nodes={filteredTree}
-            depth={0}
-            expandedDirs={expandedDirs}
-            selectedPath={selectedPath}
-            onToggle={toggleDir}
-            onSelect={setSelectedPath}
-          />
-        </div>
-      </div>
-
-      {/* Center pane: Preview */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <CenterPane node={selectedNode} codeContent={codeContent} onSelect={setSelectedPath} />
-      </div>
-
-      {/* Right pane: Metadata */}
-      <div className="w-[300px] shrink-0 border-l border-border overflow-hidden">
-        <RightPane node={selectedNode} diffs={diffs} history={historyMap} />
-      </div>
-    </div>
+        )
+      }
+    />
   )
 }

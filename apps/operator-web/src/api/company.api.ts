@@ -10,10 +10,3 @@ export async function getCompanyProfile(): Promise<CompanyProfile> {
   return mockCompanyProfile
 }
 
-export async function updateCompanyField(
-  _field: string,
-  _value: string,
-): Promise<void> {
-  await delay(100)
-  // In real implementation: PATCH /api/company { [field]: value }
-}

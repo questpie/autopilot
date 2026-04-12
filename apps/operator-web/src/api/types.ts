@@ -20,8 +20,9 @@ export interface Task {
   assigned_to: string | null
   workflow_id: string | null
   workflow_step: string | null
-  context: Record<string, unknown>
-  metadata: Record<string, unknown>
+  // Runtime DB fields — JSON strings stored as text
+  context: string
+  metadata: string
   queue: string | null
   start_after: string | null
   scheduled_by: string | null
@@ -41,7 +42,9 @@ export interface Run {
   runtime: string
   model: string | null
   provider: string | null
+  variant: string | null
   status: RunStatus
+  initiated_by: string | null
   instructions: string | null
   summary: string | null
   tokens_input: number
@@ -50,8 +53,10 @@ export interface Run {
   started_at: string | null
   ended_at: string | null
   created_at: string
-  resumable: boolean
+  runtime_session_ref: string | null
   resumed_from_run_id: string | null
+  preferred_worker_id: string | null
+  resumable: boolean
 }
 
 // ── Artifact ──
@@ -78,7 +83,8 @@ export interface Artifact {
   ref_kind: ArtifactRefKind
   ref_value: string
   mime_type: string | null
-  metadata: Record<string, unknown>
+  // Runtime DB field — JSON string stored as text
+  metadata: string
   blob_id: string | null
   created_at: string
 }
@@ -95,9 +101,10 @@ export interface Schedule {
   timezone: string
   agent_id: string
   workflow_id: string | null
-  task_template: Record<string, unknown>
+  // Runtime DB fields — JSON strings stored as text
+  task_template: string
   mode: ScheduleMode
-  query_template: Record<string, unknown>
+  query_template: string
   concurrency_policy: ConcurrencyPolicy
   enabled: boolean
   last_run_at: string | null
@@ -134,8 +141,46 @@ export interface Query {
   created_by: string
   created_at: string
   ended_at: string | null
-  metadata: Record<string, unknown>
+  // Runtime DB field — JSON string stored as text
+  metadata: string
   session_id: string | null
+  promoted_task_id: string | null
+}
+
+// ── Session ──
+// Mirrors packages/spec/src/schemas/session.ts — SessionRowSchema + SessionMessageRowSchema
+export type SessionMode = 'query' | 'task_thread'
+export type SessionStatus = 'active' | 'closed'
+
+export interface Session {
+  id: string
+  provider_id: string
+  external_conversation_id: string
+  external_thread_id: string | null
+  mode: SessionMode
+  task_id: string | null
+  status: SessionStatus
+  created_at: string
+  updated_at: string
+  // Runtime DB field — JSON string stored as text
+  metadata: string
+  runtime_session_ref: string | null
+  preferred_worker_id: string | null
+}
+
+// ── Session Message ──
+export type SessionMessageRole = 'user' | 'assistant' | 'system'
+
+export interface SessionMessage {
+  id: string
+  session_id: string
+  role: SessionMessageRole
+  content: string
+  query_id: string | null
+  external_message_id: string | null
+  // Runtime DB field — JSON string stored as text
+  metadata: string
+  created_at: string
 }
 
 // ── Worker ──
@@ -157,37 +202,59 @@ export interface WorkerCapability {
   tags: string[]
 }
 
-// ── Run Event ──
+// ── Run Event (persisted row) ──
 export interface RunEvent {
-  id: string
+  id: number
   run_id: string
   type: string
-  data: Record<string, unknown>
+  summary: string | null
+  // Runtime DB field — JSON string stored as text
+  metadata: string
   created_at: string
 }
 
 // ── SSE Event ──
-export type AutopilotEventType =
-  | 'task_changed'
-  | 'run_event'
-  | 'run_completed'
-  | 'worker_registered'
-  | 'worker_offline'
-  | 'heartbeat'
+// Mirrors packages/orchestrator/src/events/event-bus.ts — AutopilotEvent
+export type AutopilotEvent =
+  | { type: 'task_changed'; taskId: string; status: string }
+  | { type: 'task_created'; taskId: string; title: string }
+  | { type: 'run_started'; runId: string; agentId: string }
+  | { type: 'run_event'; runId: string; eventType: string; summary: string }
+  | { type: 'run_completed'; runId: string; status: string }
+  | { type: 'run_steer'; runId: string; message: string }
+  | { type: 'worker_registered'; workerId: string }
+  | { type: 'worker_offline'; workerId: string }
+  | { type: 'message'; channelId: string; fromId: string }
+  | { type: 'task_relation_created'; sourceTaskId: string; targetTaskId: string; relationType: string }
+  | { type: 'settings_changed' }
+  | { type: 'heartbeat'; ts: string }
 
-export interface AutopilotEvent {
-  type: AutopilotEventType
-  taskId?: string
-  status?: string
-  runId?: string
-  eventType?: string
-  summary?: string
-  workerId?: string
-  ts?: string
+// ── Worker Event ──
+// Mirrors packages/spec/src/schemas/worker-event.ts — WorkerEventSchema
+export type WorkerEventType =
+  | 'started'
+  | 'progress'
+  | 'tool_use'
+  | 'artifact'
+  | 'message_sent'
+  | 'task_updated'
+  | 'approval_needed'
+  | 'error'
+  | 'completed'
+  | 'external_action'
+
+export interface WorkerEvent {
+  type: WorkerEventType
+  summary: string
+  metadata?: Record<string, unknown>
 }
 
 // ── View models for screens without backend API yet ──
 
+/**
+ * FE projection over Provider — no canonical spec schema exists for this type.
+ * This is a UI-only convenience model derived from provider connection state.
+ */
 export interface Integration {
   id: string
   provider: string
@@ -199,21 +266,6 @@ export interface Integration {
   created_at: string
 }
 
-export interface Playbook {
-  id: string
-  name: string
-  description: string
-  status: 'active' | 'draft' | 'disabled'
-  trigger: 'scheduled' | 'manual' | 'on_demand'
-  skill_id: string | null
-  linked_schedule_ids: string[]
-  resource_refs: string[]
-  last_used_at: string | null
-  usage_count: number
-  success_rate: number
-  created_at: string
-}
-
 export interface CompanyProfile {
   name: string
   description: string
@@ -222,47 +274,54 @@ export interface CompanyProfile {
 }
 
 // ── Workflow ──
+// Mirrors packages/spec/src/schemas/workflow.ts — WorkflowSchema + WorkflowStepSchema
+
+export type WorkflowStepType = 'agent' | 'human_approval' | 'wait_for_children' | 'done'
 
 export interface WorkflowStep {
-  name: string
-  type: 'trigger' | 'action' | 'condition'
+  id: string
+  name: string | null
+  type: WorkflowStepType
+  /** The agent that executes this step. Required for 'agent' steps. */
+  agent_id: string | null
+  /** Instructions passed to the agent run. */
+  instructions: string | null
+  /** Who can approve. Only meaningful for 'human_approval' steps. */
+  approvers: string[]
+  /** External actions to execute after the step's run completes. */
+  actions: Array<Record<string, unknown>>
 }
 
 export interface Workflow {
   id: string
   name: string
+  description: string
+  workspace?: { mode: 'none' | 'isolated_worktree' }
   steps: WorkflowStep[]
 }
 
 // ── Script ──
+// Mirrors packages/spec/src/schemas/script.ts — StandaloneScriptSchema
+
+export type ScriptRunner = 'bun' | 'node' | 'python3' | 'bash' | 'exec'
+export type ScriptInputType = 'string' | 'number' | 'boolean' | 'json'
 
 export interface Script {
   id: string
   name: string
   description: string
-  runtime: 'bun' | 'node' | 'python3' | 'bash'
   entry_point: string
-  inputs: Array<{ name: string; type: string; required: boolean }>
-  outputs: Array<{ name: string; type: string }>
-  linked_workflow_ids: string[]
-  linked_task_ids: string[]
-  last_run_at: string | null
-  created_at: string
-}
-
-// ── Playbook step/execution (mock view models) ──
-
-export interface PlaybookStep {
-  name: string
-  description: string
-  type: 'gather' | 'execute' | 'review' | 'deliver'
-}
-
-export interface PlaybookExecution {
-  date: string
-  task_id: string
-  status: 'completed' | 'failed'
-  outcome: string
+  runner: ScriptRunner
+  inputs: Array<{ name: string; description: string; type: ScriptInputType; required: boolean }>
+  outputs: Array<{ name: string; description: string; type: ScriptInputType }>
+  sandbox: {
+    fs_scope: { read: string[]; write: string[] }
+    network: 'none' | 'local' | 'unrestricted'
+    timeout_ms: number
+  }
+  env?: Record<string, string>
+  secret_env?: Record<string, string>
+  tags: string[]
 }
 
 // ── View Models (derived for UI, NOT in backend) ──
