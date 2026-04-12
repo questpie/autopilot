@@ -33,6 +33,7 @@ import { workers } from './routes/workers'
 import { enrollment } from './routes/enrollment'
 import { previews } from './routes/previews'
 import { intake } from './routes/intake'
+import { chatSessions } from './routes/chat-sessions'
 import { conversations } from './routes/conversations'
 import { taskGraph } from './routes/task-graph'
 import { secrets } from './routes/secrets'
@@ -282,6 +283,8 @@ export function createApp(config: AppConfig) {
 	// ── Session routes (user auth — operator surface) ────────────────
 	app.use('/api/sessions/*', userAuth)
 	app.use('/api/sessions', userAuth)
+	app.use('/api/chat-sessions/*', userAuth)
+	app.use('/api/chat-sessions', userAuth)
 
 	// ── Schedule routes (user auth — operator surface) ───────────────
 	app.use('/api/schedules/*', userAuth)
@@ -326,6 +329,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/secrets', secrets)
 		.route('/api/queries', queries)
 		.route('/api/sessions', sessionsRoute)
+		.route('/api/chat-sessions', chatSessions)
 		.route('/api/schedules', schedules)
 		.route('/api/queues', queues)
 		.route('/api/search', searchRoute)
