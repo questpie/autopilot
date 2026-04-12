@@ -81,4 +81,5 @@ export const QueryRowSchema = z.object({
 	ended_at: z.string().nullable(),
 	metadata: z.string(),
 	session_id: z.string().nullable(),
+	promoted_task_id: z.string().nullable().optional(),
 })

@@ -234,6 +234,28 @@ export class ScheduleService {
 				.update(scheduleExecutions)
 				.set({ status: terminalStatus })
 				.where(eq(scheduleExecutions.id, triggered.id))
+
+			// Drain queue: promote the oldest queued execution so the next tick picks it up
+			const queued = await this.db
+				.select()
+				.from(scheduleExecutions)
+				.where(
+					and(
+						eq(scheduleExecutions.schedule_id, scheduleId),
+						eq(scheduleExecutions.status, 'queued'),
+					),
+				)
+				.orderBy(scheduleExecutions.triggered_at)
+				.limit(1)
+				.get()
+			if (queued) {
+				await this.db
+					.update(scheduleExecutions)
+					.set({ status: 'triggered' })
+					.where(eq(scheduleExecutions.id, queued.id))
+				console.log(`[schedules] promoted queued execution ${queued.id} to triggered for schedule ${scheduleId}`)
+			}
+
 			return undefined
 		}
 

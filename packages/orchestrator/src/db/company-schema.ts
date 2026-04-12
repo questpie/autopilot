@@ -361,12 +361,15 @@ export const queries = sqliteTable(
 		metadata: text('metadata').default('{}'),
 		/** Session this query belongs to. */
 		session_id: text('session_id'),
+		/** Task ID if this query was promoted to a task. */
+		promoted_task_id: text('promoted_task_id'),
 	},
 	(table) => [
 		index('idx_queries_status').on(table.status),
 		index('idx_queries_agent').on(table.agent_id),
 		index('idx_queries_created').on(table.created_at),
 		index('idx_queries_session').on(table.session_id),
+		index('idx_queries_promoted').on(table.promoted_task_id),
 	],
 )
 
@@ -460,7 +463,7 @@ export const scheduleExecutions = sqliteTable(
 		schedule_id: text('schedule_id').notNull(),
 		task_id: text('task_id'),
 		query_id: text('query_id'),
-		status: text('status').notNull().default('triggered'), // triggered | completed | skipped | failed
+		status: text('status').notNull().default('triggered'), // triggered | completed | skipped | failed | queued
 		skip_reason: text('skip_reason'),
 		error: text('error'),
 		triggered_at: text('triggered_at').notNull(),

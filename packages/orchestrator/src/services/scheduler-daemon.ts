@@ -96,20 +96,34 @@ export class SchedulerDaemon {
 		const concurrencyPolicy = schedule.concurrency_policy ?? 'skip'
 
 		// ── Concurrency check ───────────────────────────────────────────
-		if (concurrencyPolicy === 'skip') {
+		if (concurrencyPolicy !== 'allow') {
 			const active = await this.scheduleService.findActiveExecution(schedule.id)
 			if (active) {
-				console.log(`[scheduler] skipping ${schedule.id} — active execution ${active.id} in progress`)
-				await this.scheduleService.recordExecution({
-					schedule_id: schedule.id,
-					status: 'skipped',
-					skip_reason: `active execution ${active.id} still in progress`,
-					triggered_at: now.toISOString(),
-				})
-				await this.scheduleService.advanceSchedule(schedule.id, now)
-				return
+				if (concurrencyPolicy === 'skip') {
+					console.log(`[scheduler] skipping ${schedule.id} — active execution ${active.id} in progress`)
+					await this.scheduleService.recordExecution({
+						schedule_id: schedule.id,
+						status: 'skipped',
+						skip_reason: `active execution ${active.id} still in progress`,
+						triggered_at: now.toISOString(),
+					})
+					await this.scheduleService.advanceSchedule(schedule.id, now)
+					return
+				}
+				if (concurrencyPolicy === 'queue') {
+					console.log(`[scheduler] queueing ${schedule.id} — active execution ${active.id} in progress`)
+					await this.scheduleService.recordExecution({
+						schedule_id: schedule.id,
+						status: 'queued',
+						skip_reason: `queued behind active execution ${active.id}`,
+						triggered_at: now.toISOString(),
+					})
+					await this.scheduleService.advanceSchedule(schedule.id, now)
+					return
+				}
 			}
 		}
+		// 'allow' falls through — no concurrency check needed
 
 		// ── Execute based on mode ───────────────────────────────────────
 		if (mode === 'query') {

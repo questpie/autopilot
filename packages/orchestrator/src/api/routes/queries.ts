@@ -108,7 +108,58 @@ const queries = new Hono<AppEnv>()
 				created_by: query.created_by,
 				created_at: query.created_at,
 				ended_at: query.ended_at,
+				promoted_task_id: query.promoted_task_id ?? null,
 			}, 200)
+		},
+	)
+	// POST /queries/:id/promote — promote a query to a durable task
+	.post(
+		'/:id/promote',
+		zValidator('param', z.object({ id: z.string() })),
+		zValidator(
+			'json',
+			z.object({
+				title: z.string().min(1),
+				type: z.string().default('promoted'),
+				description: z.string().optional(),
+				priority: z.string().optional(),
+				workflow_id: z.string().optional(),
+			}),
+		),
+		async (c) => {
+			const { queryService, workflowEngine } = c.get('services')
+			const { id } = c.req.valid('param')
+			const body = c.req.valid('json')
+			const actor = c.get('actor')?.id ?? 'system'
+
+			const query = await queryService.get(id)
+			if (!query) return c.json({ error: 'query not found' }, 404)
+			if (query.promoted_task_id) {
+				return c.json({ error: 'query already promoted', task_id: query.promoted_task_id }, 409)
+			}
+
+			const result = await workflowEngine.materializeTask({
+				title: body.title,
+				type: body.type,
+				description: body.description ?? query.prompt,
+				priority: body.priority,
+				assigned_to: query.agent_id,
+				workflow_id: body.workflow_id,
+				context: JSON.stringify({ promoted_from_query: id }),
+				created_by: actor,
+			})
+
+			if (!result) {
+				return c.json({ error: 'failed to create task' }, 500)
+			}
+
+			await queryService.promote(id, result.task.id)
+
+			return c.json({
+				query_id: id,
+				task_id: result.task.id,
+				run_id: result.runId,
+			}, 201)
 		},
 	)
 

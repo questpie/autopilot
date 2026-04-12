@@ -136,6 +136,22 @@ export class QueryService {
 			.get()
 	}
 
+	/**
+	 * Mark a query as promoted to a task.
+	 * Does NOT create the task — caller must do that via WorkflowEngine.materializeTask().
+	 */
+	async promote(queryId: string, taskId: string): Promise<QueryRow | undefined> {
+		const query = await this.get(queryId)
+		if (!query) return undefined
+		if (query.promoted_task_id) return undefined // already promoted
+
+		await this.db
+			.update(queries)
+			.set({ promoted_task_id: taskId })
+			.where(eq(queries.id, queryId))
+		return this.get(queryId)
+	}
+
 	/** Complete a query with results from its run. */
 	async complete(
 		queryId: string,
