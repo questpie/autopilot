@@ -48,9 +48,6 @@ export async function createCompanyDb(companyRoot: string): Promise<CompanyDbRes
 	const migrationsDir = join(import.meta.dir, '..', '..', 'drizzle')
 	await migrate(db, { migrationsFolder: migrationsDir })
 
-	// FTS5 for messages full-text search
-	await initMessagesFts(client)
-
 	return { db, raw: client }
 }
 
@@ -216,44 +213,6 @@ async function initChunksFts(client: Client): Promise<void> {
 		`)
 	} catch (err) {
 		console.warn('[db] chunks FTS5 triggers failed:', err instanceof Error ? err.message : String(err))
-	}
-}
-
-/**
- * FTS5 virtual table + triggers for messages full-text search (company DB).
- */
-async function initMessagesFts(client: Client): Promise<void> {
-	try {
-		await client.execute(`
-			CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-				content,
-				content=messages,
-				content_rowid=rowid
-			)
-		`)
-	} catch (err) {
-		console.warn('[db] messages FTS5 init failed:', err instanceof Error ? err.message : String(err))
-	}
-
-	try {
-		await client.execute(`
-			CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
-				INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
-			END
-		`)
-		await client.execute(`
-			CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
-				INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
-			END
-		`)
-		await client.execute(`
-			CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
-				INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.rowid, old.content);
-				INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
-			END
-		`)
-	} catch (err) {
-		console.warn('[db] messages FTS5 triggers failed:', err instanceof Error ? err.message : String(err))
 	}
 }
 

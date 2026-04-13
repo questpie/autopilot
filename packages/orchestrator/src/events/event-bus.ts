@@ -7,7 +7,6 @@ export type AutopilotEvent =
 	| { type: 'run_steer'; runId: string; message: string }
 	| { type: 'worker_registered'; workerId: string }
 	| { type: 'worker_offline'; workerId: string }
-	| { type: 'message'; channelId: string; fromId: string }
 	| { type: 'task_relation_created'; sourceTaskId: string; targetTaskId: string; relationType: string }
 	| { type: 'settings_changed' }
 

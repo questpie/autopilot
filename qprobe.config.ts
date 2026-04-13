@@ -9,13 +9,6 @@ export default defineConfig({
 			port: 7778,
 			health: '/api/status',
 		},
-		dashboard: {
-			cmd: 'bun node_modules/.bin/vite dev --port 3001',
-			cwd: 'apps/dashboard-v2',
-			ready: 'Local',
-			port: 3001,
-			depends: ['orchestrator'],
-		},
 	},
 	http: {
 		baseUrl: 'http://localhost:7778',

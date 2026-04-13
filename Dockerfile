@@ -15,7 +15,6 @@ COPY packages/orchestrator/package.json packages/orchestrator/package.json
 COPY packages/worker/package.json packages/worker/package.json
 COPY packages/spec/package.json packages/spec/package.json
 COPY packages/mcp-server/package.json packages/mcp-server/package.json
-COPY apps/dashboard-v2/package.json apps/dashboard-v2/package.json
 COPY apps/docs/package.json apps/docs/package.json
 
 RUN bun install --frozen-lockfile --ignore-scripts
@@ -30,7 +29,6 @@ COPY packages/orchestrator/package.json packages/orchestrator/package.json
 COPY packages/worker/package.json packages/worker/package.json
 COPY packages/spec/package.json packages/spec/package.json
 COPY packages/mcp-server/package.json packages/mcp-server/package.json
-COPY apps/dashboard-v2/package.json apps/dashboard-v2/package.json
 COPY apps/docs/package.json apps/docs/package.json
 
 RUN bun install --frozen-lockfile --ignore-scripts --production && \

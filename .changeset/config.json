@@ -7,5 +7,5 @@
 	"access": "public",
 	"baseBranch": "main",
 	"updateInternalDependencies": "patch",
-	"ignore": ["dashboard-v2", "@questpie/autopilot-docs"]
+	"ignore": ["@questpie/autopilot-docs"]
 }

@@ -35,7 +35,7 @@ This is a Bun monorepo managed with Turbo.
 | `@questpie/autopilot-orchestrator` | `packages/orchestrator/` | Core engine — FS watcher, workflow engine, agent spawner, context assembler, memory extractor, cron scheduler, webhook server, session stream, write queue, API server |
 | `@questpie/autopilot-agents` | `packages/agents/` | Agent system prompt templates and prompt builder for all 8 agent roles |
 | `@questpie/autopilot` | `packages/cli/` | CLI interface — `autopilot init`, `start`, `ask`, `attach`, `inbox`, `agents`, `status`, `tasks` |
-| `dashboard-v2` | `apps/dashboard-v2/` | Living Dashboard — React 19 + TanStack Start + Tailwind CSS 4 |
+| `operator-web` | `apps/operator-web/` | Operator Web — React 19 + TanStack Router + Tailwind CSS 4 |
 | `@questpie/autopilot-docs` | `apps/docs/` | Documentation site (Fumadocs) |
 | `@questpie/avatar` | `packages/avatar/` | Deterministic SVG avatar generator |
 
@@ -218,17 +218,16 @@ test(spec): add schema validation for nested task refs
 6. Commit with a conventional commit message
 7. Open a PR against `main`
 
-## Dashboard Development
+## Operator Web Development
 
-The Living Dashboard is a React 19 + TanStack Start app in `apps/dashboard-v2/`:
+The Operator Web is a React 19 + TanStack Router app in `apps/operator-web/`:
 
 ```bash
-cd apps/dashboard-v2
+cd apps/operator-web
 bun run dev
-# Opens at http://localhost:3000
 ```
 
-- React 19 + TanStack Start + TanStack Query
+- React 19 + TanStack Router + TanStack Query
 - Tailwind CSS 4 + Base UI components
 - Vite with HMR
 

@@ -96,7 +96,6 @@ const chatSessions = new Hono<AppEnv>()
 				agentId: z.string(),
 				message: z.string(),
 				attachments: z.array(attachmentSchema).optional(),
-				channelId: z.string().optional(),
 			}),
 		),
 		async (c) => {
