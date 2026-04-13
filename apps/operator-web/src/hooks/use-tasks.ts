@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getTasks, getTaskDetail, getTaskActivity, getTaskArtifacts, approveTask, rejectTask } from '@/api/tasks.api'
+import { getTasks, getTaskDetail, getTaskActivity, getTaskArtifacts, approveTask, rejectTask, replyTask } from '@/api/tasks.api'
 
 export const taskKeys = {
   all: ['tasks'] as const,
@@ -56,6 +56,18 @@ export function useRejectTask() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, message }: { id: string; message: string }) => rejectTask(id, message),
+    onSuccess: (_data, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.detail(id) })
+      void queryClient.invalidateQueries({ queryKey: taskKeys.activity(id) })
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all })
+    },
+  })
+}
+
+export function useReplyTask() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, message }: { id: string; message: string }) => replyTask(id, message),
     onSuccess: (_data, { id }) => {
       void queryClient.invalidateQueries({ queryKey: taskKeys.detail(id) })
       void queryClient.invalidateQueries({ queryKey: taskKeys.activity(id) })

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { getRuns, getRun } from '@/api/runs.api'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { getRuns, getRun, steerRun } from '@/api/runs.api'
 
 export const runKeys = {
   all: ['runs'] as const,
@@ -19,5 +19,15 @@ export function useRunDetail(id: string | null) {
     queryKey: runKeys.detail(id!),
     queryFn: () => getRun(id!),
     enabled: id !== null,
+  })
+}
+
+export function useSteerRun() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ runId, message }: { runId: string; message: string }) => steerRun(runId, message),
+    onSuccess: (_data, { runId }) => {
+      void queryClient.invalidateQueries({ queryKey: runKeys.detail(runId) })
+    },
   })
 }

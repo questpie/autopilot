@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { ChatCircle, GearSix, Plus } from '@phosphor-icons/react'
+import { SquareBuildLogo } from '@/components/brand'
 import { fileIcon } from '@/lib/file-icons'
 import { useChatSessions } from '@/hooks/use-chat-sessions'
 import { useQueryList } from '@/hooks/use-queries'
@@ -328,7 +329,14 @@ export function Sidebar() {
 
   return (
     <ShadcnSidebar collapsible="offcanvas">
-      <SidebarHeader className="flex flex-row items-center justify-end px-2 py-2">
+      <SidebarHeader className="flex flex-row items-center gap-2 px-3 py-2">
+        <Link to="/" className="flex items-center gap-2 text-foreground">
+          <SquareBuildLogo size={16} />
+          <span className="font-mono text-[11px] font-bold uppercase tracking-widest">
+            Autopilot
+          </span>
+        </Link>
+        <div className="flex-1" />
         <SidebarTrigger />
       </SidebarHeader>
       <SidebarContent>

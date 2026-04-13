@@ -8,6 +8,7 @@ import { vfsKeys } from '@/hooks/use-vfs'
 import { resolveViewer } from '@/lib/viewer-registry'
 import { Spinner } from '@/components/ui/spinner'
 import { Markdown } from '@/components/ui/markdown'
+import { TiptapEditor } from '@/components/ui/tiptap-editor'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -179,27 +180,39 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
 
   const [editMode, setEditMode] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // Monaco editor ref — used for code/structured/plain files
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
+
+  // Tiptap-managed markdown content — only used when viewer.type === 'markdown'
+  const tiptapContentRef = useRef<string>('')
 
   const handleEditorMount: OnMount = useCallback((editor) => {
     editorRef.current = editor
   }, [])
 
   const handleEdit = useCallback(() => {
+    if (data) {
+      tiptapContentRef.current = data.content ?? ''
+    }
     setEditMode(true)
-  }, [])
+  }, [data])
 
   const handleCancel = useCallback(() => {
-    // Reset editor content to the last saved value
+    // Reset Monaco editor content to the last saved value (code files)
     if (editorRef.current && data) {
       editorRef.current.setValue(data.content ?? '')
     }
+    // Tiptap resets via key-based remount (content prop drives initial state)
     setEditMode(false)
   }, [data])
 
   const handleSave = useCallback(async () => {
-    if (!editorRef.current) return
-    const content = editorRef.current.getValue()
+    const viewer = data ? resolveViewer(path, data.contentType) : null
+    const content =
+      viewer?.type === 'markdown'
+        ? tiptapContentRef.current
+        : editorRef.current?.getValue() ?? ''
     setSaving(true)
     try {
       await vfsWrite(uri, content)
@@ -208,13 +221,13 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
     } finally {
       setSaving(false)
     }
-  }, [uri, queryClient])
+  }, [uri, queryClient, data, path])
 
   // Only company:// URIs are writable (workspace is read-only)
   const canEdit = runId === null
 
   const viewer = data ? resolveViewer(path, data.contentType) : null
-  const isCodeLike = viewer && (viewer.type === 'code' || viewer.type === 'structured' || viewer.type === 'plain')
+  const isEditable = viewer && (viewer.type === 'code' || viewer.type === 'structured' || viewer.type === 'plain' || viewer.type === 'markdown')
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -222,7 +235,7 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
       <div className="shrink-0 border-b border-border px-4 py-3 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
           <BreadcrumbNav runId={runId} path={path} onBack={onBack} />
-          {canEdit && isCodeLike && data && !isLoading && !error && (
+          {canEdit && isEditable && data && !isLoading && !error && (
             <div className="flex items-center gap-1">
               {editMode ? (
                 <>
@@ -305,11 +318,22 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
             )
           }
 
+          if (viewer.type === 'markdown' && editMode) {
+            return (
+              <div className="h-full overflow-hidden">
+                <TiptapEditor
+                  content={data.content ?? ''}
+                  editable
+                  onChange={(md) => { tiptapContentRef.current = md }}
+                />
+              </div>
+            )
+          }
+
           if (
             viewer.type === 'code' ||
             viewer.type === 'structured' ||
-            viewer.type === 'plain' ||
-            (viewer.type === 'markdown' && editMode)
+            viewer.type === 'plain'
           ) {
             return (
               <div className="h-full p-4">

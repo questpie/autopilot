@@ -1,6 +1,5 @@
 import { ChatCircle, CheckSquare, Folder, GearSix, MagnifyingGlass, SignOut } from '@phosphor-icons/react'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { SquareBuildLogo } from '@/components/brand'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import {
@@ -41,14 +40,6 @@ export function Topbar({ onSearchOpen }: TopbarProps) {
 
   return (
     <header className="sticky top-0 z-50 flex h-12 shrink-0 items-center border-b border-border bg-background px-3">
-      {/* Left: brand → links to home */}
-      <Link to="/" className="flex items-center gap-2 text-foreground">
-        <SquareBuildLogo size={18} />
-        <span className="font-mono text-[12px] font-bold uppercase tracking-widest">
-          Autopilot
-        </span>
-      </Link>
-
       <div className="flex-1" />
 
       {/* Center: CMS-style pill tabs */}
@@ -81,15 +72,15 @@ export function Topbar({ onSearchOpen }: TopbarProps) {
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
-          size="default"
+          size="sm"
           onClick={onSearchOpen}
           aria-label="Open command palette"
           aria-keyshortcuts="Meta+K"
-          className="h-8 gap-2 px-3 font-mono text-xs text-muted-foreground"
+          className="gap-2 font-mono text-xs text-muted-foreground"
         >
           <MagnifyingGlass size={14} />
           <span className="hidden md:inline">Search</span>
-          <Kbd className="ml-1 hidden md:inline leading-none">⌘K</Kbd>
+          <Kbd className="ml-1 hidden md:inline">⌘K</Kbd>
         </Button>
 
         <DropdownMenu>
