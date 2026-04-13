@@ -9,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
 import { useActiveView } from '@/hooks/use-active-view'
 import { useSession } from '@/hooks/use-session'
 import { authClient } from '@/lib/auth'
@@ -27,6 +28,7 @@ interface TopbarProps {
 export function Topbar({ onSearchOpen }: TopbarProps) {
   const activeView = useActiveView()
   const { user } = useSession()
+  const { open: sidebarOpen } = useSidebar()
   const navigate = useNavigate()
 
   const initials = user?.name
@@ -40,6 +42,7 @@ export function Topbar({ onSearchOpen }: TopbarProps) {
 
   return (
     <header className="sticky top-0 z-50 flex h-12 shrink-0 items-center border-b border-border bg-background px-3">
+      {!sidebarOpen && <SidebarTrigger className="mr-2" />}
       <div className="flex-1" />
 
       {/* Center: CMS-style pill tabs */}

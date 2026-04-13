@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
 import { SmartText } from '@/lib/smart-links'
 import type { TaskWithRelations, Task } from '@/api/types'
 import { useWorkflows } from '@/hooks/use-workflows'
-import { useRuns, useSteerRun } from '@/hooks/use-runs'
+import { useRuns } from '@/hooks/use-runs'
 import { useTaskArtifacts, useApproveTask, useRejectTask, useReplyTask } from '@/hooks/use-tasks'
 import { buildTimeline } from '../lib/build-timeline'
 import { WorkflowTimeline } from './workflow-timeline'
@@ -106,7 +106,6 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
   const approveTask = useApproveTask()
   const rejectTask = useRejectTask()
   const replyTask = useReplyTask()
-  const steerRun = useSteerRun()
 
   const workflow = detail?.workflow_id
     ? (workflowsQuery.data ?? []).find((w) => w.id === detail.workflow_id) ?? null
@@ -155,10 +154,6 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
     replyTask.mutate({ id: detail.id, message: actionMessage.trim() }, { onSuccess: closeActionDialog })
   }
 
-  function handleSteer() {
-    if (!activeRun || !actionMessage.trim()) return
-    steerRun.mutate({ runId: activeRun.id, message: actionMessage.trim() }, { onSuccess: closeActionDialog })
-  }
 
   if (isLoading && !detail) {
     return (

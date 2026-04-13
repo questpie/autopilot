@@ -43,58 +43,47 @@ function ChatSidebar() {
   const navigate = useNavigate()
 
   return (
-    <>
-      <SidebarGroup>
-        <SidebarGroupLabel className="font-mono text-[11px] font-bold uppercase tracking-widest">
-          Chats
-        </SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {conversations.map((conv) => {
-              const isActive = conv.session.id === activeSessionId
-              return (
-                <SidebarMenuItem key={conv.session.id}>
-                  <SidebarMenuButton
-                    render={<Link to="/chat" search={{ sessionId: conv.session.id }} />}
-                    isActive={isActive}
-                    className="font-mono text-xs"
-                  >
-                    <ChatCircle
-                      size={14}
-                      weight={isActive ? 'fill' : 'regular'}
-                      className="shrink-0 text-muted-foreground"
-                    />
-                    <span className="min-w-0 flex-1 truncate">{conv.title || 'New conversation'}</span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">{conv.time}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )
-            })}
-            {conversations.length === 0 && !sessionsQuery.isLoading && (
-              <div className="px-3 py-4 text-center font-mono text-[11px] text-muted-foreground">
-                No conversations yet
-              </div>
-            )}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-
-      <SidebarSeparator />
-
-      <SidebarGroup>
-        <SidebarGroupContent>
-          <div className="px-2">
-            <button
-              onClick={() => void navigate({ to: '/chat' })}
-              className="flex w-full items-center gap-1.5 border border-border px-2 py-1.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <Plus size={12} />
-              New chat
-            </button>
-          </div>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    </>
+    <SidebarGroup>
+      <SidebarGroupLabel className="font-mono text-[11px] font-bold uppercase tracking-widest">
+        <span className="flex-1">Conversations</span>
+        <button
+          onClick={() => void navigate({ to: '/chat' })}
+          className="flex size-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          title="New chat"
+        >
+          <Plus size={12} weight="bold" />
+        </button>
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {conversations.map((conv) => {
+            const isActive = conv.session.id === activeSessionId
+            return (
+              <SidebarMenuItem key={conv.session.id}>
+                <SidebarMenuButton
+                  render={<Link to="/chat" search={{ sessionId: conv.session.id }} />}
+                  isActive={isActive}
+                  className="font-mono text-xs"
+                >
+                  <ChatCircle
+                    size={14}
+                    weight={isActive ? 'fill' : 'regular'}
+                    className="shrink-0 text-muted-foreground"
+                  />
+                  <span className="min-w-0 flex-1 truncate">{conv.title || 'New conversation'}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{conv.time}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          })}
+          {conversations.length === 0 && !sessionsQuery.isLoading && (
+            <div className="px-3 py-4 text-center font-mono text-[11px] text-muted-foreground">
+              No conversations yet
+            </div>
+          )}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   )
 }
 
@@ -251,7 +240,6 @@ function FilesSidebar() {
 // ── Dashboard / fallback sidebar ─────────────────────────────
 
 function DashboardSidebar() {
-  const navigate = useNavigate()
   const { data: tasks = [] } = useTasks()
   const activeTasks = tasks.filter((t) => t.status === 'active' || t.status === 'blocked').length
   const pendingTasks = tasks.filter((t) => t.status === 'backlog').length
@@ -303,21 +291,6 @@ function DashboardSidebar() {
         </SidebarGroupContent>
       </SidebarGroup>
 
-      <SidebarSeparator />
-
-      <SidebarGroup>
-        <SidebarGroupContent>
-          <div className="px-2">
-            <button
-              onClick={() => void navigate({ to: '/chat' })}
-              className="flex w-full items-center gap-1.5 border border-border px-2 py-1.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <Plus size={12} />
-              New chat
-            </button>
-          </div>
-        </SidebarGroupContent>
-      </SidebarGroup>
     </>
   )
 }
