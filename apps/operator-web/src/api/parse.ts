@@ -9,7 +9,7 @@
  * than throwing, to keep the UI resilient to corrupt data.
  */
 
-import type { RunEvent, SessionMessage, Task } from './types'
+import type { ActivityEntry, RunEvent, SessionMessage, Task, WorkerEventType } from './types'
 
 // ── Generic safe parse ──
 
@@ -70,7 +70,7 @@ export function parseRunEventMetadata(evt: RunEvent): RunEventPayload {
 
 export interface MessageMetadata {
   worker_event?: {
-    type: string
+    type: WorkerEventType
     summary: string
   }
   artifact_refs?: Array<{ artifact_id: string; title: string }>
@@ -82,10 +82,22 @@ export interface MessageMetadata {
   [key: string]: unknown
 }
 
+// ── ActivityEntry details ──
+
+export interface ActivityDetails {
+  task_id?: string
+  step_id?: string
+  action?: string
+  reason?: string
+  message?: string
+  [key: string]: unknown
+}
+
+export function parseActivityDetails(entry: ActivityEntry): ActivityDetails {
+  if (!entry.details) return {}
+  return safeParse<ActivityDetails>(entry.details)
+}
+
 export function parseMessageMetadata(msg: SessionMessage): MessageMetadata {
-  if (typeof msg.metadata !== 'string') {
-    // Should not happen with a truthful contract, but tolerate it during dev
-    return msg.metadata as unknown as MessageMetadata
-  }
   return safeParse<MessageMetadata>(msg.metadata)
 }

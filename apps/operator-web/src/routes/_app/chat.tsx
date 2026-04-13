@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { m, AnimatePresence } from 'framer-motion'
 import {
@@ -26,14 +26,18 @@ import {
 import { cn } from '@/lib/utils'
 import { fadeInUp, EASING, DURATION } from '@/lib/motion'
 import { Button } from '@/components/ui/button'
+import { FileViewer } from '@/components/file-viewer'
 import { useTranslation } from '@/lib/i18n'
 import { useChatSeedStore } from '@/stores/chat-seed.store'
 import {
-  getConversations,
+  composeConversations,
   type ConversationViewModel,
   type ConversationDisplayType,
   type TaskSummaryView,
 } from '@/api/conversations.api'
+import { useChatSessions, useChatMessages, useSendChatMessage } from '@/hooks/use-chat-sessions'
+import { useQueryList } from '@/hooks/use-queries'
+import { useTasks } from '@/hooks/use-tasks'
 import type { SessionMessage, Artifact, ArtifactKind, WorkerEventType } from '@/api/types'
 import { parseMessageMetadata } from '@/api/parse'
 
@@ -91,36 +95,6 @@ function findArtifact(conversations: ConversationViewModel[], artifactId: string
   return undefined
 }
 
-// ── Metadata extractors ──
-
-function getWorkerEvent(msg: SessionMessage): { type: WorkerEventType; summary: string } | null {
-  const parsed = parseMessageMetadata(msg)
-  const evt = parsed.worker_event
-  if (evt && typeof evt === 'object' && 'type' in evt) {
-    return evt as { type: WorkerEventType; summary: string }
-  }
-  return null
-}
-
-function getArtifactRefs(msg: SessionMessage): Array<{ artifact_id: string; title: string }> {
-  const parsed = parseMessageMetadata(msg)
-  const refs = parsed.artifact_refs
-  return Array.isArray(refs) ? (refs as Array<{ artifact_id: string; title: string }>) : []
-}
-
-function getToolCard(msg: SessionMessage): { kind: 'created' | 'updated'; task_id: string; task_title: string } | null {
-  const parsed = parseMessageMetadata(msg)
-  const card = parsed.tool_card
-  if (card && typeof card === 'object' && 'kind' in card) {
-    return card as { kind: 'created' | 'updated'; task_id: string; task_title: string }
-  }
-  return null
-}
-
-function isApprovalNeeded(msg: SessionMessage): boolean {
-  const evt = getWorkerEvent(msg)
-  return evt?.type === 'approval_needed'
-}
 
 // ── Sub-components ──
 
@@ -382,72 +356,6 @@ function TaskSummaryPanel({ task }: { task: TaskSummaryView }) {
   )
 }
 
-function renderMarkdown(md: string): React.ReactNode[] {
-  const lines = md.split('\n')
-  const elements: React.ReactNode[] = []
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-
-    if (line.startsWith('# ')) {
-      elements.push(
-        <h1 key={i} className="mb-3 text-[18px] font-bold text-foreground">
-          {line.slice(2)}
-        </h1>
-      )
-    } else if (line.startsWith('## ')) {
-      elements.push(
-        <h2 key={i} className="mb-2 mt-4 text-[15px] font-semibold text-foreground">
-          {line.slice(3)}
-        </h2>
-      )
-    } else if (line.startsWith('### ')) {
-      elements.push(
-        <h3 key={i} className="mb-1 mt-3 text-[13px] font-semibold text-foreground">
-          {line.slice(4)}
-        </h3>
-      )
-    } else if (line.startsWith('---')) {
-      elements.push(<hr key={i} className="my-3 border-border" />)
-    } else if (line.startsWith('- ')) {
-      elements.push(
-        <p key={i} className="pl-3 text-[12px] leading-relaxed text-muted-foreground">
-          <span className="mr-1.5 text-muted-foreground/50">&middot;</span>
-          <InlineFormat text={line.slice(2)} />
-        </p>
-      )
-    } else if (line.trim() === '') {
-      elements.push(<div key={i} className="h-1" />)
-    } else {
-      elements.push(
-        <p key={i} className="text-[12px] leading-relaxed text-muted-foreground">
-          <InlineFormat text={line} />
-        </p>
-      )
-    }
-  }
-
-  return elements
-}
-
-function InlineFormat({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/)
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return (
-            <strong key={i} className="font-semibold text-foreground">
-              {part.slice(2, -2)}
-            </strong>
-          )
-        }
-        return <span key={i}>{part}</span>
-      })}
-    </>
-  )
-}
-
 // ── Conversation type indicators ──
 
 function ConversationTypeIndicator({
@@ -487,24 +395,63 @@ function ChatPage() {
   const pendingSeed = useChatSeedStore((s) => s.pendingSeed)
   const clearSeed = useChatSeedStore((s) => s.clearSeed)
 
-  // Local state — all conversations (loaded from adapter)
-  const [conversations, setConversations] = useState<ConversationViewModel[]>([])
+  // Backend data
+  const { data: sessions } = useChatSessions()
+  const { data: allQueries } = useQueryList()
+  const { data: allTasks } = useTasks()
 
-  // Load conversations from adapter
-  useEffect(() => {
-    getConversations().then(setConversations)
-  }, [])
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null)
+  // Local-only conversations (seeds, new chats)
+  const [localConversations, setLocalConversations] = useState<ConversationViewModel[]>([])
+
+  // Compose backend conversations from primitives
+  const backendConversations = useMemo(
+    () => composeConversations(sessions ?? [], allQueries ?? [], allTasks ?? []),
+    [sessions, allQueries, allTasks],
+  )
+
+  // Merge: local first, then backend
+  const conversations = useMemo(
+    () => [...localConversations, ...backendConversations],
+    [localConversations, backendConversations],
+  )
+  // User's explicit conversation selection (null = use first available)
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
+
+  // Derived active ID: explicit pick if still in list, otherwise first conversation
+  const activeId = (selectedConvId != null && conversations.some((c) => c.session.id === selectedConvId))
+    ? selectedConvId
+    : (conversations[0]?.session.id ?? null)
+
+  // User overrides for panel state (null = use defaults derived from conversation)
+  const [userArtifactId, setUserArtifactId] = useState<string | null>(null)
+  const [userRightTab, setUserRightTab] = useState<RightPanelTab | null>(null)
+  const [userPanelOpen, setUserPanelOpen] = useState<boolean | null>(null)
+
+  // Reset panel overrides when conversation changes (React-recommended setState-during-render)
+  const [prevActiveId, setPrevActiveId] = useState<string | null>(null)
+  if (prevActiveId !== activeId) {
+    setPrevActiveId(activeId)
+    setUserArtifactId(null)
+    setUserRightTab(null)
+    setUserPanelOpen(null)
+  }
+
   const [inputValue, setInputValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  const [rightTab, setRightTab] = useState<RightPanelTab>('artifacts')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [rightPanelOpen, setRightPanelOpen] = useState(false)
   // Track resolved approval requests: messageId -> resolution label
   const [resolvedActions, setResolvedActions] = useState<Record<string, string>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Determine if active session is local (seed/new) vs backend
+  const isLocalSession = activeId != null && (activeId.startsWith('seed_') || activeId.startsWith('new_'))
+
+  // Messages: from backend hook for real sessions, from local state for local sessions
+  const { data: backendMessages } = useChatMessages(isLocalSession ? null : activeId)
+
+  // Send message mutation
+  const sendMutation = useSendChatMessage()
 
   // Handle seed arrival
   useEffect(() => {
@@ -585,42 +532,31 @@ function ChatPage() {
         }
       }
 
-      setConversations((prev) => [seedConv, ...prev])
-      setActiveId(seedId)
+      setLocalConversations((prev) => [seedConv, ...prev])
+      setSelectedConvId(seedId)
       clearSeed()
     }
   }, [pendingSeed, clearSeed])
 
-  // Auto-select first conversation
-  useEffect(() => {
-    if (activeId === null && conversations.length > 0) {
-      setActiveId(conversations[0].session.id)
-    }
-  }, [activeId, conversations])
-
-  // Auto-select artifact when switching conversations
-  useEffect(() => {
-    const conv = conversations.find((c) => c.session.id === activeId)
-    if (conv && conv.artifacts.length > 0) {
-      setSelectedArtifactId(conv.artifacts[conv.artifacts.length - 1].id)
-    } else {
-      setSelectedArtifactId(null)
-    }
-    // Reset right panel tab and visibility based on conversation type
-    if (conv && (conv.displayType === 'task' || conv.displayType === 'discussion') && conv.task) {
-      setRightTab('tasks')
-      setRightPanelOpen(true)
-    } else if (conv && conv.artifacts.length > 0) {
-      setRightTab('artifacts')
-      setRightPanelOpen(true)
-    } else {
-      setRightTab('artifacts')
-      setRightPanelOpen(false)
-    }
-  }, [activeId, conversations])
-
-  const currentConversation =
+  const currentConversationBase =
     conversations.find((c) => c.session.id === activeId) ?? conversations[0] ?? null
+
+  // Enrich with messages from the correct source
+  const currentConversation = useMemo(() => {
+    if (!currentConversationBase) return null
+    if (isLocalSession) return currentConversationBase
+    return {
+      ...currentConversationBase,
+      messages: backendMessages ?? [],
+    }
+  }, [currentConversationBase, isLocalSession, backendMessages])
+
+  // Derive panel state: user override ?? default from conversation
+  const hasTaskSummary = currentConversation?.task != null
+  const hasArtifacts = currentConversation != null && currentConversation.artifacts.length > 0
+  const selectedArtifactId = userArtifactId ?? currentConversation?.artifacts.at(-1)?.id ?? null
+  const rightTab: RightPanelTab = userRightTab ?? (hasTaskSummary ? 'tasks' : 'artifacts')
+  const rightPanelOpen = userPanelOpen ?? (hasTaskSummary || hasArtifacts)
 
   const selectedArtifact = selectedArtifactId
     ? findArtifact(conversations, selectedArtifactId)
@@ -641,13 +577,13 @@ function ChatPage() {
   }, [navigate])
 
   const handleArtifactSelect = useCallback((artifactId: string) => {
-    setSelectedArtifactId(artifactId)
-    setRightTab('artifacts')
-    setRightPanelOpen(true)
+    setUserArtifactId(artifactId)
+    setUserRightTab('artifacts')
+    setUserPanelOpen(true)
   }, [])
 
   const handleConversationSelect = useCallback((id: string) => {
-    setActiveId(id)
+    setSelectedConvId(id)
   }, [])
 
   const handleTextareaInput = useCallback(() => {
@@ -660,35 +596,41 @@ function ChatPage() {
   const handleSendMessage = useCallback(() => {
     if (!inputValue.trim() || !activeId) return
 
-    const now = new Date().toISOString()
-    const newMsg: SessionMessage = {
-      id: `usr_${Date.now()}`,
-      session_id: activeId,
-      role: 'user',
-      content: inputValue.trim(),
-      query_id: null,
-      external_message_id: null,
-      metadata: '{}',
-      created_at: now,
+    const trimmed = inputValue.trim()
+
+    if (isLocalSession) {
+      // Local-only: append to local state
+      const now = new Date().toISOString()
+      const newMsg: SessionMessage = {
+        id: `usr_${Date.now()}`,
+        session_id: activeId,
+        role: 'user',
+        content: trimmed,
+        query_id: null,
+        external_message_id: null,
+        metadata: '{}',
+        created_at: now,
+      }
+      setLocalConversations((prev) =>
+        prev.map((c) => {
+          if (c.session.id !== activeId) return c
+          return {
+            ...c,
+            messages: [...c.messages, newMsg],
+            lastPreview: trimmed.slice(0, 80),
+          }
+        })
+      )
+    } else {
+      // Backend session: send via API, messages will refresh via query invalidation
+      sendMutation.mutate({ sessionId: activeId, message: trimmed })
     }
 
-    setConversations((prev) =>
-      prev.map((c) => {
-        if (c.session.id !== activeId) return c
-        return {
-          ...c,
-          messages: [...c.messages, newMsg],
-          lastPreview: inputValue.trim().slice(0, 80),
-        }
-      })
-    )
     setInputValue('')
-
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [inputValue, activeId])
+  }, [inputValue, activeId, isLocalSession, sendMutation])
 
   const handleNewConversation = useCallback(() => {
     const newId = `new_${Date.now()}`
@@ -717,8 +659,8 @@ function ChatPage() {
       task: null,
       queries: [],
     }
-    setConversations((prev) => [newConv, ...prev])
-    setActiveId(newId)
+    setLocalConversations((prev) => [newConv, ...prev])
+    setSelectedConvId(newId)
   }, [t, locale])
 
   const handleApprove = useCallback((messageId: string) => {
@@ -729,9 +671,6 @@ function ChatPage() {
     setResolvedActions((prev) => ({ ...prev, [messageId]: t('chat.returned') }))
   }, [t])
 
-  // Right panel has tabs when there are both tasks and artifacts
-  const hasTaskSummary = currentConversation?.task != null
-  const hasArtifacts = currentConversation != null && currentConversation.artifacts.length > 0
   const showRightPanelTabs = hasTaskSummary && hasArtifacts
 
   // Derive promoted task from queries
@@ -833,7 +772,7 @@ function ChatPage() {
             {(hasTaskSummary || hasArtifacts) && (
               <button
                 type="button"
-                onClick={() => setRightPanelOpen((v) => !v)}
+                onClick={() => setUserPanelOpen(!rightPanelOpen)}
                 className="shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
               >
                 <SidebarSimpleIcon weight={rightPanelOpen ? 'fill' : 'regular'} className="size-4 -scale-x-100" />
@@ -884,10 +823,11 @@ function ChatPage() {
                 className="mx-auto flex max-w-[640px] flex-col gap-3"
               >
                 {currentConversation.messages.map((msg) => {
-                  const workerEvent = getWorkerEvent(msg)
-                  const artifactRefs = getArtifactRefs(msg)
-                  const toolCard = getToolCard(msg)
-                  const approvalNeeded = isApprovalNeeded(msg)
+                  const meta = parseMessageMetadata(msg)
+                  const workerEvent = meta.worker_event ?? null
+                  const artifactRefs = meta.artifact_refs ?? []
+                  const toolCard = meta.tool_card ?? null
+                  const approvalNeeded = workerEvent?.type === 'approval_needed'
 
                   return (
                     <m.div
@@ -1016,7 +956,7 @@ function ChatPage() {
           <div className="flex border-b border-border">
             <button
               type="button"
-              onClick={() => setRightTab('artifacts')}
+              onClick={() => setUserRightTab('artifacts')}
               className={cn(
                 'flex-1 py-2.5 text-center font-heading text-[12px] transition-colors',
                 rightTab === 'artifacts'
@@ -1031,7 +971,7 @@ function ChatPage() {
             </button>
             <button
               type="button"
-              onClick={() => setRightTab('tasks')}
+              onClick={() => setUserRightTab('tasks')}
               className={cn(
                 'flex-1 py-2.5 text-center font-heading text-[12px] transition-colors',
                 rightTab === 'tasks'
@@ -1043,7 +983,7 @@ function ChatPage() {
             </button>
             <button
               type="button"
-              onClick={() => setRightPanelOpen(false)}
+              onClick={() => setUserPanelOpen(false)}
               className="shrink-0 px-2.5 text-muted-foreground hover:text-foreground transition-colors"
             >
               <XIcon className="size-3.5" />
@@ -1056,7 +996,7 @@ function ChatPage() {
           <div className="flex items-center justify-end border-b border-border px-3 py-2">
             <button
               type="button"
-              onClick={() => setRightPanelOpen(false)}
+              onClick={() => setUserPanelOpen(false)}
               className="p-1 text-muted-foreground hover:text-foreground transition-colors"
             >
               <XIcon className="size-3.5" />
@@ -1082,7 +1022,7 @@ function ChatPage() {
                     <button
                       key={art.id}
                       type="button"
-                      onClick={() => setSelectedArtifactId(art.id)}
+                      onClick={() => setUserArtifactId(art.id)}
                       className={cn(
                         'flex items-center gap-2.5 px-4 py-2.5 text-left transition-colors',
                         isSelected ? 'bg-muted/30' : 'hover:bg-muted/10'
@@ -1101,13 +1041,21 @@ function ChatPage() {
               {/* Selected artifact preview */}
               {selectedArtifact ? (
                 <>
-                  <div className="flex-1 overflow-y-auto p-5">
-                    {selectedArtifact.ref_kind === 'inline'
-                      ? renderMarkdown(selectedArtifact.ref_value)
-                      : (
-                        <p className="text-[12px] text-muted-foreground">{selectedArtifact.ref_value}</p>
-                      )
-                    }
+                  <div className="flex-1 overflow-hidden">
+                    {selectedArtifact.ref_kind === 'inline' ? (
+                      <FileViewer
+                        path={selectedArtifact.title}
+                        content={selectedArtifact.ref_value}
+                        mime={selectedArtifact.mime_type ?? undefined}
+                        className="h-full"
+                      />
+                    ) : (
+                      <div className="p-5">
+                        <p className="text-[12px] text-muted-foreground break-all">
+                          {selectedArtifact.ref_value}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 border-t border-border px-5 py-3">
