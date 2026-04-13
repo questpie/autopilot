@@ -1,16 +1,20 @@
-/**
- * VFS API — wired to /api/vfs endpoints.
- * All endpoints require user auth (session cookie).
- */
 import type { VfsListResult, VfsStatResult, VfsDiffResult } from './types'
-import { apiFetch, ApiError } from '@/lib/api-client'
+import { api, ApiError } from '@/lib/api'
 
-export function vfsList(uri: string): Promise<VfsListResult> {
-  return apiFetch<VfsListResult>(`/api/vfs/list?uri=${encodeURIComponent(uri)}`)
+function normalizePath(p: string): string {
+  return p.replace(/^\.\//, '').replace(/^\/+/, '')
 }
 
-export function vfsStat(uri: string): Promise<VfsStatResult> {
-  return apiFetch<VfsStatResult>(`/api/vfs/stat?uri=${encodeURIComponent(uri)}`)
+export async function vfsList(uri: string): Promise<VfsListResult> {
+  const res = await api.api.vfs.list.$get({ query: { uri } })
+  const data = (await res.json()) as VfsListResult
+  data.entries = data.entries.map((e) => ({ ...e, path: normalizePath(e.path) }))
+  return data
+}
+
+export async function vfsStat(uri: string): Promise<VfsStatResult> {
+  const res = await api.api.vfs.stat.$get({ query: { uri } })
+  return res.json() as Promise<VfsStatResult>
 }
 
 export interface VfsReadResult {
@@ -19,9 +23,10 @@ export interface VfsReadResult {
   size: number | null
 }
 
-export function vfsDiff(uri: string, includeDirty = true): Promise<VfsDiffResult> {
-  const params = new URLSearchParams({ uri, include_dirty: String(includeDirty) })
-  return apiFetch<VfsDiffResult>(`/api/vfs/diff?${params}`)
+export async function vfsDiff(uri: string, includeDirty = true): Promise<VfsDiffResult> {
+  const include_dirty = includeDirty ? 'true' as const : 'false' as const
+  const res = await api.api.vfs.diff.$get({ query: { uri, include_dirty } })
+  return res.json() as Promise<VfsDiffResult>
 }
 
 export async function vfsRead(uri: string): Promise<VfsReadResult> {
@@ -34,4 +39,16 @@ export async function vfsRead(uri: string): Promise<VfsReadResult> {
   const sizeHeader = res.headers.get('x-vfs-size')
   const size = sizeHeader ? Number(sizeHeader) : null
   return { content, contentType, size }
+}
+
+export async function vfsWrite(uri: string, content: string): Promise<void> {
+  const res = await fetch(`/api/vfs/write?uri=${encodeURIComponent(uri)}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    body: content,
+  })
+  if (!res.ok) {
+    throw new ApiError(res.status, res.statusText)
+  }
 }
