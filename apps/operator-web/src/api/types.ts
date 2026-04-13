@@ -119,7 +119,7 @@ export interface ScheduleExecution {
   schedule_id: string
   task_id: string | null
   query_id: string | null
-  status: 'triggered' | 'completed' | 'skipped' | 'failed'
+  status: 'triggered' | 'completed' | 'skipped' | 'failed' | 'queued'
   skip_reason: string | null
   error: string | null
   triggered_at: string
@@ -200,6 +200,19 @@ export interface WorkerCapability {
   models: string[]
   maxConcurrent: number
   tags: string[]
+}
+
+// ── Agent (config-driven, from GET /api/config/agents) ──
+// Mirrors packages/spec/src/schemas/agent.ts — AgentSchema
+export interface Agent {
+  id: string
+  name: string
+  role: string
+  description: string
+  model: string | null
+  provider: string | null
+  variant: string | null
+  capability_profiles: string[]
 }
 
 // ── Run Event (persisted row) ──
@@ -322,6 +335,23 @@ export interface Script {
   env?: Record<string, string>
   secret_env?: Record<string, string>
   tags: string[]
+}
+
+// ── Activity (from GET /api/tasks/:id/activity) ──
+export interface ActivityEntry {
+  id: number
+  actor: string
+  type: string
+  summary: string
+  details: string | null
+  created_at: string
+}
+
+// ── Workflow advance result (from approve/reject/reply endpoints) ──
+export interface AdvanceResult {
+  task: Task
+  runId: string | null
+  actions: string[]
 }
 
 // ── View Models (derived for UI, NOT in backend) ──

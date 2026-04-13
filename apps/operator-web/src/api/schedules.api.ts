@@ -1,50 +1,42 @@
-// Mock adapter. Returns hardcoded data matching API response shapes.
-// Swap to real API: replace with hc<AppType>('/api/schedules').get().$get() (Hono client)
+/**
+ * Schedules API — wired to /api/schedules endpoints.
+ * All endpoints require user auth (session cookie).
+ */
+import type { Schedule, ScheduleExecution, ScheduleWithHistory } from './types'
+import { apiFetch, ApiError } from '@/lib/api-client'
 
-import type { Schedule, ScheduleWithHistory } from './types'
-import {
-  mockSchedules,
-  mockScheduleExecutions,
-} from './mock/schedules.mock'
-import { delay } from './mock/delay'
-
-export async function getSchedules(
-  filters?: { enabled?: boolean },
-): Promise<Schedule[]> {
-  await delay(80)
+export async function getSchedules(filters?: { enabled?: boolean }): Promise<Schedule[]> {
+  const all = await apiFetch<Schedule[]>('/api/schedules')
   if (filters?.enabled !== undefined) {
-    return mockSchedules.filter((s) => s.enabled === filters.enabled)
+    return all.filter((s) => s.enabled === filters.enabled)
   }
-  return mockSchedules
+  return all
 }
 
-export async function getSchedule(
-  id: string,
-): Promise<ScheduleWithHistory | null> {
-  await delay(60)
-  const schedule = mockSchedules.find((s) => s.id === id)
-  if (!schedule) return null
-
-  return {
-    ...schedule,
-    history: mockScheduleExecutions.filter(
-      (e) => e.schedule_id === id,
-    ),
+export async function getSchedule(id: string): Promise<ScheduleWithHistory | null> {
+  try {
+    const [schedule, history] = await Promise.all([
+      apiFetch<Schedule>(`/api/schedules/${encodeURIComponent(id)}`),
+      apiFetch<ScheduleExecution[]>(`/api/schedules/${encodeURIComponent(id)}/history`),
+    ])
+    return { ...schedule, history }
+  } catch (err: unknown) {
+    if (err instanceof ApiError && err.status === 404) return null
+    throw err
   }
 }
 
-export async function toggleSchedule(
-  _id: string,
-  _enabled: boolean,
-): Promise<void> {
-  await delay(100)
-  // In real implementation: PATCH /api/schedules/:id { enabled }
+export async function toggleSchedule(id: string, enabled: boolean): Promise<Schedule> {
+  return apiFetch<Schedule>(`/api/schedules/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  })
 }
 
-export async function triggerSchedule(
-  _id: string,
-): Promise<void> {
-  await delay(100)
-  // In real implementation: POST /api/schedules/:id/trigger
+export async function triggerSchedule(id: string): Promise<{ ok: boolean; schedule_id: string }> {
+  return apiFetch<{ ok: boolean; schedule_id: string }>(
+    `/api/schedules/${encodeURIComponent(id)}/trigger`,
+    { method: 'POST' },
+  )
 }
-

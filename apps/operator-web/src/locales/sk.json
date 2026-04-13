@@ -93,7 +93,9 @@
 		"outputs_for_review": "Výstupy na kontrolu",
 		"view_in_files": "zobraziť v Súboroch",
 		"inspect_output": "zobraziť",
-		"open_related_files": "Otvoriť v Súboroch"
+		"open_related_files": "Otvoriť v Súboroch",
+		"preview": "náhľad",
+		"hide_preview": "skryť"
 	},
 	"automations": {
 		"title": "Automatizácie",
@@ -151,7 +153,8 @@
 		"exec_open_task": "Otvorit task",
 		"exec_open_chat": "Otvorit konverzaciu",
 		"exec_no_follow_up": "Ziadna nadvazujuca akcia",
-		"exec_identifier": "Identifikator"
+		"exec_identifier": "Identifikator",
+		"loading": "Načítavam automatizácie..."
 	},
 	"results": {
 		"title": "Výsledky",
@@ -185,7 +188,8 @@
 		"label_agent": "Agent",
 		"label_tokens": "Tokeny",
 		"approved": "Schválené",
-		"returned": "Vrátené"
+		"returned": "Vrátené",
+		"hide_preview": "Skryť"
 	},
 	"chat": {
 		"title": "Konverzácia",
@@ -431,14 +435,28 @@
 	},
 	"agents": {
 		"title": "Agenti",
-		"subtitle": "Katalóg AI agentov"
+		"subtitle": "Katalóg AI agentov",
+		"loading": "Načítavam agentov...",
+		"error": "Nepodarilo sa načítať konfiguráciu agentov",
+		"empty": "Žiadni agenti nie sú nakonfigurovaní",
+		"empty_desc": "Pridajte agentov do .autopilot/agents/ pre začatie.",
+		"model": "Model",
+		"provider": "Poskytovateľ",
+		"profiles": "Profily schopností"
 	},
 	"runtime": {
 		"title": "Runtime",
 		"subtitle": "Stav workerov a premenných prostredia",
 		"workers": "Workers",
+		"workers_loading": "Načítavam workerov...",
+		"workers_error": "Zoznam workerov vyžaduje prístup na úrovni workera",
+		"workers_empty": "Žiadni workeri nie sú zaregistrovaní",
 		"env_vars": "Premenné prostredia",
-		"not_set": "nenastavené"
+		"env_unavailable": "Výpis premenných nie je dostupný cez operátorské API",
+		"not_set": "nenastavené",
+		"status_online": "online",
+		"status_busy": "zaneprázdnený",
+		"status_offline": "offline"
 	},
 	"advanced": {
 		"files_title": "Súbory",

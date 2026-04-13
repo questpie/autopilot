@@ -226,7 +226,9 @@
 		"outputs_for_review": "Outputs for review",
 		"view_in_files": "view in Files",
 		"inspect_output": "inspect",
-		"open_related_files": "Open in Files"
+		"open_related_files": "Open in Files",
+		"preview": "preview",
+		"hide_preview": "hide"
 	},
 	"team": {
 		"title": "Team",
@@ -1097,7 +1099,8 @@
 		"exec_open_task": "Open task",
 		"exec_open_chat": "Open conversation",
 		"exec_no_follow_up": "No follow-up action",
-		"exec_identifier": "Identifier"
+		"exec_identifier": "Identifier",
+		"loading": "Loading automations..."
 	},
 	"results": {
 		"title": "Results",
@@ -1131,7 +1134,8 @@
 		"label_agent": "Agent",
 		"label_tokens": "Tokens",
 		"approved": "Approved",
-		"returned": "Returned"
+		"returned": "Returned",
+		"hide_preview": "Hide"
 	},
 	"company": {
 		"title": "Company",
@@ -1294,14 +1298,28 @@
 	},
 	"agents": {
 		"title": "Agents",
-		"subtitle": "AI agent catalog"
+		"subtitle": "AI agent catalog",
+		"loading": "Loading agents...",
+		"error": "Failed to load agent configuration",
+		"empty": "No agents configured",
+		"empty_desc": "Add agents in .autopilot/agents/ to get started.",
+		"model": "Model",
+		"provider": "Provider",
+		"profiles": "Capability profiles"
 	},
 	"runtime": {
 		"title": "Runtime",
 		"subtitle": "Workers and environment variable status",
 		"workers": "Workers",
+		"workers_loading": "Loading workers...",
+		"workers_error": "Worker listing requires worker-level access",
+		"workers_empty": "No workers registered",
 		"env_vars": "Environment variables",
-		"not_set": "not set"
+		"env_unavailable": "Secret listing is not available through the operator API",
+		"not_set": "not set",
+		"status_online": "online",
+		"status_busy": "busy",
+		"status_offline": "offline"
 	},
 	"advanced": {
 		"files_title": "Files",

@@ -8,10 +8,12 @@ import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
 import { ListDetail, ListPanel } from '@/components/list-detail'
 import { StatusPill, type StatusPillStatus } from '@/components/ui/status-pill'
-import { SectionHeader } from '@/components/ui/section-header'
 import { KvList } from '@/components/ui/kv-list'
 import { FlatList } from '@/components/ui/flat-list'
 import { RelationLink } from '@/components/ui/relation-link'
+import { FilterTabs } from '@/components/ui/filter-tabs'
+import { MetaToken } from '@/components/ui/meta-token'
+import { DetailSection } from '@/components/ui/detail-section'
 import { useTranslation } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
@@ -21,8 +23,8 @@ import {
   wizardTextareaClass,
   wizardSelectClass,
 } from '@/components/wizard-dialog'
-import { getSchedules, getSchedule, toggleSchedule, triggerSchedule } from '@/api/schedules.api'
-import { getWorkflows } from '@/api/workflows.api'
+import { useSchedules, useScheduleDetail, useToggleSchedule, useTriggerSchedule } from '@/hooks/use-schedules'
+import { useWorkflows } from '@/hooks/use-workflows'
 import type { Schedule, ScheduleWithHistory, ScheduleExecution, Workflow } from '@/api/types'
 
 const automationsSearchSchema = z.object({
@@ -36,15 +38,14 @@ export const Route = createFileRoute('/_app/automations')({
 
 // ── Filter types ──
 
-type FilterKey = 'all' | 'active' | 'paused' | 'error'
+type FilterKey = 'all' | 'active' | 'paused'
 
-const FILTER_KEYS: FilterKey[] = ['active', 'paused', 'error', 'all']
+const FILTER_KEYS: FilterKey[] = ['active', 'paused', 'all']
 
 const FILTER_LABEL_KEYS: Record<FilterKey, string> = {
   all: 'automations.filter_all',
   active: 'automations.filter_active',
   paused: 'automations.filter_paused',
-  error: 'automations.filter_error',
 }
 
 // ── Helpers ──
@@ -98,6 +99,8 @@ function executionStatusToPill(status: ScheduleExecution['status']): StatusPillS
       return 'draft'
     case 'failed':
       return 'failed'
+    case 'queued':
+      return 'pending'
   }
 }
 
@@ -203,25 +206,20 @@ function ScheduleDetail({
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="border-b border-border/50 px-5 py-4">
+      <DetailSection>
         <h2 className="text-[18px] font-medium text-foreground">{detail.name}</h2>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <StatusPill status={statusPillStatus} label={t(`automations.status_${colors.label}`)} />
-          <span className="rounded-none bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-            {detail.id}
-          </span>
-          <span className="rounded-none bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-            {detail.mode}
-          </span>
+          <MetaToken mono>{detail.id}</MetaToken>
+          <MetaToken mono>{detail.mode}</MetaToken>
         </div>
         {detail.description && (
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{detail.description}</p>
         )}
-      </div>
+      </DetailSection>
 
       {/* Config */}
-      <div className="border-b border-border/50 px-5 py-4">
-        <SectionHeader>{t('automations.config')}</SectionHeader>
+      <DetailSection title={t('automations.config')}>
         <div className="mt-3">
           <KvList
             items={[
@@ -234,11 +232,10 @@ function ScheduleDetail({
             ]}
           />
         </div>
-      </div>
+      </DetailSection>
 
       {/* Next run */}
-      <div className="border-b border-border/50 px-5 py-4">
-        <SectionHeader>{t('automations.next_run')}</SectionHeader>
+      <DetailSection title={t('automations.next_run')}>
         <div className="mt-3 flex items-center justify-between">
           <span className="text-[15px] font-medium text-foreground">
             {detail.enabled ? formatDateTime(detail.next_run_at, locale) : '\u2014'}
@@ -251,12 +248,11 @@ function ScheduleDetail({
             {t('automations.trigger_now')}
           </Button>
         </div>
-      </div>
+      </DetailSection>
 
       {/* Recent executions */}
       {sortedHistory.length > 0 && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('automations.executions')}</SectionHeader>
+        <DetailSection title={t('automations.executions')}>
           <div className="mt-3">
             <FlatList
               items={sortedHistory}
@@ -284,13 +280,12 @@ function ScheduleDetail({
               )}
             />
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* Created tasks */}
       {createdTaskIds.length > 0 && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('automations.created_tasks')}</SectionHeader>
+        <DetailSection title={t('automations.created_tasks')}>
           <div className="mt-3 flex flex-col gap-1">
             {createdTaskIds.map((ct) => (
               <RelationLink
@@ -301,13 +296,12 @@ function ScheduleDetail({
               />
             ))}
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* Linked workflow (FE-derived from schedule.workflow_id) */}
       {linkedWorkflow && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('automations.linked_workflow')}</SectionHeader>
+        <DetailSection title={t('automations.linked_workflow')}>
           <div className="mt-3">
             <RelationLink
               label={linkedWorkflow.name}
@@ -315,12 +309,11 @@ function ScheduleDetail({
               onClick={() => void navigate({ to: '/workflows', search: { workflowId: linkedWorkflow.id } })}
             />
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* Failure handling */}
-      <div className="px-5 py-4">
-        <SectionHeader>{t('automations.error_handling')}</SectionHeader>
+      <DetailSection last title={t('automations.error_handling')}>
         <div className="mt-3">
           <KvList
             items={[
@@ -330,7 +323,7 @@ function ScheduleDetail({
             ]}
           />
         </div>
-      </div>
+      </DetailSection>
     </div>
   )
 }
@@ -374,6 +367,8 @@ function ExecutionDetailSheet({
         }
         return <span className="text-[13px] text-foreground">{t('automations.exec_completed')}</span>
       case 'triggered':
+        return <span className="text-[13px] text-foreground">{t('automations.exec_running')}</span>
+      case 'queued':
         return <span className="text-[13px] text-foreground">{t('automations.exec_running')}</span>
       case 'skipped':
         return (
@@ -420,8 +415,7 @@ function ExecutionDetailSheet({
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {/* Status section */}
-          <div className="border-b border-border/50 px-5 py-4">
-            <SectionHeader>{t('automations.exec_status')}</SectionHeader>
+          <DetailSection title={t('automations.exec_status')}>
             <div className="mt-3">
               <KvList
                 items={[
@@ -432,20 +426,18 @@ function ExecutionDetailSheet({
                 ]}
               />
             </div>
-          </div>
+          </DetailSection>
 
           {/* Outcome section */}
-          <div className="border-b border-border/50 px-5 py-4">
-            <SectionHeader>{t('automations.exec_outcome')}</SectionHeader>
+          <DetailSection title={t('automations.exec_outcome')}>
             <div className="mt-3">
               {renderOutcome()}
             </div>
-          </div>
+          </DetailSection>
 
           {/* Linked entity section */}
           {(execution.task_id || execution.query_id) && (
-            <div className="border-b border-border/50 px-5 py-4">
-              <SectionHeader>{t('automations.exec_follow_up')}</SectionHeader>
+            <DetailSection title={t('automations.exec_follow_up')}>
               <div className="mt-3">
                 {execution.task_id && (
                   <Button size="sm" onClick={() => onNavigateToTask(execution.task_id!)}>
@@ -458,20 +450,18 @@ function ExecutionDetailSheet({
                   </Button>
                 )}
               </div>
-            </div>
+            </DetailSection>
           )}
 
           {/* No action state */}
           {!execution.task_id && !execution.query_id && execution.status !== 'triggered' && (
-            <div className="border-b border-border/50 px-5 py-4">
-              <SectionHeader>{t('automations.exec_follow_up')}</SectionHeader>
+            <DetailSection title={t('automations.exec_follow_up')}>
               <p className="mt-3 text-[12px] text-muted-foreground">{t('automations.exec_no_follow_up')}</p>
-            </div>
+            </DetailSection>
           )}
 
           {/* Execution ID */}
-          <div className="px-5 py-4">
-            <SectionHeader>{t('automations.exec_identifier')}</SectionHeader>
+          <DetailSection last title={t('automations.exec_identifier')}>
             <div className="mt-3">
               <KvList
                 items={[
@@ -480,7 +470,7 @@ function ExecutionDetailSheet({
                 ]}
               />
             </div>
-          </div>
+          </DetailSection>
         </div>
       </div>
     </>
@@ -491,40 +481,29 @@ function ExecutionDetailSheet({
 
 function AutomationsPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
+  const { scheduleId: deepLinkScheduleId } = Route.useSearch()
+
+  // Data hooks
+  const { data: schedules = [], isLoading: isLoadingSchedules } = useSchedules()
+  const { data: workflows = [] } = useWorkflows()
+  const toggleMutation = useToggleSchedule()
+  const triggerMutation = useTriggerSchedule()
+
+  // Selection state
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [schedules, setSchedules] = useState<Schedule[]>([])
-  const [executions, setExecutions] = useState<Map<string, ScheduleExecution | undefined>>(new Map())
-  const [detail, setDetail] = useState<ScheduleWithHistory | null>(null)
-  const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [selectedExecution, setSelectedExecution] = useState<ScheduleExecution | null>(null)
+
+  // Wizard state
   const [wizardOpen, setWizardOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [frequency, setFrequency] = useState('daily')
   const [time, setTime] = useState('09:00')
-  const { t } = useTranslation()
-  const { scheduleId: deepLinkScheduleId } = Route.useSearch()
 
-  // Load schedules + workflows
-  useEffect(() => {
-    Promise.all([getSchedules(), getWorkflows()]).then(([scheds, wfs]) => {
-      setSchedules(scheds)
-      setWorkflows(wfs)
-
-      // Load last execution status for each schedule
-      const exMap = new Map<string, ScheduleExecution | undefined>()
-      const loadDetails = scheds.map((s) =>
-        getSchedule(s.id).then((det) => {
-          if (det && det.history.length > 0) {
-            const last = det.history.reduce((a, b) => (a.triggered_at > b.triggered_at ? a : b))
-            exMap.set(s.id, last)
-          }
-        }),
-      )
-      Promise.all(loadDetails).then(() => setExecutions(exMap))
-    })
-  }, [])
+  // Detail query — fires when selectedId is set
+  const { data: detail } = useScheduleDetail(selectedId)
 
   // Auto-select first
   useEffect(() => {
@@ -537,43 +516,22 @@ function AutomationsPage() {
     setSelectedId(schedules[0].id)
   }, [schedules, selectedId, deepLinkScheduleId])
 
-  // Load detail when selection changes
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(null)
-      return
-    }
-    let cancelled = false
-    getSchedule(selectedId).then((d) => {
-      if (!cancelled) setDetail(d)
-    })
-    return () => { cancelled = true }
-  }, [selectedId])
-
-  // Filter
+  // Filter — status derived from enabled flag (no per-schedule execution data in list)
   const filteredSchedules = schedules.filter((s) => {
     if (activeFilter === 'all') return true
-    const lastExec = executions.get(s.id)
-    const status = scheduleStatusColor(s, lastExec).label
-    return status === activeFilter
+    if (activeFilter === 'paused') return !s.enabled
+    return s.enabled
   })
 
   function handleToggle(id: string) {
     const schedule = schedules.find((s) => s.id === id)
     if (!schedule) return
-    const newEnabled = !schedule.enabled
-    // Optimistic update
-    setSchedules((prev) => prev.map((s) => s.id === id ? { ...s, enabled: newEnabled } : s))
-    if (detail && detail.id === id) {
-      setDetail({ ...detail, enabled: newEnabled })
-    }
-    toggleSchedule(id, newEnabled)
+    toggleMutation.mutate({ id, enabled: !schedule.enabled })
   }
 
   function handleTrigger() {
     if (!selectedId) return
-    triggerSchedule(selectedId)
-    // Could add toast or optimistic execution entry here
+    triggerMutation.mutate(selectedId)
   }
 
   function handleCreate() {
@@ -601,27 +559,22 @@ function AutomationsPage() {
                   </Button>
                 }
               />
-              <div className="mt-3 flex items-center gap-1">
-                {FILTER_KEYS.map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setActiveFilter(key)}
-                    className={cn(
-                      'font-heading text-[12px] px-2.5 py-1 transition-colors',
-                      activeFilter === key
-                        ? 'bg-muted/50 text-foreground'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {t(FILTER_LABEL_KEYS[key])}
-                  </button>
-                ))}
-              </div>
+              <FilterTabs
+                tabs={FILTER_KEYS}
+                active={activeFilter}
+                getLabel={(key) => t(FILTER_LABEL_KEYS[key])}
+                onChange={setActiveFilter}
+                className="mt-3"
+              />
             </>
           }
         >
-          {filteredSchedules.length === 0 ? (
+          {isLoadingSchedules ? (
+            <EmptyState
+              title={t('automations.loading')}
+              description=""
+            />
+          ) : filteredSchedules.length === 0 ? (
             <EmptyState
               title={t('automations.empty_title')}
               description={t('automations.empty_desc')}
@@ -631,7 +584,7 @@ function AutomationsPage() {
               <ScheduleRow
                 key={schedule.id}
                 schedule={schedule}
-                lastExecution={executions.get(schedule.id)}
+                lastExecution={undefined}
                 selected={schedule.id === selectedId}
                 onClick={() => { setSelectedId(schedule.id); void navigate({ to: '/automations', search: { scheduleId: schedule.id }, replace: true }) }}
                 onToggle={() => handleToggle(schedule.id)}

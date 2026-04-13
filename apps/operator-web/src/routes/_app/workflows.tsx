@@ -6,12 +6,13 @@ import { useTranslation } from '@/lib/i18n'
 import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
 import { ListDetail, ListPanel } from '@/components/list-detail'
-import { SectionHeader } from '@/components/ui/section-header'
 import { KvList } from '@/components/ui/kv-list'
 import { RelationLink } from '@/components/ui/relation-link'
-import { getWorkflows, getWorkflow } from '@/api/workflows.api'
-import { getSchedules } from '@/api/schedules.api'
-import { getScripts } from '@/api/scripts.api'
+import { MetaToken } from '@/components/ui/meta-token'
+import { DetailSection } from '@/components/ui/detail-section'
+import { useSchedules } from '@/hooks/use-schedules'
+import { useWorkflows } from '@/hooks/use-workflows'
+import { useScripts } from '@/hooks/use-scripts'
 import type { Workflow, WorkflowStepType, Schedule, Script } from '@/api/types'
 
 const workflowsSearchSchema = z.object({
@@ -104,42 +105,35 @@ function WorkflowDetail({ data }: { data: WorkflowDetailData }) {
   // FE-derived: scripts referenced by step actions (script_ref kind)
   const scriptRefsUsed = workflow.steps.flatMap((step) =>
     step.actions
-      .filter((a) => (a as Record<string, unknown>).kind === 'script_ref')
+      .filter((a) => 'kind' in a && a.kind === 'script_ref')
       .map((a) => {
-        const action = a as Record<string, unknown>
-        const scriptId = action.script_id as string | undefined
+        const scriptId = 'script_id' in a && typeof a.script_id === 'string' ? a.script_id : null
         const script = scriptId ? scripts.find((scr) => scr.id === scriptId) : undefined
-        return { scriptId: scriptId ?? null, scriptName: script?.name ?? scriptId ?? 'unknown' }
+        return { scriptId, scriptName: script?.name ?? scriptId ?? 'unknown' }
       }),
   )
 
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="border-b border-border/50 px-5 py-4">
+      <DetailSection>
         <h2 className="text-[18px] font-medium text-foreground">{workflow.name}</h2>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="rounded-none bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-            {workflow.id}
-          </span>
+          <MetaToken mono>{workflow.id}</MetaToken>
           {workflow.workspace && (
-            <span className="rounded-none bg-muted/40 px-1.5 py-0.5 font-heading text-[11px] text-muted-foreground">
-              {workflow.workspace.mode}
-            </span>
+            <MetaToken>{workflow.workspace.mode}</MetaToken>
           )}
         </div>
-      </div>
+      </DetailSection>
 
       {/* Description */}
-      <div className="border-b border-border/50 px-5 py-4">
-        <SectionHeader>{t('workflows.description')}</SectionHeader>
+      <DetailSection title={t('workflows.description')}>
         <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{workflow.description}</p>
-      </div>
+      </DetailSection>
 
       {/* Steps */}
       {workflow.steps.length > 0 && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('workflows.steps')}</SectionHeader>
+        <DetailSection title={t('workflows.steps')}>
           <div className="mt-3 flex flex-col">
             {workflow.steps.map((step, idx) => (
               <div
@@ -155,14 +149,12 @@ function WorkflowDetail({ data }: { data: WorkflowDetailData }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] font-medium text-foreground">{step.name ?? step.id}</span>
-                    <span
-                      className={cn(
-                        'inline-block rounded-none border px-1.5 py-0.5 font-heading text-[10px]',
-                        STEP_TYPE_COLORS[step.type],
-                      )}
+                    <MetaToken
+                      variant="outline"
+                      className={STEP_TYPE_COLORS[step.type]}
                     >
                       {t(STEP_TYPE_I18N_KEYS[step.type])}
-                    </span>
+                    </MetaToken>
                     {step.approvers.length > 0 && (
                       <span className="font-heading text-[10px] text-amber-400">
                         {step.approvers.join(', ')}
@@ -184,13 +176,12 @@ function WorkflowDetail({ data }: { data: WorkflowDetailData }) {
               </div>
             ))}
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* Linked schedules (FE-derived from schedule.workflow_id) */}
       {linkedSchedules.length > 0 && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('workflows.linked_schedules')}</SectionHeader>
+        <DetailSection title={t('workflows.linked_schedules')}>
           <div className="mt-3 flex flex-col gap-1">
             {linkedSchedules.map((s) => (
               <RelationLink
@@ -201,13 +192,12 @@ function WorkflowDetail({ data }: { data: WorkflowDetailData }) {
               />
             ))}
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* Scripts used (FE-derived from step actions) */}
       {scriptRefsUsed.length > 0 && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('workflows.linked_scripts')}</SectionHeader>
+        <DetailSection title={t('workflows.linked_scripts')}>
           <div className="mt-3 flex flex-col gap-1">
             {scriptRefsUsed.map((s) => (
               <RelationLink
@@ -221,12 +211,11 @@ function WorkflowDetail({ data }: { data: WorkflowDetailData }) {
               />
             ))}
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* Metadata */}
-      <div className="px-5 py-4">
-        <SectionHeader>{t('workflows.metadata')}</SectionHeader>
+      <DetailSection last title={t('workflows.metadata')}>
         <div className="mt-3">
           <KvList
             items={[
@@ -235,7 +224,7 @@ function WorkflowDetail({ data }: { data: WorkflowDetailData }) {
             ]}
           />
         </div>
-      </div>
+      </DetailSection>
     </div>
   )
 }
@@ -245,21 +234,11 @@ function WorkflowDetail({ data }: { data: WorkflowDetailData }) {
 function WorkflowsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [workflows, setWorkflows] = useState<Workflow[]>([])
-  const [schedules, setSchedules] = useState<Schedule[]>([])
-  const [scripts, setScripts] = useState<Script[]>([])
+  const { data: workflows = [], isLoading: isLoadingWorkflows } = useWorkflows()
+  const { data: scripts = [] } = useScripts()
+  const { data: schedules = [] } = useSchedules()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [detailData, setDetailData] = useState<WorkflowDetailData | null>(null)
   const { workflowId: deepLinkWorkflowId } = Route.useSearch()
-
-  // Load data
-  useEffect(() => {
-    Promise.all([getWorkflows(), getSchedules(), getScripts()]).then(([wfs, scheds, scrs]) => {
-      setWorkflows(wfs)
-      setSchedules(scheds)
-      setScripts(scrs)
-    })
-  }, [])
 
   // Auto-select first
   useEffect(() => {
@@ -272,19 +251,8 @@ function WorkflowsPage() {
     setSelectedId(workflows[0].id)
   }, [workflows, selectedId, deepLinkWorkflowId])
 
-  // Load detail when selection changes
-  useEffect(() => {
-    if (!selectedId) {
-      setDetailData(null)
-      return
-    }
-    let cancelled = false
-    getWorkflow(selectedId).then((wf) => {
-      if (cancelled || !wf) return
-      setDetailData({ workflow: wf, schedules, scripts })
-    })
-    return () => { cancelled = true }
-  }, [selectedId, schedules, scripts])
+  const selectedWorkflow = selectedId ? (workflows.find((w) => w.id === selectedId) ?? null) : null
+  const detailData = selectedWorkflow ? { workflow: selectedWorkflow, schedules, scripts } : null
 
   return (
     <ListDetail
@@ -298,7 +266,12 @@ function WorkflowsPage() {
             />
           }
         >
-          {workflows.length === 0 ? (
+          {isLoadingWorkflows ? (
+            <EmptyState
+              title={t('workflows.empty_title')}
+              description={t('workflows.empty_desc')}
+            />
+          ) : workflows.length === 0 ? (
             <EmptyState
               title={t('workflows.empty_title')}
               description={t('workflows.empty_desc')}

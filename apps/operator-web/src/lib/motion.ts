@@ -25,35 +25,6 @@ export const DURATION = {
   exitNormal: 0.15,
 } as const
 
-// ── Spring Presets ──
-// For gestures, drag, and physics-based motion.
-export const SPRING = {
-  /** Quick settle — drag drops, button feedback */
-  snappy: { type: "spring" as const, stiffness: 400, damping: 30 },
-  /** Noticeable bounce — notifications, empty state icon */
-  bouncy: { type: "spring" as const, stiffness: 300, damping: 20 },
-  /** Soft settle — page transitions, cards */
-  gentle: { type: "spring" as const, stiffness: 200, damping: 25 },
-  /** Apple-style — drawers, sheets */
-  apple: { type: "spring" as const, duration: 0.5, bounce: 0.2 },
-} as const
-
-// ── Stagger Helper ──
-// Max total stagger under 300ms.
-export function staggerTransition(perItem = 0.03) {
-  return {
-    staggerChildren: perItem,
-    delayChildren: 0,
-    ...(perItem > 0 ? { staggerDirection: 1 as const } : {}),
-  }
-}
-
-/** Clamp stagger delay so total never exceeds maxMs */
-export function clampedDelay(index: number, perItemMs = 30, maxTotalMs = 300): number {
-  const delay = index * perItemMs
-  return Math.min(delay, maxTotalMs) / 1000
-}
-
 // ── Common Variants ──
 export const fadeInUp = {
   initial: { opacity: 0, y: 8 },
@@ -61,14 +32,8 @@ export const fadeInUp = {
   exit: { opacity: 0 },
 } as const
 
-export const fadeInScale = {
-  initial: { opacity: 0, scale: 0.95 },
-  animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 0.95 },
-} as const
-
 // ── Reduced variants (no motion) ──
-export const staticVariants = {
+const staticVariants = {
   initial: { opacity: 1 },
   animate: { opacity: 1 },
   exit: { opacity: 1 },
@@ -100,16 +65,3 @@ export function useMotionPreference() {
   }
 }
 
-// ── Haptic Patterns ──
-// Vibration patterns for different feedback types.
-// Single number = duration in ms. Array = pattern [vibrate, pause, vibrate, ...].
-export const HAPTIC_PATTERN = {
-  /** Subtle tap — default for most interactions */
-  tap: 5,
-  /** Success confirmation — approve, send, complete */
-  success: [10, 50, 10] as number[],
-  /** Error/reject feedback */
-  error: [50, 30, 50, 30, 50] as number[],
-  /** Heavy press — destructive action confirm */
-  heavy: 30,
-} as const

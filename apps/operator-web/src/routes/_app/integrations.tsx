@@ -4,6 +4,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/page-header'
+import { DetailSection } from '@/components/ui/detail-section'
 import {
   WizardDialog,
   WizardField,
@@ -46,72 +47,79 @@ function IntegrationsPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-8">
-      <PageHeader
-        title={t('integrations.title')}
-        subtitle={t('integrations.subtitle')}
-        actions={
-          <Button variant="outline" onClick={() => setWizardOpen(true)}>
-            {t('integrations.add')}
-          </Button>
-        }
-      />
-
-      <div className="mt-6 flex max-w-2xl flex-col">
-        {integrations.map((integration, i) => {
-          const connected = integration.status === 'connected'
-          return (
-            <div
-              key={integration.id}
-              className={cn(
-                'flex items-center gap-4 px-1 py-3',
-                i < integrations.length - 1 && 'border-b border-border',
-              )}
-            >
-              <div className="flex size-9 items-center justify-center rounded-none bg-muted text-xl">
-                {integration.icon}
-              </div>
-              <div className="flex-1">
-                <p className="text-[14px] font-medium">{integration.name}</p>
-                <div className="mt-0.5 flex items-center gap-1.5">
-                  <span
-                    className={cn(
-                      'inline-block size-1.5 rounded-full',
-                      connected ? 'bg-success' : 'bg-muted-foreground',
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      'text-[12px]',
-                      connected ? 'text-success' : 'text-muted-foreground',
-                    )}
-                  >
-                    {connected ? t('integrations.connected') : t('integrations.disconnected', { name: integration.name })}
-                  </span>
-                </div>
-              </div>
-              <Button
-                variant={connected ? 'outline' : 'default'}
-                size="sm"
-                onClick={() => {
-                  if (!connected) {
-                    setSeed({
-                      action: 'create_integration',
-                      title: integration.name,
-                      context: t('chat.seed_creating_integration', { service: integration.name }),
-                      fields: { service: integration.name },
-                    })
-                    void navigate({ to: '/chat' })
-                  }
-                }}
-              >
-                {connected ? t('integrations.configure') : t('integrations.connect')}
-              </Button>
-            </div>
-          )
-        })}
-
+    <div className="flex flex-col h-full overflow-y-auto">
+      {/* Page header */}
+      <div className="border-b border-border/50 px-5 py-4">
+        <PageHeader
+          title={t('integrations.title')}
+          subtitle={t('integrations.subtitle')}
+          actions={
+            <Button variant="outline" size="sm" onClick={() => setWizardOpen(true)}>
+              {t('integrations.add')}
+            </Button>
+          }
+        />
       </div>
+
+      {/* Integrations list */}
+      <DetailSection last title={t('integrations.title')}>
+        <div className="mt-2 flex flex-col">
+          {integrations.map((integration, i) => {
+            const connected = integration.status === 'connected'
+            return (
+              <div
+                key={integration.id}
+                className={cn(
+                  'flex items-center gap-3 py-2.5',
+                  i < integrations.length - 1 && 'border-b border-border/30',
+                )}
+              >
+                <div className="flex size-8 items-center justify-center rounded-none bg-muted text-lg">
+                  {integration.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-foreground">{integration.name}</p>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    <span
+                      className={cn(
+                        'inline-block size-1.5 rounded-full',
+                        connected ? 'bg-success' : 'bg-muted-foreground',
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        'text-[12px]',
+                        connected ? 'text-success' : 'text-muted-foreground',
+                      )}
+                    >
+                      {connected
+                        ? t('integrations.connected')
+                        : t('integrations.disconnected', { name: integration.name })}
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  variant={connected ? 'outline' : 'default'}
+                  size="sm"
+                  onClick={() => {
+                    if (!connected) {
+                      setSeed({
+                        action: 'create_integration',
+                        title: integration.name,
+                        context: t('chat.seed_creating_integration', { service: integration.name }),
+                        fields: { service: integration.name },
+                      })
+                      void navigate({ to: '/chat' })
+                    }
+                  }}
+                >
+                  {connected ? t('integrations.configure') : t('integrations.connect')}
+                </Button>
+              </div>
+            )
+          })}
+        </div>
+      </DetailSection>
 
       {/* Integration wizard */}
       <WizardDialog

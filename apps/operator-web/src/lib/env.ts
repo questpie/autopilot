@@ -32,11 +32,3 @@ export function getApiBaseUrl(): string {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
   return ''
 }
-
-/**
- * App URL (canonical external URL). Defaults to window.location.origin.
- */
-export function getAppUrl(): string {
-  const env = readRuntimeEnv()
-  return env.APP_URL || window.location.origin
-}

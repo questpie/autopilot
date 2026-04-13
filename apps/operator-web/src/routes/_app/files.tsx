@@ -350,11 +350,13 @@ function CompanyDetail({ resource }: { resource: ResourceData }) {
             <h2 className="text-[18px] font-medium text-foreground">{resource.filename}</h2>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="font-mono text-[11px] text-muted-foreground">{resource.type} · {resource.size} · {resource.date}</span>
-              <StatusPill
-                status={STATUS_PILL_MAP[resource.status]}
-                label={t(STATUS_I18N[resource.status])}
-                pulse={resource.status === 'processing'}
-              />
+              {resource.status !== 'indexed' && (
+                <StatusPill
+                  status={STATUS_PILL_MAP[resource.status]}
+                  label={t(STATUS_I18N[resource.status])}
+                  pulse={resource.status === 'processing'}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -781,11 +783,13 @@ function FilesPage() {
                         metaRight={
                           <div className="flex items-center gap-2">
                             <span className="font-heading text-[11px] text-muted-foreground">{resource.size}</span>
-                            <StatusPill
-                              status={STATUS_PILL_MAP[resource.status]}
-                              label={t(STATUS_I18N[resource.status])}
-                              pulse={resource.status === 'processing'}
-                            />
+                            {resource.status !== 'indexed' && (
+                              <StatusPill
+                                status={STATUS_PILL_MAP[resource.status]}
+                                label={t(STATUS_I18N[resource.status])}
+                                pulse={resource.status === 'processing'}
+                              />
+                            )}
                           </div>
                         }
                         selected={selected?.kind === 'company-file' && selected.resource.id === resource.id}

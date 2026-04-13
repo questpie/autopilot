@@ -1,152 +1,58 @@
-// Mock adapter. Returns hardcoded data matching API response shapes.
-// Swap to real API: replace with hc<AppType>('/api/tasks').get().$get() (Hono client)
+/**
+ * Tasks API — wired to /api/tasks and composed endpoints.
+ * All endpoints require user auth (session cookie).
+ */
+import type { Task, TaskWithRelations, Artifact, Run, ActivityEntry, AdvanceResult } from './types'
+import { apiFetch, ApiError } from '@/lib/api-client'
 
-import type { Task, TaskWithRelations, RunEvent, Artifact } from './types'
-import { mockTasks, mockTaskRuns, mockTaskRunEvents, mockTaskArtifacts } from './mock/tasks.mock'
-import { delay } from './mock/delay'
-
-// ── Module-local mutable approval state ──
-// These track in-session approve/reject decisions without touching the const mock arrays.
-// Reset on page reload — demo only.
-
-let _nextEventId = 1000
-const _approvalEvents: RunEvent[] = []
-
-function nowIso(): string {
-  return new Date().toISOString()
+export async function getTasks(filters?: { status?: string; assigned_to?: string; workflow_id?: string }): Promise<Task[]> {
+  const params = new URLSearchParams()
+  if (filters?.status) params.set('status', filters.status)
+  if (filters?.assigned_to) params.set('assigned_to', filters.assigned_to)
+  if (filters?.workflow_id) params.set('workflow_id', filters.workflow_id)
+  const qs = params.toString()
+  return apiFetch<Task[]>(`/api/tasks${qs ? `?${qs}` : ''}`)
 }
 
-// Find the pending approval_requested event run_id for a task
-function pendingApprovalRunId(taskId: string): string | null {
-  const taskRuns = mockTaskRuns.filter((r) => r.task_id === taskId)
-  const runIds = new Set(taskRuns.map((r) => r.id))
-  // Look through static + dynamic events for approval_requested without a matching approved/rejected
-  const allEvents = [...mockTaskRunEvents, ..._approvalEvents].filter((e) => runIds.has(e.run_id))
-  const requestedEvents = allEvents.filter((e) => e.type === 'approval_requested')
-  for (const req of requestedEvents) {
-    const payload = (() => { try { return JSON.parse(req.metadata) as Record<string, unknown> } catch { return {} } })()
-    const step = payload.step as string | undefined
-    const revision = payload.revision as number | undefined
-    const hasResolution = allEvents.some((e) => {
-      if (e.run_id !== req.run_id) return false
-      if (e.type !== 'approval_approved' && e.type !== 'approval_rejected') return false
-      const ep = (() => { try { return JSON.parse(e.metadata) as Record<string, unknown> } catch { return {} } })()
-      return ep.step === step && ep.revision === revision
-    })
-    if (!hasResolution) return req.run_id
+export async function getTaskDetail(id: string): Promise<TaskWithRelations | null> {
+  try {
+    const [task, parents, children, dependencies, dependents, runs] = await Promise.all([
+      apiFetch<Task>(`/api/tasks/${encodeURIComponent(id)}`),
+      apiFetch<Task[]>(`/api/tasks/${encodeURIComponent(id)}/parents`),
+      apiFetch<Task[]>(`/api/tasks/${encodeURIComponent(id)}/children`),
+      apiFetch<Task[]>(`/api/tasks/${encodeURIComponent(id)}/dependencies`),
+      apiFetch<Task[]>(`/api/tasks/${encodeURIComponent(id)}/dependents`),
+      apiFetch<Run[]>(`/api/runs?task_id=${encodeURIComponent(id)}`),
+    ])
+    return { ...task, parents, children, dependencies, dependents, runs }
+  } catch (err: unknown) {
+    if (err instanceof ApiError && err.status === 404) return null
+    throw err
   }
-  return null
 }
 
-export async function getTasks(
-  filters?: { status?: string },
-): Promise<Task[]> {
-  await delay(80)
-  if (filters?.status) {
-    return mockTasks.filter((t) => t.status === filters.status)
-  }
-  return mockTasks
+export async function getTaskActivity(id: string): Promise<ActivityEntry[]> {
+  return apiFetch<ActivityEntry[]>(`/api/tasks/${encodeURIComponent(id)}/activity`)
 }
 
-export async function getTask(
-  id: string,
-): Promise<TaskWithRelations | null> {
-  await delay(60)
-  const task = mockTasks.find((t) => t.id === id)
-  if (!task) return null
-
-  const parentTask = mockTasks.find(
-    (t) => t.id === 'tsk_01JR8VQM3K0000000000000004',
+export async function getTaskArtifacts(id: string): Promise<Artifact[]> {
+  const runs = await apiFetch<Run[]>(`/api/runs?task_id=${encodeURIComponent(id)}`)
+  const artifactArrays = await Promise.all(
+    runs.map((run) => apiFetch<Artifact[]>(`/api/runs/${encodeURIComponent(run.id)}/artifacts`))
   )
-
-  return {
-    ...task,
-    parents: parentTask && task.id !== parentTask.id ? [parentTask] : [],
-    children: [],
-    dependencies: [],
-    dependents: [],
-    runs: mockTaskRuns.filter((r) => r.task_id === id),
-  }
+  return artifactArrays.flat()
 }
 
-export async function getTaskActivity(
-  id: string,
-): Promise<RunEvent[]> {
-  await delay(40)
-  const taskRuns = mockTaskRuns.filter((r) => r.task_id === id)
-  const runIds = new Set(taskRuns.map((r) => r.id))
-  const staticEvents = mockTaskRunEvents.filter((e) => runIds.has(e.run_id))
-  const dynamicEvents = _approvalEvents.filter((e) => runIds.has(e.run_id))
-  return [...staticEvents, ...dynamicEvents]
-}
-
-export async function getTaskArtifacts(
-  id: string,
-): Promise<Artifact[]> {
-  await delay(40)
-  return mockTaskArtifacts.filter((a) => a.task_id === id)
-}
-
-export async function approveTask(
-  id: string,
-): Promise<void> {
-  await delay(100)
-  // Find the task and mutate its status in-place
-  const task = mockTasks.find((t) => t.id === id)
-  if (!task) return
-  const runId = pendingApprovalRunId(id) ?? mockTaskRuns.find((r) => r.task_id === id)?.id ?? 'run_unknown'
-
-  // Determine which step/revision we are approving from the last approval_requested event
-  const allEvents = [...mockTaskRunEvents, ..._approvalEvents]
-  const taskRuns = mockTaskRuns.filter((r) => r.task_id === id)
-  const runIds = new Set(taskRuns.map((r) => r.id))
-  const reqEvt = [...allEvents].reverse().find((e) => runIds.has(e.run_id) && e.type === 'approval_requested')
-  const reqPayload = reqEvt ? (() => { try { return JSON.parse(reqEvt.metadata) as Record<string, unknown> } catch { return {} } })() : {}
-
-  _approvalEvents.push({
-    id: _nextEventId++,
-    run_id: runId,
-    type: 'approval_approved',
-    summary: 'Approved by operator',
-    metadata: JSON.stringify({ step: reqPayload.step ?? 'review', revision: reqPayload.revision ?? 1, by: 'Jana Kováčová' }),
-    created_at: nowIso(),
+export async function approveTask(id: string): Promise<AdvanceResult> {
+  return apiFetch<AdvanceResult>(`/api/tasks/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
   })
-
-  task.status = 'running'
-  task.updated_at = nowIso()
 }
 
-export async function rejectTask(
-  id: string,
-  message: string,
-): Promise<void> {
-  await delay(100)
-  const task = mockTasks.find((t) => t.id === id)
-  if (!task) return
-  const runId = pendingApprovalRunId(id) ?? mockTaskRuns.find((r) => r.task_id === id)?.id ?? 'run_unknown'
-
-  const allEvents = [...mockTaskRunEvents, ..._approvalEvents]
-  const taskRuns = mockTaskRuns.filter((r) => r.task_id === id)
-  const runIds = new Set(taskRuns.map((r) => r.id))
-  const reqEvt = [...allEvents].reverse().find((e) => runIds.has(e.run_id) && e.type === 'approval_requested')
-  const reqPayload = reqEvt ? (() => { try { return JSON.parse(reqEvt.metadata) as Record<string, unknown> } catch { return {} } })() : {}
-
-  _approvalEvents.push({
-    id: _nextEventId++,
-    run_id: runId,
-    type: 'approval_rejected',
-    summary: 'Returned by operator',
-    metadata: JSON.stringify({
-      step: reqPayload.step ?? 'review',
-      revision: reqPayload.revision ?? 1,
-      by: 'Jana Kováčová',
-      message: message || undefined,
-    }),
-    created_at: nowIso(),
+export async function rejectTask(id: string, message: string): Promise<AdvanceResult> {
+  return apiFetch<AdvanceResult>(`/api/tasks/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
   })
-
-  // Rejection puts the task back to running (agent will re-draft)
-  task.status = 'running'
-  task.updated_at = nowIso()
 }
-

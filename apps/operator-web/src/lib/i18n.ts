@@ -3,8 +3,8 @@ import { initReactI18next } from "react-i18next"
 import en from "@/locales/en.json"
 import sk from "@/locales/sk.json"
 
-const SUPPORTED_LOCALES = ['sk', 'en'] as const
-type SupportedLocale = typeof SUPPORTED_LOCALES[number]
+export const SUPPORTED_LOCALES = ['sk', 'en'] as const
+export type SupportedLocale = typeof SUPPORTED_LOCALES[number]
 
 function isSupportedLocale(value: string): value is SupportedLocale {
   return SUPPORTED_LOCALES.some((locale) => locale === value)

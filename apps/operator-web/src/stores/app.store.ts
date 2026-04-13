@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { SupportedLocale } from '@/lib/i18n'
 
 type Theme = 'dark' | 'light' | 'system'
-type Locale = 'sk' | 'en' | 'auto'
+type Locale = SupportedLocale | 'auto'
 
 interface AppState {
   theme: Theme

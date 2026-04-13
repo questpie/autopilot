@@ -6,11 +6,12 @@ import { useTranslation } from '@/lib/i18n'
 import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
 import { ListDetail, ListPanel } from '@/components/list-detail'
-import { SectionHeader } from '@/components/ui/section-header'
 import { KvList } from '@/components/ui/kv-list'
 import { RelationLink } from '@/components/ui/relation-link'
-import { getScripts, getScript } from '@/api/scripts.api'
-import { getWorkflows } from '@/api/workflows.api'
+import { MetaToken } from '@/components/ui/meta-token'
+import { DetailSection } from '@/components/ui/detail-section'
+import { useScripts } from '@/hooks/use-scripts'
+import { useWorkflows } from '@/hooks/use-workflows'
 import type { Script, ScriptRunner, Workflow } from '@/api/types'
 
 const scriptsSearchSchema = z.object({
@@ -61,14 +62,9 @@ function ScriptRow({
           <div className="truncate text-[13px] font-medium text-foreground">{script.name}</div>
           <div className="truncate text-[12px] text-muted-foreground">{script.description}</div>
           <div className="mt-0.5 flex items-center gap-2">
-            <span
-              className={cn(
-                'inline-block rounded-none border px-1.5 py-0.5 font-heading text-[10px]',
-                RUNNER_COLORS[script.runner],
-              )}
-            >
+            <MetaToken variant="outline" className={RUNNER_COLORS[script.runner]}>
               {script.runner}
-            </span>
+            </MetaToken>
             {script.tags.map((tag) => (
               <span key={tag} className="font-heading text-[11px] text-muted-foreground/60">
                 {tag}
@@ -97,33 +93,24 @@ function ScriptDetail({ data }: { data: ScriptDetailData }) {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="border-b border-border/50 px-5 py-4">
+      <DetailSection>
         <h2 className="text-[18px] font-medium text-foreground">{script.name}</h2>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span
-            className={cn(
-              'inline-block rounded-none border px-1.5 py-0.5 font-heading text-[10px]',
-              RUNNER_COLORS[script.runner],
-            )}
-          >
+          <MetaToken variant="outline" className={RUNNER_COLORS[script.runner]}>
             {script.runner}
-          </span>
-          <span className="rounded-none bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-            {script.entry_point}
-          </span>
+          </MetaToken>
+          <MetaToken mono>{script.entry_point}</MetaToken>
         </div>
-      </div>
+      </DetailSection>
 
       {/* Description */}
-      <div className="border-b border-border/50 px-5 py-4">
-        <SectionHeader>{t('scripts.description')}</SectionHeader>
+      <DetailSection title={t('scripts.description')}>
         <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{script.description}</p>
-      </div>
+      </DetailSection>
 
       {/* Inputs */}
       {script.inputs.length > 0 && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('scripts.inputs')}</SectionHeader>
+        <DetailSection title={t('scripts.inputs')}>
           <div className="mt-3 flex flex-col">
             {script.inputs.map((input, idx) => (
               <div
@@ -134,22 +121,21 @@ function ScriptDetail({ data }: { data: ScriptDetailData }) {
                 )}
               >
                 <span className="font-mono text-[12px] font-medium text-foreground">{input.name}</span>
-                <span className="rounded-none border border-border/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                <MetaToken variant="outline" mono className="border-border/50 text-muted-foreground">
                   {input.type}
-                </span>
+                </MetaToken>
                 {input.required && (
                   <span className="font-heading text-[10px] text-amber-400">{t('scripts.required')}</span>
                 )}
               </div>
             ))}
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* Outputs */}
       {script.outputs.length > 0 && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('scripts.outputs')}</SectionHeader>
+        <DetailSection title={t('scripts.outputs')}>
           <div className="mt-3 flex flex-col">
             {script.outputs.map((output, idx) => (
               <div
@@ -160,19 +146,18 @@ function ScriptDetail({ data }: { data: ScriptDetailData }) {
                 )}
               >
                 <span className="font-mono text-[12px] font-medium text-foreground">{output.name}</span>
-                <span className="rounded-none border border-border/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                <MetaToken variant="outline" mono className="border-border/50 text-muted-foreground">
                   {output.type}
-                </span>
+                </MetaToken>
               </div>
             ))}
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* Where used — FE-derived from workflow step actions */}
       {usedInWorkflows.length > 0 && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('scripts.where_used')}</SectionHeader>
+        <DetailSection title={t('scripts.where_used')}>
           <div className="mt-3 flex flex-col gap-1">
             {usedInWorkflows.map((wf) => (
               <RelationLink
@@ -183,12 +168,11 @@ function ScriptDetail({ data }: { data: ScriptDetailData }) {
               />
             ))}
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* Sandbox */}
-      <div className="border-b border-border/50 px-5 py-4">
-        <SectionHeader>{t('scripts.sandbox')}</SectionHeader>
+      <DetailSection title={t('scripts.sandbox')}>
         <div className="mt-3">
           <KvList
             items={[
@@ -199,22 +183,20 @@ function ScriptDetail({ data }: { data: ScriptDetailData }) {
             ]}
           />
         </div>
-      </div>
+      </DetailSection>
 
       {/* Source file path */}
-      <div className="border-b border-border/50 px-5 py-4">
-        <SectionHeader>{t('scripts.source_file')}</SectionHeader>
+      <DetailSection title={t('scripts.source_file')}>
         <div className="mt-3 flex items-center gap-2">
           <span className="font-mono text-[12px] text-muted-foreground">{script.entry_point}</span>
           <span className="text-[11px] text-muted-foreground/50">
             {t('scripts.source_file_hint')}
           </span>
         </div>
-      </div>
+      </DetailSection>
 
       {/* Metadata */}
-      <div className="px-5 py-4">
-        <SectionHeader>{t('scripts.metadata')}</SectionHeader>
+      <DetailSection last title={t('scripts.metadata')}>
         <div className="mt-3">
           <KvList
             items={[
@@ -224,7 +206,7 @@ function ScriptDetail({ data }: { data: ScriptDetailData }) {
             ]}
           />
         </div>
-      </div>
+      </DetailSection>
     </div>
   )
 }
@@ -234,19 +216,10 @@ function ScriptDetail({ data }: { data: ScriptDetailData }) {
 function ScriptsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [scripts, setScripts] = useState<Script[]>([])
-  const [workflows, setWorkflows] = useState<Workflow[]>([])
+  const { data: scripts = [], isLoading: isLoadingScripts } = useScripts()
+  const { data: workflows = [] } = useWorkflows()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [detailData, setDetailData] = useState<ScriptDetailData | null>(null)
   const { scriptId: deepLinkScriptId } = Route.useSearch()
-
-  // Load data
-  useEffect(() => {
-    Promise.all([getScripts(), getWorkflows()]).then(([scrs, wfs]) => {
-      setScripts(scrs)
-      setWorkflows(wfs)
-    })
-  }, [])
 
   // Auto-select first
   useEffect(() => {
@@ -259,28 +232,22 @@ function ScriptsPage() {
     setSelectedId(scripts[0].id)
   }, [scripts, selectedId, deepLinkScriptId])
 
-  // Load detail when selection changes
-  useEffect(() => {
-    if (!selectedId) {
-      setDetailData(null)
-      return
-    }
-    let cancelled = false
-    getScript(selectedId).then((scr) => {
-      if (cancelled || !scr) return
-      // FE-derived: find workflows that reference this script in step actions
-      const usedInWorkflows = workflows.filter((wf) =>
-        wf.steps.some((step) =>
-          step.actions.some((a) => {
-            const action = a as Record<string, unknown>
-            return action.kind === 'script_ref' && action.script_id === scr.id
-          }),
+  const selectedScript = selectedId ? (scripts.find((s) => s.id === selectedId) ?? null) : null
+
+  const detailData: ScriptDetailData | null = selectedScript
+    ? {
+        script: selectedScript,
+        // FE-derived: find workflows that reference this script in step actions
+        usedInWorkflows: workflows.filter((wf) =>
+          wf.steps.some((step) =>
+            step.actions.some((a) => {
+              if (typeof a !== 'object' || a === null || !('kind' in a) || !('script_id' in a)) return false
+              return a.kind === 'script_ref' && a.script_id === selectedScript.id
+            }),
+          ),
         ),
-      )
-      setDetailData({ script: scr, usedInWorkflows })
-    })
-    return () => { cancelled = true }
-  }, [selectedId, workflows])
+      }
+    : null
 
   return (
     <ListDetail
@@ -294,7 +261,12 @@ function ScriptsPage() {
             />
           }
         >
-          {scripts.length === 0 ? (
+          {isLoadingScripts ? (
+            <EmptyState
+              title={t('scripts.empty_title')}
+              description={t('scripts.empty_desc')}
+            />
+          ) : scripts.length === 0 ? (
             <EmptyState
               title={t('scripts.empty_title')}
               description={t('scripts.empty_desc')}

@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/page-header'
+import { DetailSection } from '@/components/ui/detail-section'
 import { useTranslation } from '@/lib/i18n'
 import { useChatSeedStore } from '@/stores/chat-seed.store'
 import { getCompanyProfile } from '@/api/company.api'
@@ -48,112 +49,116 @@ function CompanyPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-8">
-      <PageHeader title={t('company.title')} subtitle={t('company.subtitle')} />
+    <div className="flex flex-col h-full overflow-y-auto">
+      {/* Page header */}
+      <div className="border-b border-border/50 px-5 py-4">
+        <PageHeader title={t('company.title')} subtitle={t('company.subtitle')} />
+      </div>
 
-      <div className="mt-6 flex max-w-2xl flex-col gap-3">
-        {/* Názov a popis */}
-        <div
-          className="cursor-pointer rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40"
-          onClick={() => {
-            if (!editing) startEdit()
-          }}
-        >
-          <p className="text-[14px] font-medium">{t('company.name_desc')}</p>
-          {editing ? (
-            <div className="mt-3 flex flex-col gap-2">
-              <input
-                className="h-8 rounded-none border border-border bg-background px-2.5 text-[14px] outline-none focus:border-primary"
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-              />
-              <input
-                className="h-8 rounded-none border border-border bg-background px-2.5 text-[14px] outline-none focus:border-primary"
-                value={draftDesc}
-                onChange={(e) => setDraftDesc(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-              />
-              <div className="mt-1 flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    saveEdit()
-                  }}
-                >
-                  {t('company.save')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    cancelEdit()
-                  }}
-                >
-                  {t('company.cancel')}
-                </Button>
-              </div>
+      {/* Name & description */}
+      <DetailSection
+        title={t('company.name_desc')}
+        action={
+          !editing ? (
+            <button
+              type="button"
+              onClick={startEdit}
+              className="font-heading text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Edit
+            </button>
+          ) : undefined
+        }
+      >
+        {editing ? (
+          <div className="mt-3 flex flex-col gap-2">
+            <input
+              className="h-8 rounded-none border border-border bg-background px-2.5 text-[13px] outline-none focus:border-primary"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+            />
+            <input
+              className="h-8 rounded-none border border-border bg-background px-2.5 text-[13px] outline-none focus:border-primary"
+              value={draftDesc}
+              onChange={(e) => setDraftDesc(e.target.value)}
+            />
+            <div className="mt-1 flex gap-2">
+              <Button size="sm" onClick={saveEdit}>
+                {t('company.save')}
+              </Button>
+              <Button variant="outline" size="sm" onClick={cancelEdit}>
+                {t('company.cancel')}
+              </Button>
             </div>
-          ) : (
-            <p className="mt-1 text-[13px] text-muted-foreground">
-              {companyName} — {companyDesc}
-            </p>
-          )}
-        </div>
-
-        {/* Tón komunikácie */}
-        <div
-          className="cursor-pointer rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40"
-          onClick={() => {
-            setSeed({
-              action: 'refine_tone',
-              title: t('chat.seed_refining_tone'),
-              context: t('chat.seed_refining_tone'),
-              fields: {},
-            })
-            void navigate({ to: '/chat' })
-          }}
-        >
-          <p className="text-[14px] font-medium">{t('company.tone')}</p>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            {t('company.tone_value')}
+          </div>
+        ) : (
+          <p className="mt-2 text-[13px] text-muted-foreground">
+            {companyName || <span className="italic opacity-50">—</span>}
+            {companyName && companyDesc ? ' — ' : ''}
+            {companyDesc}
           </p>
-          <p className="mt-2 font-heading text-[11px] uppercase tracking-[0.5px] text-primary">
+        )}
+      </DetailSection>
+
+      {/* Communication tone */}
+      <DetailSection
+        title={t('company.tone')}
+        action={
+          <button
+            type="button"
+            onClick={() => {
+              setSeed({
+                action: 'refine_tone',
+                title: t('chat.seed_refining_tone'),
+                context: t('chat.seed_refining_tone'),
+                fields: {},
+              })
+              void navigate({ to: '/chat' })
+            }}
+            className="font-heading text-[11px] text-primary hover:underline transition-colors"
+          >
             {t('company.tone_edit_hint')}
-          </p>
-        </div>
+          </button>
+        }
+      >
+        <p className="mt-2 text-[13px] text-muted-foreground">
+          {t('company.tone_value')}
+        </p>
+      </DetailSection>
 
-        {/* Firemné podklady */}
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-[14px] font-medium">{t('company.knowledge')}</p>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            {t('company.knowledge_desc')}
-          </p>
+      {/* Company knowledge */}
+      <DetailSection
+        last
+        title={t('company.knowledge')}
+        action={
+          <Button variant="outline" size="sm">
+            {t('company.upload')}
+          </Button>
+        }
+      >
+        <p className="mt-2 text-[13px] text-muted-foreground">
+          {t('company.knowledge_desc')}
+        </p>
 
-          <div className="mt-3 border-t border-border pt-3">
+        {(profile?.knowledge_files ?? []).length > 0 && (
+          <div className="mt-3 flex flex-col gap-0.5">
             {(profile?.knowledge_files ?? []).map((file) => (
               <div
                 key={file.name}
                 className="flex items-center gap-2 py-1.5"
               >
-                <span className="text-[14px]">{'\u{1F4C4}'}</span>
-                <span className="flex-1 text-[13px]">{file.name}</span>
+                <span className="rounded-none bg-muted/40 px-1.5 py-0.5 font-heading text-[10px] text-muted-foreground">
+                  DOC
+                </span>
+                <span className="flex-1 text-[13px] text-foreground">{file.name}</span>
                 <span className="font-heading text-[11px] text-muted-foreground">
                   {file.size}
                 </span>
               </div>
             ))}
           </div>
-
-          <div className="mt-3">
-            <Button variant="outline" size="sm">
-              {t('company.upload')}
-            </Button>
-          </div>
-        </div>
-      </div>
+        )}
+      </DetailSection>
     </div>
   )
 }

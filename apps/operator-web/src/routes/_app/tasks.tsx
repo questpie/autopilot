@@ -6,22 +6,26 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
 import { ListDetail, ListPanel } from '@/components/list-detail'
-import { StatusPill, type StatusPillStatus } from '@/components/ui/status-pill'
-import { SectionHeader } from '@/components/ui/section-header'
+import { StatusPill } from '@/components/ui/status-pill'
 import { KvList } from '@/components/ui/kv-list'
 import { Timeline, type TimelineEvent } from '@/components/ui/timeline'
 import { RelationLink } from '@/components/ui/relation-link'
+import { FilterTabs } from '@/components/ui/filter-tabs'
+import { MetaToken } from '@/components/ui/meta-token'
+import { DetailSection } from '@/components/ui/detail-section'
+import { FileViewer } from '@/components/file-viewer'
 import { useTranslation } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+import { taskStatusToPill, taskStatusBorder, taskStatusDot } from '@/lib/status-colors'
 import {
   WizardDialog,
   WizardField,
   wizardTextareaClass,
 } from '@/components/wizard-dialog'
 import { useChatSeedStore } from '@/stores/chat-seed.store'
-import { getTasks, getTask, getTaskActivity, getTaskArtifacts, approveTask, rejectTask } from '@/api/tasks.api'
-import { getWorkflows } from '@/api/workflows.api'
-import type { Task, TaskWithRelations, Run, RunEvent, Artifact, Workflow } from '@/api/types'
+import { useTasks, useTaskDetail, useTaskActivity, useTaskArtifacts, useApproveTask, useRejectTask } from '@/hooks/use-tasks'
+import { useWorkflows } from '@/hooks/use-workflows'
+import type { Task, TaskWithRelations, Run, RunEvent, Artifact, Workflow, ActivityEntry } from '@/api/types'
 import { parseRunEventMetadata, parseTaskContext } from '@/api/parse'
 
 const tasksSearchSchema = z.object({
@@ -344,60 +348,24 @@ function buildRevisionTree(task: Task, runs: Run[], events: RunEvent[], artifact
   return steps
 }
 
-function buildActivityFromEvents(events: RunEvent[], t: (key: string, opts?: Record<string, unknown>) => string, locale: string): TimelineEvent[] {
-  return events.map((evt) => {
-    const time = new Date(evt.created_at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
-    const data = parseRunEventMetadata(evt)
-    const step = typeof data.step === 'string' ? data.step : ''
-    const revision = typeof data.revision === 'number' ? data.revision : 0
-    const revStep = revision > 0 ? `${step} (rev ${revision})` : step
-
-    let label = `${evt.type}${step ? ` — ${revStep}` : ''}`
+function buildActivityFromTaskActivity(entries: ActivityEntry[], _t: (key: string, opts?: Record<string, unknown>) => string, locale: string): TimelineEvent[] {
+  return entries.map((entry) => {
+    const time = new Date(entry.created_at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
     let variant: TimelineEvent['variant'] = undefined
 
-    switch (evt.type) {
-      case 'step_completed':
-        if (typeof data.summary === 'string') {
-          label = t('tasks.activity_step_completed_summary', { step: revStep, summary: data.summary })
-        } else {
-          label = t('tasks.activity_step_completed', { step: revStep })
-        }
+    switch (entry.type) {
+      case 'approval':
         variant = 'success'
         break
-      case 'step_failed':
-        if (typeof data.error === 'string') {
-          label = t('tasks.activity_step_failed_error', { step: revStep, error: data.error })
-        } else {
-          label = t('tasks.activity_step_failed', { step: revStep })
-        }
+      case 'rejection':
+        variant = 'warning'
+        break
+      case 'escalation':
         variant = 'error'
         break
-      case 'step_started':
-        label = t('tasks.activity_step_started', { step: revStep })
-        break
-      case 'approval_requested':
-        label = t('tasks.activity_approval_requested', { step: revStep })
-        variant = 'warning'
-        break
-      case 'approval_approved': {
-        const by = typeof data.by === 'string' ? data.by : 'User'
-        label = t('tasks.activity_approved', { by, step: revStep })
-        variant = 'success'
-        break
-      }
-      case 'approval_rejected': {
-        const by = typeof data.by === 'string' ? data.by : 'User'
-        if (typeof data.message === 'string') {
-          label = t('tasks.activity_returned_message', { by, message: data.message })
-        } else {
-          label = t('tasks.activity_returned', { by })
-        }
-        variant = 'warning'
-        break
-      }
     }
 
-    return { time, label, variant }
+    return { time, label: entry.summary, variant }
   })
 }
 
@@ -436,7 +404,7 @@ function buildRelations(taskWithRelations: TaskWithRelations, workflows: Workflo
 
 function taskToViewModel(
   taskWithRelations: TaskWithRelations,
-  events: RunEvent[],
+  activity: ActivityEntry[],
   artifacts: Artifact[],
   workflows: Workflow[],
   t: (key: string, opts?: Record<string, unknown>) => string,
@@ -450,7 +418,9 @@ function taskToViewModel(
     ? { type: 'schedule', label: task.scheduled_by, id: task.scheduled_by }
     : { type: 'conversation', label: typeof context.source_conversation === 'string' ? context.source_conversation : task.title }
 
-  const steps = buildRevisionTree(task, runs, events, artifacts, locale)
+  // Pass empty events — run events are workerAuth-only, not available from FE.
+  // buildRevisionTree falls back to runs-only mode when events are empty.
+  const steps = buildRevisionTree(task, runs, [], artifacts, locale)
   const allArtifacts = steps.flatMap((s) => s.artifacts)
 
   return {
@@ -463,63 +433,16 @@ function taskToViewModel(
     created_at: task.created_at,
     steps,
     relations: buildRelations(taskWithRelations, workflows, t),
-    activity: buildActivityFromEvents(events, t, locale),
+    activity: buildActivityFromTaskActivity(activity, t, locale),
     allArtifacts,
   }
 }
 
-// ── Status mapping ──
+// ── Status mapping — delegated to shared status-colors ──
 
-function apiStatusToPill(status: string): StatusPillStatus {
-  switch (status) {
-    case 'waiting_for_human_approval':
-      return 'needs-input'
-    case 'running':
-      return 'working'
-    case 'completed':
-      return 'done'
-    case 'failed':
-      return 'failed'
-    case 'blocked':
-      return 'blocked'
-    default:
-      return 'pending'
-  }
-}
-
-function statusBorderColor(status: string): string {
-  switch (status) {
-    case 'waiting_for_human_approval':
-      return 'border-l-amber-500'
-    case 'running':
-      return 'border-l-blue-500'
-    case 'completed':
-      return 'border-l-green-500'
-    case 'failed':
-      return 'border-l-red-500'
-    case 'blocked':
-      return 'border-l-red-500'
-    default:
-      return 'border-l-zinc-400'
-  }
-}
-
-function statusDotColor(status: string): string {
-  switch (status) {
-    case 'waiting_for_human_approval':
-      return 'bg-amber-500'
-    case 'running':
-      return 'bg-blue-500'
-    case 'completed':
-      return 'bg-green-500'
-    case 'failed':
-      return 'bg-red-500'
-    case 'blocked':
-      return 'bg-red-500'
-    default:
-      return 'bg-zinc-400'
-  }
-}
+const apiStatusToPill = taskStatusToPill
+const statusBorderColor = taskStatusBorder
+const statusDotColor = taskStatusDot
 
 function stepDotColor(status: StepStatus): string {
   switch (status) {
@@ -980,6 +903,65 @@ function artifactKindLabel(kind: string): string {
   }
 }
 
+// ── Artifact preview row ──
+
+function ArtifactPreviewRow({
+  art,
+  t,
+  navigate,
+}: {
+  art: StepArtifact
+  t: (key: string) => string
+  navigate: ReturnType<typeof useNavigate>
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const canPreview = art.ref_kind === 'inline' && art.ref_value.length > 0
+
+  return (
+    <div className="flex flex-col gap-0">
+      <div className="flex items-center gap-2 py-0.5">
+        <MetaToken mono className="px-1 py-px text-[10px] opacity-50">{artifactKindLabel(art.kind)}</MetaToken>
+        <MetaToken mono className="px-1 py-px text-[10px]">{art.type}</MetaToken>
+        <span className={cn(
+          'min-w-0 flex-1 truncate text-[12px]',
+          art.partial ? 'text-amber-400' : 'text-foreground',
+        )}>
+          {art.filename}
+          {art.partial && <span className="ml-1 text-[10px] text-amber-400/70">(partial)</span>}
+        </span>
+        {canPreview && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="shrink-0 font-mono text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+          >
+            {expanded ? t('tasks.hide_preview') : t('tasks.preview')}
+          </button>
+        )}
+        {art.ref_kind === 'file' && (
+          <button
+            type="button"
+            onClick={() => void navigate({ to: '/files', search: { path: art.ref_value, scope: 'workspace' } })}
+            className="shrink-0 font-mono text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+          >
+            {t('tasks.inspect_output')}
+          </button>
+        )}
+      </div>
+      {expanded && canPreview && (
+        <div className="mt-1 overflow-hidden border border-border/50">
+          <FileViewer
+            path={art.filename}
+            content={art.ref_value}
+            mime={art.type === 'MD' ? 'text/markdown' : undefined}
+            className="max-h-[320px]"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Task Detail ──
 
 function TaskDetail({ task, onApprove, onReject }: { task: TaskViewModel; onApprove: (taskId: string) => void; onReject: (taskId: string, message: string) => void }) {
@@ -996,19 +978,15 @@ function TaskDetail({ task, onApprove, onReject }: { task: TaskViewModel; onAppr
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="border-b border-border/50 px-5 py-4">
+      <DetailSection>
         <h2 className="text-[18px] font-medium text-foreground">{task.title}</h2>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <StatusPill
             status={apiStatusToPill(task.status)}
             pulse={task.status === 'running'}
           />
-          <span className="rounded-none bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-            {sourceLabel(task.source, t)}
-          </span>
-          <span className="rounded-none bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-            {task.id}
-          </span>
+          <MetaToken mono>{sourceLabel(task.source, t)}</MetaToken>
+          <MetaToken mono>{task.id}</MetaToken>
         </div>
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{task.description}</p>
         {task.error && (
@@ -1016,18 +994,18 @@ function TaskDetail({ task, onApprove, onReject }: { task: TaskViewModel; onAppr
             {t('tasks.error_label')}: {task.error}
           </p>
         )}
-      </div>
+      </DetailSection>
 
       {/* 1. Current progress strip */}
-      <div className="border-b border-border/50 px-5 py-2">
+      <DetailSection className="py-2">
         <span className={cn('font-mono text-[12px]', progressStripColor(task))}>
           {progressStripText(task, t)}
         </span>
-      </div>
+      </DetailSection>
 
       {/* 2. Approval action section (only for waiting_for_human_approval) */}
       {task.status === 'waiting_for_human_approval' && (
-        <div className="border-b border-border/50 px-5 py-4">
+        <DetailSection>
           <div className="border border-amber-500/20 bg-amber-500/5 px-4 py-3">
             <p className="text-[13px] font-medium text-foreground">
               {t('tasks.action_waiting')}
@@ -1059,18 +1037,9 @@ function TaskDetail({ task, onApprove, onReject }: { task: TaskViewModel; onAppr
             {waitingStep && waitingStep.artifacts.length > 0 && (
               <div className="mt-2 border-t border-amber-500/10 pt-2">
                 <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground/50">{t('tasks.outputs_for_review')}</p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-2">
                   {waitingStep.artifacts.map((art) => (
-                    <button
-                      key={art.id}
-                      type="button"
-                      onClick={() => void navigate({ to: '/files', search: { path: art.ref_value, scope: 'workspace' } })}
-                      className="flex items-center gap-1 rounded-none border border-border/50 bg-background/50 px-2 py-1 text-[12px] text-foreground/80 hover:border-amber-500/30 hover:bg-amber-500/5 transition-colors"
-                    >
-                      <span className="font-mono text-[10px] text-muted-foreground">{art.type}</span>
-                      <span>{art.filename}</span>
-                      <span className="ml-1 font-mono text-[10px] text-muted-foreground/50">{t('tasks.view_in_files')}</span>
-                    </button>
+                    <ArtifactPreviewRow key={art.id} art={art} t={t} navigate={navigate} />
                   ))}
                 </div>
               </div>
@@ -1128,72 +1097,47 @@ function TaskDetail({ task, onApprove, onReject }: { task: TaskViewModel; onAppr
               </div>
             )}
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* 3. Revision tree */}
-      <div className="border-b border-border/50 px-5 py-4">
-        <SectionHeader>{t('tasks.section_progress')}</SectionHeader>
+      <DetailSection title={t('tasks.section_progress')}>
         <div className="mt-3">
           <RevisionTree steps={task.steps} taskStatus={task.status} />
         </div>
-      </div>
+      </DetailSection>
 
       {/* 4. Outputs section — all artifacts grouped across steps */}
       {task.allArtifacts.length > 0 && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader
-            action={
-              <button
-                type="button"
-                onClick={() => void navigate({
-                  to: '/files',
-                  search: {
-                    path: task.allArtifacts[0]?.ref_value,
-                    scope: 'workspace',
-                  },
-                })}
-                className="font-heading text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {t('tasks.open_related_files')}
-              </button>
-            }
-          >
-            {t('tasks.section_outputs')}
-          </SectionHeader>
-          <div className="mt-2 flex flex-col gap-1">
+        <DetailSection
+          title={t('tasks.section_outputs')}
+          action={
+            <button
+              type="button"
+              onClick={() => void navigate({
+                to: '/files',
+                search: {
+                  path: task.allArtifacts[0]?.ref_value,
+                  scope: 'workspace',
+                },
+              })}
+              className="font-heading text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {t('tasks.open_related_files')}
+            </button>
+          }
+        >
+          <div className="mt-2 flex flex-col gap-2">
             {task.allArtifacts.map((art) => (
-              <div key={art.id} className="flex items-center gap-2 py-0.5">
-                <span className="rounded-none bg-muted/20 px-1 py-px font-mono text-[10px] text-muted-foreground/50">
-                  {artifactKindLabel(art.kind)}
-                </span>
-                <span className="rounded-none bg-muted/40 px-1 py-px font-mono text-[10px] text-muted-foreground">
-                  {art.type}
-                </span>
-                <span className={cn(
-                  'min-w-0 flex-1 truncate text-[12px]',
-                  art.partial ? 'text-amber-400' : 'text-foreground',
-                )}>
-                  {art.filename}
-                  {art.partial && <span className="ml-1 text-[10px] text-amber-400/70">(partial)</span>}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void navigate({ to: '/files', search: { path: art.ref_value, scope: 'workspace' } })}
-                  className="shrink-0 font-mono text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                >
-                  {t('tasks.inspect_output')}
-                </button>
-              </div>
+              <ArtifactPreviewRow key={art.id} art={art} t={t} navigate={navigate} />
             ))}
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* 5. Relations */}
       {task.relations.length > 0 && (
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('tasks.section_relations')}</SectionHeader>
+        <DetailSection title={t('tasks.section_relations')}>
           <div className="mt-3">
             <KvList
               items={task.relations.map((rel) => ({
@@ -1214,31 +1158,30 @@ function TaskDetail({ task, onApprove, onReject }: { task: TaskViewModel; onAppr
               }))}
             />
           </div>
-        </div>
+        </DetailSection>
       )}
 
       {/* 6. Audit log (collapsed by default) */}
       {task.activity.length > 0 && (
-        <div className="px-5 py-4">
-          <SectionHeader
-            action={
-              <button
-                type="button"
-                onClick={() => setAuditOpen(!auditOpen)}
-                className="font-heading text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {auditOpen ? t('tasks.hide_audit') : t('tasks.show_audit')}
-              </button>
-            }
-          >
-            {t('tasks.section_activity')}
-          </SectionHeader>
+        <DetailSection
+          last
+          title={t('tasks.section_activity')}
+          action={
+            <button
+              type="button"
+              onClick={() => setAuditOpen(!auditOpen)}
+              className="font-heading text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {auditOpen ? t('tasks.hide_audit') : t('tasks.show_audit')}
+            </button>
+          }
+        >
           {auditOpen && (
             <div className="mt-3">
               <Timeline events={task.activity} />
             </div>
           )}
-        </div>
+        </DetailSection>
       )}
     </div>
   )
@@ -1257,51 +1200,34 @@ function TasksPage() {
   const setSeed = useChatSeedStore((s) => s.setSeed)
   const { taskId: deepLinkTaskId } = Route.useSearch()
 
-  // Load tasks from adapter
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [workflows, setWorkflows] = useState<Workflow[]>([])
-  const [selectedDetail, setSelectedDetail] = useState<TaskViewModel | null>(null)
+  // Data hooks
+  const { data: tasks = [], isLoading: isLoadingTasks } = useTasks()
+  const { data: workflows = [] } = useWorkflows()
+  const { data: taskDetail } = useTaskDetail(selectedTaskId)
+  const { data: activity = [] } = useTaskActivity(selectedTaskId)
+  const { data: artifacts = [] } = useTaskArtifacts(selectedTaskId)
 
-  useEffect(() => {
-    Promise.all([getTasks(), getWorkflows()]).then(([tsks, wfs]) => {
-      setTasks(tsks)
-      setWorkflows(wfs)
-    })
-  }, [])
+  // Mutations
+  const approveMutation = useApproveTask()
+  const rejectMutation = useRejectTask()
 
   // Auto-select first task (deep link takes priority)
   useEffect(() => {
     if (tasks.length === 0) return
     if (selectedTaskId !== null) return
-    if (deepLinkTaskId && tasks.some((t) => t.id === deepLinkTaskId)) {
+    if (deepLinkTaskId && tasks.some((tk) => tk.id === deepLinkTaskId)) {
       setSelectedTaskId(deepLinkTaskId)
       return
     }
     setSelectedTaskId(tasks[0].id)
   }, [tasks, selectedTaskId, deepLinkTaskId])
 
-  // Load detail when selection changes
-  useEffect(() => {
-    if (!selectedTaskId) {
-      setSelectedDetail(null)
-      return
-    }
+  // Build detail view model when all data is ready
+  const selectedDetail: TaskViewModel | null = taskDetail
+    ? taskToViewModel(taskDetail, activity, artifacts, workflows, t, locale)
+    : null
 
-    let cancelled = false
-    Promise.all([
-      getTask(selectedTaskId),
-      getTaskActivity(selectedTaskId),
-      getTaskArtifacts(selectedTaskId),
-    ]).then(([taskWithRelations, events, artifacts]) => {
-      if (cancelled) return
-      if (taskWithRelations) {
-        setSelectedDetail(taskToViewModel(taskWithRelations, events, artifacts, workflows, t, locale))
-      }
-    })
-
-    return () => { cancelled = true }
-  }, [selectedTaskId, workflows])
-
+  // Filter task list
   const filteredTasks = FILTER_TO_API_STATUS[activeFilter]
     ? tasks.filter((task) => {
         const statuses = FILTER_TO_API_STATUS[activeFilter]
@@ -1309,7 +1235,7 @@ function TasksPage() {
       })
     : tasks
 
-  // Build minimal view models for the list rows
+  // Build minimal view models for list rows
   const taskListViewModels: TaskViewModel[] = filteredTasks.map((task) => {
     const ctx = parseTaskContext(task)
     return {
@@ -1328,28 +1254,12 @@ function TasksPage() {
     }
   })
 
-  function reloadDetail(taskId: string) {
-    Promise.all([
-      getTask(taskId),
-      getTaskActivity(taskId),
-      getTaskArtifacts(taskId),
-    ]).then(([taskWithRelations, events, artifacts]) => {
-      if (!taskWithRelations) return
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: taskWithRelations.status } : t))
-      setSelectedDetail(taskToViewModel(taskWithRelations, events, artifacts, workflows, t, locale))
-    })
-  }
-
   function handleApprove(taskId: string) {
-    approveTask(taskId).then(() => {
-      reloadDetail(taskId)
-    })
+    approveMutation.mutate(taskId)
   }
 
   function handleReject(taskId: string, message: string) {
-    rejectTask(taskId, message).then(() => {
-      reloadDetail(taskId)
-    })
+    rejectMutation.mutate({ id: taskId, message })
   }
 
   function handleCreate() {
@@ -1381,27 +1291,22 @@ function TasksPage() {
                     </Button>
                   }
                 />
-                <div className="mt-3 flex items-center gap-1">
-                  {FILTER_KEYS.map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setActiveFilter(key)}
-                      className={cn(
-                        'font-heading text-[12px] px-2.5 py-1 transition-colors',
-                        activeFilter === key
-                          ? 'bg-muted/50 text-foreground'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {t(FILTER_LABEL_KEYS[key])}
-                    </button>
-                  ))}
-                </div>
+                <FilterTabs
+                  tabs={FILTER_KEYS}
+                  active={activeFilter}
+                  getLabel={(key) => t(FILTER_LABEL_KEYS[key])}
+                  onChange={setActiveFilter}
+                  className="mt-3"
+                />
               </>
             }
           >
-            {taskListViewModels.length === 0 ? (
+            {isLoadingTasks ? (
+              <EmptyState
+                title={t('tasks.empty_title')}
+                description={t('tasks.empty_desc')}
+              />
+            ) : taskListViewModels.length === 0 ? (
               <EmptyState
                 title={t('tasks.empty_title')}
                 description={t('tasks.empty_desc')}
