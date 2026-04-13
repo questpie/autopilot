@@ -369,19 +369,35 @@ export interface FileViewerProps {
   path: string
   content?: string
   mime?: string
+  /** Direct URL for binary content (image/pdf). Browser fetches natively. */
+  src?: string
   className?: string
 }
 
-export function FileViewer({ path, content, mime, className }: FileViewerProps) {
+export function FileViewer({ path, content, mime, src, className }: FileViewerProps) {
   const viewer = resolveViewer(path, mime)
 
   const body = (() => {
     switch (viewer.type) {
       case 'image':
-        return <ImagePlaceholder />
+        return src ? (
+          <div className="flex items-center justify-center p-4">
+            <img
+              src={src}
+              alt={path.split('/').pop() ?? path}
+              className="max-h-[600px] max-w-full object-contain"
+            />
+          </div>
+        ) : (
+          <ImagePlaceholder />
+        )
 
       case 'pdf':
-        return <PdfPlaceholder />
+        return src ? (
+          <embed src={src} type="application/pdf" className="h-[600px] w-full" />
+        ) : (
+          <PdfPlaceholder />
+        )
 
       case 'markdown':
         return content ? (

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { z } from 'zod'
 import {
   FileTextIcon,
@@ -8,7 +8,6 @@ import {
   TableIcon,
   FolderIcon,
   FolderOpenIcon,
-  TreeStructureIcon,
   FileArrowDownIcon,
   CaretRightIcon,
   CaretDownIcon,
@@ -20,28 +19,18 @@ import { useTranslation } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { SectionHeader } from '@/components/ui/section-header'
 import { KvList } from '@/components/ui/kv-list'
-import { RelationLink } from '@/components/ui/relation-link'
-import { StatusPill } from '@/components/ui/status-pill'
 import { EmptyState } from '@/components/empty-state'
 import { FileViewer } from '@/components/file-viewer'
 import { ListDetail, ListPanel } from '@/components/list-detail'
-import { getResources } from '@/api/resources.api'
-import type { ResourceData, ResourceType, ResourceStatus } from '@/api/resources.api'
-import {
-  getWorkspaceTree,
-  getFileCode,
-  getFileDiff,
-  getFileHistory,
-} from '@/api/files.api'
-import type { FileDiffInfo, FileCommitEntry } from '@/api/files.api'
-import type { FileTreeNode, FileChangeKind } from '@/api/types'
+import { useVfsList, useVfsRead, useVfsDiff } from '@/hooks/use-vfs'
+import { useRuns } from '@/hooks/use-runs'
+import { resolveViewer } from '@/lib/viewer-registry'
+import type { VfsListEntry, VfsDiffFile } from '@/api/types'
 
 // ── Route ──
 
 const filesSearchSchema = z.object({
-  // Workspace file path to pre-select (matches artifact ref_value)
   path: z.string().optional(),
-  // Force scope: 'workspace' to skip company files and jump straight to workspace tree
   scope: z.enum(['workspace', 'company']).optional(),
 })
 
@@ -51,35 +40,11 @@ export const Route = createFileRoute('/_app/files')({
 })
 
 // ─────────────────────────────────────────────
-// Shared utilities
+// Utilities
 // ─────────────────────────────────────────────
 
-type ResourceFilter = 'all' | 'docs' | 'images' | 'data'
-
-const TYPE_FILTER: Record<ResourceType, ResourceFilter> = {
-  PDF: 'docs',
-  MD: 'docs',
-  XLSX: 'data',
-  CSV: 'data',
-  ZIP: 'docs',
-  PNG: 'images',
-}
-
-const STATUS_PILL_MAP: Record<ResourceStatus, 'done' | 'working' | 'pending'> = {
-  indexed: 'done',
-  processing: 'working',
-  unprocessed: 'pending',
-}
-
-const STATUS_I18N: Record<ResourceStatus, string> = {
-  indexed: 'files.status_indexed',
-  processing: 'files.status_processing',
-  unprocessed: 'files.status_unprocessed',
-}
-
-function formatSize(bytes: number | null | string): string {
-  if (bytes === null || bytes === undefined) return '—'
-  if (typeof bytes === 'string') return bytes
+function formatSize(bytes: number | null | undefined): string {
+  if (bytes == null) return '—'
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -90,42 +55,9 @@ function getFileExtension(name: string): string {
   return dot >= 0 ? name.slice(dot) : ''
 }
 
-function changeLetter(change: FileChangeKind): string | null {
-  if (change === 'added') return 'A'
-  if (change === 'modified') return 'M'
-  if (change === 'deleted') return 'D'
-  return null
-}
-
-function changeBgColor(change: FileChangeKind): string {
-  if (change === 'added') return 'bg-green-500/10 border-green-500/30 text-green-500'
-  if (change === 'modified') return 'bg-amber-500/10 border-amber-500/30 text-amber-500'
-  if (change === 'deleted') return 'bg-red-500/10 border-red-500/30 text-red-500'
-  return ''
-}
-
-function findNode(nodes: FileTreeNode[], path: string): FileTreeNode | null {
-  for (const node of nodes) {
-    if (node.path === path) return node
-    if (node.children) {
-      const found = findNode(node.children, path)
-      if (found) return found
-    }
-  }
-  return null
-}
-
-// ─────────────────────────────────────────────
-// Unified file icon function
-// ─────────────────────────────────────────────
-
 type PhosphorIcon = typeof FileTextIcon
 
-function fileIcon(
-  name: string,
-  opts: { isDir?: boolean; isWorktreeRoot?: boolean; expanded?: boolean } = {},
-): PhosphorIcon {
-  if (opts.isWorktreeRoot) return TreeStructureIcon
+function fileIcon(name: string, opts: { isDir?: boolean; expanded?: boolean } = {}): PhosphorIcon {
   if (opts.isDir) return opts.expanded ? FolderOpenIcon : FolderIcon
   const ext = getFileExtension(name).toLowerCase()
   if (ext === '.pdf') return FileIcon
@@ -136,16 +68,83 @@ function fileIcon(
   return FileTextIcon
 }
 
+function vfsUri(scope: 'company' | 'workspace', path: string, runId: string | null): string {
+  if (scope === 'company') return path ? `company://${path}` : 'company://'
+  return path ? `workspace://run/${runId}/${path}` : `workspace://run/${runId}`
+}
+
+function vfsReadUrl(uri: string): string {
+  return `/api/vfs/read?uri=${encodeURIComponent(uri)}`
+}
+
+// ── Diff utilities ──
+
+interface DiffStatusBadge {
+  letter: string
+  colorClass: string
+}
+
+function diffStatusBadge(status: string): DiffStatusBadge {
+  switch (status) {
+    case 'added':
+      return { letter: 'A', colorClass: 'bg-green-500/20 text-green-600' }
+    case 'modified':
+      return { letter: 'M', colorClass: 'bg-amber-500/20 text-amber-600' }
+    case 'deleted':
+      return { letter: 'D', colorClass: 'bg-red-500/20 text-red-600' }
+    case 'renamed':
+      return { letter: 'R', colorClass: 'bg-blue-500/20 text-blue-600' }
+    default:
+      return { letter: status.charAt(0).toUpperCase(), colorClass: 'bg-muted text-muted-foreground' }
+  }
+}
+
+interface DiffLine {
+  type: 'add' | 'delete' | 'context' | 'header'
+  content: string
+  oldNum: number | null
+  newNum: number | null
+}
+
+function parseUnifiedDiff(raw: string): DiffLine[] {
+  const lines: DiffLine[] = []
+  let oldNum = 0
+  let newNum = 0
+
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('@@')) {
+      const match = /@@ -(\d+)/.exec(line)
+      if (match) {
+        oldNum = Number(match[1]) - 1
+        const newMatch = /\+(\d+)/.exec(line)
+        newNum = newMatch ? Number(newMatch[1]) - 1 : oldNum
+      }
+      lines.push({ type: 'header', content: line, oldNum: null, newNum: null })
+    } else if (line.startsWith('+')) {
+      newNum++
+      lines.push({ type: 'add', content: line.slice(1), oldNum: null, newNum })
+    } else if (line.startsWith('-')) {
+      oldNum++
+      lines.push({ type: 'delete', content: line.slice(1), oldNum, newNum: null })
+    } else if (line.startsWith(' ') || line === '') {
+      oldNum++
+      newNum++
+      lines.push({ type: 'context', content: line.startsWith(' ') ? line.slice(1) : line, oldNum, newNum })
+    }
+  }
+  return lines
+}
+
 // ─────────────────────────────────────────────
 // Selection type
 // ─────────────────────────────────────────────
 
 type SelectedItem =
-  | { kind: 'company-file'; resource: ResourceData }
-  | { kind: 'workspace-file'; path: string }
+  | { kind: 'company-file'; entry: VfsListEntry }
+  | { kind: 'workspace-file'; entry: VfsListEntry; runId: string }
 
 // ─────────────────────────────────────────────
-// Unified FileRow — one component for both scopes
+// FileRow
 // ─────────────────────────────────────────────
 
 function FileRow({
@@ -153,7 +152,6 @@ function FileRow({
   iconClass,
   name,
   sublabel,
-  metaLeft,
   metaRight,
   selected,
   depth,
@@ -166,7 +164,6 @@ function FileRow({
   iconClass?: string
   name: string
   sublabel?: string
-  metaLeft?: React.ReactNode
   metaRight?: React.ReactNode
   selected?: boolean
   depth?: number
@@ -187,7 +184,6 @@ function FileRow({
       )}
       onClick={onClick}
     >
-      {/* Caret for expandable dirs — occupies fixed width so icons stay aligned */}
       {hasChildren !== undefined
         ? (hasChildren
           ? (caretExpanded
@@ -200,94 +196,136 @@ function FileRow({
         weight={isDir ? 'bold' : 'regular'}
       />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-medium text-foreground">
-          {name}
-        </div>
+        <div className="truncate text-[13px] font-medium text-foreground">{name}</div>
         {sublabel && (
           <div className="truncate text-[12px] text-muted-foreground">{sublabel}</div>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {metaLeft}
-        {metaRight}
-      </div>
+      {metaRight && (
+        <div className="flex shrink-0 items-center gap-2">{metaRight}</div>
+      )}
     </button>
   )
 }
 
 // ─────────────────────────────────────────────
-// Workspace file row (recursive)
+// VFS tree rows with lazy directory loading
 // ─────────────────────────────────────────────
 
-function WsFileRow({
-  node,
+function VfsDirectoryEntries({
+  uri,
+  scope,
+  runId,
   depth,
   expandedDirs,
   selectedPath,
+  diffMap,
   onToggle,
   onSelect,
 }: {
-  node: FileTreeNode
+  uri: string
+  scope: 'company' | 'workspace'
+  runId: string | null
   depth: number
   expandedDirs: Set<string>
   selectedPath: string | null
-  onToggle: (p: string) => void
-  onSelect: (p: string) => void
+  diffMap: Map<string, VfsDiffFile> | null
+  onToggle: (dirUri: string) => void
+  onSelect: (entry: VfsListEntry) => void
 }) {
-  const isDir = node.type === 'directory' || node.type === 'worktree-root'
-  const expanded = expandedDirs.has(node.path)
-  const changeLet = changeLetter(node.change)
+  const { data } = useVfsList(uri)
+  if (!data) return null
+  return (
+    <>
+      {data.entries.map((entry) => (
+        <VfsEntryRow
+          key={entry.path}
+          entry={entry}
+          scope={scope}
+          runId={runId}
+          depth={depth}
+          expandedDirs={expandedDirs}
+          selectedPath={selectedPath}
+          diffMap={diffMap}
+          onToggle={onToggle}
+          onSelect={onSelect}
+        />
+      ))}
+    </>
+  )
+}
 
-  const Icon = fileIcon(node.name, {
-    isDir: node.type === 'directory',
-    isWorktreeRoot: node.type === 'worktree-root',
-    expanded,
-  })
+function VfsEntryRow({
+  entry,
+  scope,
+  runId,
+  depth,
+  expandedDirs,
+  selectedPath,
+  diffMap,
+  onToggle,
+  onSelect,
+}: {
+  entry: VfsListEntry
+  scope: 'company' | 'workspace'
+  runId: string | null
+  depth: number
+  expandedDirs: Set<string>
+  selectedPath: string | null
+  diffMap: Map<string, VfsDiffFile> | null
+  onToggle: (dirUri: string) => void
+  onSelect: (entry: VfsListEntry) => void
+}) {
+  const isDir = entry.type === 'directory'
+  const entryUri = vfsUri(scope, entry.path, runId)
+  const expanded = isDir && expandedDirs.has(entryUri)
 
-  const iconClass = node.type === 'worktree-root'
-    ? 'text-primary'
-    : isDir
-    ? 'text-primary/70'
-    : 'text-muted-foreground'
+  const Icon = fileIcon(entry.name, { isDir, expanded })
+  const iconClass = isDir ? 'text-primary/70' : 'text-muted-foreground'
+  const diffEntry = diffMap?.get(entry.path)
+  const badge = diffEntry ? diffStatusBadge(diffEntry.status) : null
 
   return (
     <div>
       <FileRow
         icon={Icon}
         iconClass={iconClass}
-        name={`${node.name}${isDir ? '/' : ''}`}
-        sublabel={undefined}
-        metaLeft={
-          changeLet
-            ? <span className={cn('font-heading text-[10px] border px-1.5 py-0.5', changeBgColor(node.change))}>{changeLet}</span>
-            : undefined
-        }
+        name={`${entry.name}${isDir ? '/' : ''}`}
         metaRight={
-          !isDir
-            ? <span className="font-heading text-[11px] text-muted-foreground">{formatSize(node.size)}</span>
-            : undefined
+          <span className="flex items-center gap-1.5">
+            {badge && (
+              <span className={cn('inline-flex size-[18px] items-center justify-center rounded text-[10px] font-bold', badge.colorClass)}>
+                {badge.letter}
+              </span>
+            )}
+            {!isDir && entry.size != null && (
+              <span className="font-heading text-[11px] text-muted-foreground">{formatSize(entry.size)}</span>
+            )}
+          </span>
         }
-        selected={selectedPath === node.path}
+        selected={selectedPath === entry.path}
         depth={depth}
         caretExpanded={expanded}
         hasChildren={isDir ? true : undefined}
         isDir={isDir}
         onClick={() => {
-          if (isDir) onToggle(node.path)
-          onSelect(node.path)
+          if (isDir) onToggle(entryUri)
+          else onSelect(entry)
         }}
       />
-      {isDir && expanded && node.children?.map((child) => (
-        <WsFileRow
-          key={child.path}
-          node={child}
+      {isDir && expanded && (
+        <VfsDirectoryEntries
+          uri={entryUri}
+          scope={scope}
+          runId={runId}
           depth={depth + 1}
           expandedDirs={expandedDirs}
           selectedPath={selectedPath}
+          diffMap={diffMap}
           onToggle={onToggle}
           onSelect={onSelect}
         />
-      ))}
+      )}
     </div>
   )
 }
@@ -334,236 +372,179 @@ function ScopeHeader({
 }
 
 // ─────────────────────────────────────────────
-// Detail panels
+// File detail panel (unified for both scopes)
 // ─────────────────────────────────────────────
 
-function CompanyDetail({ resource }: { resource: ResourceData }) {
+function DiffView({ diff }: { diff: string }) {
+  const lines = useMemo(() => parseUnifiedDiff(diff), [diff])
+
+  if (lines.length === 0) {
+    return <div className="py-4 text-center text-[12px] text-muted-foreground">No diff content</div>
+  }
+
+  return (
+    <div className="overflow-auto font-mono text-[12px] leading-[20px]">
+      {lines.map((line, i) => {
+        if (line.type === 'header') {
+          return (
+            <div key={i} className="bg-blue-500/10 px-3 py-0.5 text-blue-600">
+              {line.content}
+            </div>
+          )
+        }
+        const bgClass =
+          line.type === 'add' ? 'bg-green-500/10' :
+          line.type === 'delete' ? 'bg-red-500/10' :
+          ''
+        const textClass =
+          line.type === 'add' ? 'text-green-600' :
+          line.type === 'delete' ? 'text-red-600' :
+          'text-foreground'
+        const prefix =
+          line.type === 'add' ? '+' :
+          line.type === 'delete' ? '-' :
+          ' '
+
+        return (
+          <div key={i} className={cn('flex', bgClass)}>
+            <span className="inline-block w-[36px] shrink-0 select-none pr-1 text-right text-muted-foreground/40">
+              {line.oldNum ?? ''}
+            </span>
+            <span className="inline-block w-[36px] shrink-0 select-none pr-1 text-right text-muted-foreground/40">
+              {line.newNum ?? ''}
+            </span>
+            <span className={cn('whitespace-pre', textClass)}>
+              {prefix}{line.content}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function FileDetail({
+  item,
+  diffMap,
+  activeTaskId,
+}: {
+  item: SelectedItem
+  diffMap: Map<string, VfsDiffFile> | null
+  activeTaskId: string | null
+}) {
   const { t } = useTranslation()
-  const Icon = fileIcon(resource.filename)
+  const readUri = item.kind === 'company-file'
+    ? `company://${item.entry.path}`
+    : `workspace://run/${item.runId}/${item.entry.path}`
+
+  const isDir = item.entry.type === 'directory'
+
+  // Binary files (image/pdf) — skip JS text fetch, use direct browser URL
+  const viewer = resolveViewer(item.entry.path, item.entry.mime_type ?? undefined)
+  const isBinaryViewer = viewer.type === 'image' || viewer.type === 'pdf'
+  const { data: fileData } = useVfsRead(isDir || isBinaryViewer ? null : readUri)
+
+  const Icon = fileIcon(item.entry.name, { isDir })
+  const diffEntry = item.kind === 'workspace-file' ? diffMap?.get(item.entry.path) ?? null : null
+  const badge = diffEntry ? diffStatusBadge(diffEntry.status) : null
+
+  // Direct browser URL for binary preview — browser handles binary natively with session cookie
+  const binarySrc = !isDir && isBinaryViewer ? vfsReadUrl(readUri) : undefined
+
   return (
     <div className="flex flex-col overflow-hidden">
       {/* Header */}
       <div className="shrink-0 border-b border-border/50 px-5 py-4">
         <div className="flex items-start gap-3">
-          <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+          <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" weight={isDir ? 'bold' : 'regular'} />
           <div className="min-w-0">
-            <h2 className="text-[18px] font-medium text-foreground">{resource.filename}</h2>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <span className="font-mono text-[11px] text-muted-foreground">{resource.type} · {resource.size} · {resource.date}</span>
-              {resource.status !== 'indexed' && (
-                <StatusPill
-                  status={STATUS_PILL_MAP[resource.status]}
-                  label={t(STATUS_I18N[resource.status])}
-                  pulse={resource.status === 'processing'}
-                />
+            <div className="flex items-center gap-2">
+              <h2 className="text-[18px] font-medium text-foreground break-all">
+                {item.entry.name}{isDir ? '/' : ''}
+              </h2>
+              {badge && (
+                <span className={cn('inline-flex h-5 items-center rounded px-1.5 text-[10px] font-bold', badge.colorClass)}>
+                  {badge.letter}
+                </span>
               )}
+            </div>
+            <div className="mt-1 font-mono text-[11px] text-muted-foreground/70">{item.entry.path}</div>
+            <div className="mt-1 font-heading text-[11px] text-muted-foreground">
+              {formatSize(fileData?.size ?? item.entry.size)} · {fileData?.contentType ?? item.entry.mime_type ?? 'unknown'}
             </div>
           </div>
         </div>
-        {resource.description && (
-          <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">{resource.description}</p>
-        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Preview — primary */}
-        <div className="border-b border-border/50 px-5 py-4">
-          <SectionHeader>{t('files.detail_preview')}</SectionHeader>
-          <div className="mt-3 border border-border/50 bg-muted/10">
-            <FileViewer
-              path={resource.filename}
-              content={resource.preview_content}
-              mime={resource.preview_mime}
-            />
-          </div>
-        </div>
-
-        {/* Relations */}
-        {resource.relations.length > 0 && (
-          <div className="border-b border-border/50 px-5 py-4">
-            <SectionHeader>{t('files.detail_where_used')}</SectionHeader>
-            <div className="mt-3 flex flex-col gap-2">
-              {resource.relations.map((rel, i) => (
-                <div key={i} className="flex items-baseline gap-2">
-                  <span className="shrink-0 font-heading text-[11px] text-muted-foreground">{rel.kind}:</span>
-                  <RelationLink label={rel.label} sublabel={rel.sublabel} />
-                </div>
-              ))}
+        {isDir ? (
+          <DirectoryContents uri={readUri} />
+        ) : (
+          <>
+            {/* Preview */}
+            <div className="border-b border-border/50">
+              <FileViewer
+                path={item.entry.path}
+                content={fileData?.content}
+                mime={fileData?.contentType ?? item.entry.mime_type ?? undefined}
+                src={binarySrc}
+              />
             </div>
-          </div>
-        )}
 
-        {/* Versions */}
-        {resource.versions.length > 0 && (
-          <div className="px-5 py-4">
-            <SectionHeader>{t('files.detail_versions')}</SectionHeader>
-            <div className="mt-3 flex flex-col gap-1">
-              {resource.versions.map((v) => (
-                <div key={v.version} className="flex items-baseline gap-2 py-1 text-[12px]">
-                  <span className={cn('font-medium', v.current ? 'text-foreground' : 'text-muted-foreground')}>
-                    v{v.version}{v.current && <span className="ml-1 font-heading text-[11px] text-muted-foreground">({t('files.label_current')})</span>}
-                  </span>
-                  <span className="font-mono text-[11px] text-muted-foreground">{v.date}</span>
+            {/* Diff section — workspace files with diff data */}
+            {diffEntry?.diff && (
+              <div className="border-b border-border/50 px-5 py-4">
+                <SectionHeader>Changes</SectionHeader>
+                <div className="mt-3 overflow-hidden rounded border border-border/50">
+                  <DiffView diff={diffEntry.diff} />
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="px-5 py-4">
+              <SectionHeader>{t('files.detail_info')}</SectionHeader>
+              <div className="mt-3">
+                <KvList items={[
+                  { label: t('files.label_path'), value: <span className="truncate font-mono text-[12px]">{item.entry.path}</span> },
+                  { label: t('files.label_size'), value: formatSize(fileData?.size ?? item.entry.size) },
+                  { label: t('files.label_type'), value: fileData?.contentType ?? item.entry.mime_type ?? 'unknown' },
+                  ...(diffEntry ? [{ label: 'Status', value: diffEntry.status }] : []),
+                  ...(item.kind === 'workspace-file' ? [{ label: 'Run', value: <span className="font-mono text-[12px]">{item.runId.slice(0, 16)}</span> }] : []),
+                  ...(item.kind === 'workspace-file' && activeTaskId ? [{ label: 'Task', value: <span className="font-mono text-[12px]">{activeTaskId.slice(0, 16)}</span> }] : []),
+                ]} />
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
   )
 }
 
-function WorkspaceDetail({
-  node, codeContent, diffs, historyMap,
-}: {
-  node: FileTreeNode
-  codeContent: Record<string, string>
-  diffs: Record<string, FileDiffInfo>
-  historyMap: Record<string, FileCommitEntry[]>
-}) {
+function DirectoryContents({ uri }: { uri: string }) {
   const { t } = useTranslation()
-  const isDir = node.type === 'directory' || node.type === 'worktree-root'
-  const diff = diffs[node.path]
-  const history = historyMap[node.path] ?? []
-  const code = codeContent[node.path]
-  const changeLet = changeLetter(node.change)
+  const { data } = useVfsList(uri)
 
-  const Icon = fileIcon(node.name, {
-    isDir: node.type === 'directory',
-    isWorktreeRoot: node.type === 'worktree-root',
-  })
+  if (!data) {
+    return <div className="flex items-center justify-center py-12 text-[12px] text-muted-foreground">Loading...</div>
+  }
+  if (data.entries.length === 0) {
+    return <div className="flex items-center justify-center py-12 text-[12px] text-muted-foreground">{t('files.empty_title')}</div>
+  }
 
   return (
-    <div className="flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="shrink-0 border-b border-border/50 px-5 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0">
-            <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" weight={isDir ? 'bold' : 'regular'} />
-            <div className="min-w-0">
-              <h2 className="text-[18px] font-medium text-foreground break-all">{node.name}{isDir ? '/' : ''}</h2>
-              <div className="mt-1 font-mono text-[11px] text-muted-foreground/70">{node.path}</div>
-              <div className="mt-1 font-heading text-[11px] text-muted-foreground">{formatSize(node.size)} · {node.mime_type ?? 'unknown'}</div>
-            </div>
+    <div className="flex flex-col">
+      {data.entries.map((child) => {
+        const ChildIcon = fileIcon(child.name, { isDir: child.type === 'directory' })
+        return (
+          <div key={child.path} className="flex items-center gap-2.5 border-b border-border/50 px-4 py-2">
+            <ChildIcon className="size-[18px] shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{child.name}</span>
+            <span className="font-heading text-[11px] text-muted-foreground">{formatSize(child.size)}</span>
           </div>
-          {changeLet && (
-            <span className={cn('mt-1 shrink-0 font-heading text-[10px] border px-1.5 py-0.5', changeBgColor(node.change))}>{changeLet}</span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto">
-        {isDir ? (
-          /* Directory listing */
-          <div className="flex flex-col">
-            {(node.children ?? []).length > 0
-              ? (node.children ?? []).map((child) => {
-                  const ChildIcon = fileIcon(child.name, {
-                    isDir: child.type === 'directory',
-                    isWorktreeRoot: child.type === 'worktree-root',
-                  })
-                  const childChangeLet = changeLetter(child.change)
-                  return (
-                    <div key={child.path} className="flex items-center gap-2.5 border-b border-border/50 px-4 py-2">
-                      <ChildIcon className="size-[18px] shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{child.name}</span>
-                      {childChangeLet && (
-                        <span className={cn('font-heading text-[10px] border px-1.5 py-0.5', changeBgColor(child.change))}>{childChangeLet}</span>
-                      )}
-                      <span className="font-heading text-[11px] text-muted-foreground">{formatSize(child.size)}</span>
-                    </div>
-                  )
-                })
-              : (
-                <div className="flex items-center justify-center py-12 text-[12px] text-muted-foreground">{t('files.empty_title')}</div>
-              )}
-          </div>
-        ) : (
-          <>
-            {/* Preview — always first */}
-            <div className="border-b border-border/50">
-              <FileViewer path={node.path} content={code} mime={node.mime_type ?? undefined} />
-            </div>
-
-            {/* Diff — shown only when file has changes */}
-            {diff && node.change !== 'unchanged' && (
-              <div className="border-b border-border/50 px-5 py-4">
-                <SectionHeader>{t('files.detail_changes')}</SectionHeader>
-                <div className="mt-3 flex items-center gap-3 text-[12px]">
-                  <span className="font-mono text-green-500">{t('files.lines_added', { count: diff.added })}</span>
-                  <span className="font-mono text-red-500">{t('files.lines_deleted', { count: diff.deleted })}</span>
-                </div>
-                <div className="mt-3 overflow-hidden border border-border bg-muted/10 p-2 font-mono text-[11px] leading-[18px]">
-                  {diff.hunks.map((hunk, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        hunk.type === 'add' && 'text-green-500',
-                        hunk.type === 'delete' && 'text-red-500',
-                        hunk.type === 'context' && 'text-muted-foreground',
-                      )}
-                    >
-                      {hunk.type === 'add' ? '+ ' : hunk.type === 'delete' ? '- ' : '  '}{hunk.text}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Info */}
-            <div className="border-b border-border/50 px-5 py-4">
-              <SectionHeader>{t('files.detail_info')}</SectionHeader>
-              <div className="mt-3">
-                <KvList items={[
-                  { label: t('files.label_path'), value: <span className="truncate font-mono text-[12px]">{node.path}</span> },
-                  { label: t('files.label_size'), value: formatSize(node.size) },
-                  { label: t('files.label_type'), value: node.mime_type ?? 'unknown' },
-                  ...(node.change !== 'unchanged'
-                    ? [{ label: t('files.label_change'), value: <span className={cn('font-heading text-[11px] border px-1.5 py-0.5', changeBgColor(node.change))}>{changeLetter(node.change)}</span> }]
-                    : []),
-                ]} />
-              </div>
-            </div>
-
-            {/* Context links */}
-            {(node.linked_task_id ?? node.linked_run_id) && (
-              <div className="border-b border-border/50 px-5 py-4">
-                <SectionHeader>{t('files.context')}</SectionHeader>
-                <div className="mt-3">
-                  <KvList items={[
-                    ...(node.linked_task_id ? [{ label: t('files.label_task'), value: <RelationLink label="Promo texty na víkendovú akciu" sublabel={node.linked_task_id} /> }] : []),
-                    ...(node.linked_run_id ? [{ label: t('files.label_run'), value: <RelationLink label={node.linked_run_id} /> }] : []),
-                    ...(node.path.includes('.worktrees/') ? [
-                      { label: t('files.label_worktree'), value: <span className="font-mono text-[12px]">.worktrees/T-151</span> },
-                      { label: t('files.label_branch'), value: <span className="font-mono text-[12px]">task/T-151</span> },
-                      { label: t('files.label_commit'), value: <span className="font-mono text-[12px]">abc123f</span> },
-                    ] : []),
-                  ]} />
-                </div>
-              </div>
-            )}
-
-            {/* History */}
-            {history.length > 0 && (
-              <div className="px-5 py-4">
-                <SectionHeader>{t('files.detail_history')}</SectionHeader>
-                <div className="mt-3 flex flex-col gap-1.5">
-                  {history.slice(0, 3).map((commit) => (
-                    <div key={commit.hash} className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[11px] text-primary">{commit.hash}</span>
-                        <span className="text-[11px] text-muted-foreground">{commit.time}</span>
-                      </div>
-                      <span className="text-[12px] text-foreground">{commit.message}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+        )
+      })}
     </div>
   )
 }
@@ -572,149 +553,97 @@ function WorkspaceDetail({
 // Main page
 // ─────────────────────────────────────────────
 
-const RESOURCE_FILTERS: ResourceFilter[] = ['all', 'docs', 'images', 'data']
-const RESOURCE_FILTER_KEYS: Record<ResourceFilter, string> = {
-  all: 'files.filter_all',
-  docs: 'files.filter_docs',
-  images: 'files.filter_images',
-  data: 'files.filter_data',
-}
-
-function matchesResourceFilter(resource: ResourceData, filter: ResourceFilter): boolean {
-  if (filter === 'all') return true
-  return TYPE_FILTER[resource.type] === filter
-}
-
-function flattenTree(nodes: FileTreeNode[]): FileTreeNode[] {
-  const result: FileTreeNode[] = []
-  for (const node of nodes) {
-    result.push(node)
-    if (node.children) {
-      result.push(...flattenTree(node.children))
-    }
-  }
-  return result
-}
-
 function FilesPage() {
   const { t } = useTranslation()
   const { path: deepLinkPath, scope: deepLinkScope } = Route.useSearch()
 
-  // Data
-  const [resources, setResources] = useState<ResourceData[]>([])
-  const [tree, setTree] = useState<FileTreeNode[]>([])
-  const [codeContent, setCodeContent] = useState<Record<string, string>>({})
-  const [diffs, setDiffs] = useState<Record<string, FileDiffInfo>>({})
-  const [historyMap, setHistoryMap] = useState<Record<string, FileCommitEntry[]>>({})
+  // ── Data ──
+  const companyList = useVfsList('company://')
+  const { data: allRuns } = useRuns()
 
-  // Workspace tree expansion
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
-    new Set(['.worktrees', '.worktrees/T-151', 'packages', 'packages/worker', 'packages/worker/src', 'artifacts']),
-  )
+  const workspaceRuns = useMemo(() => {
+    if (!allRuns) return []
+    return allRuns.filter((r) => r.status === 'completed' || r.status === 'running')
+  }, [allRuns])
+
+  const [userRunId, setUserRunId] = useState<string | null>(null)
+  const activeRunId = userRunId ?? workspaceRuns[0]?.id ?? null
+
+  const workspaceUri = activeRunId ? `workspace://run/${activeRunId}` : null
+  const workspaceList = useVfsList(workspaceUri)
+  const { data: diffData } = useVfsDiff(workspaceUri)
+
+  // ── UI state ──
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
   const [workspaceExpanded, setWorkspaceExpanded] = useState(true)
-
-  // Selection
   const [selected, setSelected] = useState<SelectedItem | null>(null)
-  // Track whether deep-link has been applied (so it fires once after data loads)
-  const [deepLinkApplied, setDeepLinkApplied] = useState(false)
-
-  // Filters / search
-  const [activeFilter, setActiveFilter] = useState<ResourceFilter>('all')
   const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    getResources().then((res) => {
-      setResources(res)
-      // Only auto-select first company file when there is no deep-link
-      if (!deepLinkPath && deepLinkScope !== 'workspace' && res.length > 0) {
-        setSelected({ kind: 'company-file', resource: res[0] })
-      }
-    })
-  }, [deepLinkPath, deepLinkScope])
-  useEffect(() => { getWorkspaceTree().then(setTree) }, [])
+  // ── Derived data ──
+  const companyEntries = companyList.data?.entries ?? []
+  const workspaceEntries = workspaceList.data?.entries ?? []
 
-  // Lazy-load code/diff/history for selected workspace file
-  const selectedWsPath = useMemo(() => {
-    if (selected?.kind === 'workspace-file') return selected.path
+  const diffMap = useMemo((): Map<string, VfsDiffFile> | null => {
+    if (!diffData) return null
+    const map = new Map<string, VfsDiffFile>()
+    for (const file of diffData.files) {
+      map.set(file.path, file)
+    }
+    return map
+  }, [diffData])
+
+  const activeRun = workspaceRuns.find((r) => r.id === activeRunId) ?? null
+  const activeTaskId = activeRun?.task_id ?? null
+
+  const filteredCompany = useMemo(() => {
+    if (!search.trim()) return companyEntries
+    const q = search.trim().toLowerCase()
+    return companyEntries.filter((e) => e.name.toLowerCase().includes(q))
+  }, [companyEntries, search])
+
+  const filteredWorkspace = useMemo(() => {
+    if (!search.trim()) return workspaceEntries
+    const q = search.trim().toLowerCase()
+    return workspaceEntries.filter((e) => e.name.toLowerCase().includes(q))
+  }, [workspaceEntries, search])
+
+  // ── Deep-link resolution ──
+  const deepLinkSelected = useMemo((): SelectedItem | null => {
+    if (!deepLinkPath) return null
+    if (deepLinkScope === 'workspace' && activeRunId) {
+      const wsEntry = workspaceEntries.find((e) => e.path === deepLinkPath)
+      if (wsEntry) return { kind: 'workspace-file', entry: wsEntry, runId: activeRunId }
+      // Synthesize entry for nested paths not yet loaded
+      const name = deepLinkPath.split('/').pop() ?? deepLinkPath
+      const synthetic: VfsListEntry = { name, path: deepLinkPath, type: 'file' }
+      return { kind: 'workspace-file', entry: synthetic, runId: activeRunId }
+    }
+    const companyEntry = companyEntries.find((e) => e.path === deepLinkPath)
+    if (companyEntry) return { kind: 'company-file', entry: companyEntry }
     return null
-  }, [selected])
+  }, [deepLinkPath, deepLinkScope, activeRunId, workspaceEntries, companyEntries])
 
-  useEffect(() => {
-    if (!selectedWsPath) return
-    if (!(selectedWsPath in codeContent)) {
-      getFileCode(selectedWsPath).then((code) => {
-        if (code !== null) setCodeContent((prev) => ({ ...prev, [selectedWsPath]: code }))
-      })
-    }
-    if (!(selectedWsPath in diffs)) {
-      getFileDiff(selectedWsPath).then((diff) => {
-        if (diff !== null) setDiffs((prev) => ({ ...prev, [selectedWsPath]: diff }))
-      })
-    }
-    if (!(selectedWsPath in historyMap)) {
-      getFileHistory(selectedWsPath).then((history) => {
-        if (history.length > 0) setHistoryMap((prev) => ({ ...prev, [selectedWsPath]: history }))
-      })
-    }
-  }, [selectedWsPath])
+  // ── Effective selection: explicit pick > deep-link > first company file ──
+  const autoSelect = useMemo((): SelectedItem | null => {
+    if (deepLinkPath || deepLinkScope === 'workspace') return null
+    if (companyEntries.length === 0) return null
+    return { kind: 'company-file', entry: companyEntries[0] }
+  }, [deepLinkPath, deepLinkScope, companyEntries])
 
-  // Apply deep-link once tree is loaded
-  useEffect(() => {
-    if (deepLinkApplied || tree.length === 0) return
-    if (!deepLinkPath) return
-    // Expand parent dirs so the target file is visible
-    const parts = deepLinkPath.split('/')
-    const dirsToExpand: string[] = []
-    for (let i = 1; i < parts.length; i++) {
-      dirsToExpand.push(parts.slice(0, i).join('/'))
-    }
+  const effectiveSelected = selected ?? deepLinkSelected ?? autoSelect
+
+  // ── Selected paths per scope (for highlighting) ──
+  const selectedCompanyPath = effectiveSelected?.kind === 'company-file' ? effectiveSelected.entry.path : null
+  const selectedWorkspacePath = effectiveSelected?.kind === 'workspace-file' ? effectiveSelected.entry.path : null
+
+  const toggleDir = useCallback((dirUri: string) => {
     setExpandedDirs((prev) => {
       const next = new Set(prev)
-      for (const d of dirsToExpand) next.add(d)
-      return next
-    })
-    setWorkspaceExpanded(true)
-    const node = findNode(tree, deepLinkPath)
-    if (node && node.type !== 'directory' && node.type !== 'worktree-root') {
-      setSelected({ kind: 'workspace-file', path: deepLinkPath })
-    }
-    setDeepLinkApplied(true)
-  }, [deepLinkPath, deepLinkApplied, tree])
-
-  const toggleDir = useCallback((path: string) => {
-    setExpandedDirs((prev) => {
-      const next = new Set(prev)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
+      if (next.has(dirUri)) next.delete(dirUri)
+      else next.add(dirUri)
       return next
     })
   }, [])
-
-  // Filtered company resources
-  const filteredResources = useMemo(() => {
-    let items = resources.filter((r) => matchesResourceFilter(r, activeFilter))
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      items = items.filter(
-        (r) => r.filename.toLowerCase().includes(q) || (r.description ?? '').toLowerCase().includes(q),
-      )
-    }
-    return items
-  }, [resources, activeFilter, search])
-
-  // Filtered workspace files (flat search when searching)
-  const filteredWsNodes = useMemo(() => {
-    if (!search.trim()) return tree
-    const q = search.trim().toLowerCase()
-    return flattenTree(tree).filter((n) => n.name.toLowerCase().includes(q))
-  }, [tree, search])
-
-  const selectedWsNode = useMemo(() => {
-    if (selected?.kind === 'workspace-file') return findNode(tree, selected.path)
-    return null
-  }, [selected, tree])
-
-  const selectedResourceItem = selected?.kind === 'company-file' ? selected.resource : null
 
   return (
     <ListDetail
@@ -740,68 +669,43 @@ function FilesPage() {
                   className="h-7 w-full bg-transparent pl-5 font-heading text-[12px] text-foreground outline-none placeholder:text-muted-foreground/60"
                 />
               </div>
-              {/* Filters */}
-              <div className="mt-2 flex flex-wrap gap-1">
-                {RESOURCE_FILTERS.map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => setActiveFilter(f)}
-                    className={cn(
-                      'font-heading text-[11px] px-2 py-0.5 transition-colors',
-                      activeFilter === f
-                        ? 'bg-foreground text-background'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {t(RESOURCE_FILTER_KEYS[f])}
-                  </button>
-                ))}
-              </div>
             </>
           }
         >
-          {filteredResources.length === 0 && filteredWsNodes.length === 0 ? (
+          {filteredCompany.length === 0 && filteredWorkspace.length === 0 ? (
             <EmptyState title={t('files.empty_title')} description={t('files.empty_desc')} />
           ) : (
             <>
-              {/* Company files section */}
-              {filteredResources.length > 0 && (
+              {/* ── Company files ── */}
+              {filteredCompany.length > 0 && (
                 <>
                   <ScopeHeader
                     title={t('files.scope_company')}
                     description={t('files.scope_company_desc')}
                   />
-                  {filteredResources.map((resource) => {
-                    const Icon = fileIcon(resource.filename)
+                  {filteredCompany.map((entry) => {
+                    const Icon = fileIcon(entry.name, { isDir: entry.type === 'directory' })
                     return (
                       <FileRow
-                        key={resource.id}
+                        key={entry.path}
                         icon={Icon}
-                        name={resource.filename}
-                        sublabel={resource.description ?? resource.type}
+                        name={entry.name}
+                        sublabel={entry.mime_type ?? undefined}
                         metaRight={
-                          <div className="flex items-center gap-2">
-                            <span className="font-heading text-[11px] text-muted-foreground">{resource.size}</span>
-                            {resource.status !== 'indexed' && (
-                              <StatusPill
-                                status={STATUS_PILL_MAP[resource.status]}
-                                label={t(STATUS_I18N[resource.status])}
-                                pulse={resource.status === 'processing'}
-                              />
-                            )}
-                          </div>
+                          entry.size != null
+                            ? <span className="font-heading text-[11px] text-muted-foreground">{formatSize(entry.size)}</span>
+                            : undefined
                         }
-                        selected={selected?.kind === 'company-file' && selected.resource.id === resource.id}
-                        onClick={() => setSelected({ kind: 'company-file', resource })}
+                        selected={selectedCompanyPath === entry.path}
+                        onClick={() => setSelected({ kind: 'company-file', entry })}
                       />
                     )
                   })}
                 </>
               )}
 
-              {/* Task files section — collapsible */}
-              {tree.length > 0 && (
+              {/* ── Workspace files ── */}
+              {(workspaceRuns.length > 0 || workspaceEntries.length > 0) && (
                 <>
                   <ScopeHeader
                     title={t('files.scope_workspace')}
@@ -810,22 +714,56 @@ function FilesPage() {
                     expanded={workspaceExpanded}
                     onToggle={() => setWorkspaceExpanded((v) => !v)}
                   />
-                  {workspaceExpanded && (search.trim() ? filteredWsNodes : tree).map((node) => (
-                    <WsFileRow
-                      key={node.path}
-                      node={node}
-                      depth={0}
-                      expandedDirs={expandedDirs}
-                      selectedPath={selected?.kind === 'workspace-file' ? selected.path : null}
-                      onToggle={toggleDir}
-                      onSelect={(path) => {
-                        const n = findNode(tree, path)
-                        if (!n) return
-                        const isDir = n.type === 'directory' || n.type === 'worktree-root'
-                        if (!isDir) setSelected({ kind: 'workspace-file', path })
-                      }}
-                    />
-                  ))}
+                  {workspaceExpanded && (
+                    <>
+                      {/* Run selector */}
+                      {workspaceRuns.length > 0 && (
+                        <div className="border-b border-border/50 px-4 py-2">
+                          <select
+                            value={activeRunId ?? ''}
+                            onChange={(e) => setUserRunId(e.target.value || null)}
+                            className="w-full bg-transparent font-heading text-[11px] text-muted-foreground outline-none"
+                          >
+                            {workspaceRuns.map((run) => (
+                              <option key={run.id} value={run.id}>
+                                {run.id.slice(0, 16)} — {run.agent_id} ({run.status})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Workspace entries */}
+                      {filteredWorkspace.length > 0 ? (
+                        filteredWorkspace.map((entry) => (
+                          <VfsEntryRow
+                            key={entry.path}
+                            entry={entry}
+                            scope="workspace"
+                            runId={activeRunId}
+                            depth={0}
+                            expandedDirs={expandedDirs}
+                            selectedPath={selectedWorkspacePath}
+                            diffMap={diffMap}
+                            onToggle={toggleDir}
+                            onSelect={(e) => {
+                              if (activeRunId) {
+                                setSelected({ kind: 'workspace-file', entry: e, runId: activeRunId })
+                              }
+                            }}
+                          />
+                        ))
+                      ) : activeRunId ? (
+                        <div className="flex items-center justify-center py-8 text-[12px] text-muted-foreground">
+                          {t('files.empty_title')}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center py-8 text-[12px] text-muted-foreground">
+                          {t('files.empty_desc')}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </>
               )}
             </>
@@ -833,15 +771,8 @@ function FilesPage() {
         </ListPanel>
       }
       detail={
-        selectedResourceItem ? (
-          <CompanyDetail resource={selectedResourceItem} />
-        ) : selectedWsNode ? (
-          <WorkspaceDetail
-            node={selectedWsNode}
-            codeContent={codeContent}
-            diffs={diffs}
-            historyMap={historyMap}
-          />
+        effectiveSelected ? (
+          <FileDetail item={effectiveSelected} diffMap={diffMap} activeTaskId={activeTaskId} />
         ) : (
           <div className="flex h-full items-center justify-center">
             <EmptyState
