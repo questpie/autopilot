@@ -74,6 +74,12 @@ export async function createIndexDb(companyRoot: string): Promise<IndexDbResult>
 	// Create core tables via raw SQL (index.db is fully rebuildable — no migrations needed)
 	await createIndexTables(client)
 
+	// Items table (VFS item index)
+	await createItemsTables(client)
+
+	// FTS5 virtual tables for items
+	await initItemsFts(client)
+
 	// FTS5 virtual tables for search_index
 	await initSearchFts(client)
 
@@ -213,6 +219,65 @@ async function initChunksFts(client: Client): Promise<void> {
 		`)
 	} catch (err) {
 		console.warn('[db] chunks FTS5 triggers failed:', err instanceof Error ? err.message : String(err))
+	}
+}
+
+// ─── Items Table Creation ──────────────────────────────────────────────────
+
+async function createItemsTables(client: Client): Promise<void> {
+	await client.execute(`
+		CREATE TABLE IF NOT EXISTS items (
+			path TEXT PRIMARY KEY,
+			is_dir INTEGER NOT NULL,
+			type TEXT,
+			type_source TEXT,
+			frontmatter TEXT,
+			body_preview TEXT,
+			size INTEGER,
+			mtime TEXT NOT NULL,
+			hash TEXT,
+			parent_path TEXT,
+			indexed_at TEXT NOT NULL
+		)
+	`)
+	await client.execute('CREATE INDEX IF NOT EXISTS idx_items_type ON items(type)')
+	await client.execute('CREATE INDEX IF NOT EXISTS idx_items_parent ON items(parent_path)')
+	await client.execute('CREATE INDEX IF NOT EXISTS idx_items_type_parent ON items(type, parent_path)')
+}
+
+async function initItemsFts(client: Client): Promise<void> {
+	try {
+		await client.execute(`
+			CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(
+				path, frontmatter, body_preview,
+				content=items,
+				content_rowid=rowid,
+				tokenize='porter unicode61'
+			)
+		`)
+	} catch (err) {
+		console.warn('[db] items FTS5 init failed:', err instanceof Error ? err.message : String(err))
+	}
+
+	try {
+		await client.execute(`
+			CREATE TRIGGER IF NOT EXISTS items_fts_ai AFTER INSERT ON items BEGIN
+				INSERT INTO items_fts(rowid, path, frontmatter, body_preview) VALUES (new.rowid, new.path, new.frontmatter, new.body_preview);
+			END
+		`)
+		await client.execute(`
+			CREATE TRIGGER IF NOT EXISTS items_fts_ad AFTER DELETE ON items BEGIN
+				INSERT INTO items_fts(items_fts, rowid, path, frontmatter, body_preview) VALUES('delete', old.rowid, old.path, old.frontmatter, old.body_preview);
+			END
+		`)
+		await client.execute(`
+			CREATE TRIGGER IF NOT EXISTS items_fts_au AFTER UPDATE ON items BEGIN
+				INSERT INTO items_fts(items_fts, rowid, path, frontmatter, body_preview) VALUES('delete', old.rowid, old.path, old.frontmatter, old.body_preview);
+				INSERT INTO items_fts(rowid, path, frontmatter, body_preview) VALUES (new.rowid, new.path, new.frontmatter, new.body_preview);
+			END
+		`)
+	} catch (err) {
+		console.warn('[db] items FTS5 triggers failed:', err instanceof Error ? err.message : String(err))
 	}
 }
 

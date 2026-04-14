@@ -44,6 +44,9 @@ import { scripts } from './routes/scripts'
 import { queues } from './routes/queues'
 import { searchRoute } from './routes/search'
 import { vfs } from './routes/vfs'
+import { items } from './routes/items'
+import { types } from './routes/types'
+import { invites } from './routes/invites'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -233,6 +236,7 @@ export function createApp(config: AppConfig) {
 	app.use('/api/runs/*/cancel', userAuth)
 	app.use('/api/runs/*/continue', userAuth)
 	app.use('/api/runs/*/steer', userAuth)
+	app.use('/api/runs/*/stream', userAuth)
 	// GET /api/runs/:id — both users and workers need access
 	const eitherAuth = createMiddleware<AppEnv>(async (c, next) => {
 		// Try worker auth first (X-Worker-Secret header)
@@ -303,6 +307,16 @@ export function createApp(config: AppConfig) {
 	app.use('/api/scripts/*', userAuth)
 	app.use('/api/scripts', userAuth)
 
+	// ── Items & Types routes (user auth — rendering system) ─────────────
+	app.use('/api/items/*', userAuth)
+	app.use('/api/items', userAuth)
+	app.use('/api/types/*', userAuth)
+	app.use('/api/types', userAuth)
+
+	// ── Invite routes (GET/POST/DELETE require user auth; GET /validate and POST /accept are public) ──
+	app.use('/api/invites', userAuth)
+	app.use('/api/invites/:id', userAuth)
+
 	// ── Conversation routes ──────────────────────────────────────────────
 	// Binding management requires user auth; inbound /:providerId is self-authenticated via provider secret
 	app.use('/api/conversations/bindings', userAuth)
@@ -335,6 +349,9 @@ export function createApp(config: AppConfig) {
 		.route('/api/search', searchRoute)
 		.route('/api/vfs', vfs)
 		.route('/api/scripts', scripts)
+		.route('/api/items', items)
+		.route('/api/types', types)
+		.route('/api/invites', invites)
 
 	// ── Operator Web SPA serving ────────────────────────────────────────────
 	if (config.operatorWebDist) {

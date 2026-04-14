@@ -91,6 +91,10 @@ export {
 	RunSteerSchema,
 } from './api-contracts'
 export { SkillManifestSchema, SkillEntrySchema, SkillHintSchema } from './skill'
+export { TypeDefinitionSchema } from './type-definition'
+export type { TypeDefinition } from './type-definition'
+export { ItemRecordSchema } from './item'
+export type { ItemRecord } from './item'
 export {
 	VfsSchemeSchema,
 	VfsParsedUriSchema,
