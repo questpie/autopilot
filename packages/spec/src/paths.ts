@@ -11,6 +11,7 @@ export const PATHS = {
 	// Authored config (under .autopilot/)
 	AGENTS_DIR: '.autopilot/agents',
 	WORKFLOWS_DIR: '.autopilot/workflows',
+	TYPES_DIR: '.autopilot/types',
 	ENVIRONMENTS_DIR: '.autopilot/environments',
 	PROVIDERS_DIR: '.autopilot/providers',
 	HANDLERS_DIR: '.autopilot/handlers',

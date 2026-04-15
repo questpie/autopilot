@@ -3,7 +3,7 @@
  * Config endpoint returns authored workflow definitions (read-only).
  */
 import type { Workflow, WorkflowStep } from './types'
-import { apiFetch } from '@/lib/api-client'
+import { configFetch } from '@/lib/api'
 
 // ── Wire shapes (backend Zod-parsed, optional fields may be absent) ──
 
@@ -48,7 +48,7 @@ function mapWorkflow(wire: WireWorkflow): Workflow {
 }
 
 export async function getWorkflows(): Promise<Workflow[]> {
-  const data = await apiFetch<WireWorkflow[]>('/api/config/workflows')
+  const data = await configFetch<WireWorkflow[]>('/api/config/workflows')
   return data.map(mapWorkflow)
 }
 

@@ -32,6 +32,7 @@ const MCP_TOOL_NAMES = [
   'mcp__autopilot__task_parents',
   'mcp__autopilot__run_list',
   'mcp__autopilot__run_get',
+  'mcp__autopilot__artifact_create',
 ].join(',')
 
 /**
@@ -43,18 +44,17 @@ const MCP_TOOL_NAMES = [
  * - Fresh run: spawns with -p (print mode) and a prompt
  * - Resume: spawns with --resume <session-id> -p and a continuation message
  */
-/** Bun FileSink type for stdin pipe. */
-interface FileSink {
-  write(data: string | Uint8Array): number
-  flush(): void | Promise<void>
-  end(): void
-}
-
 export class ClaudeCodeAdapter implements RuntimeAdapter {
   private eventHandler: ((event: WorkerEvent) => void) | null = null
   private subprocess: Subprocess | null = null
-  private stdinSink: FileSink | null = null
   private config: ClaudeCodeConfig
+
+  // Streaming accumulators for --include-partial-messages deltas
+  private streamingText = ''
+  private streamingThinking = ''
+  private lastProgressEmitAt = 0
+  private lastThinkingEmitAt = 0
+  private readonly PROGRESS_THROTTLE_MS = 150
 
   constructor(config?: ClaudeCodeConfig) {
     this.config = config ?? {}
@@ -62,17 +62,6 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
 
   onEvent(handler: (event: WorkerEvent) => void): void {
     this.eventHandler = handler
-  }
-
-  /**
-   * Send a steering message to Claude Code mid-execution via stdin.
-   * NOTE: Currently disabled — --input-format stream-json requires investigation.
-   * Steer infrastructure (DB, API, worker polling) is in place; this method is the
-   * missing link. When enabled, switch to stdin:'pipe' and bidirectional stream-json.
-   */
-  steer(_message: string): boolean {
-    // Steering deferred — stdin pipe not open in current -p <prompt> mode
-    return false
   }
 
   async start(context: RunContext): Promise<RuntimeResult | undefined> {
@@ -88,7 +77,7 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       args.push('--resume', context.runtimeSessionRef!)
     }
 
-    args.push('-p', prompt, '--output-format', 'stream-json')
+    args.push('-p', prompt, '--output-format', 'stream-json', '--include-partial-messages')
 
     // Model override (canonical model resolved by worker modelMap)
     if (context.model) {
@@ -114,16 +103,12 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
         apiKey: context.apiKey,
         mcpBinaryPath: this.config.mcpBinaryPath,
         localDev: context.localDev,
+        runId: context.runId,
       })
       args.push('--mcp-config', mcp.configPath, '--strict-mcp-config')
       args.push('--allowedTools', MCP_TOOL_NAMES)
       mcpCleanup = mcp.cleanup
     }
-
-    this.emit({
-      type: 'progress',
-      summary: isResume ? `Resuming Claude Code session ${context.runtimeSessionRef}` : 'Launching Claude Code',
-    })
 
     try {
       const proc = Bun.spawn([binaryPath, ...args], {
@@ -141,9 +126,6 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
       const { sessionId, lastResult, tokens } = await this.streamJsonl(proc)
       const stderr = await stderrPromise
 
-      // Clean up stdin sink
-      this.stdinSink = null
-
       const exitCode = await proc.exited
       this.subprocess = null
 
@@ -152,8 +134,6 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
         this.emit({ type: 'error', summary: errorMsg })
         throw new Error(errorMsg)
       }
-
-      this.emit({ type: 'progress', summary: 'Claude Code completed' })
 
       if (!lastResult) {
         return { summary: 'Claude Code completed with no output' }
@@ -169,16 +149,11 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
         outputs: extracted.outputs,
       }
     } finally {
-      this.stdinSink = null
       if (mcpCleanup) await mcpCleanup()
     }
   }
 
   async stop(): Promise<void> {
-    if (this.stdinSink) {
-      try { this.stdinSink.end() } catch (err) { console.debug('[claude-code] stdin.end() failed (process may already be dead):', err instanceof Error ? err.message : String(err)) }
-      this.stdinSink = null
-    }
     if (this.subprocess) {
       this.subprocess.kill()
       this.subprocess = null
@@ -228,22 +203,53 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
     switch (event.type) {
       case 'system': {
         if (event.subtype === 'init' && event.session_id) {
-          const model = event.model ? ` (model: ${event.model})` : ''
-          this.emit({ type: 'progress', summary: `Claude Code initialized${model}` })
           return { sessionId: event.session_id }
         }
         return {}
       }
 
+      case 'stream_event': {
+        const inner = event.event
+        if (!inner) return {}
+
+        if (inner.type === 'content_block_start') {
+          if (inner.content_block?.type === 'text') {
+            this.streamingText = ''
+          } else if (inner.content_block?.type === 'thinking') {
+            this.streamingThinking = ''
+          }
+        } else if (inner.type === 'content_block_delta') {
+          if (inner.delta?.type === 'text_delta' && inner.delta.text) {
+            this.streamingText += inner.delta.text
+            this.maybeEmitProgress()
+          } else if (inner.delta?.type === 'thinking_delta' && inner.delta.thinking) {
+            this.streamingThinking += inner.delta.thinking
+            this.maybeEmitThinking()
+          }
+        } else if (inner.type === 'content_block_stop') {
+          this.flushStreamingText()
+          this.flushStreamingThinking()
+        }
+
+        return {}
+      }
+
       case 'assistant': {
+        // Text and thinking already handled by stream_event deltas — only emit tool_use
         const content = event.message?.content
         if (Array.isArray(content)) {
           for (const block of content) {
-            if (block.type === 'text' && block.text) {
-              this.emit({ type: 'progress', summary: truncate(block.text) })
-            } else if (block.type === 'tool_use' && block.name) {
+            if (block.type === 'tool_use' && block.name) {
               const detail = summarizeToolInput(block.name, block.input)
               this.emit({ type: 'tool_use', summary: detail })
+              // Also emit artifact event for artifact_create tool calls
+              if (block.name === 'mcp__autopilot__artifact_create' && block.input) {
+                this.emit({
+                  type: 'artifact',
+                  summary: String(block.input.title ?? 'artifact'),
+                  metadata: { artifact_type: block.input.type, title: block.input.title },
+                })
+              }
             }
           }
         }
@@ -271,6 +277,42 @@ export class ClaudeCodeAdapter implements RuntimeAdapter {
     }
   }
 
+  /** Emit a progress event if the throttle window has elapsed. */
+  private maybeEmitProgress(): void {
+    const now = Date.now()
+    if (now - this.lastProgressEmitAt >= this.PROGRESS_THROTTLE_MS) {
+      this.emit({ type: 'progress', summary: this.streamingText })
+      this.lastProgressEmitAt = now
+    }
+  }
+
+  /** Flush any remaining accumulated text as a final progress event. */
+  private flushStreamingText(): void {
+    if (this.streamingText) {
+      this.emit({ type: 'progress', summary: this.streamingText })
+      this.streamingText = ''
+      this.lastProgressEmitAt = Date.now()
+    }
+  }
+
+  /** Emit a thinking event if the throttle window has elapsed. */
+  private maybeEmitThinking(): void {
+    const now = Date.now()
+    if (now - this.lastThinkingEmitAt >= this.PROGRESS_THROTTLE_MS) {
+      this.emit({ type: 'thinking', summary: this.streamingThinking })
+      this.lastThinkingEmitAt = now
+    }
+  }
+
+  /** Flush accumulated thinking as a thinking event. */
+  private flushStreamingThinking(): void {
+    if (this.streamingThinking) {
+      this.emit({ type: 'thinking', summary: this.streamingThinking })
+      this.streamingThinking = ''
+      this.lastThinkingEmitAt = Date.now()
+    }
+  }
+
   private emit(event: WorkerEvent): void {
     this.eventHandler?.(event)
   }
@@ -284,6 +326,15 @@ interface ClaudeStreamEvent {
   session_id?: string
   model?: string
   tools?: unknown[]
+  /** Nested Anthropic API event (present when type === 'stream_event'). */
+  event?: {
+    type?: string
+    index?: number
+    content_block?: { type?: string; text?: string; name?: string; id?: string }
+    delta?: { type?: string; text?: string; thinking?: string; partial_json?: string }
+    message?: Record<string, unknown>
+    usage?: Record<string, unknown>
+  }
   message?: {
     content?: Array<{
       type?: string

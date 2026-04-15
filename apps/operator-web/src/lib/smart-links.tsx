@@ -29,20 +29,20 @@ interface PatternDef {
  */
 const PATTERNS: PatternDef[] = [
   {
-    // TASK-<uuid-fragment>  or  task:<uuid-fragment>
-    regex: /\b(?:TASK|task)[:-]([a-f0-9-]{4,})/g,
+    // TASK-<id>  or  task:<id>  — IDs are slugs like "full-system-review-questpie-autopilot-a954"
+    regex: /\b(?:TASK|task)[:-]([\w][\w-]{3,})/g,
     type: 'task',
     capture: (m) => m[1],
   },
   {
-    // RUN-<uuid-fragment>  or  run:<uuid-fragment>
-    regex: /\b(?:RUN|run)[:-]([a-f0-9-]{4,})/g,
+    // RUN-<id>  or  run:<id>  — IDs like "run-1776160625928-df0049bd3230"
+    regex: /\b(?:RUN|run)[:-]([\w][\w-]{3,})/g,
     type: 'run',
     capture: (m) => m[1],
   },
   {
-    // session:<uuid-fragment>
-    regex: /\bsession[:-]([a-f0-9-]{4,})/g,
+    // session:<id>  — IDs like "session-abc123" or UUIDs
+    regex: /\bsession[:-]([\w][\w-]{3,})/g,
     type: 'session',
     capture: (m) => m[1],
   },

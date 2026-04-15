@@ -6,17 +6,17 @@
  * In production, this call will fail — the hook handles this gracefully.
  */
 import type { Worker, WorkerCapability } from './types'
-import { apiFetch } from '@/lib/api-client'
+import { api } from '@/lib/api'
 
 interface WireWorker {
   id: string
-  device_id: string
+  device_id: string | null
   name: string | null
   status: string
-  capabilities: string
+  capabilities: string | null
   registered_at: string
   last_heartbeat: string | null
-  machine_secret_hash: string
+  machine_secret_hash: string | null
 }
 
 function isWorkerCapability(item: unknown): item is WorkerCapability {
@@ -24,7 +24,8 @@ function isWorkerCapability(item: unknown): item is WorkerCapability {
   return typeof item.runtime === 'string'
 }
 
-function parseCapabilities(json: string): WorkerCapability[] {
+function parseCapabilities(json: string | null): WorkerCapability[] {
+  if (!json) return []
   try {
     const parsed: unknown = JSON.parse(json)
     if (!Array.isArray(parsed)) return []
@@ -50,6 +51,8 @@ function mapWorker(wire: WireWorker): Worker {
 }
 
 export async function getWorkers(): Promise<Worker[]> {
-  const data = await apiFetch<WireWorker[]>('/api/workers')
+  const res = await api.api.workers.$get()
+  if (!res.ok) throw new Error(`Failed to fetch workers: ${res.status}`)
+  const data = await res.json()
   return data.map(mapWorker)
 }

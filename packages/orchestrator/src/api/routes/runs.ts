@@ -7,7 +7,6 @@ import {
 	RunCompletionSchema,
 	CreateRunRequestSchema,
 	ContinueRunRequestSchema,
-	RunSteerRequestSchema,
 	ArtifactKindSchema,
 } from '@questpie/autopilot-spec'
 import type { ResolvedCapabilities, CapabilityProfile } from '@questpie/autopilot-spec'
@@ -58,6 +57,78 @@ const runs = new Hono<AppEnv>()
 			return c.json(events, 200)
 		},
 	)
+	// GET /runs/:id/stream — SSE stream of run progress events
+	.get(
+		'/:id/stream',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { runService } = c.get('services')
+			const { id } = c.req.valid('param')
+			const run = await runService.get(id)
+			if (!run) return c.json({ error: 'run not found' }, 404)
+
+			const { readable, writable } = new TransformStream()
+			const writer = writable.getWriter()
+			const encoder = new TextEncoder()
+
+			function send(data: string): void {
+				writer.write(encoder.encode(`data: ${data}\n\n`)).catch(() => {})
+			}
+
+			const existingEvents = await runService.getEvents(id)
+			for (const evt of existingEvents) {
+				send(JSON.stringify({ type: 'run_event', eventType: evt.type, summary: evt.summary, created_at: evt.created_at }))
+			}
+
+			const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
+			if (terminalStatuses.has(run.status)) {
+				send(JSON.stringify({ type: 'run_completed', status: run.status, summary: run.summary }))
+				writer.close().catch(() => {})
+				return new Response(readable, {
+					headers: {
+						'Content-Type': 'text/event-stream',
+						'Cache-Control': 'no-cache',
+						Connection: 'keep-alive',
+					},
+				})
+			}
+
+			const unsubscribe = eventBus.subscribe((event) => {
+				if (event.type === 'run_event' && event.runId === id) {
+					send(JSON.stringify({ type: 'run_event', eventType: event.eventType, summary: event.summary }))
+				} else if (event.type === 'run_completed' && event.runId === id) {
+					runService.get(id).then((finalRun) => {
+						send(JSON.stringify({ type: 'run_completed', status: event.status, summary: finalRun?.summary ?? '' }))
+					}).catch((err) => {
+						console.error(`[runs/stream] failed to fetch final run ${id}:`, err instanceof Error ? err.message : String(err))
+						send(JSON.stringify({ type: 'run_completed', status: event.status, summary: '' }))
+					}).finally(() => {
+						unsubscribe()
+						clearInterval(heartbeat)
+						writer.close().catch(() => {})
+					})
+				}
+			})
+
+			const heartbeat = setInterval(() => {
+				send(JSON.stringify({ type: 'heartbeat', ts: new Date().toISOString() }))
+			}, 30_000)
+
+			c.req.raw.signal.addEventListener('abort', () => {
+				clearInterval(heartbeat)
+				unsubscribe()
+				writer.close().catch(() => {})
+			})
+
+			return new Response(readable, {
+				headers: {
+					'Content-Type': 'text/event-stream',
+					'Cache-Control': 'no-cache',
+					Connection: 'keep-alive',
+				},
+			})
+		},
+	)
 	// GET /runs/:id/artifacts — get run artifacts (metadata only, blob content not inlined)
 	.get(
 		'/:id/artifacts',
@@ -80,14 +151,100 @@ const runs = new Hono<AppEnv>()
 			const { artId } = c.req.valid('param')
 			const row = await artifactService.get(artId)
 			if (!row) return c.json({ error: 'artifact not found' }, 404)
-			const content = await artifactService.resolveContent(row)
-			const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8')
-			return new Response(bytes, {
-				headers: {
-					'Content-Type': row.mime_type || 'application/octet-stream',
-					'Content-Length': String(bytes.length),
-				},
+			try {
+				const content = await artifactService.resolveContent(row)
+				const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8')
+				return new Response(bytes, {
+					headers: {
+						'Content-Type': row.mime_type || 'application/octet-stream',
+						'Content-Length': String(bytes.length),
+					},
+				})
+			} catch (err) {
+				console.error(`[runs] failed to resolve artifact ${artId}:`, err instanceof Error ? err.message : String(err))
+				return c.json({ error: 'failed to resolve artifact content' }, 500)
+			}
+		},
+	)
+	// POST /runs/:id/artifacts — create an artifact on an active run (MCP tool use)
+	.post(
+		'/:id/artifacts',
+		zValidator('param', z.object({ id: z.string() })),
+		zValidator(
+			'json',
+			z.object({
+				kind: z.string().default('preview_file'),
+				title: z.string(),
+				ref_kind: z.enum(['file', 'url', 'inline', 'base64']).default('inline'),
+				ref_value: z.string(),
+				mime_type: z.string().optional(),
+				metadata: z.record(z.unknown()).optional(),
+			}),
+		),
+		async (c) => {
+			const { runService, artifactService } = c.get('services')
+			const { id } = c.req.valid('param')
+			const body = c.req.valid('json')
+
+			const run = await runService.get(id)
+			if (!run) return c.json({ error: 'run not found' }, 404)
+
+			const activeStatuses = new Set(['pending', 'claimed', 'running'])
+			if (!activeStatuses.has(run.status)) {
+				return c.json({ error: `run ${id} is ${run.status} — cannot add artifacts to a terminal run` }, 409)
+			}
+
+			const kindParse = ArtifactKindSchema.safeParse(body.kind)
+			if (!kindParse.success) {
+				console.debug(`[runs] normalized unknown artifact kind "${body.kind}" to "other"`)
+			}
+			const normalizedKind = kindParse.success ? kindParse.data : 'other'
+
+			const artId = `art-${Date.now()}-${randomBytes(6).toString('hex')}`
+			await artifactService.create({
+				id: artId,
+				run_id: id,
+				task_id: run.task_id ?? undefined,
+				kind: normalizedKind,
+				title: body.title,
+				ref_kind: body.ref_kind,
+				ref_value: body.ref_value,
+				mime_type: body.mime_type,
+				metadata: body.metadata ? JSON.stringify(body.metadata) : undefined,
 			})
+
+			let previewUrl: string | null = null
+			if (normalizedKind === 'preview_file') {
+				const entry = body.title.endsWith('.html') ? body.title : 'index.html'
+				const baseUrl = c.get('orchestratorUrl')
+				previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
+				await artifactService.create({
+					id: `art-preview-${Date.now()}-${randomBytes(6).toString('hex')}`,
+					run_id: id,
+					task_id: run.task_id ?? undefined,
+					kind: 'preview_url',
+					title: 'Preview',
+					ref_kind: 'url',
+					ref_value: previewUrl,
+					mime_type: 'text/html',
+					metadata: JSON.stringify({ entry, run_id: id }),
+				})
+			}
+
+			eventBus.emit({
+				type: 'run_event',
+				runId: id,
+				eventType: 'artifact',
+				summary: body.title,
+			})
+
+			await runService.appendEvent(id, {
+				type: 'artifact',
+				summary: body.title,
+				metadata: JSON.stringify({ artifact_id: artId, kind: normalizedKind, preview_url: previewUrl }),
+			})
+
+			return c.json({ id: artId, preview_url: previewUrl }, 201)
 		},
 	)
 	// POST /runs — create a new pending run
@@ -415,61 +572,6 @@ const runs = new Hono<AppEnv>()
 		},
 	)
 
-	// POST /runs/:id/steer — send a steering message to a running run (user auth)
-	.post(
-		'/:id/steer',
-		zValidator('param', z.object({ id: z.string() })),
-		zValidator('json', RunSteerRequestSchema),
-		async (c) => {
-			const { runService, steerService } = c.get('services')
-			const actor = c.get('actor')
-			const { id } = c.req.valid('param')
-			const body = c.req.valid('json')
-
-			const run = await runService.get(id)
-			if (!run) return c.json({ error: 'run not found' }, 404)
-
-			if (run.status !== 'running' && run.status !== 'claimed') {
-				return c.json({ error: `Run ${id} is ${run.status} — can only steer running/claimed runs` }, 400)
-			}
-
-			const steer = await steerService.create({
-				run_id: id,
-				message: body.message,
-				created_by: body.created_by ?? actor?.id ?? 'system',
-			})
-
-			eventBus.emit({
-				type: 'run_event',
-				runId: id,
-				eventType: 'steer',
-				summary: `Steering message: ${body.message.slice(0, 100)}`,
-			})
-
-			return c.json(steer, 201)
-		},
-	)
-	// POST /runs/:id/steers/claim — worker claims pending steer messages (worker auth)
-	.post(
-		'/:id/steers/claim',
-		zValidator('param', z.object({ id: z.string() })),
-		async (c) => {
-			const { runService, steerService } = c.get('services')
-			const { id } = c.req.valid('param')
-
-			const run = await runService.get(id)
-			if (!run) return c.json({ error: 'run not found' }, 404)
-
-			// Verify authenticated worker owns this run
-			const authWorkerId = c.get('workerId')
-			if (authWorkerId && run.worker_id && run.worker_id !== authWorkerId) {
-				return c.json({ error: `Run ${id} belongs to worker ${run.worker_id}, not ${authWorkerId}` }, 403)
-			}
-
-			const steers = await steerService.claimPending(id)
-			return c.json({ steers }, 200)
-		},
-	)
 
 export { runs }
 

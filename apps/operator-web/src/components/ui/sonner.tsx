@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 
 const defaultClassNames: ToastClassnames = {
 	toast: cn(
-		'pointer-events-auto flex w-[var(--width)] max-w-[calc(100vw-2rem)] items-start gap-2 rounded-none border border-border border-l-2 bg-popover px-3 py-2 text-popover-foreground shadow-none backdrop-blur-none',
+		'pointer-events-auto flex w-[var(--width)] max-w-[calc(100vw-2rem)] items-start gap-2 rounded-none border-l-2 bg-popover px-3 py-2 text-popover-foreground shadow-none backdrop-blur-none',
 		'focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50',
 		'data-[swiping=true]:cursor-grabbing',
 	),
@@ -24,19 +24,19 @@ const defaultClassNames: ToastClassnames = {
 	description:
 		'min-w-0 whitespace-normal text-[11px]/4 text-muted-foreground [overflow-wrap:anywhere]',
 	actionButton: cn(
-		'ml-1 inline-flex h-6 shrink-0 items-center justify-center rounded-none border border-border bg-background px-2',
+		'ml-1 inline-flex h-6 shrink-0 items-center justify-center rounded-none bg-muted/40 px-2',
 		'font-heading text-[10px] uppercase tracking-[0.12em] text-foreground',
 		'transition-colors hover:bg-muted',
 		'focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50',
 	),
 	cancelButton: cn(
-		'ml-auto inline-flex h-6 shrink-0 items-center justify-center rounded-none border border-border bg-background px-2',
+		'ml-auto inline-flex h-6 shrink-0 items-center justify-center rounded-none bg-muted/40 px-2',
 		'font-heading text-[10px] uppercase tracking-[0.12em] text-muted-foreground',
 		'transition-colors hover:bg-muted hover:text-foreground',
 		'focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50',
 	),
 	closeButton: cn(
-		'order-4 ml-1 inline-flex size-5 shrink-0 items-center justify-center rounded-none border border-border bg-background',
+		'order-4 ml-1 inline-flex size-5 shrink-0 items-center justify-center rounded-none bg-muted/40',
 		'text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
 		'focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50',
 		'[&_svg]:size-3',

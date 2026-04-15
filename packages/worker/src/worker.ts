@@ -449,27 +449,13 @@ export class AutopilotWorker {
         : undefined,
     })
 
-    // Steer polling timer — declared outside try so it's accessible in catch for cleanup
-    let steerTimer: ReturnType<typeof setInterval> | null = null
-
     try {
       adapter.onEvent((event) => {
         this.postEvent(run.id, event).catch((err) => console.warn('[worker] failed to post event:', err))
       })
 
-      // Start steer polling if the adapter supports it
-      if (typeof adapter.steer === 'function') {
-        steerTimer = setInterval(() => {
-          this.pollSteers(run.id, adapter).catch((err) => {
-            console.warn('[worker] steer poll failed:', err instanceof Error ? err.message : String(err))
-          })
-        }, 2_000) // Poll every 2 seconds
-      }
-
       const result = await adapter.start(context)
 
-      // Stop steer polling
-      if (steerTimer) { clearInterval(steerTimer); steerTimer = null }
       const resumable = !!result?.sessionId
 
       // Collect preview files from worktree before cleanup
@@ -510,7 +496,6 @@ export class AutopilotWorker {
         await this.workspace.release({ runId: run.id, taskId: run.task_id, resumable })
       }
     } catch (err) {
-      if (steerTimer) { clearInterval(steerTimer); steerTimer = null }
       const errorMsg = err instanceof Error ? err.message : String(err)
       await this.postEvent(run.id, { type: 'error', summary: errorMsg })
       await this.completeRun(run.id, { status: 'failed', error: errorMsg })
@@ -539,24 +524,6 @@ export class AutopilotWorker {
       runArtifacts,
       resolvedScripts: run.resolved_scripts ?? [],
     })
-  }
-
-  /** Poll orchestrator for pending steer messages and deliver them to the adapter. */
-  private async pollSteers(runId: string, adapter: RuntimeAdapter): Promise<void> {
-    if (typeof adapter.steer !== 'function') return
-
-    const res = (await this.api(`/api/runs/${runId}/steers/claim`, {
-      method: 'POST',
-    })) as { steers: Array<{ id: string; message: string }> }
-
-    for (const steer of res.steers) {
-      const delivered = adapter.steer(steer.message)
-      if (delivered) {
-        console.log(`[worker] delivered steer ${steer.id} to run ${runId}`)
-      } else {
-        console.warn(`[worker] steer ${steer.id} could not be delivered to run ${runId}`)
-      }
-    }
   }
 
   /** Scan .worktrees/ and remove any whose task is in terminal state (done/failed). */

@@ -7,6 +7,7 @@ function normalizePath(p: string): string {
 
 export async function vfsList(uri: string): Promise<VfsListResult> {
   const res = await api.api.vfs.list.$get({ query: { uri } })
+  if (!res.ok) throw new Error(`Failed to list vfs: ${res.status}`)
   const data = (await res.json()) as VfsListResult
   data.entries = data.entries.map((e) => ({ ...e, path: normalizePath(e.path) }))
   return data
@@ -14,6 +15,7 @@ export async function vfsList(uri: string): Promise<VfsListResult> {
 
 export async function vfsStat(uri: string): Promise<VfsStatResult> {
   const res = await api.api.vfs.stat.$get({ query: { uri } })
+  if (!res.ok) throw new Error(`Failed to stat vfs: ${res.status}`)
   return res.json() as Promise<VfsStatResult>
 }
 
@@ -26,6 +28,7 @@ export interface VfsReadResult {
 export async function vfsDiff(uri: string, includeDirty = true): Promise<VfsDiffResult> {
   const include_dirty = includeDirty ? 'true' as const : 'false' as const
   const res = await api.api.vfs.diff.$get({ query: { uri, include_dirty } })
+  if (!res.ok) throw new Error(`Failed to fetch vfs diff: ${res.status}`)
   return res.json() as Promise<VfsDiffResult>
 }
 

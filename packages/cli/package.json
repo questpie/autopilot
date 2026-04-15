@@ -8,10 +8,7 @@
 		"autopilot": "./bin/autopilot.ts"
 	},
 	"main": "src/index.ts",
-	"files": [
-		"bin/",
-		"src/"
-	],
+	"files": ["bin/", "src/"],
 	"keywords": [
 		"ai",
 		"agents",
@@ -35,6 +32,8 @@
 	"license": "MIT",
 	"author": "QUESTPIE s.r.o.",
 	"scripts": {
+		"dev": "bun run --watch ./bin/autopilot.ts",
+		"start": "bun run ./bin/autopilot.ts",
 		"build": "echo 'no build needed — runs as TypeScript via Bun'",
 		"test": "bun test",
 		"typecheck": "bunx tsc --noEmit"

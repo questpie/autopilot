@@ -74,7 +74,7 @@ const chatSessions = new Hono<AppEnv>()
 			}),
 		),
 		async (c) => {
-			const { sessionMessageService } = c.get('services')
+			const { sessionMessageService, queryService } = c.get('services')
 			const { id } = c.req.valid('param')
 			const query = c.req.valid('query')
 			const limit = query.limit ? Number.parseInt(query.limit, 10) : 200
@@ -85,6 +85,28 @@ const chatSessions = new Hono<AppEnv>()
 				const attachments = Array.isArray(meta.attachments) ? meta.attachments : null
 				return { ...msg, attachments }
 			})
+
+			// Merge completed query summaries as assistant messages
+			const sessionQueries = await queryService.listBySession(id)
+			for (const q of sessionQueries) {
+				if (q.summary && (q.status === 'completed' || q.status === 'failed')) {
+					enriched.push({
+						id: `qsummary-${q.id}`,
+						session_id: id,
+						role: 'assistant',
+						content: q.summary,
+						query_id: q.id,
+						external_message_id: null,
+						metadata: '{}',
+						created_at: q.ended_at ?? q.created_at,
+						attachments: null,
+					})
+				}
+			}
+
+			// Sort chronologically
+			enriched.sort((a, b) => a.created_at.localeCompare(b.created_at))
+
 			return c.json(enriched, 200)
 		},
 	)
@@ -140,6 +162,8 @@ const chatSessions = new Hono<AppEnv>()
 				created_by: 'dashboard',
 			})
 
+			await sessionMessageService.markConsumed([userMsg.id], query.id)
+
 			const runId = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
 			await runService.create({
 				id: runId,
@@ -153,7 +177,6 @@ const chatSessions = new Hono<AppEnv>()
 			})
 
 			await queryService.linkRun(query.id, runId)
-			await sessionMessageService.markConsumed([userMsg.id], query.id)
 
 			return c.json(
 				{
@@ -181,7 +204,6 @@ const chatSessions = new Hono<AppEnv>()
 				sessionMessageService,
 				queryService,
 				runService,
-				steerService,
 				workerService,
 			} = c.get('services')
 			const authoredConfig = c.get('authoredConfig')
@@ -210,19 +232,6 @@ const chatSessions = new Hono<AppEnv>()
 						activeRun.status === 'claimed' ||
 						activeRun.status === 'running')
 				) {
-					await steerService.create({
-						run_id: activeQuery.run_id,
-						message: body.message,
-						created_by: 'dashboard',
-					})
-
-					eventBus.emit({
-						type: 'run_event',
-						runId: activeQuery.run_id,
-						eventType: 'steer',
-						summary: `Steering message: ${body.message.slice(0, 100)}`,
-					})
-
 					return c.json(
 						{
 							queued: true as const,
@@ -270,6 +279,8 @@ const chatSessions = new Hono<AppEnv>()
 				created_by: 'dashboard',
 			})
 
+			await sessionMessageService.markConsumed([userMsg.id], query.id)
+
 			const runId = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
 			await runService.create({
 				id: runId,
@@ -289,7 +300,6 @@ const chatSessions = new Hono<AppEnv>()
 			})
 
 			await queryService.linkRun(query.id, runId)
-			await sessionMessageService.markConsumed([userMsg.id], query.id)
 
 			return c.json(
 				{

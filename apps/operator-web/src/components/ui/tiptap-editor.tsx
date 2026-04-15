@@ -55,7 +55,7 @@ function ToolbarSep() {
 
 function TiptapToolbar({ editor }: { editor: Editor }) {
   return (
-    <div className="flex items-center gap-0.5 border-b border-border px-2 py-1 flex-wrap">
+    <div className="flex items-center gap-0.5 bg-muted/30 px-2 py-1 flex-wrap">
       <ToolbarButton
         title="Bold"
         onClick={() => editor.chain().focus().toggleBold().run()}
@@ -166,7 +166,7 @@ export function TiptapEditor({ content, onChange, editable = true }: TiptapEdito
   })
 
   return (
-    <div className="border border-border flex flex-col h-full">
+    <div className="bg-muted/40 flex flex-col h-full">
       {editable && editor && <TiptapToolbar editor={editor} />}
       <div className="flex-1 overflow-auto">
         <EditorContent

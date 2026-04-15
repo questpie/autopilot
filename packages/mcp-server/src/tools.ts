@@ -9,6 +9,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { tasks, runs, schedulesApi, searchApi } from './api-client'
+import { env } from './env'
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }> }
 
@@ -174,6 +175,74 @@ async function handleSearch(args: { query: string; scope?: string }) {
 	return ok(await searchApi.$get({ query: { q: args.query, scope: args.scope } }))
 }
 
+const ARTIFACT_EXT: Record<string, string> = {
+	html: '.html',
+	code: '.txt',
+	document: '.md',
+	image: '.svg',
+}
+
+function slugify(title: string, type: string): string {
+	const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+	return slug + (ARTIFACT_EXT[type] ?? '')
+}
+
+async function handleArtifactCreate(args: {
+	title: string
+	content: string
+	type: 'html' | 'code' | 'document' | 'image' | 'file'
+	filename?: string
+	language?: string
+}) {
+	const runId = process.env.AUTOPILOT_RUN_ID
+	if (!runId) throw new Error('AUTOPILOT_RUN_ID not set — artifact_create requires an active run context')
+
+	const ARTIFACT_META: Record<string, { kind: string; mime: string }> = {
+		html: { kind: 'preview_file', mime: 'text/html' },
+		code: { kind: 'other', mime: 'text/plain' },
+		document: { kind: 'other', mime: 'text/markdown' },
+		image: { kind: 'other', mime: 'image/svg+xml' },
+		file: { kind: 'other', mime: 'application/octet-stream' },
+	}
+
+	const meta = ARTIFACT_META[args.type] ?? { kind: 'other', mime: 'application/octet-stream' }
+	const filename = args.filename ?? slugify(args.title, args.type)
+	const baseUrl = env.AUTOPILOT_API_URL
+
+	const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+	if (env.AUTOPILOT_LOCAL_DEV === 'true') {
+		headers['X-Local-Dev'] = 'true'
+	} else if (env.AUTOPILOT_API_KEY) {
+		headers['Authorization'] = `Bearer ${env.AUTOPILOT_API_KEY}`
+	}
+
+	const res = await fetch(`${baseUrl}/api/runs/${runId}/artifacts`, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify({
+			kind: meta.kind,
+			title: filename,
+			ref_kind: 'inline',
+			ref_value: args.content,
+			mime_type: meta.mime,
+			metadata: {
+				artifact_type: args.type,
+				language: args.language,
+				original_title: args.title,
+			},
+		}),
+	})
+
+	if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+	const data = await res.json()
+	return {
+		content: [{
+			type: 'text' as const,
+			text: JSON.stringify(data, null, 2),
+		}],
+	}
+}
+
 // ─── Tool registration ─────────────────────────────────────────────
 
 export function registerTools(server: McpServer): void {
@@ -314,4 +383,12 @@ export function registerTools(server: McpServer): void {
 		query: z.string().describe('Search query'),
 		scope: z.enum(['tasks', 'runs', 'context', 'schedules', 'all']).optional().describe('Scope filter (default: all)'),
 	}, handleSearch)
+
+	server.tool('artifact_create', 'Create a previewable artifact (HTML page, code snippet, document, image). For HTML artifacts, the content is served and a preview URL is returned. Produce self-contained HTML with all dependencies via CDN.', {
+		title: z.string().describe('Human-readable title for the artifact'),
+		content: z.string().describe('Full content of the artifact'),
+		type: z.enum(['html', 'code', 'document', 'image', 'file']).describe('Artifact type: html (web page/React app), code (syntax-highlighted snippet), document (markdown/text), image (SVG), file (other)'),
+		filename: z.string().optional().describe('Filename for serving. Defaults to slugified title with appropriate extension'),
+		language: z.string().optional().describe('For code type: programming language (python, tsx, sql, etc.)'),
+	}, handleArtifactCreate)
 }

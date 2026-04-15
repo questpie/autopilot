@@ -14,6 +14,9 @@ const events = new Hono<AppEnv>().get('/', async (c) => {
 		})
 	}
 
+	// Send initial heartbeat immediately so proxies flush headers
+	send(JSON.stringify({ type: 'heartbeat', ts: new Date().toISOString() }))
+
 	// Subscribe to all autopilot events
 	const unsubscribe = eventBus.subscribe((event: AutopilotEvent) => {
 		send(JSON.stringify(event))

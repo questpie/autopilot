@@ -23,6 +23,7 @@ export default defineConfig({
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
             proxyReq.setHeader('origin', 'http://localhost:7778')
+            proxyReq.setHeader('x-local-dev', 'true')
           })
         },
       },

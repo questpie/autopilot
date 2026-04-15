@@ -172,6 +172,17 @@ export class SessionService {
 		return normalizeRows(rows)
 	}
 
+	async updateMetadata(id: string, metadata: Record<string, unknown>): Promise<SessionRow | undefined> {
+		await this.db
+			.update(sessions)
+			.set({
+				metadata: JSON.stringify(metadata),
+				updated_at: new Date().toISOString(),
+			})
+			.where(eq(sessions.id, id))
+		return this.get(id)
+	}
+
 	async listForTask(taskId: string): Promise<SessionRow[]> {
 		const rows = await this.db
 			.select()

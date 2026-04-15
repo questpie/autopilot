@@ -71,7 +71,7 @@ function ForgotPasswordPage() {
 	if (isSuccess) {
 		return (
 			<div className="flex flex-col items-center gap-6 text-center">
-				<div className="flex size-12 items-center justify-center border border-primary/25 bg-primary/[0.08]">
+				<div className="flex size-12 items-center justify-center bg-primary/[0.08]">
 					<CheckCircleIcon className="size-6 text-primary" />
 				</div>
 				<div className="flex flex-col gap-2">

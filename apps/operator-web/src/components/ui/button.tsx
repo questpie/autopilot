@@ -6,20 +6,22 @@ import { cn } from '@/lib/utils'
 import { Spinner } from '@/components/ui/spinner'
 
 const buttonVariants = cva(
-	"group/button font-heading inline-flex shrink-0 items-center justify-center rounded-none border border-transparent bg-clip-padding text-xs font-medium whitespace-nowrap transition-all duration-150 ease-out outline-none select-none touch-target hover:translate-y-[-1px] focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0 aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+	"group/button font-heading inline-flex shrink-0 items-center justify-center rounded-none bg-clip-padding text-xs font-medium whitespace-nowrap transition-all duration-150 ease-out outline-none select-none touch-target focus-visible:ring-1 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:ring-1 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
 	{
 		variants: {
 			variant: {
 				default: 'bg-primary text-primary-foreground hover:bg-primary/80 [a]:hover:bg-primary/80',
 				outline:
-					'border-border bg-background hover:border-primary hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:border-primary',
+					'bg-muted/40 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-input/30 dark:hover:bg-muted',
 				secondary:
-					'bg-secondary text-secondary-foreground hover:border-primary hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground',
+					'bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground',
 				ghost:
-					'hover:bg-muted hover:text-foreground hover:translate-y-0 aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50',
+					'hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50',
 				destructive:
 					'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40',
-				link: 'relative text-primary no-underline hover:text-primary hover:translate-y-0 after:absolute after:bottom-0 after:left-0 after:h-px after:w-0 after:bg-primary after:transition-[width] after:duration-150 after:ease-out hover:after:w-full',
+				link: 'relative text-primary no-underline hover:text-primary after:absolute after:bottom-0 after:left-0 after:h-px after:w-0 after:bg-primary after:transition-[width] after:duration-150 after:ease-out hover:after:w-full',
+				success: 'bg-success text-success-foreground hover:bg-success/90',
+				warning: 'bg-warning text-warning-foreground hover:bg-warning/90',
 			},
 			size: {
 				default:

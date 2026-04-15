@@ -106,7 +106,7 @@ function ArtifactCard({ artifact, onInlineOpen }: ArtifactCardProps) {
       type="button"
       onClick={handleClick}
       className={cn(
-        'w-full text-left border border-border px-3 py-2 hover:bg-muted transition-colors cursor-pointer',
+        'w-full text-left bg-muted/40 px-3 py-2 hover:bg-muted/60 transition-colors cursor-pointer',
         'flex items-start gap-2.5',
       )}
     >

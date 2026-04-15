@@ -32,7 +32,7 @@ function Timeline({ events, className, ...props }: TimelineProps) {
       {events.map((event, index) => (
         <div
           key={index}
-          className="grid grid-cols-[50px_1fr] items-baseline gap-x-3 border-b border-border/50 py-1.5"
+          className="grid grid-cols-[50px_1fr] items-baseline gap-x-3 py-1.5"
         >
           <span className="font-heading text-[11px] text-muted-foreground">
             {event.time}

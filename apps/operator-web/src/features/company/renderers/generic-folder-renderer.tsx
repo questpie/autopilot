@@ -31,7 +31,7 @@ function ChildRow({ child, navigate }: ChildRowProps) {
   return (
     <button
       type="button"
-      className="flex w-full cursor-pointer items-center gap-3 border-b border-border px-4 py-2.5 text-left transition-colors hover:bg-muted"
+      className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted"
       onClick={() => navigate(child.path)}
     >
       <Icon
@@ -64,7 +64,7 @@ export function GenericFolderRenderer({ item, navigate }: RendererProps) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-border px-4 py-2.5">
+      <div className="shrink-0 bg-muted/30 px-4 py-2.5">
         <p className="font-mono text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
           Contents
         </p>

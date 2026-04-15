@@ -145,7 +145,7 @@ function MonacoEditorView({ path, value, readOnly, onEditorMount }: MonacoEditor
   const language = resolveMonacoLanguage(path)
 
   return (
-    <div className="h-full w-full border border-border overflow-hidden">
+    <div className="h-full w-full overflow-hidden">
       <Editor
         height="100%"
         language={language}
@@ -232,7 +232,7 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header: breadcrumb + file metadata + edit actions */}
-      <div className="shrink-0 border-b border-border px-4 py-3 flex flex-col gap-1">
+      <div className="shrink-0 bg-muted/30 px-4 py-3 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
           <BreadcrumbNav runId={runId} path={path} onBack={onBack} />
           {canEdit && isEditable && data && !isLoading && !error && (
@@ -348,7 +348,7 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
           }
 
           return (
-            <div className="m-4 border border-border bg-card p-4">
+            <div className="m-4 bg-muted/40 p-4">
               <p className="font-mono text-xs text-muted-foreground">Preview not available for this file type.</p>
               <div className="mt-3 space-y-1">
                 <p className="font-mono text-xs text-muted-foreground">

@@ -19,8 +19,8 @@ export interface ConfigManagerOptions {
 	initialChain?: ScopeChain
 	/** Debounce window for file watcher in ms. Default: 500. */
 	debounceMs?: number
-	/** Callback invoked after a successful reload with the new config. */
-	onReload?: (config: AuthoredConfig) => void
+	/** Callback invoked after a successful reload with the new config. May be async. */
+	onReload?: (config: AuthoredConfig) => void | Promise<void>
 }
 
 export interface ReloadResult {
@@ -32,7 +32,7 @@ export class ConfigManager {
 	private config: AuthoredConfig
 	private readonly companyRoot: string
 	private readonly debounceMs: number
-	private readonly onReload?: (config: AuthoredConfig) => void
+	private readonly onReload?: (config: AuthoredConfig) => void | Promise<void>
 
 	private watchers: FSWatcher[] = []
 	private reloadTimer: ReturnType<typeof setTimeout> | null = null
@@ -106,7 +106,7 @@ export class ConfigManager {
 				`[config] reloaded (${newConfig.agents.size} agents, ${newConfig.workflows.size} workflows, ${newConfig.environments.size} environments, ${newConfig.providers.size} providers, ${newConfig.skills.size} skills, ${newConfig.scripts.size} scripts)`,
 			)
 
-			this.onReload?.(this.config)
+			await this.onReload?.(this.config)
 
 			return { ok: true }
 		} catch (err) {

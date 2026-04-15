@@ -1,11 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
 import { useRunStream } from '@/hooks/use-run-stream'
-import { useRunDetail } from '@/hooks/use-runs'
+import { useRunDetail, useRunEvents } from '@/hooks/use-runs'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { StatusPill } from '@/components/ui/status-pill'
 import { Spinner } from '@/components/ui/spinner'
 import { taskStatusToPill } from '@/lib/status-colors'
-import type { RunEvent } from '@/api/types'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,22 +91,6 @@ function TimelineItem({ event, isLast }: { event: TimelineEventItem; isLast: boo
   )
 }
 
-// ── persisted events fetcher ──────────────────────────────────────────────────
-
-function useRunEvents(runId: string | null, enabled: boolean) {
-  return useQuery<RunEvent[]>({
-    queryKey: ['runs', runId, 'events'],
-    queryFn: async () => {
-      const res = await fetch(`/api/runs/${encodeURIComponent(runId!)}/events`, {
-        credentials: 'include',
-      })
-      if (!res.ok) throw new Error(`Failed to fetch run events: ${res.status}`)
-      return res.json() as Promise<RunEvent[]>
-    },
-    enabled: !!runId && enabled,
-  })
-}
-
 // ── live timeline (SSE) ───────────────────────────────────────────────────────
 
 function LiveTimeline({ runId }: { runId: string }) {
@@ -150,7 +132,7 @@ function LiveTimeline({ runId }: { runId: string }) {
 // ── persisted timeline ────────────────────────────────────────────────────────
 
 function PersistedTimeline({ runId }: { runId: string }) {
-  const eventsQuery = useRunEvents(runId, true)
+  const eventsQuery = useRunEvents(runId)
 
   if (eventsQuery.isLoading) {
     return (
@@ -207,7 +189,7 @@ export function RunViewerSheet({ runId, onClose }: RunViewerSheetProps) {
     <Sheet open={!!runId} onOpenChange={(open) => { if (!open) onClose() }}>
       <SheetContent side="right" className="flex flex-col gap-0 w-full sm:max-w-lg p-0">
         {/* Header */}
-        <SheetHeader className="border-b border-border px-4 py-3 gap-1">
+        <SheetHeader className="bg-muted/30 px-4 py-3 gap-1">
           <div className="flex items-center gap-2 pr-8">
             <SheetTitle className="font-mono text-[11px] text-muted-foreground font-normal">
               {runId ? `${runId.slice(0, 16)}…` : '—'}

@@ -26,7 +26,8 @@ export function Spinner({ className, size = "default" }: SpinnerProps) {
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
-      aria-hidden="true"
+      role="status"
+      aria-label="Loading"
     >
       <circle
         className="opacity-25"

@@ -1,6 +1,6 @@
 import { watch as fsWatch } from 'node:fs'
 import { readFile, readdir, stat } from 'node:fs/promises'
-import { join, dirname } from 'node:path'
+import { join, dirname, extname } from 'node:path'
 import { createHash } from 'node:crypto'
 import { parse as parseYaml } from 'yaml'
 import type { Client } from '@libsql/client'
@@ -37,21 +37,22 @@ export interface ItemIndexerOptions {
 
 function parseYamlSafe(content: string): Record<string, unknown> | null {
 	try {
-		const result = parseYaml(content)
+		const result = parseYaml(content, { logLevel: 'silent' })
 		return typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : null
 	} catch {
 		return null
 	}
 }
 
-function parseFrontmatter(content: string): {
+function parseFrontmatter(content: string, relPath?: string): {
 	frontmatter: Record<string, unknown> | null
 	body: string | null
 } {
 	const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
 	if (!match) {
-		// Try parsing entire file as YAML (for .yaml/.yml files without --- fences)
-		if (content.trim().startsWith('{') || content.includes(':')) {
+		// Try parsing entire file as YAML — only for .yaml/.yml files without --- fences
+		const ext = relPath ? extname(relPath).toLowerCase() : ''
+		if (ext === '.yaml' || ext === '.yml') {
 			return { frontmatter: parseYamlSafe(content), body: null }
 		}
 		return { frontmatter: null, body: content }
@@ -61,6 +62,18 @@ function parseFrontmatter(content: string): {
 		body: match[2] ?? null,
 	}
 }
+
+/** File extensions that are binary or not worth parsing for frontmatter. */
+const BINARY_EXTENSIONS = new Set([
+	'.pdf', '.eps', '.ai', '.psd', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico',
+	'.svg', '.webp', '.avif', '.tiff', '.tif',
+	'.mp3', '.mp4', '.wav', '.ogg', '.webm', '.mov', '.avi',
+	'.zip', '.tar', '.gz', '.bz2', '.rar', '.7z',
+	'.woff', '.woff2', '.ttf', '.otf', '.eot',
+	'.exe', '.dll', '.so', '.dylib', '.bin',
+	'.db', '.sqlite', '.sqlite3',
+	'.lock', '.map',
+])
 
 // ─── ItemIndexer ───────────────────────────────────────────────────────────
 
@@ -136,6 +149,12 @@ export class ItemIndexer {
 		return false
 	}
 
+	/** Returns true for file extensions that are binary / not worth frontmatter-parsing. */
+	private isBinaryExt(relPath: string): boolean {
+		const ext = extname(relPath).toLowerCase()
+		return BINARY_EXTENSIONS.has(ext)
+	}
+
 	private async handleChange(relPath: string): Promise<void> {
 		const absPath = join(this.companyRoot, relPath)
 		try {
@@ -175,7 +194,7 @@ export class ItemIndexer {
 			} catch {
 				// No .folder.yaml — that's fine
 			}
-		} else {
+		} else if (!this.isBinaryExt(relPath)) {
 			try {
 				const content = await readFile(absPath, 'utf-8')
 				hash = createHash('sha256').update(content).digest('hex').slice(0, 16)
@@ -188,11 +207,11 @@ export class ItemIndexer {
 					return
 				}
 
-				const parsed = parseFrontmatter(content)
+				const parsed = parseFrontmatter(content, relPath)
 				frontmatter = parsed.frontmatter
 				bodyPreview = parsed.body?.slice(0, 500) ?? null
 			} catch {
-				// Binary file or unreadable — index with minimal metadata
+				// Unreadable file — index with minimal metadata
 			}
 		}
 

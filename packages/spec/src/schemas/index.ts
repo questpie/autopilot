@@ -87,8 +87,6 @@ export {
 	CreateJoinTokenResponseSchema,
 	WorkerEnrollRequestSchema,
 	WorkerEnrollResponseSchema,
-	RunSteerRequestSchema,
-	RunSteerSchema,
 } from './api-contracts'
 export { SkillManifestSchema, SkillEntrySchema, SkillHintSchema } from './skill'
 export { TypeDefinitionSchema } from './type-definition'

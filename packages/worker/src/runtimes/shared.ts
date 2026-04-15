@@ -203,6 +203,7 @@ export function summarizeToolInput(name: string, input?: Record<string, unknown>
     case 'Agent': return `Agent: ${truncate(String(input.description ?? input.prompt ?? ''), 120)}`
     case 'WebSearch': return `WebSearch: ${input.query ?? ''}`
     case 'WebFetch': return `WebFetch: ${input.url ?? ''}`
+    case 'mcp__autopilot__artifact_create': return `Artifact: ${truncate(String(input.title ?? ''), 100)}`
     default: {
       const firstVal = Object.values(input).find((v) => typeof v === 'string')
       return firstVal ? `${name}: ${truncate(String(firstVal), 100)}` : name

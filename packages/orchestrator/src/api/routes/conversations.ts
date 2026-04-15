@@ -324,6 +324,9 @@ const conversations = new Hono<AppEnv>()
 				created_by: initiator,
 			})
 
+			// ── Mark consumed BEFORE dispatching run (prevents bridge race) ──
+			await sessionMessageService.markConsumed([userMsg.id], query.id)
+
 			// ── Create run with resume state ─────────────────────────────
 			const agentConfig = authoredConfig.agents.get(agentId)
 			const runId = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
@@ -341,9 +344,6 @@ const conversations = new Hono<AppEnv>()
 			})
 
 			await queryService.linkRun(query.id, runId)
-
-			// ── Mark user message consumed (after dispatch is complete) ──
-			await sessionMessageService.markConsumed([userMsg.id], query.id)
 
 			return c.json({
 				action: 'query.dispatched',

@@ -6,7 +6,7 @@ export function AuthBrandPanel() {
   const { shouldReduce } = useMotionPreference()
 
   return (
-    <div className="relative hidden w-[40%] flex-col items-center justify-center overflow-hidden border-r border-border bg-background md:flex lg:w-[45%]">
+    <div className="relative hidden w-[40%] flex-col items-center justify-center overflow-hidden bg-muted/20 md:flex lg:w-[45%]">
       {/* Animated grid overlay — slow drift gives it a living feel */}
       <div
         className="pointer-events-none absolute inset-0"

@@ -1,13 +1,11 @@
-/**
- * Queries API — wired to /api/queries.
- */
 import type { Query } from './types'
-import { apiFetch } from '@/lib/api-client'
+import { api } from '@/lib/api'
 
 export async function getQueries(filters?: { status?: string; agent_id?: string }): Promise<Query[]> {
-  const params = new URLSearchParams()
-  if (filters?.status) params.set('status', filters.status)
-  if (filters?.agent_id) params.set('agent_id', filters.agent_id)
-  const qs = params.toString()
-  return apiFetch<Query[]>(`/api/queries${qs ? `?${qs}` : ''}`)
+  const query: Record<string, string> = {}
+  if (filters?.status) query.status = filters.status
+  if (filters?.agent_id) query.agent_id = filters.agent_id
+  const res = await api.api.queries.$get({ query })
+  if (!res.ok) throw new Error(`Failed to list queries: ${res.status}`)
+  return res.json() as Promise<Query[]>
 }

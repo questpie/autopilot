@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
-import { Wrench, CheckCircle, XCircle, ArrowsClockwise, ChatTeardrop, Lightning } from '@phosphor-icons/react'
+import { Wrench, CheckCircle, XCircle, ArrowsClockwise, Brain, Globe, FileText, File, Robot } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
+import { Markdown } from '@/components/ui/markdown'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -10,101 +11,141 @@ interface RunStreamEvent {
   summary?: string
   status?: string
   created_at?: string
+  metadata?: Record<string, unknown>
 }
 
 interface RunEventFeedProps {
   events: RunStreamEvent[]
+  isStreaming: boolean
 }
 
 // ── ToolCallCard ──────────────────────────────────────────────────────────
 
-interface ToolCallCardProps {
+export interface ToolCallCardProps {
   summary: string
   status: 'running' | 'done' | 'error'
 }
 
-function ToolCallCard({ summary, status }: ToolCallCardProps) {
-  // The summary for tool_use events typically reads: "tool_name(args...)" or just a description.
-  // We extract whatever is present.
-  const statusLabel =
-    status === 'running' ? 'running' : status === 'error' ? 'error' : 'done'
+const STATUS_ICONS = {
+  running: <ArrowsClockwise size={10} className="text-muted-foreground animate-spin" />,
+  error: <XCircle size={10} className="text-destructive" />,
+  done: <CheckCircle size={10} className="text-muted-foreground/60" />,
+} as const
 
-  const statusIcon =
-    status === 'running' ? (
-      <ArrowsClockwise size={10} className="text-muted-foreground animate-spin" />
-    ) : status === 'error' ? (
-      <XCircle size={10} className="text-destructive" />
-    ) : (
-      <CheckCircle size={10} className="text-muted-foreground" />
-    )
-
+export function ToolCallCard({ summary, status }: ToolCallCardProps) {
   return (
-    <details className="border border-border">
-      <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer font-mono text-xs hover:bg-muted list-none">
-        <Wrench size={12} className="text-muted-foreground shrink-0" />
-        <span className="font-medium text-primary truncate flex-1">{summary}</span>
-        <span className="flex items-center gap-1 text-muted-foreground ml-auto shrink-0">
-          {statusIcon}
-          <span>{statusLabel}</span>
-        </span>
-      </summary>
-      <div className="border-t border-border px-3 py-2 font-mono text-[11px] text-muted-foreground">
-        <pre className="whitespace-pre-wrap break-all">{summary}</pre>
-      </div>
-    </details>
+    <div className="flex items-center gap-2 py-0.5 font-mono text-xs text-muted-foreground">
+      <Wrench size={10} className="shrink-0" />
+      <span className="truncate flex-1">{summary}</span>
+      {STATUS_ICONS[status]}
+    </div>
   )
 }
 
-// ── StreamingMessage ──────────────────────────────────────────────────────
+// ── ThinkingBlock ─────────────────────────────────────────────────────────
 
-interface StreamingMessageProps {
-  text: string
+export interface ThinkingBlockProps {
+  isActive: boolean
 }
 
-function StreamingMessage({ text }: StreamingMessageProps) {
-  if (!text) return null
+export function ThinkingBlock({ isActive }: ThinkingBlockProps) {
+  const Icon = isActive ? ArrowsClockwise : Brain
+
   return (
-    <div className="flex w-full justify-start">
-      <div className="max-w-[85%] bg-transparent px-4 py-3">
-        <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
-          Assistant
-        </p>
-        <p className="font-sans text-sm leading-relaxed text-foreground whitespace-pre-wrap break-words">
-          {text}
-          <span className="inline-block w-[7px] h-[13px] bg-foreground ml-0.5 align-text-bottom animate-pulse" />
-        </p>
-      </div>
+    <div className="flex items-center gap-2 py-0.5 font-mono text-xs text-muted-foreground italic">
+      <Icon size={10} className={isActive ? 'animate-spin shrink-0' : 'shrink-0'} />
+      <span className="truncate">{isActive ? 'Thinking…' : 'Thought'}</span>
+    </div>
+  )
+}
+
+// ── ArtifactEventCard ─────────────────────────────────────────────────────
+
+export interface ArtifactEventCardProps {
+  title: string
+  previewUrl?: string | null
+  kind?: string
+}
+
+export function ArtifactEventCard({ title, previewUrl, kind }: ArtifactEventCardProps) {
+  let Icon = File
+  if (previewUrl) Icon = Globe
+  else if (kind === 'doc') Icon = FileText
+
+  return (
+    <div className="flex items-center gap-2 py-0.5 font-mono text-xs text-muted-foreground">
+      <Icon size={10} className="shrink-0" />
+      <span className="truncate flex-1">{title}</span>
+      {previewUrl && (
+        <a
+          href={previewUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:text-foreground shrink-0"
+        >
+          open
+        </a>
+      )}
     </div>
   )
 }
 
 // ── RunEventFeed ──────────────────────────────────────────────────────────
 
-export function RunEventFeed({ events }: RunEventFeedProps) {
-  // Accumulate text_delta / content_delta / message_sent text for streaming display.
-  // In practice the backend emits 'message_sent' with the assembled message text as summary.
-  const streamingText = useMemo(() => {
-    const parts: string[] = []
-    for (const ev of events) {
-      const et = ev.eventType ?? ev.type
-      if (et === 'text_delta' || et === 'content_delta') {
-        parts.push(ev.summary ?? '')
-      }
+function findLastIndex(events: RunStreamEvent[], match: (et: string) => boolean): number {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const et = events[i].eventType ?? events[i].type
+    if (match(et)) return i
+  }
+  return -1
+}
+
+function deduplicateEvents(events: RunStreamEvent[]): RunStreamEvent[] {
+  const result: RunStreamEvent[] = []
+  for (let i = 0; i < events.length; i++) {
+    const et = events[i].eventType ?? events[i].type
+    const nextEt = i + 1 < events.length
+      ? (events[i + 1].eventType ?? events[i + 1].type)
+      : null
+    if ((et === 'thinking' || et === 'reasoning' || et === 'progress') && et === nextEt) {
+      continue
     }
-    return parts.join('')
-  }, [events])
+    result.push(events[i])
+  }
+  return result
+}
+
+export function RunEventFeed({ events, isStreaming }: RunEventFeedProps) {
+  const dedupedEvents = useMemo(() => deduplicateEvents(events), [events])
+
+  const lastToolUseIdx = useMemo(() => findLastIndex(dedupedEvents, (et) => et === 'tool_use'), [dedupedEvents])
+  const lastThinkingIdx = useMemo(() => findLastIndex(dedupedEvents, (et) => et === 'thinking' || et === 'reasoning'), [dedupedEvents])
+  const lastProgressIdx = useMemo(() => findLastIndex(dedupedEvents, (et) => et === 'progress'), [dedupedEvents])
+  const lastEventIdx = dedupedEvents.length - 1
 
   if (events.length === 0) return null
 
   return (
     <div className="flex w-full justify-start">
-      <div className="flex flex-col gap-1 w-full max-w-[85%] px-1">
-        {events.map((ev, idx) => {
-          const et = ev.eventType ?? ev.type
-          return <EventRow key={idx} event={ev} eventType={et} />
-        })}
-
-        {streamingText && <StreamingMessage text={streamingText} />}
+      <div className="max-w-[85%] px-4 py-3">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
+          Assistant
+        </p>
+        <div className="flex flex-col gap-0.5">
+          {dedupedEvents.map((ev, idx) => {
+            const et = ev.eventType ?? ev.type
+            return (
+              <EventRow
+                key={idx}
+                event={ev}
+                eventType={et}
+                isRunning={isStreaming && idx === lastToolUseIdx && idx === lastEventIdx}
+                isActiveThinking={isStreaming && idx === lastThinkingIdx && idx === lastEventIdx}
+                isActiveProgress={isStreaming && idx === lastProgressIdx && idx === lastEventIdx}
+              />
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -115,36 +156,57 @@ export function RunEventFeed({ events }: RunEventFeedProps) {
 interface EventRowProps {
   event: RunStreamEvent
   eventType: string
+  isRunning: boolean
+  isActiveThinking: boolean
+  isActiveProgress: boolean
 }
 
-function EventRow({ event, eventType }: EventRowProps) {
+function EventRow({ event, eventType, isRunning, isActiveThinking, isActiveProgress }: EventRowProps) {
   if (eventType === 'tool_use') {
+    const isAgent = (event.summary ?? '').startsWith('Agent:')
+    if (isAgent) {
+      const status = isRunning ? 'running' : 'done'
+      return (
+        <div className="flex items-center gap-2 py-0.5 font-mono text-xs text-muted-foreground pl-4">
+          <Robot size={10} className="shrink-0" />
+          <span className="truncate flex-1">{event.summary}</span>
+          {STATUS_ICONS[status]}
+        </div>
+      )
+    }
     return (
       <ToolCallCard
         summary={event.summary ?? 'tool call'}
-        status="done"
+        status={isRunning ? 'running' : 'done'}
       />
     )
   }
 
   if (eventType === 'thinking' || eventType === 'reasoning') {
     return (
-      <p className="font-mono text-xs italic text-muted-foreground px-1 py-0.5">
-        {event.summary ?? 'thinking…'}
-      </p>
+      <ThinkingBlock
+        isActive={isActiveThinking}
+      />
     )
   }
 
-  if (eventType === 'text_delta' || eventType === 'content_delta') {
-    // Accumulated in streamingText above — skip individual rows.
-    return null
+  if (eventType === 'progress') {
+    if (!event.summary) return null
+    return (
+      <div className="py-0.5">
+        <Markdown content={event.summary} className="prose prose-sm font-sans text-sm" />
+        {isActiveProgress && (
+          <span className="inline-block w-[7px] h-[13px] bg-foreground ml-0.5 align-text-bottom animate-pulse" />
+        )}
+      </div>
+    )
   }
 
   if (eventType === 'run_completed') {
     const isError = event.status === 'failed'
     return (
-      <div className={cn('flex items-center gap-2 px-1 py-1 font-mono text-xs', isError ? 'text-destructive' : 'text-muted-foreground')}>
-        {isError ? <XCircle size={12} /> : <CheckCircle size={12} />}
+      <div className={cn('flex items-center gap-2 py-0.5 font-mono text-xs', isError ? 'text-destructive' : 'text-muted-foreground')}>
+        {isError ? <XCircle size={10} /> : <CheckCircle size={10} />}
         <span>{isError ? 'Run failed' : 'Run completed'}</span>
         {event.summary && <span className="text-muted-foreground truncate">— {event.summary}</span>}
       </div>
@@ -153,41 +215,34 @@ function EventRow({ event, eventType }: EventRowProps) {
 
   if (eventType === 'error') {
     return (
-      <div className="flex items-center gap-2 px-1 py-1 font-mono text-xs text-destructive">
-        <XCircle size={12} />
+      <div className="flex items-center gap-2 py-0.5 font-mono text-xs text-destructive">
+        <XCircle size={10} />
         <span className="truncate">{event.summary ?? 'error'}</span>
       </div>
     )
   }
 
-  if (eventType === 'started') {
-    return (
-      <div className="flex items-center gap-2 px-1 py-0.5 font-mono text-xs text-muted-foreground">
-        <Lightning size={12} />
-        <span>Run started</span>
-      </div>
-    )
-  }
-
-  if (eventType === 'message_sent') {
-    // Final assembled message — skip; will appear as a real ChatMessage once conversation refreshes.
+  if (eventType === 'started' || eventType === 'message_sent') {
     return null
   }
 
   if (eventType === 'artifact') {
+    const meta = event.metadata ?? {}
+    const previewUrl = typeof meta.preview_url === 'string' ? meta.preview_url : null
+    const kind = typeof meta.kind === 'string' ? meta.kind : undefined
     return (
-      <div className="flex items-center gap-2 px-1 py-0.5 font-mono text-xs text-muted-foreground">
-        <ChatTeardrop size={12} />
-        <span className="truncate">{event.summary ?? 'artifact produced'}</span>
-      </div>
+      <ArtifactEventCard
+        title={event.summary ?? 'artifact produced'}
+        previewUrl={previewUrl}
+        kind={kind}
+      />
     )
   }
 
-  // progress, task_updated, external_action, steer, approval_needed, and any unknown
   if (!event.summary) return null
 
   return (
-    <p className="font-mono text-xs text-muted-foreground px-1 py-0.5 truncate">
+    <p className="font-mono text-xs text-muted-foreground py-0.5 truncate">
       {event.summary}
     </p>
   )

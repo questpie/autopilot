@@ -8,6 +8,7 @@ export async function getTasks(filters?: { status?: string; assigned_to?: string
   if (filters?.assigned_to) query.assigned_to = filters.assigned_to
   if (filters?.workflow_id) query.workflow_id = filters.workflow_id
   const res = await api.api.tasks.$get({ query })
+  if (!res.ok) throw new Error(`Failed to list tasks: ${res.status}`)
   return res.json() as Promise<Task[]>
 }
 
@@ -46,6 +47,7 @@ export async function approveTask(id: string): Promise<AdvanceResult> {
     method: 'POST',
     credentials: 'include',
   })
+  if (!res.ok) throw new Error(`Failed to approve task: ${res.status}`)
   return res.json() as Promise<AdvanceResult>
 }
 
@@ -56,6 +58,7 @@ export async function rejectTask(id: string, message: string): Promise<AdvanceRe
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message }),
   })
+  if (!res.ok) throw new Error(`Failed to reject task: ${res.status}`)
   return res.json() as Promise<AdvanceResult>
 }
 
@@ -70,4 +73,30 @@ export async function replyTask(id: string, message: string): Promise<AdvanceRes
     throw new Error(`Failed to reply to task: ${res.status}`)
   }
   return res.json() as Promise<AdvanceResult>
+}
+
+export async function retryTask(id: string): Promise<Task> {
+  const res = await fetch(`/api/tasks/${encodeURIComponent(id)}/retry`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    throw new Error(`Failed to retry task: ${res.status}`)
+  }
+  return res.json() as Promise<Task>
+}
+
+export async function cancelTask(id: string, reason?: string): Promise<Task> {
+  const res = await fetch(`/api/tasks/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+    credentials: 'include',
+    ...(reason ? {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    } : {}),
+  })
+  if (!res.ok) {
+    throw new Error(`Failed to cancel task: ${res.status}`)
+  }
+  return res.json() as Promise<Task>
 }

@@ -9,6 +9,7 @@ export const env = createEnv({
 		AUTOPILOT_API_KEY: z.string().optional(),
 		/** When 'true', sends X-Local-Dev header instead of Bearer auth. Only for `autopilot start`. */
 		AUTOPILOT_LOCAL_DEV: z.string().optional(),
+		AUTOPILOT_RUN_ID: z.string().optional(),
 	},
 	runtimeEnv: process.env,
 	emptyStringAsUndefined: true,

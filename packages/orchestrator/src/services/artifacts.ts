@@ -92,9 +92,17 @@ export class ArtifactService {
 			if (!data) throw new Error(`Blob file missing for artifact ${row.id}: ${blobRow.storage_key}`)
 			return data
 		}
-		// Legacy or inline — content is in ref_value
 		if (row.ref_kind === 'base64') {
 			return Buffer.from(row.ref_value, 'base64')
+		}
+		if (row.ref_kind === 'file') {
+			const { readFile } = await import('node:fs/promises')
+			return readFile(row.ref_value)
+		}
+		if (row.ref_kind === 'url') {
+			const res = await fetch(row.ref_value)
+			if (!res.ok) throw new Error(`Failed to fetch artifact ${row.id} from ${row.ref_value}: ${res.status}`)
+			return Buffer.from(await res.arrayBuffer())
 		}
 		return row.ref_value
 	}
@@ -118,6 +126,8 @@ export class ArtifactService {
 	 * DB row and the filesystem blob. Returns the number of blobs removed.
 	 */
 	async removeOrphanBlobs(): Promise<number> {
+		if (!this.blobStore) return 0
+
 		// Find all blob IDs that have no referencing artifact
 		const orphans = await this.db
 			.select({ id: artifactBlobs.id, storage_key: artifactBlobs.storage_key })

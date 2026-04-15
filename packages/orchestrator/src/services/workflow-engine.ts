@@ -700,6 +700,81 @@ export class WorkflowEngine {
 		return this.advanceToTarget(taskId, targetStepId, undefined, { ...ctx, humanReply: message })
 	}
 
+	/**
+	 * User-triggered retry of a failed task.
+	 * Clears retry counters, resets status, and re-processes the current workflow step.
+	 * For non-workflow tasks, resets to backlog for the scheduler to pick up.
+	 */
+	async retry(taskId: string, actorId?: string): Promise<TaskRow | null> {
+		const task = await this.taskService.get(taskId)
+		if (!task) return null
+		if (task.status !== 'failed') return null
+
+		// Clear retry counters from metadata
+		let meta: Record<string, unknown> = {}
+		try {
+			meta = JSON.parse(task.metadata ?? '{}')
+		} catch {}
+		const cleaned: Record<string, unknown> = {}
+		for (const [k, v] of Object.entries(meta)) {
+			if (!k.startsWith('_retry:') && !k.startsWith('_empty_retries:')) {
+				cleaned[k] = v
+			}
+		}
+		await this.taskService.update(taskId, { metadata: JSON.stringify(cleaned) })
+
+		await this.activityService?.log({
+			actor: actorId ?? 'operator',
+			type: 'retry',
+			summary: `Task retried manually`,
+			details: JSON.stringify({ task_id: taskId, step: task.workflow_step }),
+		})
+
+		if (task.workflow_id && task.workflow_step) {
+			// Workflow task: set active and re-process current step
+			await this.taskService.update(taskId, { status: 'active' })
+			const ctx = await this.buildStepContext(undefined, taskId)
+			const updated = (await this.taskService.get(taskId))!
+			const actions: string[] = ['manual_retry']
+			await this.processCurrentStep(updated, actions, ctx)
+			eventBus.emit({ type: 'task_changed', taskId, status: 'active' })
+			return (await this.taskService.get(taskId))!
+		}
+
+		// Non-workflow task: reset to backlog
+		const updated = await this.taskService.update(taskId, { status: 'backlog' })
+		eventBus.emit({ type: 'task_changed', taskId, status: 'backlog' })
+		return updated ?? null
+	}
+
+	/**
+	 * User-triggered cancellation. Cancels active runs and marks task as failed.
+	 */
+	async cancel(taskId: string, reason?: string, actorId?: string): Promise<TaskRow | null> {
+		const task = await this.taskService.get(taskId)
+		if (!task) return null
+		if (task.status === 'done' || task.status === 'failed') return null
+
+		// Cancel all active runs
+		const taskRuns = await this.runService.list({ task_id: taskId })
+		const activeRuns = taskRuns.filter((r) => r.status === 'running' || r.status === 'claimed' || r.status === 'pending')
+		for (const run of activeRuns) {
+			await this.runService.cancel(run.id, reason ?? 'cancelled by operator')
+		}
+
+		await this.taskService.update(taskId, { status: 'failed' })
+
+		await this.activityService?.log({
+			actor: actorId ?? 'operator',
+			type: 'cancellation',
+			summary: reason ? `Task cancelled: ${reason}` : 'Task cancelled by operator',
+			details: JSON.stringify({ task_id: taskId, cancelled_runs: activeRuns.map((r) => r.id) }),
+		})
+
+		eventBus.emit({ type: 'task_changed', taskId, status: 'failed' })
+		return (await this.taskService.get(taskId))!
+	}
+
 	// ─── Private ────────────────────────────────────────────────────────
 
 	private async guardApprovalStep(taskId: string): Promise<{ task: TaskRow; step: WorkflowStep } | null> {
@@ -834,18 +909,6 @@ export class WorkflowEngine {
 						actions.push('blocked_on_dependency')
 						eventBus.emit({ type: 'task_changed', taskId: task.id, status: 'blocked' })
 						console.log(`[workflow-engine] task ${task.id} blocked — waiting on dependencies`)
-						return null
-					}
-				}
-
-				// Queue concurrency check: if task belongs to a queue, verify capacity
-				if (task.queue) {
-					const blocked = await this.isQueueBlocked(task)
-					if (blocked) {
-						// Task must wait — don't create a run yet
-						await this.taskService.update(task.id, { status: 'active' })
-						actions.push('queued')
-						console.log(`[workflow-engine] task ${task.id} queued in "${task.queue}" — waiting for capacity`)
 						return null
 					}
 				}

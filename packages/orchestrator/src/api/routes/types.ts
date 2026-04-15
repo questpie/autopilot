@@ -3,9 +3,6 @@
  *
  * GET  /api/types      — list all registered types
  * GET  /api/types/:id  — get single type definition
- *
- * Type definitions are managed by the TypeRegistry (not yet implemented).
- * These endpoints return an empty list until the rendering system is wired in.
  */
 import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
@@ -23,17 +20,22 @@ const TypesListQuery = z.object({
 const types = new Hono<AppEnv>()
 
 	// GET /api/types — list all registered types
-	.get('/', zValidator('query', TypesListQuery), async (c) => {
-		// TypeRegistry is not yet wired to AppEnv. Return empty list as a
-		// stable contract — callers can always expect this shape.
-		return c.json({ types: [] }, 200)
+	.get('/', zValidator('query', TypesListQuery), (c) => {
+		const registry = c.get('typeRegistry')
+		if (!registry) return c.json({ types: [] }, 200)
+		const { category } = c.req.valid('query')
+		const all = category ? registry.byCategory(category) : registry.all()
+		return c.json({ types: all }, 200)
 	})
 
 	// GET /api/types/:id — get single type definition
-	.get('/:id', async (c) => {
+	.get('/:id', (c) => {
 		const id = c.req.param('id')
-		// TypeRegistry not yet wired — no type can be resolved.
-		return c.json({ error: `type '${id}' not found` }, 404)
+		const registry = c.get('typeRegistry')
+		if (!registry) return c.json({ error: `type '${id}' not found` }, 404)
+		const def = registry.get(id)
+		if (!def) return c.json({ error: `type '${id}' not found` }, 404)
+		return c.json(def, 200)
 	})
 
 export { types }

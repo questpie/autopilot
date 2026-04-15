@@ -4,7 +4,6 @@ export type AutopilotEvent =
 	| { type: 'run_started'; runId: string; agentId: string }
 	| { type: 'run_event'; runId: string; eventType: string; summary: string }
 	| { type: 'run_completed'; runId: string; status: string }
-	| { type: 'run_steer'; runId: string; message: string }
 	| { type: 'worker_registered'; workerId: string }
 	| { type: 'worker_offline'; workerId: string }
 	| { type: 'task_relation_created'; sourceTaskId: string; targetTaskId: string; relationType: string }

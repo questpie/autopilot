@@ -65,6 +65,16 @@ export class QueryService {
 			.all()
 	}
 
+	/** List queries belonging to a session, ordered by creation. */
+	async listBySession(sessionId: string): Promise<QueryRow[]> {
+		return this.db
+			.select()
+			.from(queries)
+			.where(eq(queries.session_id, sessionId))
+			.orderBy(queries.created_at)
+			.all()
+	}
+
 	/** Link a run to a query and mark it as running. */
 	async linkRun(queryId: string, runId: string): Promise<QueryRow | undefined> {
 		await this.db
@@ -223,41 +233,39 @@ export function buildQueryInstructions(
 
 You are in query mode with full repo access. You may read, create, and edit files.
 
-### Output guidelines
+### Artifacts
 
-- **Prefer structured artifacts over pasted code.**
-  When the result is a web page, prototype, or previewable artifact, return it using the structured output format — do NOT paste long HTML/CSS/JS inline in chat.
+When your response includes substantial visual output (web page, chart, diagram,
+interactive prototype, presentation — anything over ~20 lines that benefits from
+a rendered preview), create it as an artifact using the \`artifact_create\` tool
+instead of pasting content into chat.
 
-  Use this format:
+**For HTML artifacts** — produce self-contained files:
+- Include all dependencies via CDN (esm.sh for npm packages, unpkg, cdnjs)
+- For React components: include @babel/standalone + import maps pointing to esm.sh
+- For charts: include the charting library (recharts, chart.js, d3) via CDN
+- For Mermaid diagrams: include mermaid.js via CDN
+- Use Tailwind via CDN for styling (\`<script src="https://cdn.tailwindcss.com"></script>\`)
+- Always include proper HTML structure: doctype, charset, viewport meta
+- No external API calls to unknown domains
 
-  <AUTOPILOT_RESULT>
-  <summary>Short summary of what was built or changed.</summary>
-  <artifact kind="preview_file" title="index.html">
-  ...file content...
-  </artifact>
-  </AUTOPILOT_RESULT>
+**Artifact types:**
+- \`html\` — web pages, React apps, interactive content (rendered as live preview)
+- \`code\` — code snippets with syntax highlighting (displayed inline)
+- \`document\` — markdown or text content (rendered inline)
 
-  For simple web artifacts, default to a single self-contained \`index.html\` file.
-  If the output naturally needs multiple local files or assets (for example HTML + CSS + JS, a reveal.js deck, a built \`dist/\` directory, or images/fonts), do not force everything into one giant file just because the user did not name a platform primitive.
-  In that case, prepare the files normally and return a directory preview directive, for example:
+After creating an artifact, briefly describe what you made. Don't paste the full
+artifact content into chat — it's available in the preview.
 
-  <AUTOPILOT_RESULT>
-  <summary>Built a multi-file preview artifact.</summary>
-  <artifact kind="preview_dir" path="output/deck" entry="presentation.html" title="Deck" />
-  </AUTOPILOT_RESULT>
-
-  The user should be able to ask naturally for a page, deck, or prototype without knowing about \`preview_file\` or \`preview_dir\`.
-  Keep the \`<summary>\` concise — it may be delivered to chat surfaces like Telegram.
-  Do not duplicate the artifact content outside the structured block.
+### General guidelines
 
 - **Prefer Autopilot-native primitives.**
   Autopilot is your primary runtime. Prefer Autopilot-native primitives over host-runtime tools whenever an Autopilot equivalent exists.
   Examples:
-  - use Autopilot artifacts / preview files for previewable output
+  - use artifacts for previewable visual output
   - use Autopilot tasks for durable tracked work
   - use Autopilot schedules for recurring work
   - use host-runtime tools only when Autopilot has no equivalent primitive
-  Avoid large plain-text blobs when a better Autopilot output format exists.
 
 - **Stay in query mode for:** prototyping, drafts, artifacts, exploratory work, quick implementation.
 - **Consider creating an Autopilot task when:** the user asks for durable multi-step operational work, scheduled/repeatable work, or background work that should be tracked independently.

@@ -180,6 +180,41 @@ const tasks = new Hono<AppEnv>()
 			return c.json(result, 200)
 		},
 	)
+	// POST /tasks/:id/retry — retry a failed task
+	.post(
+		'/:id/retry',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { workflowEngine } = c.get('services')
+			const actor = c.get('actor')
+			const { id } = c.req.valid('param')
+
+			const result = await workflowEngine.retry(id, actor?.id)
+			if (!result) {
+				return c.json({ error: 'task not found or not in failed status' }, 400)
+			}
+
+			return c.json(result, 200)
+		},
+	)
+	// POST /tasks/:id/cancel — cancel an active task
+	.post(
+		'/:id/cancel',
+		zValidator('param', z.object({ id: z.string() })),
+		async (c) => {
+			const { workflowEngine } = c.get('services')
+			const actor = c.get('actor')
+			const { id } = c.req.valid('param')
+			const body = await c.req.json().catch(() => ({})) as { reason?: string }
+
+			const result = await workflowEngine.cancel(id, body?.reason, actor?.id)
+			if (!result) {
+				return c.json({ error: 'task not found or already completed/failed' }, 400)
+			}
+
+			return c.json(result, 200)
+		},
+	)
 	// DELETE /tasks/:id — delete task with cascade
 	.delete(
 		'/:id',

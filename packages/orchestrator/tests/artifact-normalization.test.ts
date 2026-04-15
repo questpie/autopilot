@@ -187,7 +187,6 @@ describe('artifact kind normalization', () => {
 			sessionService,
 			sessionMessageService,
 			scheduleService: {} as never,
-			steerService: {} as never,
 		}
 
 		app = buildTestApp(companyRoot, db, services)

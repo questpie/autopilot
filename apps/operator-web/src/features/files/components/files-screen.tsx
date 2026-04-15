@@ -1,5 +1,6 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useSetLayoutMode } from '@/features/shell/layout-mode-context'
+import { ItemView } from '@/features/company/item-view'
 import { DirectoryListing } from './directory-listing'
 import { FileView } from './file-view'
 
@@ -34,6 +35,10 @@ export function FilesScreen() {
   }
 
   if (view === 'file' && path) {
+    // .autopilot/ paths aren't in the item index — use VFS viewer directly
+    if (!runId && !path.startsWith('.autopilot/')) {
+      return <ItemView path={path} />
+    }
     return (
       <FileView
         path={path}

@@ -54,15 +54,20 @@ const previews = new Hono<AppEnv>().get('/:runId/*', async (c) => {
 	const match = previewFiles.find((a) => a.title === filePath)
 
 	if (match) {
-		const content = await artifactService.resolveContent(match)
-		const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8')
-		return new Response(bytes, {
-			headers: {
-				'Content-Type': match.mime_type || guessMimeType(match.title),
-				'Cache-Control': 'public, max-age=3600',
-				'Content-Length': String(bytes.length),
-			},
-		})
+		try {
+			const content = await artifactService.resolveContent(match)
+			const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8')
+			return new Response(bytes, {
+				headers: {
+					'Content-Type': match.mime_type || guessMimeType(match.title),
+					'Cache-Control': 'public, max-age=3600',
+					'Content-Length': String(bytes.length),
+				},
+			})
+		} catch (err) {
+			console.error(`[previews] failed to resolve content for ${match.id}:`, err instanceof Error ? err.message : String(err))
+			return c.text('Failed to resolve preview content', 500)
+		}
 	}
 
 	// Synthetic index: if index.html was requested but doesn't exist,

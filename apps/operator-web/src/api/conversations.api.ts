@@ -18,6 +18,7 @@ export interface TaskSummaryView {
   id: string
   title: string
   status: string
+  workflow_id: string | null
   workflow_step: string | null
   runs_total: number
   runs_completed: number
@@ -65,7 +66,7 @@ export function composeConversations(
     if (matchedTask) {
       title = matchedTask.title
     } else if (sessionQueries.length > 0) {
-      title = sessionQueries[0].prompt.slice(0, 80)
+      title = sessionQueries[0].prompt?.slice(0, 80) ?? session.id.slice(0, 12)
     } else {
       title = session.id.slice(0, 12)
     }
@@ -83,6 +84,7 @@ export function composeConversations(
           id: matchedTask.id,
           title: matchedTask.title,
           status: matchedTask.status,
+          workflow_id: matchedTask.workflow_id,
           workflow_step: matchedTask.workflow_step,
           runs_total: 0,
           runs_completed: 0,

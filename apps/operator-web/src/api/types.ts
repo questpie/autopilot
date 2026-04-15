@@ -234,10 +234,11 @@ export type AutopilotEvent =
   | { type: 'run_started'; runId: string; agentId: string }
   | { type: 'run_event'; runId: string; eventType: string; summary: string }
   | { type: 'run_completed'; runId: string; status: string }
-  | { type: 'run_steer'; runId: string; message: string }
   | { type: 'worker_registered'; workerId: string }
   | { type: 'worker_offline'; workerId: string }
   | { type: 'task_relation_created'; sourceTaskId: string; targetTaskId: string; relationType: string }
+  | { type: 'items_changed'; paths: string[] }
+  | { type: 'types_changed'; typeIds: string[] }
   | { type: 'settings_changed' }
   | { type: 'heartbeat'; ts: string }
 
@@ -247,6 +248,7 @@ export type WorkerEventType =
   | 'started'
   | 'progress'
   | 'tool_use'
+  | 'thinking'
   | 'artifact'
   | 'message_sent'
   | 'task_updated'
@@ -276,13 +278,6 @@ export interface Integration {
   last_sync_at: string | null
   config: Record<string, unknown>
   created_at: string
-}
-
-export interface CompanyProfile {
-  name: string
-  description: string
-  tone: string
-  knowledge_files: Array<{ name: string; size: string; uri: string }>
 }
 
 // ── Workflow ──
@@ -413,18 +408,3 @@ export interface VfsDiffResult {
   }
 }
 
-// ── File tree view model (composed from VFS list/stat, NOT a backend entity) ──
-export type FileTreeNodeType = 'file' | 'directory' | 'worktree-root'
-export type FileChangeKind = 'added' | 'modified' | 'deleted' | 'unchanged'
-
-export interface FileTreeNode {
-  path: string
-  name: string
-  type: FileTreeNodeType
-  change: FileChangeKind
-  size: number | null
-  mime_type: string | null
-  linked_task_id: string | null
-  linked_run_id: string | null
-  children?: FileTreeNode[]
-}

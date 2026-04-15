@@ -36,7 +36,7 @@ function viewToScope(view: ReturnType<typeof useActiveView>): SearchScope | unde
 
 function resultNavigateTo(result: SearchResult): string | null {
   if (result.entityType === 'task') return `/tasks?taskId=${encodeURIComponent(result.entityId)}`
-  if (result.entityType === 'run') return `/chat`
+  // Runs don't carry task_id in search results — no meaningful deep link yet
   return null
 }
 

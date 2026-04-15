@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { chatSessionKeys } from './use-chat-sessions'
+import { itemKeys } from './use-items'
 import { queryKeys } from './use-queries'
 import { taskKeys } from './use-tasks'
+import { typeKeys } from './use-types'
 import type { AutopilotEvent } from '@/api/types'
 
 /**
@@ -32,11 +34,24 @@ export function useAutoEvents() {
           break
 
         case 'run_started':
-        case 'run_completed':
-        case 'run_event':
           void queryClient.invalidateQueries({ queryKey: ['runs'] })
           void queryClient.invalidateQueries({ queryKey: taskKeys.all })
           void queryClient.invalidateQueries({ queryKey: queryKeys.all })
+          void queryClient.invalidateQueries({ queryKey: chatSessionKeys.list() })
+          break
+
+        case 'run_completed':
+          void queryClient.invalidateQueries({ queryKey: ['runs'] })
+          void queryClient.invalidateQueries({ queryKey: taskKeys.all })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.all })
+          // Completed run produces new messages — invalidate entire chat-sessions
+          // subtree (list + per-session messages) so the thread refreshes.
+          void queryClient.invalidateQueries({ queryKey: chatSessionKeys.all })
+          break
+
+        // run_event is incremental progress (text_delta, tool_use, etc.)
+        // — streamed via per-run SSE, no need to refetch entity lists
+        case 'run_event':
           break
 
         case 'task_relation_created':
@@ -46,6 +61,14 @@ export function useAutoEvents() {
         case 'worker_registered':
         case 'worker_offline':
           void queryClient.invalidateQueries({ queryKey: ['workers'] })
+          break
+
+        case 'items_changed':
+          void queryClient.invalidateQueries({ queryKey: itemKeys.all })
+          break
+
+        case 'types_changed':
+          void queryClient.invalidateQueries({ queryKey: typeKeys.all })
           break
 
         case 'settings_changed':
@@ -58,10 +81,11 @@ export function useAutoEvents() {
           break
       }
 
-      // Always refresh chat sessions on any non-heartbeat event
-      if (event.type !== 'heartbeat') {
-        void queryClient.invalidateQueries({ queryKey: chatSessionKeys.all })
-      }
+      // Chat session invalidation is handled inside the switch above (run_started,
+      // run_completed) — NOT here as a catch-all. A blanket invalidation on every
+      // SSE event caused an infinite request loop because high-frequency events
+      // (task_changed, worker_*, items_changed, …) continuously restarted the
+      // chat-sessions fetch before it could settle.
     }
 
     source.onerror = () => {

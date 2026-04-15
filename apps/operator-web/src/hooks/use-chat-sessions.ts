@@ -5,6 +5,7 @@ import {
   createChatSession,
   sendChatMessage,
 } from '@/api/chat-sessions.api'
+import { queryKeys } from './use-queries'
 
 export const chatSessionKeys = {
   all: ['chat-sessions'] as const,
@@ -34,6 +35,7 @@ export function useCreateChatSession() {
       createChatSession(agentId, message),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: chatSessionKeys.all })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.all })
     },
   })
 }
@@ -46,6 +48,7 @@ export function useSendChatMessage() {
     onSuccess: (_data, { sessionId }) => {
       void queryClient.invalidateQueries({ queryKey: chatSessionKeys.messages(sessionId) })
       void queryClient.invalidateQueries({ queryKey: chatSessionKeys.list() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.all })
     },
   })
 }

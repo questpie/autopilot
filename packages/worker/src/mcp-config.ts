@@ -10,6 +10,8 @@ export interface McpConfigOptions {
   mcpBinaryPath?: string
   /** Local dev mode — MCP server uses X-Local-Dev header instead of Bearer auth. */
   localDev?: boolean
+  /** Active run ID — passed to MCP server so artifact_create knows which run to attach to. */
+  runId?: string
 }
 
 /**
@@ -35,6 +37,9 @@ export async function createMcpConfig(opts: McpConfigOptions): Promise<{
     mcpEnv.AUTOPILOT_LOCAL_DEV = 'true'
   } else {
     mcpEnv.AUTOPILOT_API_KEY = opts.apiKey
+  }
+  if (opts.runId) {
+    mcpEnv.AUTOPILOT_RUN_ID = opts.runId
   }
 
   const config = {

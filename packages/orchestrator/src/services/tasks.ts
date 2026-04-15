@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { eq, and, or, sql, inArray } from 'drizzle-orm'
-import { tasks, runs, runEvents, artifacts, taskRelations, conversationBindings, workerLeases, scheduleExecutions, runSteers } from '../db/company-schema'
+import { tasks, runs, runEvents, artifacts, taskRelations, conversationBindings, workerLeases, scheduleExecutions } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 import type { ArtifactService } from './artifacts'
 
@@ -271,12 +271,11 @@ export class TaskService {
 			const runIds = taskRuns.map((r) => r.id)
 
 			if (runIds.length > 0) {
-				// 2. Delete run_events + artifacts + worker_leases + run_steers for each run
+				// 2. Delete run_events + artifacts + worker_leases for each run
 				for (const runId of runIds) {
 					await tx.delete(runEvents).where(eq(runEvents.run_id, runId)).run()
 					await tx.delete(artifacts).where(eq(artifacts.run_id, runId)).run()
 					await tx.delete(workerLeases).where(eq(workerLeases.run_id, runId)).run()
-					await tx.delete(runSteers).where(eq(runSteers.run_id, runId)).run()
 				}
 
 				// 3. Delete runs

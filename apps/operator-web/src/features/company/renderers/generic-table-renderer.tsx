@@ -71,7 +71,7 @@ function TableHeaderCell({ column, sort, onSort }: TableHeaderCellProps) {
   return (
     <th
       className={cn(
-        'border-b border-border px-3 py-2 font-mono text-[11px] font-bold uppercase tracking-widest text-muted-foreground',
+        'bg-muted/30 px-3 py-2 font-mono text-[11px] font-bold uppercase tracking-widest text-muted-foreground',
         column.align === 'right' ? 'text-right' : 'text-left',
       )}
     >
@@ -103,7 +103,7 @@ function TableRow({ item, columns, navigate }: TableRowProps) {
   const frontmatter = item.frontmatter ?? {}
   return (
     <tr
-      className="cursor-pointer border-b border-border transition-colors hover:bg-muted"
+      className="cursor-pointer transition-colors hover:bg-muted"
       onClick={() => navigate(item.path)}
     >
       {columns.map((col) => (
@@ -152,7 +152,7 @@ export function GenericTableRenderer({ item, type, navigate }: RendererProps) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-border px-4 py-2.5">
+      <div className="shrink-0 bg-muted/30 px-4 py-2.5">
         <p className="font-mono text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
           {type?.name ?? 'Items'}
         </p>

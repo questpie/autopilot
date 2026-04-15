@@ -156,12 +156,10 @@ const items = new Hono<AppEnv>()
 		}
 	})
 
-	// POST /api/items/rebuild — trigger full reindex
-	.post('/rebuild', async (c) => {
-		// The indexer runs on a schedule and at startup. A rebuild endpoint is
-		// reserved for operator-triggered full reindexes. No itemIndexer service
-		// exists yet — return accepted status to indicate the intent is understood.
-		return c.json({ status: 'rebuild_started' }, 202)
+	// POST /api/items/rebuild — handled inline in app.ts (requires itemIndexer from config)
+	// This route is shadowed by the inline registration in createApp() which runs first.
+	.post('/rebuild', (c) => {
+		return c.json({ error: 'indexer not available' }, 503)
 	})
 
 export { items }

@@ -27,7 +27,7 @@ function FlatList<T>({
         <div
           key={index}
           className={cn(
-            'border-b border-border/50 transition-colors',
+            'transition-colors',
             onSelect && 'cursor-pointer hover:bg-muted/20',
             selectedIndex === index && 'bg-muted/30',
           )}

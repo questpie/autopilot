@@ -10,18 +10,15 @@ import type { StatusPillStatus } from '@/components/ui/status-pill'
 
 export function taskStatusToPill(status: string): StatusPillStatus {
   switch (status) {
-    case 'waiting_for_human_approval':
-      return 'needs-input'
-    case 'running':
-    case 'claimed':
+    case 'active':
       return 'working'
-    case 'completed':
+    case 'blocked':
+      return 'blocked'
+    case 'done':
       return 'done'
     case 'failed':
       return 'failed'
-    case 'blocked':
-      return 'blocked'
-    default:
+    default: // backlog
       return 'pending'
   }
 }
@@ -30,18 +27,16 @@ export function taskStatusToPill(status: string): StatusPillStatus {
 
 export function taskStatusBorder(status: string): string {
   switch (status) {
-    case 'waiting_for_human_approval':
-      return 'border-l-amber-500'
-    case 'running':
-    case 'claimed':
-      return 'border-l-blue-500'
-    case 'completed':
-      return 'border-l-green-500'
-    case 'failed':
+    case 'active':
+      return 'border-l-info'
     case 'blocked':
-      return 'border-l-red-500'
+      return 'border-l-warning'
+    case 'done':
+      return 'border-l-success'
+    case 'failed':
+      return 'border-l-destructive'
     default:
-      return 'border-l-zinc-400'
+      return 'border-l-muted-foreground'
   }
 }
 
@@ -49,18 +44,16 @@ export function taskStatusBorder(status: string): string {
 
 export function taskStatusDot(status: string): string {
   switch (status) {
-    case 'waiting_for_human_approval':
-      return 'bg-amber-500'
-    case 'running':
-    case 'claimed':
-      return 'bg-blue-500'
-    case 'completed':
-      return 'bg-green-500'
-    case 'failed':
+    case 'active':
+      return 'bg-info'
     case 'blocked':
-      return 'bg-red-500'
+      return 'bg-warning'
+    case 'done':
+      return 'bg-success'
+    case 'failed':
+      return 'bg-destructive'
     default:
-      return 'bg-zinc-400'
+      return 'bg-muted-foreground'
   }
 }
 
@@ -71,10 +64,10 @@ export type ResultType = 'task' | 'query' | 'automation'
 export function resultTypeChip(type: ResultType): string {
   switch (type) {
     case 'task':
-      return 'bg-blue-500/10 text-blue-500'
+      return 'bg-info-surface text-info'
     case 'query':
-      return 'bg-green-500/10 text-green-500'
+      return 'bg-success-surface text-success'
     case 'automation':
-      return 'bg-zinc-500/10 text-zinc-400'
+      return 'bg-muted text-muted-foreground'
   }
 }

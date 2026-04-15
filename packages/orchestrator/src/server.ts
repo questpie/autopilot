@@ -11,7 +11,9 @@
  * 8. Bun.serve on port 7778
  */
 import { existsSync } from 'node:fs'
+import { readdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { parse as parseYaml } from 'yaml'
 import dotenv from 'dotenv'
 import { createApp } from './api'
 import type { Services } from './api/app'
@@ -40,7 +42,6 @@ import {
 	ScheduleService,
 	SchedulerDaemon,
 	ScriptService,
-	SteerService,
 	VfsService,
 	DefaultWorkerRegistry,
 } from './services'
@@ -49,6 +50,32 @@ import type { AuthoredConfig } from './services'
 import { NotificationBridge, QueryResponseBridge, TaskProgressBridge } from './providers'
 import { eventBus } from './events/event-bus'
 import { hasMasterKey, MasterKeyError } from './crypto'
+import { TypeRegistry } from './items/type-registry'
+import { ItemIndexer } from './items/item-indexer'
+import { resolveType, BUILTIN_EXTENSION_MAP } from './items/type-resolver'
+import { TypeDefinitionSchema, PATHS } from '@questpie/autopilot-spec'
+
+// ── Helper: load user-defined types from .autopilot/types/ ──────────────────
+
+async function loadUserTypes(root: string, registry: TypeRegistry): Promise<void> {
+	const typesDir = join(root, PATHS.TYPES_DIR)
+	let files: string[]
+	try {
+		files = await readdir(typesDir)
+	} catch {
+		return // directory doesn't exist yet — that's fine
+	}
+	for (const f of files) {
+		if (!f.endsWith('.yaml') && !f.endsWith('.yml')) continue
+		try {
+			const raw = await readFile(join(typesDir, f), 'utf-8')
+			const parsed = TypeDefinitionSchema.parse(parseYaml(raw))
+			registry.register(parsed)
+		} catch (err) {
+			console.warn(`[server] failed to load type from ${f}:`, err instanceof Error ? err.message : String(err))
+		}
+	}
+}
 
 export interface StartServerOptions {
 	/** Absolute path to start scope discovery from. Defaults to first CLI arg or cwd. */
@@ -94,6 +121,36 @@ export async function startServer(options?: StartServerOptions) {
 	const { db: indexDb, raw: indexDbRaw } = await createIndexDb(companyRoot)
 	console.log('[server] databases initialized')
 
+	// ── 3b. Create TypeRegistry and seed built-in types ─────────────────
+	const typeRegistry = new TypeRegistry()
+	const extensionsByType = new Map<string, string[]>()
+	for (const [ext, id] of Object.entries(BUILTIN_EXTENSION_MAP)) {
+		const exts = extensionsByType.get(id) ?? []
+		exts.push(ext)
+		extensionsByType.set(id, exts)
+	}
+	for (const [id, extensions] of extensionsByType) {
+		typeRegistry.register({
+			id,
+			name: id.charAt(0).toUpperCase() + id.slice(1).replace(/-/g, ' '),
+			category: 'file',
+			match: { extensions },
+			source: { file: '__builtin__', priority: -1 },
+		})
+	}
+
+	// Load user-defined types from .autopilot/types/
+	await loadUserTypes(companyRoot, typeRegistry)
+	console.log(`[server] type registry: ${typeRegistry.all().length} types loaded`)
+
+	// ── 3c. Create ItemIndexer ────────────────────────────────────────────
+	const itemIndexer = new ItemIndexer({
+		companyRoot,
+		indexDb: indexDbRaw,
+		eventBus,
+		resolveType: (input) => resolveType(input, typeRegistry),
+	})
+
 	// ── 4. Build resolved config (company + project merge) ───────────────
 	const resolved = await resolveConfig(chain)
 
@@ -135,7 +192,6 @@ export async function startServer(options?: StartServerOptions) {
 	const sessionMessageService = new SessionMessageService(companyDb)
 	const scheduleService = new ScheduleService(companyDb)
 	const scriptService = new ScriptService(authoredConfig)
-	const steerService = new SteerService(companyDb)
 
 	const workerRegistry = new DefaultWorkerRegistry()
 	const vfsService = new VfsService(companyRoot, workerRegistry)
@@ -195,7 +251,6 @@ export async function startServer(options?: StartServerOptions) {
 		sessionMessageService,
 		scheduleService,
 		scriptService,
-		steerService,
 		vfsService,
 	}
 
@@ -288,15 +343,30 @@ export async function startServer(options?: StartServerOptions) {
 		)
 	})
 
+	// ── 7e. Start item indexer (filesystem rendering index) ───────────
+	itemIndexer.start().catch((err) => {
+		console.error('[server] item-indexer startup error:', err instanceof Error ? err.message : String(err))
+	})
+
 	// ── 8. Config hot reload manager ────────────────────────────────────
 	const configManager = new ConfigManager(authoredConfig, {
 		companyRoot,
-		onReload: (_cfg) => {
+		onReload: async (_cfg) => {
 			workflowEngine.refreshDefaults()
 			const issues = workflowEngine.validate()
 			for (const issue of issues) {
 				console.warn(`[config] post-reload warning: ${issue}`)
 			}
+
+			// Unregister non-builtin types, then reload from disk
+			const userTypeIds = typeRegistry.all()
+				.filter((t) => t.source?.file !== '__builtin__')
+				.map((t) => t.id)
+			for (const id of userTypeIds) {
+				typeRegistry.unregister(id)
+			}
+			await loadUserTypes(companyRoot, typeRegistry)
+			eventBus.emit({ type: 'types_changed', typeIds: typeRegistry.all().map((t) => t.id) })
 		},
 	})
 
@@ -322,6 +392,8 @@ export async function startServer(options?: StartServerOptions) {
 		indexDbRaw,
 		operatorWebDist: resolve(import.meta.dir, '..', '..', '..', 'apps', 'operator-web', 'dist'),
 		configManager,
+		typeRegistry,
+		itemIndexer,
 	})
 
 	// ── 9. Start HTTP server ─────────────────────────────────────────────
@@ -337,12 +409,13 @@ export async function startServer(options?: StartServerOptions) {
 	}
 
 	// ── 10. Startup recovery for stale leases/workers from previous instance ──
-	const failRunOnExpiry = async (runId: string) => {
-		await runService.complete(runId, {
-			status: 'failed',
-			error: 'lease expired (orchestrator restart recovery)',
-		})
+	const failRunOnExpiry = async (runId: string, reason: string) => {
+		const run = await runService.get(runId)
+		await runService.complete(runId, { status: 'failed', error: reason })
 		eventBus.emit({ type: 'run_completed', runId, status: 'failed' })
+		if (run?.task_id) {
+			await workflowEngine.handleRunFailure(run.task_id, runId)
+		}
 	}
 
 	try {
@@ -352,7 +425,9 @@ export async function startServer(options?: StartServerOptions) {
 				`[server] startup recovery: marked ${staleWorkerIds.length} stale worker(s) offline`,
 			)
 		}
-		const leaseRecovery = await workerService.expireStaleAndRecover(failRunOnExpiry)
+		const leaseRecovery = await workerService.expireStaleAndRecover(
+			(runId) => failRunOnExpiry(runId, 'lease expired (orchestrator restart recovery)'),
+		)
 		if (leaseRecovery.failedRunIds.length > 0) {
 			console.log(
 				`[server] startup recovery: failed ${leaseRecovery.failedRunIds.length} run(s) from expired leases`,
@@ -369,13 +444,9 @@ export async function startServer(options?: StartServerOptions) {
 	const leaseExpiryTimer = setInterval(async () => {
 		try {
 			await workerService.expireStale(90_000)
-			const result = await workerService.expireStaleAndRecover(async (runId) => {
-				await runService.complete(runId, {
-					status: 'failed',
-					error: 'lease expired (periodic cleanup)',
-				})
-				eventBus.emit({ type: 'run_completed', runId, status: 'failed' })
-			})
+			const result = await workerService.expireStaleAndRecover(
+				(runId) => failRunOnExpiry(runId, 'lease expired (periodic cleanup)'),
+			)
 			if (result.failedRunIds.length > 0) {
 				console.log(
 					`[server] periodic cleanup: failed ${result.failedRunIds.length} run(s), recovered ${result.recoveredWorkerIds.length} worker(s)`,
@@ -392,6 +463,25 @@ export async function startServer(options?: StartServerOptions) {
 	// Ensure timer doesn't prevent process exit
 	leaseExpiryTimer.unref()
 
+	// ── 11b. Periodic deferred-task trigger (every 15s) ─────────────────────
+	// Tasks with start_after (from retry backoff delays) need periodic re-evaluation.
+	// Without this timer, deferred tasks would only resume if another queue event triggered them.
+	const deferredTaskTimer = setInterval(async () => {
+		try {
+			const triggered = await workflowEngine.triggerDeferredTasks()
+			if (triggered > 0) {
+				console.log(`[server] deferred tasks: triggered ${triggered} task(s)`)
+			}
+		} catch (err) {
+			console.error(
+				'[server] deferred task trigger error:',
+				err instanceof Error ? err.message : String(err),
+			)
+		}
+	}, 15_000)
+
+	deferredTaskTimer.unref()
+
 	// ── 12. Start config file watcher ───────────────────────────────────
 	configManager.startWatching(chain)
 
@@ -399,12 +489,14 @@ export async function startServer(options?: StartServerOptions) {
 	const stop = () => {
 		schedulerDaemon.stop()
 		indexer.stop()
+		itemIndexer.stop()
 		notificationBridge.stop()
 		queryResponseBridge.stop()
 		taskProgressBridge.stop()
 		parentJoinBridge.stop()
 		dependencyBridge.stop()
 		clearInterval(leaseExpiryTimer)
+		clearInterval(deferredTaskTimer)
 		configManager.stop()
 		if (indexDbRaw && typeof indexDbRaw.close === 'function') {
 			indexDbRaw.close()

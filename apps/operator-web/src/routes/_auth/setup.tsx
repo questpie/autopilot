@@ -63,7 +63,7 @@ function SetupPage() {
 
   return (
     <div className="flex flex-col items-center gap-8 text-center">
-      <div className="flex size-16 items-center justify-center border border-primary/25 bg-primary/[0.08]">
+      <div className="flex size-16 items-center justify-center bg-primary/[0.08]">
         <TerminalWindowIcon className="size-8 text-primary" />
       </div>
 
@@ -75,7 +75,7 @@ function SetupPage() {
       </div>
 
       <div className="w-full max-w-sm flex flex-col gap-3">
-        <div className="border border-border bg-card p-4 text-left">
+        <div className="bg-muted/40 p-4 text-left">
           <code className="text-sm font-mono text-foreground">autopilot auth setup</code>
         </div>
         <p className="text-xs text-muted-foreground text-left">

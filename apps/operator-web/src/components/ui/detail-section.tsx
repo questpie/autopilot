@@ -27,7 +27,7 @@ function DetailSection({ title, action, last, className, children }: DetailSecti
       data-slot="detail-section"
       className={cn(
         'px-5 py-4',
-        !last && 'border-b border-border/50',
+        !last && 'mb-1',
         className,
       )}
     >

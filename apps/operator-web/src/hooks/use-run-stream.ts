@@ -61,8 +61,18 @@ export function useRunStream(runId: string | null): RunStreamState {
       }
     }
 
+    let retryCount = 0
+
     source.onerror = () => {
-      // EventSource auto-reconnects
+      if (source.readyState === EventSource.CLOSED) return
+      retryCount++
+      if (retryCount > 3) {
+        source.close()
+      }
+    }
+
+    source.onopen = () => {
+      retryCount = 0
     }
 
     return () => {

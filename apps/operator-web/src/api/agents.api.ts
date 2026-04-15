@@ -3,7 +3,7 @@
  * Config endpoint returns authored agent definitions (read-only).
  */
 import type { Agent } from './types'
-import { apiFetch } from '@/lib/api-client'
+import { configFetch } from '@/lib/api'
 
 interface WireAgent {
   id: string
@@ -30,6 +30,6 @@ function mapAgent(wire: WireAgent): Agent {
 }
 
 export async function getAgents(): Promise<Agent[]> {
-  const data = await apiFetch<WireAgent[]>('/api/config/agents')
+  const data = await configFetch<WireAgent[]>('/api/config/agents')
   return data.map(mapAgent)
 }

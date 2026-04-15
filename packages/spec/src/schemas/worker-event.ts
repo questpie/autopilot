@@ -6,6 +6,7 @@ export const WorkerEventTypeSchema = z.enum([
 	'started',
 	'progress',
 	'tool_use',
+	'thinking',
 	'artifact',
 	'message_sent',
 	'task_updated',

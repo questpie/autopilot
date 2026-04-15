@@ -144,70 +144,71 @@ export class QueryResponseBridge {
 		const query = await this.queryService.getByRunIdAnyStatus(event.runId)
 		if (!query) return
 
-		// Resolve delivery target: session-based or default-chat fallback
-		const { provider, conversationId, threadId, session } = await this.resolveDeliveryTarget(query)
-		if (!provider) {
-			console.debug(`[query-response-bridge] query ${query.id} has no delivery target — no session and no default_chat_id`)
-			return
-		}
-
-		const assistantMsg = this.sessionMessageService && session
-			? await this.sessionMessageService.findAssistantForQuery(query.id)
-			: undefined
-		const editMessageId = this.messageIdByRun.get(event.runId) ?? assistantMsg?.external_message_id ?? undefined
-
-		// Build response payload
 		const run = await this.runService.get(event.runId)
 		const failed = event.status === 'failed'
 		const summary = failed
 			? (run?.error ?? run?.summary ?? 'Query failed.')
 			: (run?.summary ?? 'Query completed.')
 
-		// Include preview_url if available
-		let previewUrl: string | undefined
-		if (this.artifactService && run) {
-			const artifacts = await this.artifactService.listForRun(event.runId)
-			const preview = artifacts.find((a) => a.kind === 'preview_url')
-			if (preview) previewUrl = preview.ref_value
-		}
+		// ── Session lifecycle (resume state, assistant message, drain) ──
+		// These must run for ALL sessions (dashboard, Telegram, Slack, …)
+		// regardless of whether an external delivery provider exists.
+		const session = query.session_id
+			? await this.sessionService.get(query.session_id)
+			: null
 
-		// Truncate summary for chat delivery safety (Telegram has 4096 char limit)
-		const MAX_SUMMARY_LENGTH = 3500
-		let deliverySummary = summary
-		if (previewUrl && summary.length > 500) {
-			// When a preview artifact exists, prefer a short summary
-			deliverySummary = summary.slice(0, 500) + '...\n\nSee the preview for full details.'
-		} else if (summary.length > MAX_SUMMARY_LENGTH) {
-			deliverySummary = summary.slice(0, MAX_SUMMARY_LENGTH) + '...'
-		}
-
-		const payload: NotificationPayload = {
-			orchestrator_url: this.config.orchestratorUrl,
-			event_type: 'query_response',
-			severity: failed ? 'error' : 'info',
-			title: failed ? 'Query Failed' : '',
-			summary: deliverySummary,
-			preview_url: previewUrl,
-			conversation_id: conversationId,
-			thread_id: threadId,
-			...(editMessageId ? { edit_message_id: editMessageId } : {}),
-		}
-
-		const sendResult = await this.sendToProvider(provider, payload)
-		const deliveredMessageId = sendResult?.external_id ?? editMessageId
-
-		// Update session resume state from completed run (only if we have a session)
-		let updatedSession: SessionRow | undefined
+		let effectiveSession = session
 		if (run && session) {
-			updatedSession = await this.sessionService.updateResumeState(
+			effectiveSession = await this.sessionService.updateResumeState(
 				session.id,
 				run.runtime_session_ref ?? null,
 				run.worker_id ?? null,
 			)
 		}
 
-		// Update or create assistant session message
-		const effectiveSession = updatedSession ?? session
+		const assistantMsg = this.sessionMessageService && session
+			? await this.sessionMessageService.findAssistantForQuery(query.id)
+			: undefined
+
+		// ── External delivery (Telegram, Slack, etc.) ──
+		const { provider, conversationId, threadId } = await this.resolveDeliveryTarget(query)
+		let deliveredMessageId: string | undefined
+
+		if (provider) {
+			const editMessageId = this.messageIdByRun.get(event.runId) ?? assistantMsg?.external_message_id ?? undefined
+
+			let previewUrl: string | undefined
+			if (this.artifactService && run) {
+				const artifacts = await this.artifactService.listForRun(event.runId)
+				const preview = artifacts.find((a) => a.kind === 'preview_url')
+				if (preview) previewUrl = preview.ref_value
+			}
+
+			const MAX_SUMMARY_LENGTH = 3500
+			let deliverySummary = summary
+			if (previewUrl && summary.length > 500) {
+				deliverySummary = summary.slice(0, 500) + '...\n\nSee the preview for full details.'
+			} else if (summary.length > MAX_SUMMARY_LENGTH) {
+				deliverySummary = summary.slice(0, MAX_SUMMARY_LENGTH) + '...'
+			}
+
+			const payload: NotificationPayload = {
+				orchestrator_url: this.config.orchestratorUrl,
+				event_type: 'query_response',
+				severity: failed ? 'error' : 'info',
+				title: failed ? 'Query Failed' : '',
+				summary: deliverySummary,
+				preview_url: previewUrl,
+				conversation_id: conversationId,
+				thread_id: threadId,
+				...(editMessageId ? { edit_message_id: editMessageId } : {}),
+			}
+
+			const sendResult = await this.sendToProvider(provider, payload)
+			deliveredMessageId = sendResult?.external_id ?? editMessageId
+		}
+
+		// ── Persist assistant message ──
 		if (this.sessionMessageService && effectiveSession) {
 			const existingMsgId = this.sessionMsgIdByRun.get(event.runId) ?? assistantMsg?.id
 			if (existingMsgId) {
@@ -232,7 +233,7 @@ export class QueryResponseBridge {
 		this.messageIdByRun.delete(event.runId)
 		this.sessionMsgIdByRun.delete(event.runId)
 
-		// Drain queued user messages
+		// ── Drain queued user messages ──
 		if (this.sessionMessageService && effectiveSession) {
 			const queued = await this.sessionMessageService.listQueued(effectiveSession.id)
 			if (queued.length > 0) {
@@ -416,6 +417,12 @@ export class QueryResponseBridge {
 			created_by: initiator,
 		})
 
+		// Mark consumed BEFORE dispatching run (prevents bridge re-trigger race)
+		await this.sessionMessageService.markConsumed(
+			queued.map((m) => m.id),
+			newQuery.id,
+		)
+
 		const runId = `run-${Date.now()}-${randomBytes(6).toString('hex')}`
 		await this.runService.create({
 			id: runId,
@@ -432,11 +439,6 @@ export class QueryResponseBridge {
 		})
 
 		await this.queryService.linkRun(newQuery.id, runId)
-
-		await this.sessionMessageService.markConsumed(
-			queued.map((m) => m.id),
-			newQuery.id,
-		)
 	}
 
 	private async sendToProvider(provider: Provider, payload: NotificationPayload): Promise<HandlerResult | null> {

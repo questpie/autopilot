@@ -4,17 +4,17 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/i18n'
 
 const statusPillVariants = cva(
-  'inline-flex items-center gap-1.5 rounded-none px-2 py-0.5 font-heading text-[11px] font-medium',
+  'inline-flex items-center gap-1.5 rounded-none px-2 py-0.5 font-mono text-[11px] font-medium',
   {
     variants: {
       status: {
-        working: 'bg-blue-500/10 text-blue-500',
-        'needs-input': 'bg-amber-500/10 text-amber-500',
-        done: 'bg-green-500/10 text-green-500',
-        failed: 'bg-red-500/10 text-red-500',
-        pending: 'bg-zinc-500/10 text-zinc-400',
-        draft: 'bg-zinc-500/10 text-zinc-400',
-        blocked: 'bg-red-500/10 text-red-500',
+        working: 'bg-info-surface text-info',
+        'needs-input': 'bg-warning-surface text-warning',
+        done: 'bg-success-surface text-success',
+        failed: 'bg-destructive-surface text-destructive',
+        pending: 'bg-muted text-foreground-muted',
+        draft: 'bg-muted text-foreground-muted',
+        blocked: 'bg-destructive-surface text-destructive',
       },
     },
     defaultVariants: {
@@ -26,13 +26,13 @@ const statusPillVariants = cva(
 const dotVariants = cva('size-1.5 rounded-full', {
   variants: {
     status: {
-      working: 'bg-blue-500',
-      'needs-input': 'bg-amber-500',
-      done: 'bg-green-500',
-      failed: 'bg-red-500',
-      pending: 'bg-zinc-400',
-      draft: 'bg-zinc-400',
-      blocked: 'bg-red-500',
+      working: 'bg-info',
+      'needs-input': 'bg-warning',
+      done: 'bg-success',
+      failed: 'bg-destructive',
+      pending: 'bg-foreground-muted',
+      draft: 'bg-foreground-muted',
+      blocked: 'bg-destructive',
     },
   },
   defaultVariants: {

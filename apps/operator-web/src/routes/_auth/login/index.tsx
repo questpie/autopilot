@@ -1,8 +1,9 @@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { authClient, getAppCallbackUrl } from '@/lib/auth'
+
 import { useTranslation } from '@/lib/i18n'
 import {
 	ArrowCounterClockwiseIcon,
@@ -11,7 +12,7 @@ import {
 	EnvelopeSimpleIcon,
 	WarningCircleIcon,
 } from '@phosphor-icons/react'
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { AnimatePresence, m } from 'framer-motion'
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
@@ -279,90 +280,102 @@ function LoginPage() {
 					className="flex flex-col gap-4"
 					noValidate
 				>
-					<div className="flex flex-col gap-1.5">
-						<Label htmlFor="email" className="font-heading text-xs font-medium">
-							{t('auth.email')}
-						</Label>
-						<Input
-							id="email"
-							type="email"
-							autoComplete="email"
-							placeholder="you@company.com"
-							disabled={form.formState.isSubmitting || isRateLimited}
-							aria-invalid={!!form.formState.errors.email}
-							{...form.register('email')}
-							ref={(el) => {
-								form.register('email').ref(el)
-								emailInputRef.current = el
-							}}
-						/>
-						<AnimatePresence>
-							{form.formState.errors.email && (
-								<m.p
-									initial={{ opacity: 0, y: -4 }}
-									animate={{ opacity: 1, y: 0 }}
-									exit={{ opacity: 0, y: -4 }}
-									transition={{ duration: 0.15 }}
-									className="text-xs text-destructive"
-								>
-									{form.formState.errors.email.message}
-								</m.p>
-							)}
-						</AnimatePresence>
-					</div>
-
-					<div className="flex flex-col gap-1.5">
-						<Label htmlFor="password" className="font-heading text-xs font-medium">
-							{t('auth.password')}
-						</Label>
-						<div className="relative">
-							<Input
-								id="password"
-								type={showPassword ? 'text' : 'password'}
-								autoComplete="current-password"
-								disabled={form.formState.isSubmitting || isRateLimited}
-								aria-invalid={!!form.formState.errors.password}
-								className="pr-9"
-								{...form.register('password')}
-							/>
-							<button
-								type="button"
-								tabIndex={-1}
-								className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-								onClick={() => dispatch({ type: 'TOGGLE_PASSWORD' })}
-								aria-label={showPassword ? t('a11y.hide_password') : t('a11y.show_password')}
-							>
-								<AnimatePresence mode="wait" initial={false}>
-									<m.span
-										key={showPassword ? 'hide' : 'show'}
-										initial={{ opacity: 0, rotate: -90 }}
-										animate={{ opacity: 1, rotate: 0 }}
-										exit={{ opacity: 0, rotate: 90 }}
-										transition={{ duration: 0.15 }}
-									>
-										{showPassword ? (
-											<EyeSlashIcon className="size-4" />
-										) : (
-											<EyeIcon className="size-4" />
-										)}
-									</m.span>
+					<FieldGroup>
+						<Field>
+							<FieldLabel htmlFor="email" className="font-mono text-xs font-medium">
+								{t('auth.email')}
+							</FieldLabel>
+							<FieldContent>
+								<Input
+									id="email"
+									type="email"
+									autoComplete="email"
+									placeholder="you@company.com"
+									disabled={form.formState.isSubmitting || isRateLimited}
+									aria-invalid={!!form.formState.errors.email}
+									{...form.register('email')}
+									ref={(el) => {
+										form.register('email').ref(el)
+										emailInputRef.current = el
+									}}
+								/>
+								<AnimatePresence>
+									{form.formState.errors.email && (
+										<m.div
+											initial={{ opacity: 0, y: -4 }}
+											animate={{ opacity: 1, y: 0 }}
+											exit={{ opacity: 0, y: -4 }}
+											transition={{ duration: 0.15 }}
+										>
+											<FieldError>{form.formState.errors.email.message}</FieldError>
+										</m.div>
+									)}
 								</AnimatePresence>
-							</button>
-						</div>
-						<AnimatePresence>
-							{form.formState.errors.password && (
-								<m.p
-									initial={{ opacity: 0, y: -4 }}
-									animate={{ opacity: 1, y: 0 }}
-									exit={{ opacity: 0, y: -4 }}
-									transition={{ duration: 0.15 }}
-									className="text-xs text-destructive"
+							</FieldContent>
+						</Field>
+
+						<Field>
+							<div className="flex items-center justify-between">
+								<FieldLabel htmlFor="password" className="font-mono text-xs font-medium">
+									{t('auth.password')}
+								</FieldLabel>
+								<Link
+									to="/forgot-password"
+									className="text-xs text-muted-foreground hover:text-primary"
 								>
-									{form.formState.errors.password.message}
-								</m.p>
-							)}
-						</AnimatePresence>
-					</div>
+									{t('auth.forgot_password')}
+								</Link>
+							</div>
+							<FieldContent>
+								<div className="relative">
+									<Input
+										id="password"
+										type={showPassword ? 'text' : 'password'}
+										autoComplete="current-password"
+										disabled={form.formState.isSubmitting || isRateLimited}
+										aria-invalid={!!form.formState.errors.password}
+										className="pr-9"
+										{...form.register('password')}
+									/>
+									<button
+										type="button"
+										tabIndex={-1}
+										className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+										onClick={() => dispatch({ type: 'TOGGLE_PASSWORD' })}
+										aria-label={showPassword ? t('a11y.hide_password') : t('a11y.show_password')}
+									>
+										<AnimatePresence mode="wait" initial={false}>
+											<m.span
+												key={showPassword ? 'hide' : 'show'}
+												initial={{ opacity: 0, rotate: -90 }}
+												animate={{ opacity: 1, rotate: 0 }}
+												exit={{ opacity: 0, rotate: 90 }}
+												transition={{ duration: 0.15 }}
+											>
+												{showPassword ? (
+													<EyeSlashIcon className="size-4" />
+												) : (
+													<EyeIcon className="size-4" />
+												)}
+											</m.span>
+										</AnimatePresence>
+									</button>
+								</div>
+								<AnimatePresence>
+									{form.formState.errors.password && (
+										<m.div
+											initial={{ opacity: 0, y: -4 }}
+											animate={{ opacity: 1, y: 0 }}
+											exit={{ opacity: 0, y: -4 }}
+											transition={{ duration: 0.15 }}
+										>
+											<FieldError>{form.formState.errors.password.message}</FieldError>
+										</m.div>
+									)}
+								</AnimatePresence>
+							</FieldContent>
+						</Field>
+					</FieldGroup>
 
 					<Button
 						type="submit"

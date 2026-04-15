@@ -2,7 +2,7 @@ import { apiKey } from '@better-auth/api-key'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { betterAuth } from 'better-auth'
 import { hashPassword, verifyPassword } from 'better-auth/crypto'
-import { bearer } from 'better-auth/plugins'
+import { bearer, admin, twoFactor } from 'better-auth/plugins'
 import { eq, sql } from 'drizzle-orm'
 import type { CompanyDb } from '../db'
 import * as authSchema from '../db/auth-schema'
@@ -140,7 +140,7 @@ export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: Mai
 			},
 		},
 
-		plugins: [bearer(), apiKey()],
+		plugins: [bearer(), apiKey(), admin(), twoFactor()],
 	})
 
 	return auth

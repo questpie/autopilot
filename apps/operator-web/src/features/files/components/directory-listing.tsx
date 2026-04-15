@@ -107,7 +107,7 @@ function EntryRow({ entry, onNavigate }: EntryRowProps) {
     <button
       className={cn(
         'flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left',
-        'border-b border-border hover:bg-muted transition-colors',
+        'hover:bg-muted transition-colors',
       )}
       onClick={() => onNavigate(entry.path, isDirectory ? 'directory' : 'file')}
     >
@@ -142,7 +142,7 @@ export function DirectoryListing({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Toolbar: breadcrumb */}
-      <div className="shrink-0 border-b border-border px-4 py-3 flex items-center">
+      <div className="shrink-0 bg-muted/30 px-4 py-3 flex items-center">
         <BreadcrumbNav
           runId={runId}
           path={path}

@@ -423,23 +423,6 @@ exit 0
     expect(progressEvents.some((e) => e.summary!.includes('Now editing'))).toBe(true)
   })
 
-  test('steer returns false — steering deferred until stream-json input is supported', () => {
-    const adapter = new ClaudeCodeAdapter({ workDir: tmpDir })
-    expect(adapter.steer('test')).toBe(false)
-  })
-
-  test('steer returns false when not running', () => {
-    const adapter = new ClaudeCodeAdapter({
-      binaryPath: fakeBinaryPath,
-      workDir: tmpDir,
-    })
-    adapter.onEvent(() => {})
-
-    // No process running, steer should return false
-    const delivered = adapter.steer('test message')
-    expect(delivered).toBe(false)
-  })
-
   test('handles result error event', async () => {
     const errorBinaryPath = join(tmpDir, 'claude-result-error')
     const script = buildClaudeScript([
