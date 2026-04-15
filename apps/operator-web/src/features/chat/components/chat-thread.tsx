@@ -82,8 +82,9 @@ export function ChatThread({
 						/>
 					)}
 
-					{conversation.messages.map((msg) => {
+					{conversation.messages.map((msg, i) => {
 						// Detect completed query summary messages — show run events inside the message.
+						const nextMsg = conversation.messages[i + 1]
 						let queryRunId: string | null = null
 						if (msg.id.startsWith('qsummary-')) {
 							const queryId = msg.id.replace('qsummary-', '')
@@ -99,6 +100,7 @@ export function ChatThread({
 								queryRunId={queryRunId}
 								taskId={taskId}
 								taskNeedsApproval={taskNeedsApproval}
+								isNextAssistant={nextMsg?.role === 'assistant'}
 							/>
 						)
 					})}

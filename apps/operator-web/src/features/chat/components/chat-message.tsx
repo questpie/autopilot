@@ -1,5 +1,13 @@
 import { useState } from 'react'
-import { CaretRight, CaretDown, Wrench, Robot, Check, X, ArrowBendUpLeft } from '@phosphor-icons/react'
+import {
+	CaretRight,
+	CaretDown,
+	Wrench,
+	Robot,
+	Check,
+	X,
+	ArrowBendUpLeft,
+} from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { Markdown } from '@/components/ui/markdown'
 import { Button } from '@/components/ui/button'
@@ -19,6 +27,8 @@ interface ChatMessageProps {
 	 * Only relevant when taskId is provided.
 	 */
 	taskNeedsApproval?: boolean
+	/** When true, suppresses the timestamp for this message, assuming the next assistant message will render it. */
+	isNextAssistant?: boolean
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -134,10 +144,10 @@ function CollapsibleToolGroup({ events, label }: { events: RunEvent[]; label?: s
 
 // ── Agent group — nested display ─────────────────────────────────────────
 
-function AgentGroup({ agents, children }: { agents: RunEvent[]; children: RunEvent[] }) {
+function AgentGroup({ agents, events }: { agents: RunEvent[]; events: RunEvent[] }) {
 	const [open, setOpen] = useState(false)
 	const CaretIcon = open ? CaretDown : CaretRight
-	const totalTools = children.length
+	const totalTools = events.length
 
 	return (
 		<div className="pl-4">
@@ -168,7 +178,7 @@ function AgentGroup({ agents, children }: { agents: RunEvent[]; children: RunEve
 					</button>
 					{open && (
 						<div className="flex flex-col gap-0.5 pl-4 mt-0.5">
-							{children.map((child) => (
+							{events.map((child) => (
 								<ToolCallCard key={child.id} summary={child.summary ?? 'tool call'} status="done" />
 							))}
 						</div>
@@ -223,7 +233,7 @@ function InlineRunEvents({ runId, fallbackContent }: { runId: string; fallbackCo
 		<div className="flex flex-col gap-1">
 			{items.map((item, idx) => {
 				if (item.kind === 'agent_group') {
-					return <AgentGroup key={idx} agents={item.agents} children={item.children} />
+					return <AgentGroup key={item} agents={item.agents} events={item.children} />
 				}
 				if (item.kind === 'tool_group') {
 					return <CollapsibleToolGroup key={idx} events={item.events} />
@@ -372,30 +382,17 @@ function TaskActionBar({ taskId, taskNeedsApproval }: TaskActionBarProps) {
 			<div className="flex items-center gap-1.5">
 				{taskNeedsApproval && (
 					<>
-						<Button
-							size="xs"
-							variant="success"
-							loading={isApprovePending}
-							onClick={handleApprove}
-						>
+						<Button size="xs" variant="success" loading={isApprovePending} onClick={handleApprove}>
 							<Check size={11} weight="bold" />
 							Approve
 						</Button>
-						<Button
-							size="xs"
-							variant="destructive"
-							onClick={openReject}
-						>
+						<Button size="xs" variant="destructive" onClick={openReject}>
 							<X size={11} weight="bold" />
 							Reject
 						</Button>
 					</>
 				)}
-				<Button
-					size="xs"
-					variant="outline"
-					onClick={openReply}
-				>
+				<Button size="xs" variant="outline" onClick={openReply}>
 					<ArrowBendUpLeft size={11} weight="bold" />
 					Reply
 				</Button>
@@ -410,8 +407,6 @@ function TaskActionBar({ taskId, taskNeedsApproval }: TaskActionBarProps) {
 						rows={3}
 						value={message}
 						onChange={(e) => setMessage(e.target.value)}
-						// biome-ignore lint/jsx-a11y/no-autofocus: intentional UX for inline action
-						autoFocus
 					/>
 					<div className="flex items-center gap-1.5">
 						<Button
@@ -440,8 +435,6 @@ function TaskActionBar({ taskId, taskNeedsApproval }: TaskActionBarProps) {
 						rows={3}
 						value={message}
 						onChange={(e) => setMessage(e.target.value)}
-						// biome-ignore lint/jsx-a11y/no-autofocus: intentional UX for inline action
-						autoFocus
 					/>
 					<div className="flex items-center gap-1.5">
 						<Button
@@ -466,7 +459,13 @@ function TaskActionBar({ taskId, taskNeedsApproval }: TaskActionBarProps) {
 
 // ── ChatMessage ────────────────────────────────────────────────────────────
 
-export function ChatMessage({ message, queryRunId, taskId, taskNeedsApproval = false }: ChatMessageProps) {
+export function ChatMessage({
+	message,
+	queryRunId,
+	taskId,
+	taskNeedsApproval = false,
+	isNextAssistant = false,
+}: ChatMessageProps) {
 	const isUser = message.role === 'user'
 	const isSystem = message.role === 'system'
 
@@ -500,39 +499,38 @@ export function ChatMessage({ message, queryRunId, taskId, taskNeedsApproval = f
 
 	if (isUser) {
 		return (
-			<div className="flex w-full justify-end">
-				<div className="max-w-[72%] bg-primary/20 px-4 py-3">
-					<div className="flex items-center justify-between">
-						<p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-							You
-						</p>
-						<p className="font-mono text-[11px] text-muted-foreground">{timestamp}</p>
-					</div>
-					<p className="font-sans text-sm leading-relaxed text-foreground whitespace-pre-wrap wrap-break-word">
+			<div className="flex w-full items-end flex-col justify-end">
+				<div className="max-w-[72%] bg-secondary  px-3 py-2">
+					<p className="font-sans text-sm leading-relaxed text-secondary-foreground whitespace-pre-wrap wrap-break-word">
 						<SmartText text={message.content} />
 					</p>
 				</div>
+				{!!isNextAssistant && (
+					<p className="font-mono text-[11px] text-muted-foreground">{timestamp}</p>
+				)}
 			</div>
 		)
 	}
 
 	// Assistant — one unified block: events interleaved with text, chronological
 	return (
-		<div className="flex w-full justify-start">
+		<div className="flex w-full flex-col items-start justify-start">
 			<div className="max-w-[85%] bg-transparent px-4 py-3">
-				<p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
-					Assistant
-				</p>
+				{/* <div className="flex items-center gap-4 justify-between">
+					<p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+						Assistant
+					</p>
+					</div> */}
 				{queryRunId ? (
 					<InlineRunEvents runId={queryRunId} fallbackContent={message.content} />
 				) : (
 					<Markdown content={message.content} className="prose prose-sm font-sans text-sm" />
 				)}
-				{taskId && (
-					<TaskActionBar taskId={taskId} taskNeedsApproval={taskNeedsApproval} />
-				)}
-				<p className="mt-1.5 font-mono text-[11px] text-muted-foreground">{timestamp}</p>
+				{taskId && <TaskActionBar taskId={taskId} taskNeedsApproval={taskNeedsApproval} />}
 			</div>
+			{!isNextAssistant && (
+				<p className="font-mono text-[11px] text-muted-foreground">{timestamp}</p>
+			)}
 		</div>
 	)
 }
