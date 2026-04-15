@@ -192,7 +192,7 @@
 	--font-mono: "JetBrains Mono Variable", "JetBrains Mono", monospace;
 	--font-heading: var(--font-sans);
 
-	/* Shadow scale: none for brutalist flat */
+	/* Shadow scale: none for flat design */
 	--shadow-xs: none;
 	--shadow-sm: none;
 	--shadow: none;
@@ -295,8 +295,8 @@
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-ring: var(--sidebar-ring);
 
-	/* Radius — standard shadcn */
-	--radius: 0rem;
+	/* Radius */
+	--radius: 0.5rem;
 }
 
 @layer base {
