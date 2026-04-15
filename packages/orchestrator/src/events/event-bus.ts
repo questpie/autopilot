@@ -8,8 +8,6 @@ export type AutopilotEvent =
 	| { type: 'worker_offline'; workerId: string }
 	| { type: 'task_relation_created'; sourceTaskId: string; targetTaskId: string; relationType: string }
 	| { type: 'settings_changed' }
-	| { type: 'items_changed'; paths: string[] }
-	| { type: 'types_changed'; typeIds: string[] }
 
 export class EventBus {
 	private listeners = new Set<(event: AutopilotEvent) => void>()

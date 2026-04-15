@@ -237,8 +237,6 @@ export type AutopilotEvent =
   | { type: 'worker_registered'; workerId: string }
   | { type: 'worker_offline'; workerId: string }
   | { type: 'task_relation_created'; sourceTaskId: string; targetTaskId: string; relationType: string }
-  | { type: 'items_changed'; paths: string[] }
-  | { type: 'types_changed'; typeIds: string[] }
   | { type: 'settings_changed' }
   | { type: 'heartbeat'; ts: string }
 

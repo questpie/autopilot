@@ -1,10 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { chatSessionKeys } from './use-chat-sessions'
-import { itemKeys } from './use-items'
 import { queryKeys } from './use-queries'
 import { taskKeys } from './use-tasks'
-import { typeKeys } from './use-types'
 import type { AutopilotEvent } from '@/api/types'
 
 /**
@@ -63,14 +61,6 @@ export function useAutoEvents() {
           void queryClient.invalidateQueries({ queryKey: ['workers'] })
           break
 
-        case 'items_changed':
-          void queryClient.invalidateQueries({ queryKey: itemKeys.all })
-          break
-
-        case 'types_changed':
-          void queryClient.invalidateQueries({ queryKey: typeKeys.all })
-          break
-
         case 'settings_changed':
           void queryClient.invalidateQueries({ queryKey: ['agents'] })
           void queryClient.invalidateQueries({ queryKey: ['workflows'] })
@@ -84,7 +74,7 @@ export function useAutoEvents() {
       // Chat session invalidation is handled inside the switch above (run_started,
       // run_completed) — NOT here as a catch-all. A blanket invalidation on every
       // SSE event caused an infinite request loop because high-frequency events
-      // (task_changed, worker_*, items_changed, …) continuously restarted the
+      // (task_changed, worker_*, …) continuously restarted the
       // chat-sessions fetch before it could settle.
     }
 

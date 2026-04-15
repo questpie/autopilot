@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { ChatCircle, GearSix, Plus } from '@phosphor-icons/react'
+import { ChatCircle, GearSix, GitBranch, Plugs, Plus, Robot, Terminal, Wrench } from '@phosphor-icons/react'
+import type { Icon } from '@phosphor-icons/react'
 import { SquareBuildLogo } from '@/components/brand'
 import { fileIcon } from '@/lib/file-icons'
 import { useChatSessions } from '@/hooks/use-chat-sessions'
@@ -134,13 +135,13 @@ function TasksSidebar() {
 
 // ── Files sidebar ────────────────────────────────────────────
 
-const CONFIG_ITEMS = [
-	{ label: 'agents', path: '.autopilot/agents' },
-	{ label: 'workflows', path: '.autopilot/workflows' },
-	{ label: 'providers', path: '.autopilot/providers' },
-	{ label: 'capabilities', path: '.autopilot/capabilities' },
-	{ label: 'scripts', path: '.autopilot/scripts' },
-] as const
+const CONFIG_ITEMS: ReadonlyArray<{ label: string; path: string; icon: Icon }> = [
+	{ label: 'agents', path: '.autopilot/agents', icon: Robot },
+	{ label: 'workflows', path: '.autopilot/workflows', icon: GitBranch },
+	{ label: 'providers', path: '.autopilot/providers', icon: Plugs },
+	{ label: 'capabilities', path: '.autopilot/capabilities', icon: Wrench },
+	{ label: 'scripts', path: '.autopilot/scripts', icon: Terminal },
+]
 
 function FilesSidebar() {
 	const search = useSearch({ strict: false }) as { path?: string; view?: string }
@@ -168,7 +169,8 @@ function FilesSidebar() {
 									isActive={rawPath.startsWith(item.path)}
 									className="font-mono text-xs"
 								>
-									<span>{item.label}</span>
+									<item.icon size={14} className="shrink-0 text-muted-foreground" />
+								<span>{item.label}</span>
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 						))}

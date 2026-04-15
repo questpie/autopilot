@@ -23,8 +23,6 @@ import { env } from '../env'
 import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, AuthoredConfig, VfsService, ScriptService } from '../services'
 import type { Client } from '@libsql/client'
 import type { Actor } from '../auth/types'
-import type { TypeRegistry } from '../items/type-registry'
-import type { ItemIndexer } from '../items/item-indexer'
 import { authMiddleware, isLocalhostRequest, resolveActor as resolveActorFn } from './middleware/auth'
 import { workerAuthMiddleware } from './middleware/worker-auth'
 import { createMiddleware } from 'hono/factory'
@@ -46,8 +44,6 @@ import { scripts } from './routes/scripts'
 import { queues } from './routes/queues'
 import { searchRoute } from './routes/search'
 import { vfs } from './routes/vfs'
-import { items } from './routes/items'
-import { types } from './routes/types'
 import { invites } from './routes/invites'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -85,8 +81,6 @@ export interface AppEnv {
 		orchestratorUrl: string | undefined
 		/** Raw libSQL client for index.db (search). */
 		indexDbRaw: Client | null
-		/** TypeRegistry for the rendering system. */
-		typeRegistry: TypeRegistry | null
 	}
 }
 
@@ -114,10 +108,6 @@ export interface AppConfig {
 	operatorWebDist?: string
 	/** ConfigManager for hot reload status reporting. */
 	configManager?: import('../config/config-manager').ConfigManager
-	/** TypeRegistry for the rendering system. */
-	typeRegistry?: TypeRegistry
-	/** ItemIndexer for filesystem item indexing. */
-	itemIndexer?: ItemIndexer
 }
 
 const orchestratorPkg = JSON.parse(
@@ -177,7 +167,6 @@ export function createApp(config: AppConfig) {
 		c.set('authoredConfig', config.authoredConfig)
 		c.set('orchestratorUrl', config.orchestratorUrl)
 		c.set('indexDbRaw', config.indexDbRaw ?? null)
-		c.set('typeRegistry', config.typeRegistry ?? null)
 		c.set('actor', null)
 		c.set('workerId', null)
 		await next()
@@ -314,19 +303,6 @@ export function createApp(config: AppConfig) {
 	app.use('/api/scripts/*', userAuth)
 	app.use('/api/scripts', userAuth)
 
-	// ── Items & Types routes (user auth — rendering system) ─────────────
-	app.use('/api/items/*', userAuth)
-	app.use('/api/items', userAuth)
-	app.use('/api/types/*', userAuth)
-	app.use('/api/types', userAuth)
-
-	// ── Items rebuild — inline because only this endpoint needs itemIndexer ──
-	app.post('/api/items/rebuild', async (c) => {
-		if (!config.itemIndexer) return c.json({ error: 'indexer not available' }, 503)
-		void config.itemIndexer.fullRebuild()
-		return c.json({ status: 'rebuild_started' }, 202)
-	})
-
 	// ── Invite routes (GET/POST/DELETE require user auth; GET /validate and POST /accept are public) ──
 	app.use('/api/invites', userAuth)
 	app.use('/api/invites/:id', userAuth)
@@ -363,8 +339,6 @@ export function createApp(config: AppConfig) {
 		.route('/api/search', searchRoute)
 		.route('/api/vfs', vfs)
 		.route('/api/scripts', scripts)
-		.route('/api/items', items)
-		.route('/api/types', types)
 		.route('/api/invites', invites)
 
 	// ── Operator Web SPA serving ────────────────────────────────────────────

@@ -11,9 +11,7 @@
  * 8. Bun.serve on port 7778
  */
 import { existsSync } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { parse as parseYaml } from 'yaml'
 import dotenv from 'dotenv'
 import { createApp } from './api'
 import type { Services } from './api/app'
@@ -50,33 +48,6 @@ import type { AuthoredConfig } from './services'
 import { NotificationBridge, QueryResponseBridge, TaskProgressBridge } from './providers'
 import { eventBus } from './events/event-bus'
 import { hasMasterKey, MasterKeyError } from './crypto'
-import { TypeRegistry } from './items/type-registry'
-import { ItemIndexer } from './items/item-indexer'
-import { resolveType, BUILTIN_EXTENSION_MAP } from './items/type-resolver'
-import { TypeDefinitionSchema, PATHS } from '@questpie/autopilot-spec'
-
-// ── Helper: load user-defined types from .autopilot/types/ ──────────────────
-
-async function loadUserTypes(root: string, registry: TypeRegistry): Promise<void> {
-	const typesDir = join(root, PATHS.TYPES_DIR)
-	let files: string[]
-	try {
-		files = await readdir(typesDir)
-	} catch {
-		return // directory doesn't exist yet — that's fine
-	}
-	for (const f of files) {
-		if (!f.endsWith('.yaml') && !f.endsWith('.yml')) continue
-		try {
-			const raw = await readFile(join(typesDir, f), 'utf-8')
-			const parsed = TypeDefinitionSchema.parse(parseYaml(raw))
-			registry.register(parsed)
-		} catch (err) {
-			console.warn(`[server] failed to load type from ${f}:`, err instanceof Error ? err.message : String(err))
-		}
-	}
-}
-
 export interface StartServerOptions {
 	/** Absolute path to start scope discovery from. Defaults to first CLI arg or cwd. */
 	companyRoot?: string
@@ -120,36 +91,6 @@ export async function startServer(options?: StartServerOptions) {
 	const { db: companyDb } = await createCompanyDb(companyRoot)
 	const { db: indexDb, raw: indexDbRaw } = await createIndexDb(companyRoot)
 	console.log('[server] databases initialized')
-
-	// ── 3b. Create TypeRegistry and seed built-in types ─────────────────
-	const typeRegistry = new TypeRegistry()
-	const extensionsByType = new Map<string, string[]>()
-	for (const [ext, id] of Object.entries(BUILTIN_EXTENSION_MAP)) {
-		const exts = extensionsByType.get(id) ?? []
-		exts.push(ext)
-		extensionsByType.set(id, exts)
-	}
-	for (const [id, extensions] of extensionsByType) {
-		typeRegistry.register({
-			id,
-			name: id.charAt(0).toUpperCase() + id.slice(1).replace(/-/g, ' '),
-			category: 'file',
-			match: { extensions },
-			source: { file: '__builtin__', priority: -1 },
-		})
-	}
-
-	// Load user-defined types from .autopilot/types/
-	await loadUserTypes(companyRoot, typeRegistry)
-	console.log(`[server] type registry: ${typeRegistry.all().length} types loaded`)
-
-	// ── 3c. Create ItemIndexer ────────────────────────────────────────────
-	const itemIndexer = new ItemIndexer({
-		companyRoot,
-		indexDb: indexDbRaw,
-		eventBus,
-		resolveType: (input) => resolveType(input, typeRegistry),
-	})
 
 	// ── 4. Build resolved config (company + project merge) ───────────────
 	const resolved = await resolveConfig(chain)
@@ -343,11 +284,6 @@ export async function startServer(options?: StartServerOptions) {
 		)
 	})
 
-	// ── 7e. Start item indexer (filesystem rendering index) ───────────
-	itemIndexer.start().catch((err) => {
-		console.error('[server] item-indexer startup error:', err instanceof Error ? err.message : String(err))
-	})
-
 	// ── 8. Config hot reload manager ────────────────────────────────────
 	const configManager = new ConfigManager(authoredConfig, {
 		companyRoot,
@@ -357,16 +293,6 @@ export async function startServer(options?: StartServerOptions) {
 			for (const issue of issues) {
 				console.warn(`[config] post-reload warning: ${issue}`)
 			}
-
-			// Unregister non-builtin types, then reload from disk
-			const userTypeIds = typeRegistry.all()
-				.filter((t) => t.source?.file !== '__builtin__')
-				.map((t) => t.id)
-			for (const id of userTypeIds) {
-				typeRegistry.unregister(id)
-			}
-			await loadUserTypes(companyRoot, typeRegistry)
-			eventBus.emit({ type: 'types_changed', typeIds: typeRegistry.all().map((t) => t.id) })
 		},
 	})
 
@@ -392,8 +318,6 @@ export async function startServer(options?: StartServerOptions) {
 		indexDbRaw,
 		operatorWebDist: resolve(import.meta.dir, '..', '..', '..', 'apps', 'operator-web', 'dist'),
 		configManager,
-		typeRegistry,
-		itemIndexer,
 	})
 
 	// ── 9. Start HTTP server ─────────────────────────────────────────────
@@ -489,7 +413,6 @@ export async function startServer(options?: StartServerOptions) {
 	const stop = () => {
 		schedulerDaemon.stop()
 		indexer.stop()
-		itemIndexer.stop()
 		notificationBridge.stop()
 		queryResponseBridge.stop()
 		taskProgressBridge.stop()
