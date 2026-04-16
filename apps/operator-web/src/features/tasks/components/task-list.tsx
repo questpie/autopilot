@@ -1,6 +1,16 @@
 import { useMemo, useState } from 'react'
-import { CaretRight, ChatCircle, Timer, Lightning } from '@phosphor-icons/react'
+import { CaretRight, ChatCircle, Timer, Lightning, Faders } from '@phosphor-icons/react'
 import { FilterTabs } from '@/components/ui/filter-tabs'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu'
 import { Spinner } from '@/components/ui/spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from '@/lib/utils'
@@ -18,28 +28,42 @@ const FILTER_LABELS: Record<TaskFilter, string> = {
   failed: 'Failed',
 }
 
-/** Display order for status groups — active first, terminal last. */
-const STATUS_GROUP_ORDER: string[] = [
-  'active',
-  'blocked',
-  'backlog',
-  'done',
-  'failed',
-]
+type GroupBy = 'status' | 'priority' | 'type' | 'none'
 
-function statusGroupLabel(status: string): string {
-  switch (status) {
-    case 'active': return 'Active'
-    case 'blocked': return 'Blocked'
-    case 'backlog': return 'Backlog'
-    case 'done': return 'Done'
-    case 'failed': return 'Failed'
-    default: return status
-  }
+const GROUP_ORDER: Record<GroupBy, string[]> = {
+  status: ['active', 'blocked', 'backlog', 'done', 'failed'],
+  priority: ['high', 'medium', 'low', 'none'],
+  type: ['query', 'scheduled', 'task'],
+  none: [],
+}
+
+const GROUP_LABELS: Record<string, string> = {
+  active: 'Active',
+  blocked: 'Blocked',
+  backlog: 'Backlog',
+  done: 'Done',
+  failed: 'Failed',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+  none: 'No priority',
+  query: 'Query',
+  scheduled: 'Scheduled',
+  task: 'Task',
+}
+
+interface DisplayProps {
+  showSubTasks: boolean
+  nestSubIssues: boolean
+  id: boolean
+  type: boolean
+  assignee: boolean
+  updated: boolean
 }
 
 interface TaskListProps {
   tasks: Task[]
+  childToParent: Map<string, string>
   filter: TaskFilter
   onFilterChange: (filter: TaskFilter) => void
   onSelect: (id: string) => void
@@ -123,14 +147,14 @@ function TaskTypeBadge({ type }: { type: string }) {
   const config = TASK_TYPE_CONFIG[type]
   if (!config) {
     return (
-      <span className="inline-flex items-center gap-1 bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1 bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
         {type}
       </span>
     )
   }
   const Icon = config.icon
   return (
-    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 font-mono text-[10px]', config.className)}>
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px]', config.className)}>
       <Icon size={10} weight="bold" />
       {config.label}
     </span>
@@ -176,27 +200,85 @@ function PriorityIcon({ priority }: { priority: string }) {
   }
 }
 
-export function TaskList({ tasks, filter, onFilterChange, onSelect, isLoading }: TaskListProps) {
+function TaskRow({ task, depth, display, onSelect }: { task: Task; depth: number; display: DisplayProps; onSelect: (id: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(task.id)}
+      className="group flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted"
+    >
+      {depth > 0 && <div style={{ width: depth * 16 }} />}
+      <PriorityIcon priority={task.priority} />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {display.id && <span className="font-mono text-[11px] text-muted-foreground shrink-0">{shortId(task.id)}</span>}
+        <SmartText text={task.title} className="truncate text-[13px] text-foreground" />
+      </div>
+      {display.type && <TaskTypeBadge type={task.type} />}
+      {display.assignee && <span className="w-24 truncate text-right font-mono text-[11px] text-muted-foreground">{task.assigned_to ?? '—'}</span>}
+      {display.updated && <span className="w-12 text-right font-mono text-[11px] text-muted-foreground tabular-nums">{formatRelativeTime(task.updated_at)}</span>}
+    </button>
+  )
+}
+
+export function TaskList({ tasks, childToParent, filter, onFilterChange, onSelect, isLoading }: TaskListProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [groupBy, setGroupBy] = useState<GroupBy>('status')
+  const [display, setDisplay] = useState<DisplayProps>({ showSubTasks: true, nestSubIssues: false, id: true, type: true, assignee: true, updated: true })
+
+  function toggleDisplay(key: keyof DisplayProps) {
+    setDisplay((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  // Filter out sub-tasks when showSubTasks is off
+  const visibleTasks = useMemo(() => {
+    if (display.showSubTasks) return tasks
+    return tasks.filter((t) => !childToParent.has(t.id))
+  }, [tasks, childToParent, display.showSubTasks])
+
+  // Build parent→children map for nesting
+  const parentToChildren = useMemo(() => {
+    if (!display.nestSubIssues || !display.showSubTasks) return new Map<string, string[]>()
+    const map = new Map<string, string[]>()
+    for (const [childId, parentId] of childToParent) {
+      const list = map.get(parentId) ?? []
+      list.push(childId)
+      map.set(parentId, list)
+    }
+    return map
+  }, [childToParent, display.nestSubIssues, display.showSubTasks])
 
   const groups = useMemo(() => {
-    const byStatus = new Map<string, Task[]>()
-    for (const task of tasks) {
-      const key = task.status
-      const list = byStatus.get(key) ?? []
-      list.push(task)
-      byStatus.set(key, list)
+    // When nesting, only include root-level tasks in groups — children render inline
+    const groupTasks = display.nestSubIssues && display.showSubTasks
+      ? visibleTasks.filter((t) => !childToParent.has(t.id))
+      : visibleTasks
+    if (groupBy === 'none') {
+      return [{ key: '__all__', label: 'All tasks', tasks: groupTasks }]
     }
-    return STATUS_GROUP_ORDER
-      .filter((s) => byStatus.has(s))
-      .map((s) => ({ status: s, label: statusGroupLabel(s), tasks: byStatus.get(s)! }))
+    const byKey = new Map<string, Task[]>()
+    for (const task of groupTasks) {
+      const key = task[groupBy]
+      const list = byKey.get(key) ?? []
+      list.push(task)
+      byKey.set(key, list)
+    }
+    return GROUP_ORDER[groupBy]
+      .filter((k) => byKey.has(k))
+      .map((k) => ({ key: k, label: GROUP_LABELS[k] ?? k, tasks: byKey.get(k)! }))
+  }, [visibleTasks, groupBy, childToParent, display.nestSubIssues, display.showSubTasks])
+
+  // Lookup for rendering nested children
+  const taskById = useMemo(() => {
+    const map = new Map<string, Task>()
+    for (const t of tasks) map.set(t.id, t)
+    return map
   }, [tasks])
 
-  function toggleGroup(status: string) {
+  function toggleGroup(key: string) {
     setCollapsedGroups((prev) => {
       const next = new Set(prev)
-      if (next.has(status)) next.delete(status)
-      else next.add(status)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }
@@ -204,18 +286,65 @@ export function TaskList({ tasks, filter, onFilterChange, onSelect, isLoading }:
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center gap-4 bg-muted/30 px-4 py-3 shrink-0">
-        <h1 className="font-mono text-xs font-semibold uppercase tracking-wider text-foreground">Tasks</h1>
+      <div className="flex items-center gap-4 px-4 py-3 shrink-0">
+        <h1 className="text-xs font-semibold uppercase tracking-wider text-foreground">Tasks</h1>
         <FilterTabs
           tabs={FILTER_TABS}
           active={filter}
           getLabel={(tab) => FILTER_LABELS[tab]}
           onChange={onFilterChange}
         />
-        {isLoading && <Spinner className="ml-auto text-muted-foreground" />}
+        <div className="flex-1" />
+        {isLoading && <Spinner className="text-muted-foreground" />}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<Button size="icon-xs" variant="ghost" title="Display settings" />}
+          >
+            <Faders size={14} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <p className="px-1.5 py-1 text-xs font-medium text-muted-foreground">Grouping</p>
+            <DropdownMenuRadioGroup
+              value={groupBy}
+              onValueChange={(v) => {
+                setGroupBy(v as GroupBy)
+                setCollapsedGroups(new Set())
+              }}
+            >
+              <DropdownMenuRadioItem value="status">Status</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="priority">Priority</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="type">Type</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="none">No grouping</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <p className="px-1.5 py-1 text-xs font-medium text-muted-foreground">Sub-tasks</p>
+            <DropdownMenuCheckboxItem checked={display.showSubTasks} onCheckedChange={() => toggleDisplay('showSubTasks')}>
+              Show sub-tasks
+            </DropdownMenuCheckboxItem>
+            {display.showSubTasks && (
+              <DropdownMenuCheckboxItem checked={display.nestSubIssues} onCheckedChange={() => toggleDisplay('nestSubIssues')}>
+                Nested sub-issues
+              </DropdownMenuCheckboxItem>
+            )}
+            <DropdownMenuSeparator />
+            <p className="px-1.5 py-1 text-xs font-medium text-muted-foreground">Display properties</p>
+            <DropdownMenuCheckboxItem checked={display.id} onCheckedChange={() => toggleDisplay('id')}>
+              ID
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={display.type} onCheckedChange={() => toggleDisplay('type')}>
+              Type
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={display.assignee} onCheckedChange={() => toggleDisplay('assignee')}>
+              Assignee
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={display.updated} onCheckedChange={() => toggleDisplay('updated')}>
+              Updated
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      {/* Rows — grouped by status */}
+      {/* Rows — grouped */}
       <div className="flex-1 overflow-y-auto">
         {!isLoading && tasks.length === 0 && (
           <EmptyState
@@ -226,50 +355,47 @@ export function TaskList({ tasks, filter, onFilterChange, onSelect, isLoading }:
           />
         )}
         {groups.map((group) => {
-          const isCollapsed = collapsedGroups.has(group.status)
+          const isCollapsed = collapsedGroups.has(group.key)
           return (
-            <div key={group.status}>
+            <div key={group.key}>
               {/* Group header */}
-              <button
-                type="button"
-                onClick={() => toggleGroup(group.status)}
-                className="sticky top-0 z-10 flex w-full items-center gap-2 bg-muted/40 px-4 py-1.5"
-              >
-                <CaretRight
-                  size={10}
-                  weight="bold"
-                  className={cn(
-                    'shrink-0 text-muted-foreground transition-transform duration-150',
-                    !isCollapsed && 'rotate-90',
-                  )}
-                />
-                <StatusIcon status={group.status} />
-                <span className="font-mono text-[11px] font-medium text-muted-foreground">
-                  {group.label}
-                </span>
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  {group.tasks.length}
-                </span>
-              </button>
-              {/* Group rows */}
-              {!isCollapsed && group.tasks.map((task) => (
+              {groupBy !== 'none' && (
                 <button
-                  key={task.id}
                   type="button"
-                  onClick={() => onSelect(task.id)}
-                  className="group flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted"
+                  onClick={() => toggleGroup(group.key)}
+                  className="sticky top-0 z-10 flex w-full items-center gap-2 bg-background px-4 py-1.5"
                 >
-                  <div className="w-4" /> {/* indent to align with group header icon */}
-                  <PriorityIcon priority={task.priority} />
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="font-mono text-[11px] text-muted-foreground shrink-0">{shortId(task.id)}</span>
-                    <SmartText text={task.title} className="truncate text-[13px] text-foreground" />
-                  </div>
-                  <TaskTypeBadge type={task.type} />
-                  <span className="w-24 truncate text-right font-mono text-[11px] text-muted-foreground">{task.assigned_to ?? '—'}</span>
-                  <span className="w-12 text-right font-mono text-[11px] text-muted-foreground tabular-nums">{formatRelativeTime(task.updated_at)}</span>
+                  <CaretRight
+                    size={10}
+                    weight="bold"
+                    className={cn(
+                      'shrink-0 text-muted-foreground transition-transform duration-150',
+                      !isCollapsed && 'rotate-90',
+                    )}
+                  />
+                  {groupBy === 'status' && <StatusIcon status={group.key} />}
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    {group.label}
+                  </span>
+                  <span className="text-[11px] tabular-nums text-muted-foreground">
+                    {group.tasks.length}
+                  </span>
                 </button>
-              ))}
+              )}
+              {/* Group rows */}
+              {!isCollapsed && group.tasks.map((task) => {
+                const children = parentToChildren.get(task.id)
+                return (
+                  <div key={task.id}>
+                    <TaskRow task={task} depth={groupBy !== 'none' ? 1 : 0} display={display} onSelect={onSelect} />
+                    {children?.map((childId) => {
+                      const child = taskById.get(childId)
+                      if (!child) return null
+                      return <TaskRow key={childId} task={child} depth={groupBy !== 'none' ? 2 : 1} display={display} onSelect={onSelect} />
+                    })}
+                  </div>
+                )
+              })}
             </div>
           )
         })}

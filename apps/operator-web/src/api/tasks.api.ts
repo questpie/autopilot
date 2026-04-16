@@ -1,4 +1,4 @@
-import type { Task, TaskWithRelations, Artifact, ActivityEntry, AdvanceResult } from './types'
+import type { Task, TaskWithRelations, TaskRelation, Artifact, ActivityEntry, AdvanceResult } from './types'
 import { api, configFetch } from '@/lib/api'
 import { getRuns } from './runs.api'
 
@@ -10,6 +10,11 @@ export async function getTasks(filters?: { status?: string; assigned_to?: string
   const res = await api.api.tasks.$get({ query })
   if (!res.ok) throw new Error(`Failed to list tasks: ${res.status}`)
   return res.json() as Promise<Task[]>
+}
+
+export async function getTaskRelations(relationType?: string): Promise<TaskRelation[]> {
+  const query = relationType ? `?relation_type=${encodeURIComponent(relationType)}` : ''
+  return configFetch<TaskRelation[]>(`/api/tasks/relations${query}`)
 }
 
 export async function getTaskDetail(id: string): Promise<TaskWithRelations | null> {

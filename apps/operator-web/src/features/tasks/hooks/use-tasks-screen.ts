@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from '@tanstack/react-router'
-import { useTasks, useTaskDetail } from '@/hooks/use-tasks'
+import { useTasks, useTaskRelations, useTaskDetail } from '@/hooks/use-tasks'
 
 export type TaskFilter = 'all' | 'active' | 'backlog' | 'done' | 'failed'
 
@@ -19,6 +19,7 @@ export function useTasksScreen() {
   const navigate = useNavigate()
 
   const tasksQuery = useTasks()
+  const relationsQuery = useTaskRelations()
   const detailQuery = useTaskDetail(selectedTaskId ?? null)
 
   function setFilter(next: TaskFilter) {
@@ -33,8 +34,15 @@ export function useTasksScreen() {
   const statuses = FILTER_STATUSES[filter]
   const tasks = statuses ? allTasks.filter((t) => statuses.includes(t.status)) : allTasks
 
+  // Build parent lookup: childId → parentId
+  const childToParent = new Map<string, string>()
+  for (const rel of relationsQuery.data ?? []) {
+    childToParent.set(rel.target_task_id, rel.source_task_id)
+  }
+
   return {
     tasks,
+    childToParent,
     isLoading: tasksQuery.isLoading,
     filter: filter ?? 'all',
     setFilter,
