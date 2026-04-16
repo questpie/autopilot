@@ -14,29 +14,20 @@ import { SectionHeader } from '@/components/ui/section-header'
  */
 
 interface DetailSectionProps {
-  title?: React.ReactNode
-  action?: React.ReactNode
-  last?: boolean
-  className?: string
-  children: React.ReactNode
+	title?: React.ReactNode
+	action?: React.ReactNode
+	last?: boolean
+	className?: string
+	children: React.ReactNode
 }
 
 function DetailSection({ title, action, last, className, children }: DetailSectionProps) {
-  return (
-    <div
-      data-slot="detail-section"
-      className={cn(
-        'px-5 py-4',
-        !last && 'mb-1',
-        className,
-      )}
-    >
-      {title != null && (
-        <SectionHeader action={action}>{title}</SectionHeader>
-      )}
-      {children}
-    </div>
-  )
+	return (
+		<div data-slot="detail-section" className={cn('px-5 py-4', !last && 'mb-1', className)}>
+			{title != null && <SectionHeader action={action}>{title}</SectionHeader>}
+			{children}
+		</div>
+	)
 }
 
 export { DetailSection }

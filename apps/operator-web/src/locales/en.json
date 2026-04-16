@@ -4,20 +4,9 @@
 		"version": "v2"
 	},
 	"nav": {
-		"home": "Home",
 		"chat": "Chat",
 		"tasks": "Tasks",
-		"workflows": "Workflows",
-		"automations": "Automations",
-		"results": "Results",
-		"workspace": "Workspace",
 		"files": "Files",
-		"company": "Company",
-		"integrations": "Integrations",
-		"technical": "Technical",
-		"scripts": "Scripts",
-		"agents": "Agents",
-		"runtime": "Runtime",
 		"settings": "Settings"
 	},
 	"sections": {
@@ -421,50 +410,6 @@
 		"task_status_failed": "Failed",
 		"conversation_type_task": "Task",
 		"conversation_type_discussion": "Discussion"
-	},
-	"dashboard": {
-		"title": "Dashboard",
-		"welcome": "Welcome to QUESTPIE Autopilot",
-		"quick_actions": "Quick actions",
-		"recent_activity": "Recent activity",
-		"active_tasks": "Active tasks",
-		"no_activity": "No recent activity",
-		"no_activity_description": "Activity will appear here as your team works",
-		"needs_attention": "Needs your attention",
-		"all_clear": "All clear",
-		"all_clear_description": "Your agents are handling it.",
-		"agents_title": "Agents",
-		"agents_count": "agents",
-		"agents_empty": "No agents configured",
-		"agents_empty_description": "Add agents in team/agents.yaml to get started.",
-		"agent_working": "Working...",
-		"agent_idle": "Idle",
-		"attach": "Attach",
-		"pinned": "Pinned",
-		"no_pins": "All quiet",
-		"no_pins_description": "Your agents haven't pinned anything yet.",
-		"open_artifact": "Open Artifact",
-		"view_all": "View all",
-		"quick_ask_placeholder": "Ask your team something...",
-		"ask": "Ask",
-		"intent_submitted": "Intent submitted. CEO is working on it.",
-		"widget_error": "Widget \"{{name}}\" failed to load"
-	},
-	"inbox": {
-		"title": "Inbox",
-		"no_items": "Inbox zero",
-		"no_items_description": "Nothing needs your attention.",
-		"mark_read": "Mark as read",
-		"mark_all_read": "Mark all as read",
-		"item_count_one": "{{count}} item",
-		"item_count_other": "{{count}} items",
-		"approve": "Approve",
-		"reject": "Reject",
-		"task_approved": "Task approved",
-		"task_rejected": "Task rejected",
-		"filter_all": "All",
-		"resolved": "Resolved",
-		"no_resolved": "No resolved items yet"
 	},
 	"settings": {
 		"title": "Settings",
@@ -1011,16 +956,6 @@
 	"time": {
 		"today": "Today",
 		"yesterday": "Yesterday"
-	},
-	"home": {
-		"greeting": "Good morning, {{name}}",
-		"attention_count_one": "{{count}} thing waiting for your input",
-		"attention_count_other": "{{count}} things waiting for your input",
-		"waiting_for_you": "Waiting for you",
-		"working_on": "Currently working on",
-		"recently_done": "Recently done",
-		"input_placeholder": "Write what you need, or ask anything...",
-		"new_task": "New task"
 	},
 	"automations": {
 		"title": "Automations",

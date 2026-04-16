@@ -4,6 +4,8 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "shadcn/tailwind.css";
 @plugin "@tailwindcss/typography";
+@import "shadcn/tailwind.css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -185,6 +187,7 @@
 	--sidebar-ring: var(--ring);
 }
 
+/* ── Tailwind v4 @theme inline ── */
 /* ── Tailwind v4 @theme inline ── */
 @theme inline {
 	/* Fonts */
@@ -406,6 +409,7 @@ body::before {
 }
 
 /* New item flash animation */
+/* New item flash animation */
 @keyframes new-item-flash {
 	0% {
 		background-color: var(--primary-surface);
@@ -419,6 +423,7 @@ body::before {
 	animation: new-item-flash 1s ease-out;
 }
 
+/* Agent working pulse ring */
 /* Agent working pulse ring */
 @keyframes status-pulse {
 	0%,
@@ -448,6 +453,7 @@ body::before {
 	animation: connected-flash 2s ease-out;
 }
 
+/* Reply highlight flash */
 /* Reply highlight flash */
 @keyframes reply-flash {
 	0% {
@@ -507,6 +513,7 @@ body::before {
 	animation: check-scale-in 150ms ease-out;
 }
 
+/* Auth grid drift */
 /* Auth grid drift */
 @keyframes auth-grid-drift {
 	from {

@@ -3,31 +3,10 @@
 		"name": "QUESTPIE Autopilot"
 	},
 	"nav": {
-		"home": "Domov",
 		"chat": "Konverzácia",
 		"tasks": "Úlohy",
-		"workflows": "Pracovné toky",
-		"automations": "Automatizácie",
-		"results": "Výsledky",
-		"workspace": "Pracovný priestor",
 		"files": "Súbory",
-		"company": "Firma",
-		"integrations": "Prepojenia",
-		"technical": "Technické",
-		"scripts": "Skripty",
-		"agents": "Agenti",
-		"runtime": "Runtime",
 		"settings": "Nastavenia"
-	},
-	"home": {
-		"greeting": "Dobré ráno, {{name}}",
-		"attention_count_one": "{{count}} vec čaká na tvoj vstup",
-		"attention_count_other": "{{count}} veci čakajú na tvoj vstup",
-		"waiting_for_you": "Čaká na teba",
-		"working_on": "Teraz pracujem na",
-		"recently_done": "Nedávno dokončené",
-		"input_placeholder": "Napíš čo potrebuješ, alebo sa opýtaj čokoľvek...",
-		"new_task": "Nová úloha"
 	},
 	"tasks": {
 		"title": "Úlohy",

@@ -1,9 +1,7 @@
 import { Button as ButtonPrimitive } from '@base-ui/react/button'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { m, AnimatePresence } from 'framer-motion'
 
 import { cn } from '@/lib/utils'
-import { Spinner } from '@/components/ui/spinner'
 
 const buttonVariants = cva(
 	"group/button font-heading inline-flex shrink-0 items-center justify-center rounded-none bg-clip-padding text-xs font-medium whitespace-nowrap transition-all duration-150 ease-out outline-none select-none touch-target focus-visible:ring-1 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:ring-1 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -42,20 +40,15 @@ const buttonVariants = cva(
 	},
 )
 
-interface ButtonProps extends ButtonPrimitive.Props, VariantProps<typeof buttonVariants> {
-	/** Show a spinner and disable the button */
-	loading?: boolean
-}
-
 function Button({
 	className,
 	variant = 'default',
 	size = 'default',
-	loading = false,
-	disabled,
+	loading,
 	children,
+	disabled,
 	...props
-}: ButtonProps) {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { loading?: boolean }) {
 	return (
 		<ButtonPrimitive
 			data-slot="button"
@@ -63,32 +56,24 @@ function Button({
 			disabled={disabled || loading}
 			{...props}
 		>
-			<AnimatePresence mode="wait" initial={false}>
-				{loading ? (
-					<m.span
-						key="loading"
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						exit={{ opacity: 0 }}
-						transition={{ duration: 0.15 }}
-						className="inline-flex items-center gap-2"
-					>
-						<Spinner size={size === 'xs' || size === 'sm' ? 'sm' : 'default'} />
-						{children}
-					</m.span>
-				) : (
-					<m.span
-						key="content"
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						exit={{ opacity: 0 }}
-						transition={{ duration: 0.15 }}
-						className="inline-flex items-center gap-1.5"
-					>
-						{children}
-					</m.span>
-				)}
-			</AnimatePresence>
+			{loading ? (
+				<svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none">
+					<circle
+						className="opacity-25"
+						cx="12"
+						cy="12"
+						r="10"
+						stroke="currentColor"
+						strokeWidth="4"
+					/>
+					<path
+						className="opacity-75"
+						fill="currentColor"
+						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+					/>
+				</svg>
+			) : null}
+			{children}
 		</ButtonPrimitive>
 	)
 }
