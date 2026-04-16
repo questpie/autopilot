@@ -7,6 +7,7 @@ export function TasksScreen() {
   useSetLayoutMode('immersive')
   const {
     tasks,
+    childToParent,
     isLoading,
     filter,
     setFilter,
@@ -30,6 +31,7 @@ export function TasksScreen() {
   return (
     <TaskList
       tasks={tasks}
+      childToParent={childToParent}
       filter={filter}
       onFilterChange={setFilter}
       onSelect={selectTask}

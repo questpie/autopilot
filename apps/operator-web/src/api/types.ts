@@ -346,6 +346,19 @@ export interface AdvanceResult {
   actions: string[]
 }
 
+// ── Task Relations ──
+export interface TaskRelation {
+  id: string
+  source_task_id: string
+  target_task_id: string
+  relation_type: string
+  dedupe_key: string | null
+  origin_run_id: string | null
+  created_by: string
+  created_at: string
+  metadata: string
+}
+
 // ── View Models (derived for UI, NOT in backend) ──
 
 export interface TaskWithRelations extends Task {

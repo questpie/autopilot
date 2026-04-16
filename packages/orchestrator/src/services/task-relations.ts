@@ -79,6 +79,17 @@ export class TaskRelationService {
 			.all()
 	}
 
+	async listAll(relationType?: string): Promise<TaskRelationRow[]> {
+		if (relationType) {
+			return this.db
+				.select()
+				.from(taskRelations)
+				.where(eq(taskRelations.relation_type, relationType))
+				.all()
+		}
+		return this.db.select().from(taskRelations).all()
+	}
+
 	async listByTarget(targetTaskId: string, relationType?: string): Promise<TaskRelationRow[]> {
 		const conditions = [eq(taskRelations.target_task_id, targetTaskId)]
 		if (relationType) conditions.push(eq(taskRelations.relation_type, relationType))

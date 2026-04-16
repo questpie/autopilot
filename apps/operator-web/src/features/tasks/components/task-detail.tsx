@@ -43,14 +43,14 @@ function TaskTypeBadge({ type }: { type: string }) {
   const config = TASK_TYPE_CONFIG[type]
   if (!config) {
     return (
-      <span className="inline-flex items-center gap-1 bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1 bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
         {type}
       </span>
     )
   }
   const Icon = config.icon
   return (
-    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 font-mono text-[10px]', config.className)}>
+    <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px]', config.className)}>
       <Icon size={10} weight="bold" />
       {config.label}
     </span>
@@ -86,7 +86,7 @@ function RelationChip({
         !onSelect && 'cursor-default',
       )}
     >
-      <span className="font-mono text-[10px] text-muted-foreground">{relation}</span>
+      <span className="text-[10px] text-muted-foreground">{relation}</span>
       <span className="truncate text-[12px] text-foreground max-w-[200px]">{task.title}</span>
     </button>
   )
@@ -167,11 +167,11 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
   if (isLoading && !detail) {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-center gap-3 bg-muted/30 px-4 py-3 shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 shrink-0">
           <Button size="icon-xs" variant="ghost" onClick={onBack} title="Back to tasks">
             <ArrowLeft size={14} weight="bold" />
           </Button>
-          <h2 className="font-mono text-xs font-medium text-foreground truncate flex-1">Loading…</h2>
+          <h2 className="text-xs font-medium text-foreground truncate flex-1">Loading…</h2>
         </div>
         <div className="flex flex-1 items-center justify-center">
           <Spinner size="lg" className="text-muted-foreground" />
@@ -183,11 +183,11 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
   if (!detail) {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-center gap-3 bg-muted/30 px-4 py-3 shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 shrink-0">
           <Button size="icon-xs" variant="ghost" onClick={onBack} title="Back to tasks">
             <ArrowLeft size={14} weight="bold" />
           </Button>
-          <h2 className="font-mono text-xs font-medium text-foreground truncate flex-1">Task not found</h2>
+          <h2 className="text-xs font-medium text-foreground truncate flex-1">Task not found</h2>
         </div>
         <div className="flex flex-1 items-center justify-center">
           <p className="text-sm text-muted-foreground">Task not found</p>
@@ -205,7 +205,7 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center gap-3 bg-muted/30 px-4 py-3 shrink-0">
+      <div className="flex items-center gap-3 px-4 py-3 shrink-0">
         <Button size="icon-xs" variant="ghost" onClick={onBack} title="Back to tasks">
           <ArrowLeft size={14} weight="bold" />
         </Button>
@@ -254,7 +254,7 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
       <Dialog open={actionDialog === 'approve'} onOpenChange={(open) => { if (!open) closeActionDialog() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-mono text-xs uppercase tracking-widest">Approve Step</DialogTitle>
+            <DialogTitle className="text-xs uppercase tracking-widest">Approve Step</DialogTitle>
           </DialogHeader>
           <p className="text-[13px] text-muted-foreground">
             Approve this workflow step? The workflow will advance to the next step.
@@ -272,7 +272,7 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
       <Dialog open={actionDialog === 'reject'} onOpenChange={(open) => { if (!open) closeActionDialog() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-mono text-xs uppercase tracking-widest">Reject Step</DialogTitle>
+            <DialogTitle className="text-xs uppercase tracking-widest">Reject Step</DialogTitle>
           </DialogHeader>
           <Textarea
             className="font-mono text-xs"
@@ -301,7 +301,7 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
       <Dialog open={actionDialog === 'reply'} onOpenChange={(open) => { if (!open) closeActionDialog() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-mono text-xs uppercase tracking-widest">Reply to Task</DialogTitle>
+            <DialogTitle className="text-xs uppercase tracking-widest">Reply to Task</DialogTitle>
           </DialogHeader>
           <Textarea
             className="font-mono text-xs"
@@ -330,7 +330,7 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
       <Dialog open={actionDialog === 'cancel'} onOpenChange={(open) => { if (!open) closeActionDialog() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-mono text-xs uppercase tracking-widest">Cancel Task</DialogTitle>
+            <DialogTitle className="text-xs uppercase tracking-widest">Cancel Task</DialogTitle>
           </DialogHeader>
           <Textarea
             className="font-mono text-xs"
@@ -373,7 +373,7 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
           {workflow && timelineEntries.length > 0 && (
             <>
               <div className="my-5" />
-              <p className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Workflow Progress</p>
+              <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Workflow Progress</p>
               <WorkflowTimeline entries={timelineEntries} />
             </>
           )}
@@ -392,7 +392,7 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
             return (
               <>
                 <div className="my-5" />
-                <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Cross-references
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -440,7 +440,7 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
           {!workflow && detail.runs.length > 0 && (
             <>
               <div className="my-5" />
-              <p className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Runs</p>
+              <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Runs</p>
               <div className="space-y-2">
                 {detail.runs.map((run) => {
                   const runArtifacts = (artifactsQuery.data ?? []).filter((a) => a.run_id === run.id)

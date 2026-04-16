@@ -17,6 +17,17 @@ const childCandidateSchema = z.object({
 })
 
 const taskGraph = new Hono<AppEnv>()
+	// GET /tasks/relations — bulk fetch all task relations (for tree view)
+	.get(
+		'/relations',
+		zValidator('query', z.object({ relation_type: z.string().optional() })),
+		async (c) => {
+			const { taskRelationService } = c.get('services')
+			const { relation_type } = c.req.valid('query')
+			const relations = await taskRelationService.listAll(relation_type)
+			return c.json(relations, 200)
+		},
+	)
 	// POST /tasks/:id/spawn-children — idempotent child task materialization
 	.post(
 		'/:id/spawn-children',

@@ -50,11 +50,11 @@ export function ChatThread({
 	return (
 		<div className="flex h-full flex-col overflow-hidden">
 			{/* Thread header */}
-			<div className="flex h-14 items-center gap-3  px-4 shrink-0">
+			<div className="flex h-14 items-center gap-3 px-4 shrink-0">
 				<Button size="icon-xs" variant="ghost" onClick={onBack} title="Back">
 					<ArrowLeft size={14} weight="bold" />
 				</Button>
-				<h2 className="font-mono text-sm font-medium text-foreground truncate flex-1">
+				<h2 className="text-sm font-medium text-foreground truncate flex-1">
 					{conversation.title || 'New conversation'}
 				</h2>
 				{onHistory && (

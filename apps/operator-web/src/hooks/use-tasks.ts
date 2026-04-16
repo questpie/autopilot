@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getTasks, getTaskDetail, getTaskActivity, getTaskArtifacts, approveTask, rejectTask, replyTask, retryTask, cancelTask } from '@/api/tasks.api'
+import { getTasks, getTaskRelations, getTaskDetail, getTaskActivity, getTaskArtifacts, approveTask, rejectTask, replyTask, retryTask, cancelTask } from '@/api/tasks.api'
 
 export const taskKeys = {
   all: ['tasks'] as const,
   list: (filters?: { status?: string }) => ['tasks', 'list', filters] as const,
+  relations: ['tasks', 'relations'] as const,
   detail: (id: string) => ['tasks', id] as const,
   activity: (id: string) => ['tasks', id, 'activity'] as const,
   artifacts: (id: string) => ['tasks', id, 'artifacts'] as const,
@@ -13,6 +14,13 @@ export function useTasks(filters?: { status?: string; assigned_to?: string; work
   return useQuery({
     queryKey: taskKeys.list(filters),
     queryFn: () => getTasks(filters),
+  })
+}
+
+export function useTaskRelations() {
+  return useQuery({
+    queryKey: taskKeys.relations,
+    queryFn: () => getTaskRelations('decomposes_to'),
   })
 }
 
