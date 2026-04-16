@@ -347,9 +347,6 @@ const runs = new Hono<AppEnv>()
 
 			// Register artifacts reported by the worker
 			const validArtifactKinds = new Set(ArtifactKindSchema.options)
-			let hasPreviewFiles = false
-			let previewEntry: string | null = null
-			const previewFileTitles: string[] = []
 			if (body.artifacts?.length) {
 				for (const art of body.artifacts) {
 					const normalizedKind = validArtifactKinds.has(art.kind) ? art.kind : 'other'
@@ -369,33 +366,7 @@ const runs = new Hono<AppEnv>()
 						mime_type: art.mime_type,
 						metadata: Object.keys(artMetadata).length > 0 ? JSON.stringify(artMetadata) : undefined,
 					})
-					if (normalizedKind === 'preview_file') {
-						hasPreviewFiles = true
-						previewFileTitles.push(art.title)
-						if (!previewEntry && art.title.endsWith('index.html')) {
-							previewEntry = art.title
-						}
-					}
-					// Explicit entry from preview_dir manifest takes priority
-					if (normalizedKind === 'other' && artMetadata.original_kind === 'preview_dir') {
-						const manifestEntry = artMetadata.preview_entry
-						if (typeof manifestEntry === 'string' && manifestEntry) {
-							previewEntry = manifestEntry
-						}
-					}
 				}
-			}
-
-			// Derive preview URL from stored preview_file artifacts (no artifact row needed)
-			let previewUrl: string | null = null
-			if (hasPreviewFiles) {
-				const singleHtmlEntry = previewFileTitles.length === 1
-					&& /\.(html?)$/i.test(previewFileTitles[0] ?? '')
-					? previewFileTitles[0]!
-					: null
-				const entry = previewEntry ?? singleHtmlEntry ?? 'index.html'
-				const baseUrl = c.get('orchestratorUrl')
-				previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
 			}
 
 			// Release worker lease for this run + update worker status
