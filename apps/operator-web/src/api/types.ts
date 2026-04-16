@@ -67,7 +67,6 @@ export type ArtifactKind =
   | 'doc'
   | 'external_receipt'
   | 'preview_file'
-  | 'preview_url'
   | 'implementation_prompt'
   | 'validation_report'
   | 'other'

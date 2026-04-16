@@ -4,7 +4,7 @@
  * Covers:
  * - Inbox renders blocked tasks
  * - Inbox renders failed runs
- * - Preview URL is shown when present
+ * - Preview URL is derived from preview_file artifacts
  * - Watch mode filters actionable events only
  * - Non-actionable events are filtered out
  */
@@ -191,8 +191,8 @@ describe('Inbox Data', () => {
 		expect(found!.status).toBe('failed')
 	})
 
-	test('preview URL is available through artifacts API', async () => {
-		// Create task + run + complete + add preview artifact
+	test('preview_file artifact is available through artifacts API', async () => {
+		// Create task + run + complete + add preview_file artifact (URL derived via derivePreviewUrl)
 		await taskService.create({
 			id: 'task-inbox-preview-1',
 			title: 'Build homepage',
@@ -215,20 +215,21 @@ describe('Inbox Data', () => {
 			id: 'art-preview-inbox-1',
 			run_id: 'run-inbox-preview-1',
 			task_id: 'task-inbox-preview-1',
-			kind: 'preview_url',
-			title: 'Preview',
-			ref_kind: 'url',
-			ref_value: 'http://localhost:7778/api/previews/run-inbox-preview-1/index.html',
+			kind: 'preview_file',
+			title: 'index.html',
+			ref_kind: 'inline',
+			ref_value: '<html><body>Homepage</body></html>',
 			mime_type: 'text/html',
 		})
 
 		const res = await app.request('/api/runs/run-inbox-preview-1/artifacts')
 		expect(res.status).toBe(200)
 
-		const arts = (await res.json()) as Array<{ kind: string; ref_value: string }>
-		const preview = arts.find((a) => a.kind === 'preview_url')
+		const arts = (await res.json()) as Array<{ kind: string; title: string; ref_value: string }>
+		const preview = arts.find((a) => a.kind === 'preview_file')
 		expect(preview).toBeDefined()
-		expect(preview!.ref_value).toContain('/api/previews/')
+		expect(preview!.title).toBe('index.html')
+		expect(preview!.ref_value).toContain('<html>')
 	})
 
 	test('completed runs are returned with status filter', async () => {

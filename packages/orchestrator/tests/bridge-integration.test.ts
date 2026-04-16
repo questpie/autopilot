@@ -1467,7 +1467,7 @@ console.log(JSON.stringify({ ok: true }))`
 		expect(delivery.summary).toContain('...')
 	})
 
-	test('long summary with preview_url is aggressively shortened and preview URL survives', async () => {
+	test('long summary with preview URL is aggressively shortened and preview URL survives', async () => {
 		await writeFile(invocationsFile, '')
 
 		const eventBus = new EventBus()
@@ -1516,14 +1516,15 @@ console.log(JSON.stringify({ ok: true }))`
 		await runService.start(runId)
 		await runService.complete(runId, { status: 'completed', summary: longSummary })
 
-		// Create preview_url artifact
+		// Create preview_file artifact (preview URL derived via resolvePreviewUrl)
 		await artifactService.create({
 			id: `art-notif-prev-${Date.now()}`,
 			run_id: runId,
-			kind: 'preview_url',
-			title: 'Preview',
-			ref_kind: 'url',
-			ref_value: `http://localhost:7778/api/previews/${runId}/index.html`,
+			kind: 'preview_file',
+			title: 'index.html',
+			ref_kind: 'inline',
+			ref_value: '<html><body>Preview</body></html>',
+			mime_type: 'text/html',
 		})
 
 		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
@@ -1536,9 +1537,9 @@ console.log(JSON.stringify({ ok: true }))`
 
 		const delivery = entries.find((e: Record<string, unknown>) => e.event_type === 'run_completed')
 		expect(delivery).toBeDefined()
-		// Aggressively truncated due to preview_url
+		// Aggressively truncated due to preview URL being present
 		expect(delivery.summary_length).toBeLessThanOrEqual(600)
-		// Preview URL preserved
+		// Preview URL derived from preview_file artifacts
 		expect(delivery.preview_url).toContain('/api/previews/')
 	})
 })
@@ -1709,14 +1710,15 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-trunc-1' }))`
 		await runService.start(runId)
 		await runService.complete(runId, { status: 'completed', summary: longSummary })
 
-		// Create a preview_url artifact for this run
+		// Create a preview_file artifact (preview URL derived via resolvePreviewUrl)
 		await artifactService.create({
 			id: `art-preview-${Date.now()}`,
 			run_id: runId,
-			kind: 'preview_url',
-			title: 'Preview',
-			ref_kind: 'url',
-			ref_value: 'http://localhost:7778/api/previews/' + runId + '/index.html',
+			kind: 'preview_file',
+			title: 'index.html',
+			ref_kind: 'inline',
+			ref_value: '<html><body>Preview</body></html>',
+			mime_type: 'text/html',
 		})
 
 		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
@@ -1729,10 +1731,10 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-trunc-1' }))`
 
 		const response = entries.find((e: Record<string, unknown>) => e.event_type === 'query_response')
 		expect(response).toBeDefined()
-		// With preview_url, should be aggressively truncated (500 + suffix)
+		// With preview URL present, should be aggressively truncated (500 + suffix)
 		expect(response.summary_length).toBeLessThanOrEqual(600)
 		expect(response.summary).toContain('preview')
-		// Preview URL should still be present in payload
+		// Preview URL derived from preview_file artifacts should still be in payload
 		expect(response.preview_url).toContain('/api/previews/')
 	})
 })

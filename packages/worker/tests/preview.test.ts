@@ -2,7 +2,8 @@
  * Tests for preview file collection from worktrees.
  *
  * Covers:
- * - collectPreviewFiles reads changed text files
+ * - collectPreviewFiles reads changed browser-previewable files
+ * - non-previewable extensions (.ts, .md, .txt) are excluded
  * - binary files are skipped
  * - large files are skipped
  * - MIME types are correct
@@ -67,10 +68,33 @@ describe('Preview File Collection', () => {
 		expect(css!.mime_type).toBe('text/css')
 	})
 
-	test('skips binary files (png)', async () => {
+	test('collects binary previewable files (png) as base64', async () => {
 		const artifacts = await collectPreviewFiles(worktreePath, repoRoot)
 		const png = artifacts.find((a) => a.title.endsWith('.png'))
-		expect(png).toBeUndefined()
+		expect(png).toBeDefined()
+		expect(png!.kind).toBe('preview_file')
+		expect(png!.ref_kind).toBe('base64')
+		expect(png!.mime_type).toBe('image/png')
+	})
+
+	test('excludes non-previewable extensions (.ts, .md, .txt)', async () => {
+		// Add non-previewable source files to the worktree
+		await writeFile(join(worktreePath, 'src', 'app.ts'), 'export const x = 1')
+		await writeFile(join(worktreePath, 'src', 'notes.md'), '# Notes')
+		await writeFile(join(worktreePath, 'src', 'readme.txt'), 'readme text')
+		await Bun.spawn(['git', 'add', '-A'], { cwd: worktreePath }).exited
+		await Bun.spawn(['git', 'commit', '-m', 'add non-previewable files'], { cwd: worktreePath }).exited
+
+		const artifacts = await collectPreviewFiles(worktreePath, repoRoot)
+
+		// .ts, .md, .txt should NOT be collected
+		expect(artifacts.find((a) => a.title.endsWith('.ts'))).toBeUndefined()
+		expect(artifacts.find((a) => a.title.endsWith('.md'))).toBeUndefined()
+		expect(artifacts.find((a) => a.title.endsWith('.txt'))).toBeUndefined()
+
+		// .html and .css should still be collected
+		expect(artifacts.find((a) => a.title.endsWith('.html'))).toBeDefined()
+		expect(artifacts.find((a) => a.title.endsWith('.css'))).toBeDefined()
 	})
 
 	test('returns empty array for repo with no changes', async () => {

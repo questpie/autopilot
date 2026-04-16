@@ -218,17 +218,6 @@ const runs = new Hono<AppEnv>()
 				const entry = body.title.endsWith('.html') ? body.title : 'index.html'
 				const baseUrl = c.get('orchestratorUrl')
 				previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
-				await artifactService.create({
-					id: `art-preview-${Date.now()}-${randomBytes(6).toString('hex')}`,
-					run_id: id,
-					task_id: run.task_id ?? undefined,
-					kind: 'preview_url',
-					title: 'Preview',
-					ref_kind: 'url',
-					ref_value: previewUrl,
-					mime_type: 'text/html',
-					metadata: JSON.stringify({ entry, run_id: id }),
-				})
 			}
 
 			eventBus.emit({
@@ -397,28 +386,16 @@ const runs = new Hono<AppEnv>()
 				}
 			}
 
-			// Auto-create preview_url artifact if preview files were stored
+			// Derive preview URL from stored preview_file artifacts (no artifact row needed)
+			let previewUrl: string | null = null
 			if (hasPreviewFiles) {
 				const singleHtmlEntry = previewFileTitles.length === 1
 					&& /\.(html?)$/i.test(previewFileTitles[0] ?? '')
 					? previewFileTitles[0]!
 					: null
 				const entry = previewEntry ?? singleHtmlEntry ?? 'index.html'
-				// Canonical orchestrator URL for rendered links — not request-derived (reverse proxy / spoofing safe).
-				// Relative-path fallback only when orchestratorUrl is absent (tests, custom embed).
 				const baseUrl = c.get('orchestratorUrl')
-				const previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
-				await artifactService.create({
-					id: `art-preview-${Date.now()}-${randomBytes(6).toString('hex')}`,
-					run_id: id,
-					task_id: run.task_id ?? undefined,
-					kind: 'preview_url',
-					title: 'Preview',
-					ref_kind: 'url',
-					ref_value: previewUrl,
-					mime_type: 'text/html',
-					metadata: JSON.stringify({ entry, run_id: id }),
-				})
+				previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
 			}
 
 			// Release worker lease for this run + update worker status

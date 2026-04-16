@@ -223,7 +223,7 @@ Tasks created from chat automatically bind results back to the originating conve
 
 - Unknown artifact kinds normalize to \`other\` with \`metadata.original_kind\`
 - Use \`doc\` for text documents
-- Use \`preview_file\` + \`preview_url\` for HTML/file previews
+- Use \`preview_file\` for HTML/file previews (preview URL is derived automatically)
 
 ## Provider/workflow installation
 

@@ -36,7 +36,17 @@ interface Run {
 
 interface Artifact {
 	kind: string
+	title: string
 	ref_value: string
+}
+
+/** Derive the preview URL from preview_file artifacts (no preview_url artifact needed). */
+function derivePreviewUrl(artifacts: Artifact[], runId: string, baseUrl: string): string | null {
+	const previewFiles = artifacts.filter((a) => a.kind === 'preview_file')
+	if (previewFiles.length === 0) return null
+	const htmlFile = previewFiles.find((a) => /\.(html?)$/i.test(a.title))
+	const entry = htmlFile?.title ?? 'index.html'
+	return `${baseUrl}/api/previews/${runId}/${entry}`
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -95,8 +105,8 @@ async function renderInbox(): Promise<void> {
 			const artsRes = await client.api.runs[':id'].artifacts.$get({ param: { id: run.id } })
 			if (artsRes.ok) {
 				const arts = (await artsRes.json()) as Artifact[]
-				const preview = arts.find((a) => a.kind === 'preview_url')
-				if (preview) previewMap.set(run.id, preview.ref_value)
+				const url = derivePreviewUrl(arts, run.id, baseUrl)
+				if (url) previewMap.set(run.id, url)
 			}
 		} catch (err) { console.debug('[inbox] failed to fetch preview URLs:', err instanceof Error ? err.message : String(err)) }
 	}
@@ -316,8 +326,8 @@ async function handleWatchEvent(
 				const artsRes = await client.api.runs[':id'].artifacts.$get({ param: { id: runId } })
 				if (artsRes.ok) {
 					const arts = (await artsRes.json()) as Artifact[]
-					const preview = arts.find((a) => a.kind === 'preview_url')
-					if (preview) previewUrl = preview.ref_value
+					const derived = derivePreviewUrl(arts, runId, getBaseUrl())
+					if (derived) previewUrl = derived
 				}
 			} catch (err) { console.debug('[inbox:watch] failed to fetch artifacts:', err instanceof Error ? err.message : String(err)) }
 

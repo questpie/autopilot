@@ -400,7 +400,6 @@
 		"artifact_kind_validation_report": "Validation",
 		"artifact_kind_implementation_prompt": "Code",
 		"artifact_kind_preview_file": "Preview",
-		"artifact_kind_preview_url": "URL preview",
 		"artifact_kind_external_receipt": "Receipt",
 		"artifact_kind_other": "File",
 		"approve": "Approve",

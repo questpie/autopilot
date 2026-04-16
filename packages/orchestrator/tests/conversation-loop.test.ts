@@ -4,7 +4,7 @@
  * Covers:
  * - Bound task events dispatch to the bound conversation provider
  * - conversation_id / thread_id reach the handler correctly
- * - run_completed with preview_url reaches the bound conversation payload
+ * - run_completed with preview_file artifacts reaches the bound conversation payload
  * - Unbound tasks do not trigger conversation delivery
  * - Existing notification_channel behavior remains unchanged
  * - Example conversation provider handles both conversation.ingest and notify.send
@@ -113,9 +113,16 @@ console.log(JSON.stringify({ ok: true }))`
 	const mockArtifactService = {
 		listForRun: async (runId: string) => {
 			if (runId === 'run-with-preview') {
-				return [{ kind: 'preview_url', ref_value: 'http://localhost:7778/api/previews/run-with-preview/index.html' }]
+				return [{ kind: 'preview_file', title: 'index.html', ref_kind: 'inline', ref_value: '<html><body>Hello</body></html>' }]
 			}
 			return []
+		},
+		resolvePreviewUrl: async (runId: string, orchestratorUrl?: string) => {
+			if (runId === 'run-with-preview') {
+				const base = orchestratorUrl ?? ''
+				return `${base}/api/previews/run-with-preview/index.html`
+			}
+			return null
 		},
 	}
 
@@ -221,7 +228,7 @@ console.log(JSON.stringify({ ok: true }))`
 		expect(content).toBe('')
 	})
 
-	test('preview_url reaches bound conversation payload', async () => {
+	test('preview_file artifact derives preview URL in bound conversation payload', async () => {
 		const eventBus = new EventBus()
 		const convProvider = makeConvProvider('conv-loop-3')
 
@@ -282,7 +289,7 @@ console.log(JSON.stringify({ ok: true }))`
 		const lines = content.split('\n').filter(Boolean)
 		const entry = JSON.parse(lines[lines.length - 1])
 		expect(entry.conversation_id).toBe('slack-channel-1')
-		expect(entry.preview_url).toBe('http://localhost:7778/api/previews/run-with-preview/index.html')
+		expect(entry.preview_url).toBe('/api/previews/run-with-preview/index.html')
 
 		await writeFile(invocationsFile, '')
 	})
@@ -472,7 +479,7 @@ if (op === 'notify.send') {
 				summary: 'Agent crashed',
 				conversation_id: 'tg-chat-99',
 				thread_id: 'tg-thread-5',
-				preview_url: 'http://localhost:7778/api/previews/run-123/index.html',
+				preview_url: '/api/previews/run-123/index.html',
 				task_url: 'http://localhost:7778/api/tasks/task-1',
 			},
 			{ companyRoot: testRoot },
@@ -485,7 +492,7 @@ if (op === 'notify.send') {
 		expect(meta.conversation_id).toBe('tg-chat-99')
 		expect(meta.thread_id).toBe('tg-thread-5')
 		expect(meta.title).toBe('Run failed: run-123')
-		expect(meta.preview_url).toBe('http://localhost:7778/api/previews/run-123/index.html')
+		expect(meta.preview_url).toBe('/api/previews/run-123/index.html')
 	})
 
 	test('notify.send without conversation_id is skipped', async () => {

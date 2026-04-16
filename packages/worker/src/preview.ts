@@ -14,6 +14,17 @@ import type { RunArtifact } from '@questpie/autopilot-spec'
 const MAX_FILE_SIZE = 512 * 1024 // 512 KB
 const SKIP_DIRS = new Set(['.git', '.worktrees', 'node_modules', '.autopilot', '.data'])
 
+/** Extensions that are actually renderable in a browser preview. */
+const PREVIEWABLE_EXTENSIONS = new Set([
+  'html', 'htm',
+  'css',
+  'js', 'mjs',
+  'svg', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'ico',
+  'woff', 'woff2', 'ttf', 'otf', 'eot',
+  'json',
+  'wasm',
+])
+
 const MIME_BY_EXT: Record<string, string> = {
   html: 'text/html',
   htm: 'text/html',
@@ -61,7 +72,9 @@ function mimeType(path: string): string {
 }
 
 /**
- * Collect changed text files from a worktree as preview_file artifacts.
+ * Collect changed browser-previewable files from a worktree as preview_file artifacts.
+ * Only includes files with extensions that are renderable in a browser preview
+ * (HTML, CSS, JS, images, fonts, JSON, WASM). Source files like .ts/.tsx/.md are skipped.
  * Uses `git diff --name-only` to find what changed relative to the base branch.
  */
 export async function collectPreviewFiles(
@@ -73,7 +86,8 @@ export async function collectPreviewFiles(
 
   const artifacts: RunArtifact[] = []
   for (const relPath of changedFiles) {
-    if (!isTextFile(relPath)) continue
+    const ext = relPath.split('.').pop()?.toLowerCase()
+    if (!ext || !PREVIEWABLE_EXTENSIONS.has(ext)) continue
     if (SKIP_DIRS.has(relPath.split('/')[0] ?? '')) continue
 
     const fullPath = `${worktreePath}/${relPath}`
@@ -82,14 +96,28 @@ export async function collectPreviewFiles(
       const size = file.size
       if (size > MAX_FILE_SIZE) continue
 
-      const content = await file.text()
-      artifacts.push({
-        kind: 'preview_file',
-        title: relPath,
-        ref_kind: 'inline',
-        ref_value: content,
-        mime_type: mimeType(relPath),
-      })
+      const isBinary = ext in BINARY_MIME_BY_EXT
+      const mime = ALL_MIME[ext] ?? (isBinary ? 'application/octet-stream' : 'text/plain')
+
+      if (isBinary) {
+        const buf = await file.arrayBuffer()
+        artifacts.push({
+          kind: 'preview_file',
+          title: relPath,
+          ref_kind: 'base64',
+          ref_value: Buffer.from(buf).toString('base64'),
+          mime_type: mime,
+        })
+      } else {
+        const content = await file.text()
+        artifacts.push({
+          kind: 'preview_file',
+          title: relPath,
+          ref_kind: 'inline',
+          ref_value: content,
+          mime_type: mime,
+        })
+      }
     } catch {
       // File may have been deleted or is unreadable — skip
     }

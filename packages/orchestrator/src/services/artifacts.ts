@@ -156,6 +156,21 @@ export class ArtifactService {
 		return await this.db.select().from(artifactBlobs).where(eq(artifactBlobs.id, blobId)).get()
 	}
 
+	/**
+	 * Derive the preview URL for a run from its preview_file artifacts.
+	 * Returns null if the run has no preview_file artifacts.
+	 */
+	async resolvePreviewUrl(runId: string, orchestratorUrl?: string): Promise<string | null> {
+		const arts = await this.listForRun(runId)
+		const previewFiles = arts.filter((a) => a.kind === 'preview_file')
+		if (previewFiles.length === 0) return null
+
+		const htmlFile = previewFiles.find((a) => /\.(html?)$/i.test(a.title))
+		const entry = htmlFile?.title ?? 'index.html'
+		const base = orchestratorUrl ?? ''
+		return `${base}/api/previews/${runId}/${entry}`
+	}
+
 	// ── Internal ─────────────────────────────────────────────────────────────
 
 	async #findOrCreateBlobRow(blob: {
