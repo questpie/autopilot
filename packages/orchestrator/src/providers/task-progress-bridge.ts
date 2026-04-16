@@ -267,10 +267,7 @@ export class TaskProgressBridge {
 		const baseUrl = this.config.orchestratorUrl
 
 		// Look up preview_url artifact
-		let previewUrl: string | undefined
-		const artifacts = await this.artifactService.listForRun(event.runId)
-		const preview = artifacts.find((a) => a.kind === 'preview_url')
-		if (preview) previewUrl = preview.ref_value
+		const previewUrl = await this.artifactService.resolvePreviewUrl(event.runId, this.config.orchestratorUrl) ?? undefined
 
 		const summary = event.status === 'failed'
 			? (run.error ?? run.summary ?? 'Run failed.')
@@ -310,9 +307,7 @@ export class TaskProgressBridge {
 			)[0]
 			if (lastRun) {
 				if (lastRun.summary) summary = lastRun.summary
-				const artifacts = await this.artifactService.listForRun(lastRun.id)
-				const preview = artifacts.find((a) => a.kind === 'preview_url')
-				if (preview) previewUrl = preview.ref_value
+				previewUrl = await this.artifactService.resolvePreviewUrl(lastRun.id, this.config.orchestratorUrl) ?? undefined
 			}
 		}
 

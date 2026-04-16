@@ -179,9 +179,7 @@ export class QueryResponseBridge {
 
 			let previewUrl: string | undefined
 			if (this.artifactService && run) {
-				const artifacts = await this.artifactService.listForRun(event.runId)
-				const preview = artifacts.find((a) => a.kind === 'preview_url')
-				if (preview) previewUrl = preview.ref_value
+				previewUrl = await this.artifactService.resolvePreviewUrl(event.runId, this.config.orchestratorUrl) ?? undefined
 			}
 
 			const MAX_SUMMARY_LENGTH = 3500

@@ -187,7 +187,7 @@ export const artifacts = sqliteTable(
 		id: text('id').primaryKey(),
 		run_id: text('run_id').notNull(),
 		task_id: text('task_id'),
-		kind: text('kind').notNull(), // changed_file | diff_summary | test_report | doc | external_receipt | preview_url | other
+		kind: text('kind').notNull(), // changed_file | diff_summary | test_report | doc | external_receipt | preview_file | other
 		title: text('title').notNull(),
 		ref_kind: text('ref_kind').notNull(), // file | url | inline
 		ref_value: text('ref_value').notNull(),

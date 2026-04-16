@@ -5,7 +5,7 @@
  * - preview_file artifacts stored and queryable
  * - preview endpoint serves correct content with MIME type
  * - relative asset paths work (CSS loaded from HTML)
- * - preview_url artifact auto-created when preview_files exist
+ * - preview URL derived from preview_file artifacts via resolvePreviewUrl
  * - preview works without worker involvement (durable)
  * - 404 for missing files
  * - blob-backed preview serving
@@ -87,24 +87,11 @@ describe('Durable Previews', () => {
 		expect(css!.mime_type).toBe('text/css')
 	})
 
-	test('preview_url artifact can be created pointing to orchestrator endpoint', async () => {
-		await artifactService.create({
-			id: 'art-preview-url-1',
-			run_id: RUN_ID,
-			task_id: TASK_ID,
-			kind: 'preview_url',
-			title: 'Preview',
-			ref_kind: 'url',
-			ref_value: 'http://localhost:7778/api/previews/run-preview-test-1/src/index.html',
-			mime_type: 'text/html',
-			metadata: JSON.stringify({ entry: 'src/index.html', run_id: RUN_ID }),
-		})
-
-		const arts = await artifactService.listForRun(RUN_ID)
-		const previewUrl = arts.find((a) => a.kind === 'preview_url')
-		expect(previewUrl).toBeDefined()
-		expect(previewUrl!.ref_value).toContain('/api/previews/')
-		expect(previewUrl!.ref_kind).toBe('url')
+	test('preview URL derived from preview_file artifacts via resolvePreviewUrl', async () => {
+		const url = await artifactService.resolvePreviewUrl(RUN_ID, 'http://localhost:7778')
+		expect(url).not.toBeNull()
+		expect(url).toContain('/api/previews/')
+		expect(url).toContain(RUN_ID)
 	})
 
 	test('preview content survives without worker — purely DB-backed', async () => {

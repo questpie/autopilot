@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeft, ChatCircle, Timer, Lightning, FileText, ArrowSquareOut, Check, X, ArrowBendUpLeft, ArrowCounterClockwise, Stop } from '@phosphor-icons/react'
+import { ArrowLeft, ChatCircle, Timer, Lightning, FileText, ArrowSquareOut, Globe, Check, X, ArrowBendUpLeft, ArrowCounterClockwise, Stop } from '@phosphor-icons/react'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/ui/status-pill'
@@ -24,7 +24,7 @@ import { useTaskArtifacts, useApproveTask, useRejectTask, useReplyTask, useRetry
 import { buildTimeline } from '../lib/build-timeline'
 import { WorkflowTimeline } from './workflow-timeline'
 import { RunViewerSheet } from './run-viewer-sheet'
-import { ArtifactList } from './artifact-list'
+import { ArtifactList, HIDDEN_ARTIFACT_KINDS } from './artifact-list'
 
 interface TaskDetailProps {
   detail: TaskWithRelations | null | undefined
@@ -444,6 +444,8 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
               <div className="space-y-2">
                 {detail.runs.map((run) => {
                   const runArtifacts = (artifactsQuery.data ?? []).filter((a) => a.run_id === run.id)
+                  const visibleArtifacts = runArtifacts.filter((a) => !HIDDEN_ARTIFACT_KINDS.has(a.kind))
+                  const hasPreview = runArtifacts.some((a) => a.kind === 'preview_file')
                   return (
                     <div key={run.id}>
                       <button
@@ -454,9 +456,21 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
                         <div className="flex items-center justify-between gap-2">
                           <StatusPill status={taskStatusToPill(run.status)} />
                           <div className="flex items-center gap-2">
-                            {runArtifacts.length > 0 && (
+                            {hasPreview && (
+                              <a
+                                href={`/api/previews/${run.id}/index.html`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 font-mono text-[10px] text-primary hover:underline"
+                              >
+                                <Globe size={10} />
+                                Preview
+                              </a>
+                            )}
+                            {visibleArtifacts.length > 0 && (
                               <span className="font-mono text-[10px] text-muted-foreground">
-                                {runArtifacts.length} artifact{runArtifacts.length !== 1 ? 's' : ''}
+                                {visibleArtifacts.length} artifact{visibleArtifacts.length !== 1 ? 's' : ''}
                               </span>
                             )}
                             <span className="font-mono text-[11px] text-muted-foreground">{run.agent_id}</span>
@@ -480,7 +494,7 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
                           )}
                         </div>
                       </button>
-                      {runArtifacts.length > 0 && (
+                      {visibleArtifacts.length > 0 && (
                         <div className="mt-1 pl-3">
                           <ArtifactList artifacts={runArtifacts} />
                         </div>

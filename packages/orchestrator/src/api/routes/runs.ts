@@ -218,17 +218,6 @@ const runs = new Hono<AppEnv>()
 				const entry = body.title.endsWith('.html') ? body.title : 'index.html'
 				const baseUrl = c.get('orchestratorUrl')
 				previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
-				await artifactService.create({
-					id: `art-preview-${Date.now()}-${randomBytes(6).toString('hex')}`,
-					run_id: id,
-					task_id: run.task_id ?? undefined,
-					kind: 'preview_url',
-					title: 'Preview',
-					ref_kind: 'url',
-					ref_value: previewUrl,
-					mime_type: 'text/html',
-					metadata: JSON.stringify({ entry, run_id: id }),
-				})
 			}
 
 			eventBus.emit({
@@ -358,9 +347,6 @@ const runs = new Hono<AppEnv>()
 
 			// Register artifacts reported by the worker
 			const validArtifactKinds = new Set(ArtifactKindSchema.options)
-			let hasPreviewFiles = false
-			let previewEntry: string | null = null
-			const previewFileTitles: string[] = []
 			if (body.artifacts?.length) {
 				for (const art of body.artifacts) {
 					const normalizedKind = validArtifactKinds.has(art.kind) ? art.kind : 'other'
@@ -380,45 +366,7 @@ const runs = new Hono<AppEnv>()
 						mime_type: art.mime_type,
 						metadata: Object.keys(artMetadata).length > 0 ? JSON.stringify(artMetadata) : undefined,
 					})
-					if (normalizedKind === 'preview_file') {
-						hasPreviewFiles = true
-						previewFileTitles.push(art.title)
-						if (!previewEntry && art.title.endsWith('index.html')) {
-							previewEntry = art.title
-						}
-					}
-					// Explicit entry from preview_dir manifest takes priority
-					if (normalizedKind === 'other' && artMetadata.original_kind === 'preview_dir') {
-						const manifestEntry = artMetadata.preview_entry
-						if (typeof manifestEntry === 'string' && manifestEntry) {
-							previewEntry = manifestEntry
-						}
-					}
 				}
-			}
-
-			// Auto-create preview_url artifact if preview files were stored
-			if (hasPreviewFiles) {
-				const singleHtmlEntry = previewFileTitles.length === 1
-					&& /\.(html?)$/i.test(previewFileTitles[0] ?? '')
-					? previewFileTitles[0]!
-					: null
-				const entry = previewEntry ?? singleHtmlEntry ?? 'index.html'
-				// Canonical orchestrator URL for rendered links — not request-derived (reverse proxy / spoofing safe).
-				// Relative-path fallback only when orchestratorUrl is absent (tests, custom embed).
-				const baseUrl = c.get('orchestratorUrl')
-				const previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
-				await artifactService.create({
-					id: `art-preview-${Date.now()}-${randomBytes(6).toString('hex')}`,
-					run_id: id,
-					task_id: run.task_id ?? undefined,
-					kind: 'preview_url',
-					title: 'Preview',
-					ref_kind: 'url',
-					ref_value: previewUrl,
-					mime_type: 'text/html',
-					metadata: JSON.stringify({ entry, run_id: id }),
-				})
 			}
 
 			// Release worker lease for this run + update worker status

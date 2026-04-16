@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import {
   FileArrowUp,
-  Globe,
   FileText,
   TestTube,
-  Image,
   File,
   ArrowSquareOut,
   DownloadSimple,
@@ -19,23 +17,23 @@ import {
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
+// ── constants ─────────────────────────────────────────────────────────────────
+
+/** Artifact kinds that are internal/infrastructure — hidden from the user. */
+export const HIDDEN_ARTIFACT_KINDS = new Set<string>(['preview_file', 'implementation_prompt'])
+
 // ── icon mapping ──────────────────────────────────────────────────────────────
 
 function artifactIcon(kind: ArtifactKind) {
   switch (kind) {
     case 'changed_file':
       return FileArrowUp
-    case 'preview_url':
-      return Globe
     case 'doc':
     case 'diff_summary':
-    case 'implementation_prompt':
     case 'validation_report':
       return FileText
     case 'test_report':
       return TestTube
-    case 'preview_file':
-      return Image
     case 'external_receipt':
       return ArrowSquareOut
     default:
@@ -141,12 +139,13 @@ interface ArtifactListProps {
 export function ArtifactList({ artifacts }: ArtifactListProps) {
   const [inlineArtifact, setInlineArtifact] = useState<Artifact | null>(null)
 
-  if (artifacts.length === 0) return null
+  const visible = artifacts.filter((a) => !HIDDEN_ARTIFACT_KINDS.has(a.kind))
+  if (visible.length === 0) return null
 
   return (
     <>
       <div className="space-y-1">
-        {artifacts.map((art) => (
+        {visible.map((art) => (
           <ArtifactCard
             key={art.id}
             artifact={art}

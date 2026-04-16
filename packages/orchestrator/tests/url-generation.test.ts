@@ -252,7 +252,7 @@ describe('URL Generation — Configured Base URL', () => {
 
 	// ── Preview URL uses configured orchestratorUrl ──────────────────────
 
-	test('preview_url artifact uses configured orchestratorUrl, not request origin', async () => {
+	test('preview URL derived from preview_file uses configured orchestratorUrl, not request origin', async () => {
 		const publicUrl = 'https://autopilot.example.com'
 		const app = buildTestApp(companyRoot, dbResult.db, services, publicUrl)
 
@@ -284,22 +284,24 @@ describe('URL Generation — Configured Base URL', () => {
 		)
 		expect(completeRes.status).toBe(200)
 
-		// Check the auto-created preview_url artifact
+		// Verify preview_file artifact is stored
 		const artifactsRes = await app.request(`/api/runs/${runId}/artifacts`)
 		const artifacts = (await artifactsRes.json()) as Array<{ kind: string; ref_value: string }>
-		const previewArt = artifacts.find((a) => a.kind === 'preview_url')
+		const previewFile = artifacts.find((a) => a.kind === 'preview_file')
+		expect(previewFile).not.toBeUndefined()
 
-		expect(previewArt).not.toBeUndefined()
-		// Must use the configured public URL, NOT localhost or request origin
-		expect(previewArt!.ref_value).toStartWith('https://autopilot.example.com/')
-		expect(previewArt!.ref_value).toBe(`https://autopilot.example.com/api/previews/${runId}/index.html`)
+		// Derive preview URL via resolvePreviewUrl — must use configured public URL
+		const previewUrl = await services.artifactService.resolvePreviewUrl(runId, publicUrl)
+		expect(previewUrl).not.toBeNull()
+		expect(previewUrl!).toStartWith('https://autopilot.example.com/')
+		expect(previewUrl!).toBe(`https://autopilot.example.com/api/previews/${runId}/index.html`)
 		// Must NOT contain localhost
-		expect(previewArt!.ref_value).not.toContain('localhost')
+		expect(previewUrl!).not.toContain('localhost')
 	})
 
 	// ── Preview URL falls back to relative path when no base URL ─────────
 
-	test('preview_url falls back to relative path when orchestratorUrl is undefined', async () => {
+	test('preview URL falls back to relative path when orchestratorUrl is undefined', async () => {
 		const app = buildTestApp(companyRoot, dbResult.db, services, undefined)
 
 		const createRes = await app.request('/api/runs', post({ agent_id: 'dev', runtime: 'bun' }))
@@ -326,15 +328,13 @@ describe('URL Generation — Configured Base URL', () => {
 			}),
 		)
 
-		const artifactsRes = await app.request(`/api/runs/${runId}/artifacts`)
-		const artifacts = (await artifactsRes.json()) as Array<{ kind: string; ref_value: string }>
-		const previewArt = artifacts.find((a) => a.kind === 'preview_url')
-
-		expect(previewArt).not.toBeUndefined()
+		// Derive preview URL with no orchestratorUrl — should be relative
+		const previewUrl = await services.artifactService.resolvePreviewUrl(runId, undefined)
+		expect(previewUrl).not.toBeNull()
 		// Should be a relative path — no scheme, no host
-		expect(previewArt!.ref_value).toStartWith('/api/previews/')
-		expect(previewArt!.ref_value).not.toContain('localhost')
-		expect(previewArt!.ref_value).not.toContain('http')
+		expect(previewUrl!).toStartWith('/api/previews/')
+		expect(previewUrl!).not.toContain('localhost')
+		expect(previewUrl!).not.toContain('http')
 	})
 
 	test('single html preview file becomes the direct preview entry', async () => {
@@ -365,12 +365,10 @@ describe('URL Generation — Configured Base URL', () => {
 			}),
 		)
 
-		const artifactsRes = await app.request(`/api/runs/${runId}/artifacts`)
-		const artifacts = (await artifactsRes.json()) as Array<{ kind: string; ref_value: string }>
-		const previewArt = artifacts.find((a) => a.kind === 'preview_url')
-
-		expect(previewArt).not.toBeUndefined()
-		expect(previewArt!.ref_value).toBe(`https://autopilot.example.com/api/previews/${runId}/presentation.html`)
+		// Derive preview URL — single .html file should be used as the entry
+		const previewUrl = await services.artifactService.resolvePreviewUrl(runId, publicUrl)
+		expect(previewUrl).not.toBeNull()
+		expect(previewUrl!).toBe(`https://autopilot.example.com/api/previews/${runId}/presentation.html`)
 	})
 
 	// ── Various topology shapes produce correct URLs ─────────────────────
@@ -422,12 +420,10 @@ describe('URL Generation — Configured Base URL', () => {
 			}),
 		)
 
-		const artifactsRes = await app.request(`/api/runs/${runId}/artifacts`)
-		const artifacts = (await artifactsRes.json()) as Array<{ kind: string; ref_value: string }>
-		const previewArt = artifacts.find((a) => a.kind === 'preview_url')
-
-		expect(previewArt).not.toBeUndefined()
-		expect(previewArt!.ref_value).toBe(`https://autopilot.example.com/api/previews/${runId}/presentation.html`)
+		// Derive preview URL — resolvePreviewUrl picks the .html entry from preview_file artifacts
+		const previewUrl = await services.artifactService.resolvePreviewUrl(runId, publicUrl)
+		expect(previewUrl).not.toBeNull()
+		expect(previewUrl!).toBe(`https://autopilot.example.com/api/previews/${runId}/presentation.html`)
 	})
 
 	test.each([
@@ -463,12 +459,10 @@ describe('URL Generation — Configured Base URL', () => {
 			}),
 		)
 
-		const artifactsRes = await app.request(`/api/runs/${runId}/artifacts`)
-		const artifacts = (await artifactsRes.json()) as Array<{ kind: string; ref_value: string }>
-		const previewArt = artifacts.find((a) => a.kind === 'preview_url')
-
-		expect(previewArt).not.toBeUndefined()
-		expect(previewArt!.ref_value).toStartWith(`${baseUrl}/api/previews/${runId}/`)
+		// Derive preview URL — must use the given base URL
+		const previewUrl = await services.artifactService.resolvePreviewUrl(runId, baseUrl)
+		expect(previewUrl).not.toBeNull()
+		expect(previewUrl!).toStartWith(`${baseUrl}/api/previews/${runId}/`)
 	})
 })
 

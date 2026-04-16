@@ -229,8 +229,6 @@ export class NotificationBridge {
 	}
 
 	private async findPreviewUrl(runId: string): Promise<string | null> {
-		const artifacts = await this.artifactService.listForRun(runId)
-		const preview = artifacts.find((a) => a.kind === 'preview_url')
-		return preview?.ref_value ?? null
+		return this.artifactService.resolvePreviewUrl(runId, this.config.orchestratorUrl)
 	}
 }

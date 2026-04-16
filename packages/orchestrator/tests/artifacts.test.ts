@@ -143,15 +143,15 @@ describe('Artifacts', () => {
 	})
 
 	test('all dogfood artifact kinds can be created', async () => {
-		const kinds = ['changed_file', 'diff_summary', 'test_report', 'doc', 'external_receipt', 'preview_url', 'other'] as const
+		const kinds = ['changed_file', 'diff_summary', 'test_report', 'doc', 'external_receipt', 'other'] as const
 		for (const kind of kinds) {
 			const art = await artifactService.create({
 				id: `art-kind-${kind}`,
 				run_id: 'run-kinds',
 				kind,
 				title: `Test ${kind}`,
-				ref_kind: kind === 'preview_url' ? 'url' : 'file',
-				ref_value: kind === 'preview_url' ? 'http://localhost:3000' : `path/to/${kind}`,
+				ref_kind: 'file',
+				ref_value: `path/to/${kind}`,
 			})
 			expect(art).not.toBeUndefined()
 			expect(art!.kind).toBe(kind)
