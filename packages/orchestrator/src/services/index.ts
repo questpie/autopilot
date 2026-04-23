@@ -51,6 +51,8 @@ export type { SharedSecretRow } from './secrets'
 export { ProjectService } from './projects'
 export type { ProjectRow } from './projects'
 
+export { KnowledgeService } from './knowledge'
+export type { KnowledgeRow, KnowledgeDocument, KnowledgeScopeInput, KnowledgeScopeType } from './knowledge'
 
 export { ScheduleService, computeNextRun, interpolateTemplate } from './schedules'
 export type { ScheduleRow, ScheduleExecutionRow } from './schedules'

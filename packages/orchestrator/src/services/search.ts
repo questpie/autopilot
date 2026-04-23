@@ -3,7 +3,7 @@
  */
 import type { Client } from '@libsql/client'
 
-export type SearchScope = 'tasks' | 'runs' | 'context' | 'schedules' | 'all'
+export type SearchScope = 'tasks' | 'runs' | 'context' | 'schedules' | 'knowledge' | 'all'
 
 export interface SearchResult {
 	entityType: string
@@ -33,7 +33,13 @@ export async function search(
 		.map((token) => `"${token.replace(/"/g, '""')}"`)
 		.join(' ')
 
-	const scopeMap: Record<string, string> = { tasks: 'task', runs: 'run', schedules: 'schedule', context: 'context' }
+	const scopeMap: Record<string, string> = {
+		tasks: 'task',
+		runs: 'run',
+		schedules: 'schedule',
+		context: 'context',
+		knowledge: 'knowledge',
+	}
 	const entityType = scope !== 'all' ? scopeMap[scope] : null
 
 	const result = await raw.execute({

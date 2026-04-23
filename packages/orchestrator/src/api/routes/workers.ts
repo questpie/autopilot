@@ -2,22 +2,27 @@ import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import {
+	ExternalActionSchema,
+	ResolvedCapabilitiesSchema,
+	SecretRefSchema,
+	WorkerClaimRequestSchema,
+	WorkerDeregisterRequestSchema,
+	WorkerHeartbeatRequestSchema,
+	WorkerRegisterRequestSchema,
+} from '@questpie/autopilot-spec'
+import type {
+	ExternalAction,
+	ResolvedCapabilities,
+	SecretRef,
+	StandaloneScript,
+} from '@questpie/autopilot-spec'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
-import {
-	WorkerRegisterRequestSchema,
-	WorkerHeartbeatRequestSchema,
-	WorkerClaimRequestSchema,
-	WorkerDeregisterRequestSchema,
-	ExternalActionSchema,
-	SecretRefSchema,
-	ResolvedCapabilitiesSchema,
-} from '@questpie/autopilot-spec'
-import type { ExternalAction, SecretRef, ResolvedCapabilities, StandaloneScript } from '@questpie/autopilot-spec'
 import { z } from 'zod'
-import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
+import type { AppEnv } from '../app'
 
 /**
  * Get the authoritative worker ID for this request.
@@ -52,10 +57,7 @@ const NULL_TASK_CONTEXT: TaskContext = {
 	workspaceMode: null,
 }
 
-async function resolveTaskContext(
-	c: Context<AppEnv>,
-	taskId: string | null,
-): Promise<TaskContext> {
+async function resolveTaskContext(c: Context<AppEnv>, taskId: string | null): Promise<TaskContext> {
 	if (!taskId) return NULL_TASK_CONTEXT
 
 	const { taskService, taskGraphService } = c.get('services')
@@ -159,7 +161,10 @@ const workers = new Hono<AppEnv>()
 
 		const { workerId, mismatch } = getAuthoritativeWorkerId(authWorkerId, body.worker_id)
 		if (mismatch) {
-			return c.json({ error: `Authenticated as ${authWorkerId} but body.worker_id is ${body.worker_id}` }, 403)
+			return c.json(
+				{ error: `Authenticated as ${authWorkerId} but body.worker_id is ${body.worker_id}` },
+				403,
+			)
 		}
 
 		await workerService.heartbeat(workerId)
@@ -173,7 +178,10 @@ const workers = new Hono<AppEnv>()
 
 		const { workerId, mismatch } = getAuthoritativeWorkerId(authWorkerId, body.worker_id)
 		if (mismatch) {
-			return c.json({ error: `Authenticated as ${authWorkerId} but body.worker_id is ${body.worker_id}` }, 403)
+			return c.json(
+				{ error: `Authenticated as ${authWorkerId} but body.worker_id is ${body.worker_id}` },
+				403,
+			)
 		}
 
 		// Expire stale leases — prevents crashed workers from being stuck forever
@@ -187,33 +195,30 @@ const workers = new Hono<AppEnv>()
 
 		// Use worker capabilities for targeting-aware claim
 		const workerRecord = await workerService.get(workerId)
-		const workerCaps = workerRecord?.capabilities
-			? JSON.parse(workerRecord.capabilities)
-			: []
+		const workerCaps = workerRecord?.capabilities ? JSON.parse(workerRecord.capabilities) : []
 		const sharedCheckoutLocked = body.shared_checkout_locked === true
 		const sharedCheckoutEnabled = body.shared_checkout_enabled === true
 		const worktreeIsolationAvailable = body.worktree_isolation_available === true
 		const skippedRunIds = new Set<string>()
 
 		let run = await runService.claim(workerId, body.runtime, workerCaps)
-		let taskContext = run
-			? await resolveRunContext(c, run)
-			: NULL_TASK_CONTEXT
+		let taskContext = run ? await resolveRunContext(c, run) : NULL_TASK_CONTEXT
 
-		while (run && runRequiresSharedCheckout(run, {
-			sharedCheckoutEnabled,
-			sharedCheckoutLocked,
-			worktreeIsolationAvailable,
-			workspaceMode: taskContext.workspaceMode,
-		})) {
+		while (
+			run &&
+			runRequiresSharedCheckout(run, {
+				sharedCheckoutEnabled,
+				sharedCheckoutLocked,
+				worktreeIsolationAvailable,
+				workspaceMode: taskContext.workspaceMode,
+			})
+		) {
 			await runService.releaseClaim(run.id)
 			skippedRunIds.add(run.id)
 			run = await runService.claim(workerId, body.runtime, workerCaps, {
 				excludeRunIds: [...skippedRunIds],
 			})
-			taskContext = run
-				? await resolveRunContext(c, run)
-				: NULL_TASK_CONTEXT
+			taskContext = run ? await resolveRunContext(c, run) : NULL_TASK_CONTEXT
 		}
 
 		if (!run) return c.json({ run: null, lease_id: null }, 200)
@@ -229,12 +234,7 @@ const workers = new Hono<AppEnv>()
 		})
 		await workerService.setBusy(workerId)
 
-		const {
-			taskTitle,
-			taskDescription,
-			parentBranch,
-			workspaceMode,
-		} = taskContext
+		const { taskTitle, taskDescription, parentBranch, workspaceMode } = taskContext
 
 		// Resolve agent identity from authored config
 		const config = c.get('authoredConfig')
@@ -257,7 +257,9 @@ const workers = new Hono<AppEnv>()
 				if (content) {
 					injectedContext[name] = content
 				} else {
-					console.warn(`[workers/claim] context "${name}" referenced by capability profile but not found in .autopilot/context/`)
+					console.warn(
+						`[workers/claim] context "${name}" referenced by capability profile but not found in .autopilot/context/`,
+					)
 				}
 			}
 		}
@@ -265,7 +267,12 @@ const workers = new Hono<AppEnv>()
 		// 2. Resolve context hints from company config
 		const companyRoot = c.get('companyRoot')
 		const companyHintsConfig = config.company.context_hints ?? {}
-		const contextHints: Array<{ type: string; path: string; description?: string; files?: string[] }> = []
+		const contextHints: Array<{
+			type: string
+			path: string
+			description?: string
+			files?: string[]
+		}> = []
 		for (const [hintType, relativePath] of Object.entries(companyHintsConfig)) {
 			const absPath = resolve(companyRoot, relativePath)
 			let files: string[] | undefined
@@ -274,7 +281,10 @@ const workers = new Hono<AppEnv>()
 					const entries = await readdir(absPath)
 					files = entries.filter((e) => !e.startsWith('.')).slice(0, 20)
 				} catch (err) {
-					console.warn(`[workers/claim] cannot read context hint dir "${absPath}":`, err instanceof Error ? err.message : String(err))
+					console.warn(
+						`[workers/claim] cannot read context hint dir "${absPath}":`,
+						err instanceof Error ? err.message : String(err),
+					)
 				}
 			}
 			contextHints.push({
@@ -288,14 +298,11 @@ const workers = new Hono<AppEnv>()
 		// Workers receive only 'worker' scoped secrets.
 		// 'provider' and 'orchestrator_only' scoped secrets stay orchestrator-side.
 		const { secretService } = c.get('services')
-		const sharedRefNames = secretRefs
-			.filter((r) => r.source === 'shared')
-			.map((r) => r.name)
-		const resolvedSharedSecrets = sharedRefNames.length > 0
-			? Object.fromEntries(
-				await secretService.resolveForScopes(sharedRefNames, ['worker']),
-			)
-			: {}
+		const sharedRefNames = secretRefs.filter((r) => r.source === 'shared').map((r) => r.name)
+		const resolvedSharedSecrets =
+			sharedRefNames.length > 0
+				? Object.fromEntries(await secretService.resolveForScopes(sharedRefNames, ['worker']))
+				: {}
 
 		return c.json(
 			{
@@ -303,6 +310,7 @@ const workers = new Hono<AppEnv>()
 					id: run.id,
 					agent_id: run.agent_id,
 					task_id: run.task_id,
+					project_id: run.project_id ?? null,
 					runtime: run.runtime,
 					model: run.model ?? null,
 					provider: run.provider ?? null,
@@ -339,7 +347,10 @@ const workers = new Hono<AppEnv>()
 
 		const { workerId, mismatch } = getAuthoritativeWorkerId(authWorkerId, body.worker_id)
 		if (mismatch) {
-			return c.json({ error: `Authenticated as ${authWorkerId} but body.worker_id is ${body.worker_id}` }, 403)
+			return c.json(
+				{ error: `Authenticated as ${authWorkerId} but body.worker_id is ${body.worker_id}` },
+				403,
+			)
 		}
 
 		// Release all active leases for this worker — fail the associated runs
@@ -368,11 +379,13 @@ export { workers }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-const TargetingBlobSchema = z.object({
-	actions: z.array(ExternalActionSchema).default([]),
-	secret_refs: z.array(SecretRefSchema).default([]),
-	resolved_capabilities: ResolvedCapabilitiesSchema.optional(),
-}).passthrough()
+const TargetingBlobSchema = z
+	.object({
+		actions: z.array(ExternalActionSchema).default([]),
+		secret_refs: z.array(SecretRefSchema).default([]),
+		resolved_capabilities: ResolvedCapabilitiesSchema.optional(),
+	})
+	.passthrough()
 
 /**
  * Split the JSON-serialized targeting blob into execution constraints
@@ -416,7 +429,10 @@ function splitTargeting(raw: string | null | undefined): SplitTargetingResult {
 	try {
 		parsed = JSON.parse(raw)
 	} catch (err) {
-		console.warn('[workers/claim] malformed targeting JSON — treating as empty:', err instanceof Error ? err.message : String(err))
+		console.warn(
+			'[workers/claim] malformed targeting JSON — treating as empty:',
+			err instanceof Error ? err.message : String(err),
+		)
 		return EMPTY_TARGETING
 	}
 

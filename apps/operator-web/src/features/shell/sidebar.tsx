@@ -474,7 +474,7 @@ export function Sidebar({ onSearchOpen }: SidebarProps) {
 				</SidebarHeader>
 
 				<SidebarContent className="gap-3 px-2 py-3">
-					<RailSection tone="sidebar">
+					{/* <RailSection tone="sidebar">
 						<SidebarGroupContent>
 							<SidebarMenu className="gap-1">
 								{PRIMARY_NAV_ITEMS.map((item) => {
@@ -498,7 +498,7 @@ export function Sidebar({ onSearchOpen }: SidebarProps) {
 								})}
 							</SidebarMenu>
 						</SidebarGroupContent>
-					</RailSection>
+					</RailSection> */}
 
 					<TasksSection onCreate={() => setNewTaskOpen(true)} />
 					<FilesSection />

@@ -26,6 +26,7 @@ export const tasks = sqliteTable(
 		priority: text('priority').default('medium'),
 
 		assigned_to: text('assigned_to'),
+		project_id: text('project_id'),
 		workflow_id: text('workflow_id'),
 		workflow_step: text('workflow_step'),
 
@@ -46,6 +47,7 @@ export const tasks = sqliteTable(
 	(table) => [
 		index('idx_tasks_status').on(table.status),
 		index('idx_tasks_assigned').on(table.assigned_to),
+		index('idx_tasks_project').on(table.project_id),
 		index('idx_tasks_workflow').on(table.workflow_id, table.workflow_step),
 		index('idx_tasks_created').on(table.created_at),
 		index('idx_tasks_priority').on(table.priority, table.status),
@@ -73,6 +75,62 @@ export const projects = sqliteTable(
 	],
 )
 
+function configEntryTable(tableName: string) {
+	return sqliteTable(
+		tableName,
+		{
+			scope_id: text('scope_id').primaryKey(),
+			id: text('id').notNull(),
+			project_id: text('project_id'),
+			data: text('data').notNull(),
+			updated_at: text('updated_at').notNull(),
+		},
+		(table) => [
+			index(`${tableName}_id_idx`).on(table.id),
+			index(`${tableName}_project_idx`).on(table.project_id),
+		],
+	)
+}
+
+export const configCompanyScopes = sqliteTable('config_company_scopes', {
+	id: text('id').primaryKey(),
+	data: text('data').notNull(),
+	updated_at: text('updated_at').notNull(),
+})
+
+export const configProjectScopes = sqliteTable(
+	'config_project_scopes',
+	{
+		project_id: text('project_id').primaryKey(),
+		data: text('data').notNull(),
+		updated_at: text('updated_at').notNull(),
+	},
+	(table) => [index('config_project_scopes_updated_idx').on(table.updated_at)],
+)
+
+export const configAgents = configEntryTable('config_agents')
+export const configWorkflows = configEntryTable('config_workflows')
+export const configEnvironments = configEntryTable('config_environments')
+export const configProviders = configEntryTable('config_providers')
+export const configCapabilities = configEntryTable('config_capabilities')
+export const configSkills = configEntryTable('config_skills')
+export const configScripts = configEntryTable('config_scripts')
+
+export const configContexts = sqliteTable(
+	'config_contexts',
+	{
+		scope_id: text('scope_id').primaryKey(),
+		id: text('id').notNull(),
+		project_id: text('project_id'),
+		content: text('content').notNull(),
+		updated_at: text('updated_at').notNull(),
+	},
+	(table) => [
+		index('config_contexts_id_idx').on(table.id),
+		index('config_contexts_project_idx').on(table.project_id),
+	],
+)
+
 // ─── Runs (replaces agent_sessions) ────────────────────────────────────────
 
 export const runs = sqliteTable(
@@ -81,6 +139,7 @@ export const runs = sqliteTable(
 		id: text('id').primaryKey(),
 		agent_id: text('agent_id').notNull(),
 		task_id: text('task_id'),
+		project_id: text('project_id'),
 		worker_id: text('worker_id'),
 		runtime: text('runtime').notNull(), // claude-code | codex | opencode | direct-api
 		model: text('model'), // canonical model intent (e.g. 'claude-sonnet-4')
@@ -108,6 +167,7 @@ export const runs = sqliteTable(
 		index('idx_runs_status').on(table.status),
 		index('idx_runs_agent').on(table.agent_id),
 		index('idx_runs_task').on(table.task_id),
+		index('idx_runs_project').on(table.project_id),
 		index('idx_runs_worker').on(table.worker_id),
 		index('idx_runs_resumed_from').on(table.resumed_from_run_id),
 	],
@@ -145,9 +205,7 @@ export const joinTokens = sqliteTable(
 		/** Worker ID that consumed this token. */
 		used_by_worker_id: text('used_by_worker_id'),
 	},
-	(table) => [
-		index('idx_join_tokens_expires').on(table.expires_at),
-	],
+	(table) => [index('idx_join_tokens_expires').on(table.expires_at)],
 )
 
 // ─── Workers ───────────────────────────────────────────────────────────────
@@ -200,6 +258,31 @@ export const artifactBlobs = sqliteTable('artifact_blobs', {
 	created_at: text('created_at').notNull(),
 })
 
+// ─── Knowledge Documents ──────────────────────────────────────────────────
+
+export const knowledge = sqliteTable(
+	'knowledge',
+	{
+		id: text('id').primaryKey(),
+		path: text('path').notNull(),
+		title: text('title').notNull(),
+		content_hash: text('content_hash').notNull(),
+		blob_id: text('blob_id').notNull(),
+		mime_type: text('mime_type').notNull(),
+		scope_type: text('scope_type').notNull(), // company | project | task
+		scope_id: text('scope_id').notNull(),
+		created_at: text('created_at').notNull(),
+		updated_at: text('updated_at').notNull(),
+	},
+	(table) => [
+		uniqueIndex('uq_knowledge_scope_path').on(table.scope_type, table.scope_id, table.path),
+		index('idx_knowledge_path').on(table.path),
+		index('idx_knowledge_scope').on(table.scope_type, table.scope_id),
+		index('idx_knowledge_blob').on(table.blob_id),
+		index('idx_knowledge_content_hash').on(table.content_hash),
+	],
+)
+
 // ─── Artifacts ────────────────────────────────────────────────────────────
 
 export const artifacts = sqliteTable(
@@ -241,7 +324,11 @@ export const conversationBindings = sqliteTable(
 		updated_at: text('updated_at').notNull(),
 	},
 	(table) => [
-		uniqueIndex('uq_binding_provider_conv').on(table.provider_id, table.external_conversation_id, table.external_thread_id),
+		uniqueIndex('uq_binding_provider_conv').on(
+			table.provider_id,
+			table.external_conversation_id,
+			table.external_thread_id,
+		),
 		index('idx_bindings_task').on(table.task_id),
 		index('idx_bindings_provider').on(table.provider_id),
 	],
@@ -265,10 +352,18 @@ export const taskRelations = sqliteTable(
 	(table) => [
 		index('idx_task_relations_source').on(table.source_task_id, table.relation_type),
 		index('idx_task_relations_target').on(table.target_task_id, table.relation_type),
-		uniqueIndex('uq_task_relation').on(table.source_task_id, table.target_task_id, table.relation_type),
+		uniqueIndex('uq_task_relation').on(
+			table.source_task_id,
+			table.target_task_id,
+			table.relation_type,
+		),
 		// SQLite treats NULL as distinct in unique indexes, so this only enforces
 		// uniqueness when dedupe_key is non-null — exactly what we need.
-		uniqueIndex('uq_task_relation_dedupe').on(table.source_task_id, table.relation_type, table.dedupe_key),
+		uniqueIndex('uq_task_relation_dedupe').on(
+			table.source_task_id,
+			table.relation_type,
+			table.dedupe_key,
+		),
 	],
 )
 
@@ -292,9 +387,7 @@ export const sharedSecrets = sqliteTable(
 		created_at: text('created_at').notNull(),
 		updated_at: text('updated_at').notNull(),
 	},
-	(table) => [
-		index('idx_shared_secrets_scope').on(table.scope),
-	],
+	(table) => [index('idx_shared_secrets_scope').on(table.scope)],
 )
 
 // ─── Queries ──────────────────────────────────────────────────────────────
@@ -307,7 +400,9 @@ export const queries = sqliteTable(
 		agent_id: text('agent_id').notNull(),
 		run_id: text('run_id'),
 		status: text('status').notNull().default('pending'), // pending | running | completed | failed
-		allow_repo_mutation: integer('allow_repo_mutation', { mode: 'boolean' }).notNull().default(false),
+		allow_repo_mutation: integer('allow_repo_mutation', { mode: 'boolean' })
+			.notNull()
+			.default(false),
 		mutated_repo: integer('mutated_repo', { mode: 'boolean' }).notNull().default(false),
 		summary: text('summary'),
 
@@ -353,7 +448,11 @@ export const sessions = sqliteTable(
 		preferred_worker_id: text('preferred_worker_id'),
 	},
 	(table) => [
-		uniqueIndex('uq_session_provider_conv').on(table.provider_id, table.external_conversation_id, table.external_thread_id),
+		uniqueIndex('uq_session_provider_conv').on(
+			table.provider_id,
+			table.external_conversation_id,
+			table.external_thread_id,
+		),
 		index('idx_sessions_provider').on(table.provider_id),
 		index('idx_sessions_task').on(table.task_id),
 		index('idx_sessions_status').on(table.status),

@@ -199,7 +199,7 @@ function InlineRunEvents({ runId, fallbackContent }: { runId: string; fallbackCo
 	const { data: events } = useRunEvents(runId)
 
 	if (!events || events.length === 0) {
-		return <Markdown content={fallbackContent} className="prose prose-sm font-sans text-sm" />
+		return <Markdown content={fallbackContent} />
 	}
 
 	const sorted = [...events]
@@ -213,7 +213,7 @@ function InlineRunEvents({ runId, fallbackContent }: { runId: string; fallbackCo
 		.sort((a, b) => a.created_at.localeCompare(b.created_at))
 
 	if (sorted.length === 0) {
-		return <Markdown content={fallbackContent} className="prose prose-sm font-sans text-sm" />
+		return <Markdown content={fallbackContent} />
 	}
 
 	// Deduplicate consecutive thinking/progress — keep last in streak
@@ -268,7 +268,7 @@ function InlineRunEvents({ runId, fallbackContent }: { runId: string; fallbackCo
 				if (item.kind === 'progress' && item.event.summary) {
 					return (
 						<div key={item.event.id} className="py-0.5">
-							<Markdown content={item.event.summary} className="prose prose-sm font-sans text-sm" />
+								<Markdown content={item.event.summary} />
 						</div>
 					)
 				}
@@ -286,7 +286,7 @@ function InlineRunEvents({ runId, fallbackContent }: { runId: string; fallbackCo
 				return null
 			})}
 			{!hasProgress && (
-				<Markdown content={fallbackContent} className="prose prose-sm font-sans text-sm" />
+					<Markdown content={fallbackContent} />
 			)}
 		</div>
 	)
@@ -685,10 +685,7 @@ export function ChatMessage({
 						<span>Task update</span>
 					</div>
 					{message.content && (
-						<Markdown
-							content={message.content.replace(/^\[task_progress\]\s*/, '')}
-							className="prose prose-sm font-sans text-sm text-foreground"
-						/>
+							<Markdown content={message.content.replace(/^\[task_progress\]\s*/, '')} />
 					)}
 					<div className="mt-3">
 						<TaskActionBar taskId={taskId} taskNeedsApproval={taskNeedsApproval} />
@@ -734,7 +731,7 @@ export function ChatMessage({
 				{queryRunId ? (
 					<InlineRunEvents runId={queryRunId} fallbackContent={message.content} />
 				) : (
-					<Markdown content={message.content} className="prose prose-sm font-sans text-sm" />
+						<Markdown content={message.content} />
 				)}
 				{taskId && <TaskActionBar taskId={taskId} taskNeedsApproval={taskNeedsApproval} />}
 			</div>

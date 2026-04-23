@@ -1,9 +1,21 @@
 import { Command } from 'commander'
 import { program } from '../program'
-import { section, badge, dim, table, success, error, separator, dot, header, warning, stripAnsi } from '../utils/format'
 import { createApiClient, getBaseUrl } from '../utils/client'
-import { getAuthHeaders } from './auth'
+import {
+	badge,
+	dim,
+	dot,
+	error,
+	header,
+	section,
+	separator,
+	stripAnsi,
+	success,
+	table,
+	warning,
+} from '../utils/format'
 import { LiveRenderer } from '../utils/live-renderer'
+import { getAuthHeaders } from './auth'
 
 // ─── Shared Types ─────────────────────────────────────────────────────────
 
@@ -25,17 +37,46 @@ interface ChildRollup {
 	backlog: number
 }
 
+interface RegisteredProject {
+	id: string
+	path: string
+}
+
+function projectHeaders(): Record<string, string> {
+	const headers: Record<string, string> = { ...getAuthHeaders() }
+	if (Object.keys(headers).length === 0) headers['X-Local-Dev'] = 'true'
+	return headers
+}
+
+async function detectProjectIdFromCwd(baseUrl = getBaseUrl()): Promise<string | undefined> {
+	const cwd = process.cwd()
+	const res = await fetch(`${baseUrl}/api/projects`, { headers: projectHeaders() }).catch(
+		() => null,
+	)
+	if (!res?.ok) return undefined
+
+	const projects = (await res.json()) as RegisteredProject[]
+	const match = projects
+		.filter((project) => cwd === project.path || cwd.startsWith(`${project.path}/`))
+		.sort((a, b) => b.path.length - a.path.length)[0]
+
+	return match?.id
+}
+
 const tasksCmd = new Command('task')
 	.description('List and manage tasks')
 	.option('-s, --status <status>', 'Filter by task status')
 	.option('-a, --assigned <agent>', 'Filter by assigned agent ID')
-	.action(async (opts: { status?: string; assigned?: string }) => {
+	.option('-p, --project <id>', 'Filter by project ID')
+	.action(async (opts: { status?: string; assigned?: string; project?: string }) => {
 		try {
 			const client = createApiClient()
 
 			const query: Record<string, string> = {}
 			if (opts.status) query.status = opts.status
 			if (opts.assigned) query.assigned_to = opts.assigned
+			const projectId = opts.project ?? (await detectProjectIdFromCwd())
+			if (projectId) query.project_id = projectId
 
 			const res = await client.api.tasks.$get({ query })
 			if (!res.ok) {
@@ -187,6 +228,7 @@ tasksCmd.addCommand(
 		.requiredOption('-t, --title <title>', 'Task title')
 		.requiredOption('--type <type>', 'Task type (e.g. feature, bug, chore)')
 		.option('-d, --description <desc>', 'Task description')
+		.option('-p, --project <id>', 'Project ID override')
 		.option('--priority <priority>', 'Priority (low, medium, high, critical)')
 		.option('--assign <agent>', 'Assign to agent ID')
 		.option('--queue <name>', 'Task queue for concurrency control')
@@ -197,6 +239,7 @@ tasksCmd.addCommand(
 				title: string
 				type: string
 				description?: string
+				project?: string
 				priority?: string
 				assign?: string
 				queue?: string
@@ -205,12 +248,14 @@ tasksCmd.addCommand(
 			}) => {
 				try {
 					const client = createApiClient()
+					const projectId = opts.project ?? (await detectProjectIdFromCwd())
 
 					const res = await client.api.tasks.$post({
 						json: {
 							title: opts.title,
 							type: opts.type,
 							description: opts.description,
+							project_id: projectId,
 							priority: opts.priority,
 							assigned_to: opts.assign,
 							queue: opts.queue,
@@ -320,7 +365,9 @@ tasksCmd.addCommand(
 				})
 
 				if (!res.ok) {
-					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as { error?: string }
+					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
+						error?: string
+					}
 					console.error(error(body.error ?? `Failed to delete task: ${id}`))
 					process.exit(1)
 				}
@@ -585,10 +632,13 @@ interface TimelineEntry {
 
 function truncate(text: string, maxLen: number): string {
 	if (text.length <= maxLen) return text
-	return text.slice(0, maxLen - 3) + '...'
+	return `${text.slice(0, maxLen - 3)}...`
 }
 
-function formatDuration(startedAt: string | null | undefined, endedAt: string | null | undefined): string {
+function formatDuration(
+	startedAt: string | null | undefined,
+	endedAt: string | null | undefined,
+): string {
 	if (!startedAt) return ''
 	const start = new Date(startedAt).getTime()
 	const end = endedAt ? new Date(endedAt).getTime() : Date.now()
@@ -607,7 +657,7 @@ function formatDuration(startedAt: string | null | undefined, endedAt: string | 
 
 function shortRunId(id: string): string {
 	// run-1234567890-abcdef012345 → run-abcd…
-	if (id.length > 12) return id.slice(0, 10) + '\u2026'
+	if (id.length > 12) return `${id.slice(0, 10)}\u2026`
 	return id
 }
 
@@ -666,7 +716,10 @@ function buildTimeline(
 		// Determine if this is a revision or retry
 		const isRevision = matchedStepIdx < pointer
 		const isRetry = matchedStepIdx === pointer && visits > 1
-		const isEmpty = !run.summary || run.summary.trim() === '' || /^(no output|empty|n\/a|completed? with no output)$/i.test(run.summary?.trim() ?? '')
+		const isEmpty =
+			!run.summary ||
+			run.summary.trim() === '' ||
+			/^(no output|empty|n\/a|completed? with no output)$/i.test(run.summary?.trim() ?? '')
 
 		let label = step.id
 		if (isRevision) label = `${step.id} (revision)`
@@ -677,7 +730,7 @@ function buildTimeline(
 			status = 'running'
 		} else if (run.status === 'failed') {
 			status = 'failed'
-		} else if (isEmpty && (run.status === 'completed')) {
+		} else if (isEmpty && run.status === 'completed') {
 			status = 'empty'
 		}
 
@@ -686,7 +739,7 @@ function buildTimeline(
 		// Add revision annotation if validate step sent us back
 		if (isRevision && entries.length >= 2) {
 			const prevEntry = entries[entries.length - 2]
-			if (prevEntry && prevEntry.run?.summary) {
+			if (prevEntry?.run?.summary) {
 				// Look for revision reason in metadata
 				const revKey = Object.keys(metadata).find(
 					(k) => k.startsWith('_revisions:') && k.includes(step.id),
@@ -706,7 +759,7 @@ function buildTimeline(
 		if (isEmpty && run.status === 'completed') {
 			entries.push({
 				stepId: step.id,
-				label: `  \u21b3 retry (empty output)`,
+				label: '  \u21b3 retry (empty output)',
 				status: 'empty',
 			})
 		}
@@ -786,12 +839,7 @@ function renderProgressLines(data: ProgressData): string[] {
 	}
 
 	// Build timeline
-	const entries = buildTimeline(
-		workflow.steps,
-		taskRuns,
-		task.workflow_step ?? null,
-		metadata,
-	)
+	const entries = buildTimeline(workflow.steps, taskRuns, task.workflow_step ?? null, metadata)
 
 	// Inject last event summary into running entry
 	const runningEntry = entries.find((e) => e.status === 'running' && e.run)
@@ -802,7 +850,7 @@ function renderProgressLines(data: ProgressData): string[] {
 	// ── Header ──
 	lines.push('')
 	lines.push(
-		`  ${header(task.title)}  ${badge(task.status, statusColor(task.status))}${task.workflow_step ? ` ${dim('\u2192 ' + task.workflow_step)}` : ''}`,
+		`  ${header(task.title)}  ${badge(task.status, statusColor(task.status))}${task.workflow_step ? ` ${dim(`\u2192 ${task.workflow_step}`)}` : ''}`,
 	)
 	lines.push('')
 
@@ -819,7 +867,7 @@ function renderProgressLines(data: ProgressData): string[] {
 		// Annotation-only rows (revision arrows)
 		if (entry.annotation !== undefined && !entry.run) {
 			lines.push(
-				`  ${dim(entry.label.padEnd(26))}${''.padEnd(11)}${''.padEnd(17)}${''.padEnd(10)}${dim('"' + entry.annotation + '"')}`,
+				`  ${dim(entry.label.padEnd(26))}${''.padEnd(11)}${''.padEnd(17)}${''.padEnd(10)}${dim(`"${entry.annotation}"`)}`,
 			)
 			continue
 		}
@@ -844,21 +892,19 @@ function renderProgressLines(data: ProgressData): string[] {
 				statusIcon = error('\u2717')
 				statusText = error('fail')
 				break
-			case 'pending':
 			default:
 				statusIcon = dim('\u25cb')
 				statusText = dim('pending')
 				break
 		}
 
-		const stepLabel = (entry.status === 'pending' || (entry.status === 'done' && !entry.run))
-			? `${statusIcon} ${dim(entry.label)}`
-			: `${statusIcon} ${entry.label}`
+		const stepLabel =
+			entry.status === 'pending' || (entry.status === 'done' && !entry.run)
+				? `${statusIcon} ${dim(entry.label)}`
+				: `${statusIcon} ${entry.label}`
 
 		const runId = entry.run ? dim(shortRunId(entry.run.id)) : ''
-		const duration = entry.run
-			? formatDuration(entry.run.started_at, entry.run.ended_at)
-			: ''
+		const duration = entry.run ? formatDuration(entry.run.started_at, entry.run.ended_at) : ''
 
 		let summaryText = ''
 		if (entry.run?.summary) {
@@ -1101,14 +1147,16 @@ tasksCmd.addCommand(
 					if (elapsed >= MIN_INTERVAL && !pendingRender) {
 						pendingRender = true
 						lastRenderTime = now
-						doRender(full).then((terminal) => {
-							pendingRender = false
-							if (terminal) {
-								controller.abort()
-							}
-						}).catch(() => {
-							pendingRender = false
-						})
+						doRender(full)
+							.then((terminal) => {
+								pendingRender = false
+								if (terminal) {
+									controller.abort()
+								}
+							})
+							.catch(() => {
+								pendingRender = false
+							})
 					} else if (!renderTimeout) {
 						// Schedule a deferred render
 						const delay = MIN_INTERVAL - elapsed
@@ -1116,14 +1164,16 @@ tasksCmd.addCommand(
 							renderTimeout = null
 							lastRenderTime = Date.now()
 							pendingRender = true
-							doRender(full).then((terminal) => {
-								pendingRender = false
-								if (terminal) {
-									controller.abort()
-								}
-							}).catch(() => {
-								pendingRender = false
-							})
+							doRender(full)
+								.then((terminal) => {
+									pendingRender = false
+									if (terminal) {
+										controller.abort()
+									}
+								})
+								.catch(() => {
+									pendingRender = false
+								})
 						}, delay)
 					}
 				}
@@ -1172,7 +1222,11 @@ tasksCmd.addCommand(
 										if (event.type === 'heartbeat') continue
 
 										// run_event: update the running step's last event summary
-										if (event.type === 'run_event' && event.runId && currentRunIds.has(event.runId)) {
+										if (
+											event.type === 'run_event' &&
+											event.runId &&
+											currentRunIds.has(event.runId)
+										) {
 											if (event.summary) {
 												currentEventSummary = event.summary
 											}
@@ -1201,9 +1255,12 @@ tasksCmd.addCommand(
 										// by run_started with an unknown runId. We can't filter by
 										// task here since run_started only has runId + agentId, so
 										// do a speculative full render for any unrecognized run_started.
-										if (event.type === 'run_started' && event.runId && !currentRunIds.has(event.runId)) {
+										if (
+											event.type === 'run_started' &&
+											event.runId &&
+											!currentRunIds.has(event.runId)
+										) {
 											scheduleRender(true)
-											continue
 										}
 									} catch (err) {
 										void err
@@ -1308,7 +1365,10 @@ async function printRollupSummary(
 		console.log(dim(`  Children: ${rollup.total} (${parts.join(', ')})`))
 		console.log(dim(`  Use: autopilot tasks children ${taskId}`))
 	} catch (err) {
-		console.debug('[tasks] rollup summary fetch failed:', err instanceof Error ? err.message : String(err))
+		console.debug(
+			'[tasks] rollup summary fetch failed:',
+			err instanceof Error ? err.message : String(err),
+		)
 	}
 }
 
@@ -1333,7 +1393,10 @@ async function printLastRunSummary(
 			console.log(`  ${lastRun.summary.slice(0, 300)}`)
 		}
 	} catch (err) {
-		console.debug('[tasks] last run summary fetch failed:', err instanceof Error ? err.message : String(err))
+		console.debug(
+			'[tasks] last run summary fetch failed:',
+			err instanceof Error ? err.message : String(err),
+		)
 	}
 }
 
@@ -1354,7 +1417,9 @@ tasksCmd.addCommand(
 				})
 
 				if (!res.ok) {
-					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as { error?: string }
+					const body = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
+						error?: string
+					}
 					console.error(error(body.error ?? `Failed to add dependencies to task ${id}`))
 					process.exit(1)
 				}
@@ -1366,7 +1431,12 @@ tasksCmd.addCommand(
 
 				console.log(section(`Dependencies for ${id}`))
 				for (const dep of result.dependencies) {
-					const icon = dep.status === 'added' ? success('+') : dep.status === 'cycle_detected' ? error('!') : dim('?')
+					const icon =
+						dep.status === 'added'
+							? success('+')
+							: dep.status === 'cycle_detected'
+								? error('!')
+								: dim('?')
 					console.log(`  ${icon} ${dep.depends_on} — ${dep.status}`)
 				}
 			} catch (err) {
@@ -1402,13 +1472,7 @@ tasksCmd.addCommand(
 				}
 
 				console.log(
-					table(
-						deps.map((t) => [
-							dim(t.id),
-							badge(t.status, statusColor(t.status)),
-							t.title,
-						]),
-					),
+					table(deps.map((t) => [dim(t.id), badge(t.status, statusColor(t.status)), t.title])),
 				)
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))

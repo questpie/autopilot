@@ -14,10 +14,12 @@ const projectInputSchema = z.object({
 const projectsRoute = new Hono<AppEnv>()
 	.get('/', async (c) => {
 		const { projectService } = c.get('services')
+		if (!projectService) return c.json({ error: 'project service not available' }, 503)
 		return c.json(await projectService.list(), 200)
 	})
 	.get('/:id', zValidator('param', z.object({ id: z.string() })), async (c) => {
 		const { projectService } = c.get('services')
+		if (!projectService) return c.json({ error: 'project service not available' }, 503)
 		const { id } = c.req.valid('param')
 		const project = await projectService.get(id)
 		if (!project) return c.json({ error: 'project not found' }, 404)
@@ -25,11 +27,13 @@ const projectsRoute = new Hono<AppEnv>()
 	})
 	.post('/', zValidator('json', projectInputSchema), async (c) => {
 		const { projectService } = c.get('services')
+		if (!projectService) return c.json({ error: 'project service not available' }, 503)
 		const body = c.req.valid('json')
 		return c.json(await projectService.register(body), 200)
 	})
 	.delete('/:id', zValidator('param', z.object({ id: z.string() })), async (c) => {
 		const { projectService } = c.get('services')
+		if (!projectService) return c.json({ error: 'project service not available' }, 503)
 		const { id } = c.req.valid('param')
 		const deleted = await projectService.unregister(id)
 		if (!deleted) return c.json({ error: 'project not found' }, 404)

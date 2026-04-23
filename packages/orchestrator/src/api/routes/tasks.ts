@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
+import type { AppEnv } from '../app'
 
 const tasks = new Hono<AppEnv>()
 	// GET /tasks — list with optional filters
@@ -13,6 +13,7 @@ const tasks = new Hono<AppEnv>()
 			z.object({
 				status: z.string().optional(),
 				assigned_to: z.string().optional(),
+				project_id: z.string().optional(),
 				workflow_id: z.string().optional(),
 			}),
 		),
@@ -24,17 +25,13 @@ const tasks = new Hono<AppEnv>()
 		},
 	)
 	// GET /tasks/:id — single task
-	.get(
-		'/:id',
-		zValidator('param', z.object({ id: z.string() })),
-		async (c) => {
-			const { taskService } = c.get('services')
-			const { id } = c.req.valid('param')
-			const task = await taskService.get(id)
-			if (!task) return c.json({ error: 'task not found' }, 404)
-			return c.json(task, 200)
-		},
-	)
+	.get('/:id', zValidator('param', z.object({ id: z.string() })), async (c) => {
+		const { taskService } = c.get('services')
+		const { id } = c.req.valid('param')
+		const task = await taskService.get(id)
+		if (!task) return c.json({ error: 'task not found' }, 404)
+		return c.json(task, 200)
+	})
 	// POST /tasks — create a new task
 	.post(
 		'/',
@@ -47,6 +44,7 @@ const tasks = new Hono<AppEnv>()
 				status: z.string().optional(),
 				priority: z.string().optional(),
 				assigned_to: z.string().optional(),
+				project_id: z.string().optional(),
 				workflow_id: z.string().optional(),
 				workflow_step: z.string().optional(),
 				context: z.string().optional(),
@@ -79,7 +77,10 @@ const tasks = new Hono<AppEnv>()
 							created_by: taskInput.created_by ?? actor?.id ?? 'system',
 						})
 					} catch (err) {
-						console.warn(`[tasks] failed to add dependency ${result.task.id} → ${depId}:`, err instanceof Error ? err.message : String(err))
+						console.warn(
+							`[tasks] failed to add dependency ${result.task.id} → ${depId}:`,
+							err instanceof Error ? err.message : String(err),
+						)
 					}
 				}
 			}
@@ -99,6 +100,7 @@ const tasks = new Hono<AppEnv>()
 				status: z.string().optional(),
 				priority: z.string().optional(),
 				assigned_to: z.string().optional(),
+				project_id: z.string().optional(),
 				workflow_id: z.string().optional(),
 				workflow_step: z.string().optional(),
 				context: z.string().optional(),
@@ -126,22 +128,18 @@ const tasks = new Hono<AppEnv>()
 		},
 	)
 	// POST /tasks/:id/approve — approve a human_approval step
-	.post(
-		'/:id/approve',
-		zValidator('param', z.object({ id: z.string() })),
-		async (c) => {
-			const { workflowEngine } = c.get('services')
-			const actor = c.get('actor')
-			const { id } = c.req.valid('param')
+	.post('/:id/approve', zValidator('param', z.object({ id: z.string() })), async (c) => {
+		const { workflowEngine } = c.get('services')
+		const actor = c.get('actor')
+		const { id } = c.req.valid('param')
 
-			const result = await workflowEngine.approve(id, actor?.id)
-			if (!result) {
-				return c.json({ error: 'task not found or not on a human_approval step' }, 400)
-			}
+		const result = await workflowEngine.approve(id, actor?.id)
+		if (!result) {
+			return c.json({ error: 'task not found or not on a human_approval step' }, 400)
+		}
 
-			return c.json(result, 200)
-		},
-	)
+		return c.json(result, 200)
+	})
 	// POST /tasks/:id/reject — reject a human_approval step
 	.post(
 		'/:id/reject',
@@ -181,40 +179,32 @@ const tasks = new Hono<AppEnv>()
 		},
 	)
 	// POST /tasks/:id/retry — retry a failed task
-	.post(
-		'/:id/retry',
-		zValidator('param', z.object({ id: z.string() })),
-		async (c) => {
-			const { workflowEngine } = c.get('services')
-			const actor = c.get('actor')
-			const { id } = c.req.valid('param')
+	.post('/:id/retry', zValidator('param', z.object({ id: z.string() })), async (c) => {
+		const { workflowEngine } = c.get('services')
+		const actor = c.get('actor')
+		const { id } = c.req.valid('param')
 
-			const result = await workflowEngine.retry(id, actor?.id)
-			if (!result) {
-				return c.json({ error: 'task not found or not in failed status' }, 400)
-			}
+		const result = await workflowEngine.retry(id, actor?.id)
+		if (!result) {
+			return c.json({ error: 'task not found or not in failed status' }, 400)
+		}
 
-			return c.json(result, 200)
-		},
-	)
+		return c.json(result, 200)
+	})
 	// POST /tasks/:id/cancel — cancel an active task
-	.post(
-		'/:id/cancel',
-		zValidator('param', z.object({ id: z.string() })),
-		async (c) => {
-			const { workflowEngine } = c.get('services')
-			const actor = c.get('actor')
-			const { id } = c.req.valid('param')
-			const body = await c.req.json().catch(() => ({})) as { reason?: string }
+	.post('/:id/cancel', zValidator('param', z.object({ id: z.string() })), async (c) => {
+		const { workflowEngine } = c.get('services')
+		const actor = c.get('actor')
+		const { id } = c.req.valid('param')
+		const body = (await c.req.json().catch(() => ({}))) as { reason?: string }
 
-			const result = await workflowEngine.cancel(id, body?.reason, actor?.id)
-			if (!result) {
-				return c.json({ error: 'task not found or already completed/failed' }, 400)
-			}
+		const result = await workflowEngine.cancel(id, body?.reason, actor?.id)
+		if (!result) {
+			return c.json({ error: 'task not found or already completed/failed' }, 400)
+		}
 
-			return c.json(result, 200)
-		},
-	)
+		return c.json(result, 200)
+	})
 	// DELETE /tasks/:id — delete task with cascade
 	.delete(
 		'/:id',
@@ -241,15 +231,11 @@ const tasks = new Hono<AppEnv>()
 		},
 	)
 	// GET /tasks/:id/activity — approval/rejection/reply history
-	.get(
-		'/:id/activity',
-		zValidator('param', z.object({ id: z.string() })),
-		async (c) => {
-			const { activityService } = c.get('services')
-			const { id } = c.req.valid('param')
-			const entries = await activityService.listForTask(id)
-			return c.json(entries, 200)
-		},
-	)
+	.get('/:id/activity', zValidator('param', z.object({ id: z.string() })), async (c) => {
+		const { activityService } = c.get('services')
+		const { id } = c.req.valid('param')
+		const entries = await activityService.listForTask(id)
+		return c.json(entries, 200)
+	})
 
 export { tasks }

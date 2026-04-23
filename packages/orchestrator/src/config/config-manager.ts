@@ -7,14 +7,19 @@
  * - on failure: keeps old config, logs error, tracks last error
  * - file watcher with debounce for .autopilot/ changes
  */
-import { existsSync, watch as fsWatch, type FSWatcher } from 'node:fs'
+import { type FSWatcher, existsSync, watch as fsWatch } from 'node:fs'
 import { join } from 'node:path'
 import type { AuthoredConfig } from '../services/workflow-engine'
-import { discoverScopes, resolveConfig, type ScopeChain } from './scope-resolver'
+import type { ConfigService } from './config-service'
+import { type ScopeChain, discoverScopes, resolveConfig } from './scope-resolver'
 
 export interface ConfigManagerOptions {
 	/** Company root directory for scope discovery. */
 	companyRoot: string
+	/** DB-backed config service. When set, reload() uses the DB instead of filesystem scopes. */
+	configService?: ConfigService
+	/** Active project scope for this server instance. */
+	projectId?: string | null
 	/** Initial scope chain (avoids re-discovery on first load). */
 	initialChain?: ScopeChain
 	/** Debounce window for file watcher in ms. Default: 500. */
@@ -31,6 +36,8 @@ export interface ReloadResult {
 export class ConfigManager {
 	private config: AuthoredConfig
 	private readonly companyRoot: string
+	private readonly configService?: ConfigService
+	private readonly projectId: string | null
 	private readonly debounceMs: number
 	private readonly onReload?: (config: AuthoredConfig) => void | Promise<void>
 
@@ -47,6 +54,8 @@ export class ConfigManager {
 	constructor(initialConfig: AuthoredConfig, options: ConfigManagerOptions) {
 		this.config = initialConfig
 		this.companyRoot = options.companyRoot
+		this.configService = options.configService
+		this.projectId = options.projectId ?? null
 		this.debounceMs = options.debounceMs ?? 500
 		this.onReload = options.onReload
 	}
@@ -66,23 +75,9 @@ export class ConfigManager {
 	 */
 	async reload(): Promise<ReloadResult> {
 		try {
-			const newChain = await discoverScopes(this.companyRoot)
-			const newResolved = await resolveConfig(newChain)
-
-			// Build the new config snapshot for validation
-			const newConfig: AuthoredConfig = {
-				company: newResolved.company,
-				agents: newResolved.agents,
-				workflows: newResolved.workflows,
-				environments: newResolved.environments,
-				providers: newResolved.providers,
-				capabilityProfiles: newResolved.capabilityProfiles,
-				skills: newResolved.skills,
-				context: newResolved.context,
-				scripts: newResolved.scripts,
-				defaults: newResolved.defaults,
-				queues: newResolved.company.queues ?? {},
-			}
+			const newConfig = this.configService
+				? await this.configService.loadAuthoredConfig(this.projectId)
+				: await this.loadFromFilesystem()
 
 			// Atomic swap — single-threaded JS means these synchronous assignments
 			// cannot be observed in a half-applied state by any request handler.
@@ -119,6 +114,7 @@ export class ConfigManager {
 
 	/** Start watching .autopilot/ directories for changes. */
 	startWatching(chain: ScopeChain): void {
+		if (this.configService) return
 		this.watchDir(chain.companyRoot!)
 		if (chain.projectRoot && chain.projectRoot !== chain.companyRoot) {
 			this.watchDir(chain.projectRoot)
@@ -147,6 +143,7 @@ export class ConfigManager {
 	// ── Private ───────────────────────────────────────────────────────────
 
 	private scheduleReload(): void {
+		if (this.configService) return
 		if (this.reloadTimer) clearTimeout(this.reloadTimer)
 		this.reloadTimer = setTimeout(() => {
 			this.reloadTimer = null
@@ -155,17 +152,45 @@ export class ConfigManager {
 	}
 
 	private watchDir(dir: string): void {
+		if (this.configService) return
 		const autopilotDir = join(dir, '.autopilot')
 		if (!existsSync(autopilotDir)) return
 		try {
 			const watcher = fsWatch(autopilotDir, { recursive: true }, (_event, filename) => {
-				if (filename && (filename.endsWith('.yaml') || filename.endsWith('.yml') || filename.endsWith('.md'))) {
+				if (
+					filename &&
+					(filename.endsWith('.yaml') || filename.endsWith('.yml') || filename.endsWith('.md'))
+				) {
 					this.scheduleReload()
 				}
 			})
 			this.watchers.push(watcher)
 		} catch (err) {
-			console.warn('[config] could not watch', autopilotDir, ':', err instanceof Error ? err.message : String(err))
+			console.warn(
+				'[config] could not watch',
+				autopilotDir,
+				':',
+				err instanceof Error ? err.message : String(err),
+			)
+		}
+	}
+
+	private async loadFromFilesystem(): Promise<AuthoredConfig> {
+		const newChain = await discoverScopes(this.companyRoot)
+		const newResolved = await resolveConfig(newChain)
+
+		return {
+			company: newResolved.company,
+			agents: newResolved.agents,
+			workflows: newResolved.workflows,
+			environments: newResolved.environments,
+			providers: newResolved.providers,
+			capabilityProfiles: newResolved.capabilityProfiles,
+			skills: newResolved.skills,
+			context: newResolved.context,
+			scripts: newResolved.scripts,
+			defaults: newResolved.defaults,
+			queues: newResolved.company.queues ?? {},
 		}
 	}
 }

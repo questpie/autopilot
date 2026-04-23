@@ -1,13 +1,30 @@
 import { randomBytes } from 'node:crypto'
-import type { Agent, Workflow, WorkflowStep, CompanyScope, ExecutionTarget, Environment, SecretRef, ExternalAction, StepTransition, Provider, CapabilityProfile, ResolvedCapabilities, QueueConfig, RetryPolicy, SkillEntry, StandaloneScript } from '@questpie/autopilot-spec'
-import { classifyRunError } from './error-classifier'
-import { slugifyTaskId } from './tasks'
-import type { TaskService, TaskRow } from './tasks'
-import type { RunService } from './runs'
+import type {
+	Agent,
+	CapabilityProfile,
+	CompanyScope,
+	Environment,
+	ExecutionTarget,
+	ExternalAction,
+	Provider,
+	QueueConfig,
+	ResolvedCapabilities,
+	RetryPolicy,
+	SecretRef,
+	SkillEntry,
+	StandaloneScript,
+	StepTransition,
+	Workflow,
+	WorkflowStep,
+} from '@questpie/autopilot-spec'
+import { eventBus } from '../events/event-bus'
 import type { ActivityService } from './activity'
 import type { ArtifactService } from './artifacts'
+import { classifyRunError } from './error-classifier'
+import type { RunService } from './runs'
 import type { ChildRollup } from './task-graph'
-import { eventBus } from '../events/event-bus'
+import { slugifyTaskId } from './tasks'
+import type { TaskRow, TaskService } from './tasks'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -145,43 +162,70 @@ export class WorkflowEngine {
 			for (const step of wf.steps) {
 				// Agent reference
 				if (step.type === 'agent' && step.agent_id && !this.config.agents.has(step.agent_id)) {
-					issues.push(`workflow "${wfId}" step "${step.id}" references unknown agent "${step.agent_id}"`)
+					issues.push(
+						`workflow "${wfId}" step "${step.id}" references unknown agent "${step.agent_id}"`,
+					)
 				}
 
 				// Environment reference
-				if (step.targeting?.environment && !this.config.environments.has(step.targeting.environment)) {
-					issues.push(`workflow "${wfId}" step "${step.id}" references unknown environment "${step.targeting.environment}"`)
+				if (
+					step.targeting?.environment &&
+					!this.config.environments.has(step.targeting.environment)
+				) {
+					issues.push(
+						`workflow "${wfId}" step "${step.id}" references unknown environment "${step.targeting.environment}"`,
+					)
 				}
 
 				// Control flow targets
 				if (step.next && !stepIds.has(step.next)) {
-					issues.push(`workflow "${wfId}" step "${step.id}" has next="${step.next}" which does not exist`)
+					issues.push(
+						`workflow "${wfId}" step "${step.id}" has next="${step.next}" which does not exist`,
+					)
 				}
 				if (step.transitions) {
 					for (const transition of step.transitions) {
 						if (!stepIds.has(transition.goto)) {
 							const whenStr = JSON.stringify(transition.when)
-							issues.push(`workflow "${wfId}" step "${step.id}" transition ${whenStr} → "${transition.goto}" target does not exist`)
+							issues.push(
+								`workflow "${wfId}" step "${step.id}" transition ${whenStr} → "${transition.goto}" target does not exist`,
+							)
 						}
 					}
 				}
 				if (step.on_approve && !stepIds.has(step.on_approve)) {
-					issues.push(`workflow "${wfId}" step "${step.id}" on_approve="${step.on_approve}" target does not exist`)
+					issues.push(
+						`workflow "${wfId}" step "${step.id}" on_approve="${step.on_approve}" target does not exist`,
+					)
 				}
 				if (step.on_reply && !stepIds.has(step.on_reply)) {
-					issues.push(`workflow "${wfId}" step "${step.id}" on_reply="${step.on_reply}" target does not exist`)
+					issues.push(
+						`workflow "${wfId}" step "${step.id}" on_reply="${step.on_reply}" target does not exist`,
+					)
 				}
 				if (step.on_reject && !stepIds.has(step.on_reject)) {
-					issues.push(`workflow "${wfId}" step "${step.id}" on_reject="${step.on_reject}" target does not exist`)
+					issues.push(
+						`workflow "${wfId}" step "${step.id}" on_reject="${step.on_reject}" target does not exist`,
+					)
 				}
 				if (step.on_met && !stepIds.has(step.on_met)) {
-					issues.push(`workflow "${wfId}" step "${step.id}" on_met="${step.on_met}" target does not exist`)
+					issues.push(
+						`workflow "${wfId}" step "${step.id}" on_met="${step.on_met}" target does not exist`,
+					)
 				}
 				if (step.on_failed && !stepIds.has(step.on_failed)) {
-					issues.push(`workflow "${wfId}" step "${step.id}" on_failed="${step.on_failed}" target does not exist`)
+					issues.push(
+						`workflow "${wfId}" step "${step.id}" on_failed="${step.on_failed}" target does not exist`,
+					)
 				}
-				if (step.type === 'wait_for_children' && step.join_policy === 'any_failed' && step.on_failed) {
-					issues.push(`workflow "${wfId}" step "${step.id}" on_failed is ignored when join_policy is any_failed — use on_met instead`)
+				if (
+					step.type === 'wait_for_children' &&
+					step.join_policy === 'any_failed' &&
+					step.on_failed
+				) {
+					issues.push(
+						`workflow "${wfId}" step "${step.id}" on_failed is ignored when join_policy is any_failed — use on_met instead`,
+					)
 				}
 
 				// Output/transition consistency: validate when-field values against declared output
@@ -189,7 +233,9 @@ export class WorkflowEngine {
 					const { artifacts, ...outputTags } = step.output
 					for (const transition of step.transitions) {
 						for (const [field, value] of Object.entries(transition.when)) {
-							const tag = outputTags[field] as { description: string; values?: Record<string, string> } | undefined
+							const tag = outputTags[field] as
+								| { description: string; values?: Record<string, string> }
+								| undefined
 							if (tag?.values && !tag.values[value]) {
 								const validValues = Object.keys(tag.values).join(', ')
 								issues.push(
@@ -216,7 +262,9 @@ export class WorkflowEngine {
 
 		if (!task.assigned_to && this.defaultAssignee) {
 			if (!this.config.agents.has(this.defaultAssignee)) {
-				console.warn(`[workflow-engine] default_task_assignee "${this.defaultAssignee}" not found — skipping assignment`)
+				console.warn(
+					`[workflow-engine] default_task_assignee "${this.defaultAssignee}" not found — skipping assignment`,
+				)
 			} else {
 				updates.assigned_to = this.defaultAssignee
 				actions.push('assigned')
@@ -228,7 +276,9 @@ export class WorkflowEngine {
 			const workflow = this.config.workflows.get(workflowId)
 			if (!workflow) {
 				const source = task.workflow_id ? 'workflow_id' : 'default_workflow'
-				console.warn(`[workflow-engine] ${source} "${workflowId}" not found — skipping workflow attachment`)
+				console.warn(
+					`[workflow-engine] ${source} "${workflowId}" not found — skipping workflow attachment`,
+				)
 			} else if (workflow.steps.length === 0) {
 				console.warn(`[workflow-engine] workflow "${workflowId}" has no steps — skipping`)
 			} else {
@@ -245,9 +295,10 @@ export class WorkflowEngine {
 		const updated = (await this.taskService.get(taskId))!
 		const runId = await this.processCurrentStep(updated, actions, {})
 
-		const final = runId !== null || actions.includes('done') || actions.includes('approval_needed')
-			? (await this.taskService.get(taskId))!
-			: updated
+		const final =
+			runId !== null || actions.includes('done') || actions.includes('approval_needed')
+				? (await this.taskService.get(taskId))!
+				: updated
 		return { task: final, runId, actions }
 	}
 
@@ -261,6 +312,7 @@ export class WorkflowEngine {
 		description?: string
 		priority?: string
 		assigned_to?: string
+		project_id?: string
 		workflow_id?: string
 		context?: string
 		metadata?: string
@@ -286,7 +338,11 @@ export class WorkflowEngine {
 	 * @param outputs — structured output fields from the completed run (for transition matching)
 	 * @param sourceRunId — the run that just completed (direct source for context forwarding)
 	 */
-	async advance(taskId: string, outputs?: Record<string, string>, sourceRunId?: string): Promise<AdvanceResult | null> {
+	async advance(
+		taskId: string,
+		outputs?: Record<string, string>,
+		sourceRunId?: string,
+	): Promise<AdvanceResult | null> {
 		if (this.advancing.has(taskId)) {
 			console.warn(`[workflow-engine] concurrent advance for task ${taskId}, skipping`)
 			return null
@@ -299,7 +355,11 @@ export class WorkflowEngine {
 		}
 	}
 
-	private async _advanceInner(taskId: string, outputs?: Record<string, string>, sourceRunId?: string): Promise<AdvanceResult | null> {
+	private async _advanceInner(
+		taskId: string,
+		outputs?: Record<string, string>,
+		sourceRunId?: string,
+	): Promise<AdvanceResult | null> {
 		const task = await this.taskService.get(taskId)
 		if (!task || !task.workflow_id || !task.workflow_step) return null
 
@@ -311,12 +371,16 @@ export class WorkflowEngine {
 		if (sourceRunId) {
 			const sourceRun = await this.runService.get(sourceRunId)
 			if (sourceRun && this.isEmptyOutput(sourceRun.summary)) {
-				console.warn(`[workflow-engine] run ${sourceRunId} completed with empty output at step "${currentStep}"`)
+				console.warn(
+					`[workflow-engine] run ${sourceRunId} completed with empty output at step "${currentStep}"`,
+				)
 
 				const retryCount = await this.getAndIncrementEmptyRetry(taskId, task.metadata, currentStep)
 				if (retryCount <= 1) {
 					// First empty output: retry the same step once
-					console.warn(`[workflow-engine] retrying step "${currentStep}" (empty output retry ${retryCount}/1)`)
+					console.warn(
+						`[workflow-engine] retrying step "${currentStep}" (empty output retry ${retryCount}/1)`,
+					)
 					const actions: string[] = ['empty_output_retry']
 					const ctx = await this.buildStepContext(sourceRunId, taskId)
 					const updated = (await this.taskService.get(taskId))!
@@ -326,7 +390,9 @@ export class WorkflowEngine {
 				}
 
 				// Exceeded retry: escalate to human or fail
-				console.warn(`[workflow-engine] empty output persisted after retry — escalating task "${taskId}"`)
+				console.warn(
+					`[workflow-engine] empty output persisted after retry — escalating task "${taskId}"`,
+				)
 				const humanStep = this.findHumanApprovalStep(workflow)
 				if (humanStep) {
 					await this.taskService.update(taskId, { workflow_step: humanStep.id, status: 'blocked' })
@@ -343,7 +409,11 @@ export class WorkflowEngine {
 				// No human step — fail
 				await this.taskService.update(taskId, { status: 'failed' })
 				eventBus.emit({ type: 'task_changed', taskId, status: 'failed' })
-				return { task: (await this.taskService.get(taskId))!, runId: null, actions: ['empty_output_failed'] }
+				return {
+					task: (await this.taskService.get(taskId))!,
+					runId: null,
+					actions: ['empty_output_failed'],
+				}
 			}
 		}
 
@@ -356,7 +426,12 @@ export class WorkflowEngine {
 
 		// ── Revision loop guard ─────────────────────────────────────────
 		if (this.isRevisionLoop(workflow, currentStep, nextStep.id)) {
-			const revisionCount = await this.incrementRevisionCount(taskId, task.metadata, currentStep, nextStep.id)
+			const revisionCount = await this.incrementRevisionCount(
+				taskId,
+				task.metadata,
+				currentStep,
+				nextStep.id,
+			)
 			if (revisionCount > DEFAULT_MAX_REVISIONS) {
 				// After N revision attempts, advance forward instead of looping back.
 				// The output is "good enough" — continuing to revise won't converge.
@@ -371,7 +446,12 @@ export class WorkflowEngine {
 						actor: 'workflow-engine',
 						type: 'revision_limit',
 						summary: `Revision loop "${currentStep}→${nextStep.id}" exceeded ${DEFAULT_MAX_REVISIONS} — advancing to "${forwardStep.id}"`,
-						details: JSON.stringify({ task_id: taskId, from_step: currentStep, to_step: forwardStep.id, revisions: revisionCount - 1 }),
+						details: JSON.stringify({
+							task_id: taskId,
+							from_step: currentStep,
+							to_step: forwardStep.id,
+							revisions: revisionCount - 1,
+						}),
 					})
 					nextStep = forwardStep
 				} else {
@@ -402,9 +482,10 @@ export class WorkflowEngine {
 		const updated = (await this.taskService.get(taskId))!
 		const runId = await this.processCurrentStep(updated, actions, ctx)
 
-		const final = runId !== null || actions.includes('done') || actions.includes('approval_needed')
-			? (await this.taskService.get(taskId))!
-			: updated
+		const final =
+			runId !== null || actions.includes('done') || actions.includes('approval_needed')
+				? (await this.taskService.get(taskId))!
+				: updated
 		return { task: final, runId, actions }
 	}
 
@@ -441,7 +522,11 @@ export class WorkflowEngine {
 
 			if (attempt < policy.max_attempts) {
 				// Retry: increment counter and create a new run
-				const newRetryCount = await this.incrementRetryCount(taskId, task.metadata, task.workflow_step ?? '')
+				const newRetryCount = await this.incrementRetryCount(
+					taskId,
+					task.metadata,
+					task.workflow_step ?? '',
+				)
 				const delay = this.computeRetryDelay(policy, newRetryCount)
 
 				await this.activityService?.log({
@@ -502,7 +587,10 @@ export class WorkflowEngine {
 					if (workflow) {
 						const humanStep = this.findHumanApprovalStep(workflow)
 						if (humanStep) {
-							await this.taskService.update(taskId, { workflow_step: humanStep.id, status: 'blocked' })
+							await this.taskService.update(taskId, {
+								workflow_step: humanStep.id,
+								status: 'blocked',
+							})
 							await this.activityService?.log({
 								actor: 'workflow-engine',
 								type: 'escalation',
@@ -515,7 +603,9 @@ export class WorkflowEngine {
 					}
 				}
 				// No human step found — fall through to fail
-				console.warn(`[workflow-engine] on_exhausted=escalate but no human_approval step found — failing task ${taskId}`)
+				console.warn(
+					`[workflow-engine] on_exhausted=escalate but no human_approval step found — failing task ${taskId}`,
+				)
 				return this.failTask(taskId, runId, errorType)
 			}
 
@@ -531,10 +621,18 @@ export class WorkflowEngine {
 								actor: 'workflow-engine',
 								type: 'retry_skip',
 								summary: `Run ${runId} failed (${errorType}) — retries exhausted, skipping to step "${nextStep.id}"`,
-								details: JSON.stringify({ task_id: taskId, run_id: runId, error_type: errorType, next_step: nextStep.id }),
+								details: JSON.stringify({
+									task_id: taskId,
+									run_id: runId,
+									error_type: errorType,
+									next_step: nextStep.id,
+								}),
 							})
 
-							const stepUpdates: Record<string, string> = { workflow_step: nextStep.id, status: 'active' }
+							const stepUpdates: Record<string, string> = {
+								workflow_step: nextStep.id,
+								status: 'active',
+							}
 							if (nextStep.type === 'agent' && nextStep.agent_id) {
 								stepUpdates.assigned_to = nextStep.agent_id
 							}
@@ -550,11 +648,12 @@ export class WorkflowEngine {
 					}
 				}
 				// No next step — fall through to fail
-				console.warn(`[workflow-engine] on_exhausted=skip but no next step found — failing task ${taskId}`)
+				console.warn(
+					`[workflow-engine] on_exhausted=skip but no next step found — failing task ${taskId}`,
+				)
 				return this.failTask(taskId, runId, errorType)
 			}
 
-			case 'fail':
 			default:
 				return this.failTask(taskId, runId, errorType)
 		}
@@ -563,7 +662,11 @@ export class WorkflowEngine {
 	/**
 	 * Mark a task as failed — the terminal failure path.
 	 */
-	private async failTask(taskId: string, runId: string, errorType: string): Promise<TaskRow | null> {
+	private async failTask(
+		taskId: string,
+		runId: string,
+		errorType: string,
+	): Promise<TaskRow | null> {
 		const updated = await this.taskService.update(taskId, { status: 'failed' })
 		if (!updated) return null
 
@@ -603,7 +706,7 @@ export class WorkflowEngine {
 	private computeRetryDelay(policy: RetryPolicy, attempt: number): number {
 		const base = policy.delay_seconds
 		const multiplier = policy.backoff_multiplier
-		const delay = base * Math.pow(multiplier, attempt - 1)
+		const delay = base * multiplier ** (attempt - 1)
 		if (policy.max_delay_seconds !== undefined) {
 			return Math.min(delay, policy.max_delay_seconds)
 		}
@@ -618,7 +721,10 @@ export class WorkflowEngine {
 		try {
 			meta = JSON.parse(metadata || '{}')
 		} catch (err) {
-			console.debug('[workflow-engine] malformed task metadata JSON:', err instanceof Error ? err.message : String(err))
+			console.debug(
+				'[workflow-engine] malformed task metadata JSON:',
+				err instanceof Error ? err.message : String(err),
+			)
 			meta = {}
 		}
 		const key = `${RETRY_KEY_PREFIX}${stepId}`
@@ -629,12 +735,19 @@ export class WorkflowEngine {
 	 * Increment and persist the retry counter for a step.
 	 * Returns the new count.
 	 */
-	private async incrementRetryCount(taskId: string, metadata: string | null, stepId: string): Promise<number> {
+	private async incrementRetryCount(
+		taskId: string,
+		metadata: string | null,
+		stepId: string,
+	): Promise<number> {
 		let meta: Record<string, unknown>
 		try {
 			meta = JSON.parse(metadata || '{}')
 		} catch (err) {
-			console.debug('[workflow-engine] malformed task metadata JSON:', err instanceof Error ? err.message : String(err))
+			console.debug(
+				'[workflow-engine] malformed task metadata JSON:',
+				err instanceof Error ? err.message : String(err),
+			)
 			meta = {}
 		}
 		const key = `${RETRY_KEY_PREFIX}${stepId}`
@@ -670,7 +783,12 @@ export class WorkflowEngine {
 			actor: actor ?? 'system',
 			type: 'rejection',
 			summary: `Rejected task ${taskId} at step "${guard.step.id}": ${reason}`,
-			details: JSON.stringify({ task_id: taskId, step_id: guard.step.id, action: 'rejected', reason }),
+			details: JSON.stringify({
+				task_id: taskId,
+				step_id: guard.step.id,
+				action: 'rejected',
+				reason,
+			}),
 		})
 
 		if (guard.step.on_reject) {
@@ -691,7 +809,12 @@ export class WorkflowEngine {
 			actor: actor ?? 'system',
 			type: 'reply',
 			summary: `Replied to task ${taskId} at step "${guard.step.id}"`,
-			details: JSON.stringify({ task_id: taskId, step_id: guard.step.id, action: 'replied', message }),
+			details: JSON.stringify({
+				task_id: taskId,
+				step_id: guard.step.id,
+				action: 'replied',
+				message,
+			}),
 		})
 
 		await this.taskService.update(taskId, { status: 'active' })
@@ -726,7 +849,7 @@ export class WorkflowEngine {
 		await this.activityService?.log({
 			actor: actorId ?? 'operator',
 			type: 'retry',
-			summary: `Task retried manually`,
+			summary: 'Task retried manually',
 			details: JSON.stringify({ task_id: taskId, step: task.workflow_step }),
 		})
 
@@ -757,7 +880,9 @@ export class WorkflowEngine {
 
 		// Cancel all active runs
 		const taskRuns = await this.runService.list({ task_id: taskId })
-		const activeRuns = taskRuns.filter((r) => r.status === 'running' || r.status === 'claimed' || r.status === 'pending')
+		const activeRuns = taskRuns.filter(
+			(r) => r.status === 'running' || r.status === 'claimed' || r.status === 'pending',
+		)
 		for (const run of activeRuns) {
 			await this.runService.cancel(run.id, reason ?? 'cancelled by operator')
 		}
@@ -777,7 +902,9 @@ export class WorkflowEngine {
 
 	// ─── Private ────────────────────────────────────────────────────────
 
-	private async guardApprovalStep(taskId: string): Promise<{ task: TaskRow; step: WorkflowStep } | null> {
+	private async guardApprovalStep(
+		taskId: string,
+	): Promise<{ task: TaskRow; step: WorkflowStep } | null> {
 		const task = await this.taskService.get(taskId)
 		if (!task || !task.workflow_id || !task.workflow_step) return null
 
@@ -809,7 +936,9 @@ export class WorkflowEngine {
 
 		const targetStep = workflow.steps.find((s) => s.id === targetStepId)
 		if (!targetStep) {
-			console.warn(`[workflow-engine] target step "${targetStepId}" not found in workflow "${task.workflow_id}"`)
+			console.warn(
+				`[workflow-engine] target step "${targetStepId}" not found in workflow "${task.workflow_id}"`,
+			)
 			return this.advanceWithContext(taskId, outputs, ctx ?? {})
 		}
 
@@ -830,14 +959,19 @@ export class WorkflowEngine {
 		const updated = (await this.taskService.get(taskId))!
 		const runId = await this.processCurrentStep(updated, actions, ctx ?? {})
 
-		const final = runId !== null || actions.includes('done') || actions.includes('approval_needed')
-			? (await this.taskService.get(taskId))!
-			: updated
+		const final =
+			runId !== null || actions.includes('done') || actions.includes('approval_needed')
+				? (await this.taskService.get(taskId))!
+				: updated
 		return { task: final, runId, actions }
 	}
 
 	/** Like advance() but with pre-built StepContext. */
-	private async advanceWithContext(taskId: string, outputs?: Record<string, string>, ctx?: StepContext): Promise<AdvanceResult | null> {
+	private async advanceWithContext(
+		taskId: string,
+		outputs?: Record<string, string>,
+		ctx?: StepContext,
+	): Promise<AdvanceResult | null> {
 		const task = await this.taskService.get(taskId)
 		if (!task || !task.workflow_id || !task.workflow_step) return null
 
@@ -867,9 +1001,10 @@ export class WorkflowEngine {
 		const updated = (await this.taskService.get(taskId))!
 		const runId = await this.processCurrentStep(updated, actions, ctx ?? {})
 
-		const final = runId !== null || actions.includes('done') || actions.includes('approval_needed')
-			? (await this.taskService.get(taskId))!
-			: updated
+		const final =
+			runId !== null || actions.includes('done') || actions.includes('approval_needed')
+				? (await this.taskService.get(taskId))!
+				: updated
 		return { task: final, runId, actions }
 	}
 
@@ -877,7 +1012,11 @@ export class WorkflowEngine {
 	 * Process the current workflow step for a task.
 	 * Builds full instructions: context forwarding + YAML instructions + output suffix.
 	 */
-	private async processCurrentStep(task: TaskRow, actions: string[], ctx: StepContext): Promise<string | null> {
+	private async processCurrentStep(
+		task: TaskRow,
+		actions: string[],
+		ctx: StepContext,
+	): Promise<string | null> {
 		if (!task.workflow_id || !task.workflow_step) return null
 
 		const workflow = this.config.workflows.get(task.workflow_id)
@@ -890,7 +1029,9 @@ export class WorkflowEngine {
 			case 'agent': {
 				const agentId = step.agent_id ?? task.assigned_to
 				if (!agentId) {
-					console.warn(`[workflow-engine] agent step "${step.id}" has no agent_id and task has no assigned_to`)
+					console.warn(
+						`[workflow-engine] agent step "${step.id}" has no agent_id and task has no assigned_to`,
+					)
 					return null
 				}
 
@@ -917,7 +1058,9 @@ export class WorkflowEngine {
 				if (task.start_after && task.start_after > new Date().toISOString()) {
 					await this.taskService.update(task.id, { status: 'active' })
 					actions.push('deferred_start_after')
-					console.log(`[workflow-engine] task ${task.id} deferred — start_after=${task.start_after}`)
+					console.log(
+						`[workflow-engine] task ${task.id} deferred — start_after=${task.start_after}`,
+					)
 					return null
 				}
 
@@ -937,6 +1080,7 @@ export class WorkflowEngine {
 					id: runId,
 					agent_id: agentId,
 					task_id: task.id,
+					project_id: task.project_id ?? undefined,
 					runtime,
 					model: agentConfig?.model,
 					provider: agentConfig?.provider,
@@ -1003,7 +1147,7 @@ export class WorkflowEngine {
 	private async isQueueBlocked(task: { queue: string | null }): Promise<boolean> {
 		if (!task.queue) return false
 
-		const queueConfig = (this.config.queues ?? {})[task.queue]
+		const queueConfig = this.config.queues?.[task.queue]
 		const maxConcurrent = queueConfig?.max_concurrent ?? 1
 
 		const activeCount = await this.taskService.countActiveInQueue(task.queue)
@@ -1020,14 +1164,20 @@ export class WorkflowEngine {
 		const next = prev.then(() => this._triggerNextInQueueUnsafe(queueName))
 		// Swallow in the chain so a failed trigger doesn't block subsequent queue releases.
 		// The error still propagates to the caller via the unwrapped `next` below.
-		this.queueLocks.set(queueName, next.catch((err) => {
-			console.warn(`[workflow-engine] queue "${queueName}" trigger failed:`, err instanceof Error ? err.message : String(err))
-		}))
+		this.queueLocks.set(
+			queueName,
+			next.catch((err) => {
+				console.warn(
+					`[workflow-engine] queue "${queueName}" trigger failed:`,
+					err instanceof Error ? err.message : String(err),
+				)
+			}),
+		)
 		await next
 	}
 
 	private async _triggerNextInQueueUnsafe(queueName: string): Promise<void> {
-		const queueConfig = (this.config.queues ?? {})[queueName]
+		const queueConfig = this.config.queues?.[queueName]
 		const priorityOrder = queueConfig?.priority_order ?? 'fifo'
 		const maxConcurrent = queueConfig?.max_concurrent ?? 1
 
@@ -1065,14 +1215,16 @@ export class WorkflowEngine {
 	 * 4. Human reply (if present)
 	 * 5. Output suffix (auto-generated from step.output)
 	 */
-	private async buildInstructions(task: TaskRow, step: WorkflowStep, ctx: StepContext): Promise<string> {
+	private async buildInstructions(
+		task: TaskRow,
+		step: WorkflowStep,
+		ctx: StepContext,
+	): Promise<string> {
 		const parts: string[] = []
 
 		// 1. Prior run history — all completed runs for context continuity
 		if (ctx.priorRunSummaries?.length) {
-			const historyLines = ctx.priorRunSummaries.map(
-				(r) => `- **${r.runId}**: ${r.summary}`,
-			)
+			const historyLines = ctx.priorRunSummaries.map((r) => `- **${r.runId}**: ${r.summary}`)
 			parts.push(`## Workflow History\n\n${historyLines.join('\n')}`)
 		}
 
@@ -1092,7 +1244,9 @@ export class WorkflowEngine {
 					const textContent = Buffer.isBuffer(content) ? content.toString('utf-8') : content
 					parts.push(`## Input: ${found.title}\n\n${textContent}`)
 				} else {
-					parts.push(`## Input: ${wantedKind}\n\n> **Warning:** Expected artifact "${wantedKind}" was not found. It may not have been produced by a prior step.`)
+					parts.push(
+						`## Input: ${wantedKind}\n\n> **Warning:** Expected artifact "${wantedKind}" was not found. It may not have been produced by a prior step.`,
+					)
 				}
 			}
 		}
@@ -1183,7 +1337,13 @@ export class WorkflowEngine {
 			target.resolved_capabilities = capabilities
 		}
 
-		const hasConstraints = target.required_worker_id || target.required_runtime || tags.length > 0 || target.actions || target.secret_refs || target.resolved_capabilities
+		const hasConstraints =
+			target.required_worker_id ||
+			target.required_runtime ||
+			tags.length > 0 ||
+			target.actions ||
+			target.secret_refs ||
+			target.resolved_capabilities
 		if (!hasConstraints) return undefined
 		return JSON.stringify(target)
 	}
@@ -1195,7 +1355,10 @@ export class WorkflowEngine {
 	 * Merge rule: agent profiles first, step profiles extend. Deduplicated.
 	 * Returns undefined if no profiles are referenced.
 	 */
-	private resolveCapabilities(agentId: string | undefined, step: WorkflowStep): ResolvedCapabilities | undefined {
+	private resolveCapabilities(
+		agentId: string | undefined,
+		step: WorkflowStep,
+	): ResolvedCapabilities | undefined {
 		const agent = agentId ? this.config.agents.get(agentId) : undefined
 		const agentProfileIds = agent?.capability_profiles ?? []
 		const stepProfileIds = step.capability_profiles ?? []
@@ -1205,7 +1368,13 @@ export class WorkflowEngine {
 		// Per-step context refs
 		const stepContext = step.context ?? []
 
-		if (agentProfileIds.length === 0 && stepProfileIds.length === 0 && globalContext.length === 0 && stepContext.length === 0) return undefined
+		if (
+			agentProfileIds.length === 0 &&
+			stepProfileIds.length === 0 &&
+			globalContext.length === 0 &&
+			stepContext.length === 0
+		)
+			return undefined
 
 		// Deduplicate: agent first, step extends (preserves order, first wins)
 		const profileIds = [...new Set([...agentProfileIds, ...stepProfileIds])]
@@ -1236,7 +1405,7 @@ export class WorkflowEngine {
 
 		// Resolve skill hints from the skill index
 		const skillHints = [...skills]
-			.map(id => {
+			.map((id) => {
 				const entry = this.config.skills.get(id)
 				if (!entry) return null
 				return {
@@ -1262,9 +1431,14 @@ export class WorkflowEngine {
 	 * Evaluate the join condition for a wait_for_children step.
 	 * Returns 'met' if policy satisfied, 'failed' if child failure detected, 'pending' otherwise.
 	 */
-	private async evaluateJoin(taskId: string, step: WorkflowStep): Promise<'met' | 'failed' | 'pending'> {
+	private async evaluateJoin(
+		taskId: string,
+		step: WorkflowStep,
+	): Promise<'met' | 'failed' | 'pending'> {
 		if (!this.childRollupFn) {
-			console.warn('[workflow-engine] wait_for_children requires childRollupFn — treating as pending')
+			console.warn(
+				'[workflow-engine] wait_for_children requires childRollupFn — treating as pending',
+			)
 			return 'pending'
 		}
 
@@ -1288,7 +1462,11 @@ export class WorkflowEngine {
 	}
 
 	/** Route a task to a specific step by ID. Used by wait_for_children on_met/on_failed. */
-	private async routeToStep(task: TaskRow, targetStepId: string, actions: string[]): Promise<string | null> {
+	private async routeToStep(
+		task: TaskRow,
+		targetStepId: string,
+		actions: string[],
+	): Promise<string | null> {
 		if (!task.workflow_id) return null
 		const workflow = this.config.workflows.get(task.workflow_id)
 		if (!workflow) return null
@@ -1299,7 +1477,11 @@ export class WorkflowEngine {
 	}
 
 	/** Route a task to the next step in array order. Fallback for on_met without explicit target. */
-	private async routeToNextStep(task: TaskRow, workflow: Workflow, actions: string[]): Promise<string | null> {
+	private async routeToNextStep(
+		task: TaskRow,
+		workflow: Workflow,
+		actions: string[],
+	): Promise<string | null> {
 		const nextStep = this.resolveNextStep(workflow, task.workflow_step!, undefined)
 		if (!nextStep) {
 			await this.taskService.update(task.id, { status: 'done', workflow_step: '__done__' })
@@ -1311,7 +1493,11 @@ export class WorkflowEngine {
 	}
 
 	/** Update task to target step and process it. Shared by routeToStep/routeToNextStep. */
-	private async applyStepAndProcess(task: TaskRow, targetStep: WorkflowStep, actions: string[]): Promise<string | null> {
+	private async applyStepAndProcess(
+		task: TaskRow,
+		targetStep: WorkflowStep,
+		actions: string[],
+	): Promise<string | null> {
 		const stepUpdates: Record<string, string> = { workflow_step: targetStep.id }
 		if (targetStep.type === 'agent' && targetStep.agent_id) {
 			stepUpdates.assigned_to = targetStep.agent_id
@@ -1359,12 +1545,20 @@ export class WorkflowEngine {
 	 * Increment and persist the revision counter for a loop transition.
 	 * Returns the new count.
 	 */
-	private async incrementRevisionCount(taskId: string, metadata: string | null, fromStep: string, toStep: string): Promise<number> {
+	private async incrementRevisionCount(
+		taskId: string,
+		metadata: string | null,
+		fromStep: string,
+		toStep: string,
+	): Promise<number> {
 		let meta: Record<string, unknown>
 		try {
 			meta = JSON.parse(metadata || '{}')
 		} catch (err) {
-			console.debug('[workflow-engine] malformed task metadata JSON:', err instanceof Error ? err.message : String(err))
+			console.debug(
+				'[workflow-engine] malformed task metadata JSON:',
+				err instanceof Error ? err.message : String(err),
+			)
 			meta = {}
 		}
 		const key = `${REVISION_KEY_PREFIX}${fromStep}→${toStep}`
@@ -1403,12 +1597,7 @@ export class WorkflowEngine {
 		const trimmed = summary.trim()
 		if (trimmed === '') return true
 		// Common empty-output patterns
-		const emptyPatterns = [
-			/^completed? with no output$/i,
-			/^no output$/i,
-			/^empty$/i,
-			/^n\/a$/i,
-		]
+		const emptyPatterns = [/^completed? with no output$/i, /^no output$/i, /^empty$/i, /^n\/a$/i]
 		return emptyPatterns.some((p) => p.test(trimmed))
 	}
 
@@ -1416,12 +1605,19 @@ export class WorkflowEngine {
 	 * Get and increment the empty output retry count for a step.
 	 * Stored in task metadata under `_empty_retries:<stepId>`.
 	 */
-	private async getAndIncrementEmptyRetry(taskId: string, metadata: string | null, stepId: string): Promise<number> {
+	private async getAndIncrementEmptyRetry(
+		taskId: string,
+		metadata: string | null,
+		stepId: string,
+	): Promise<number> {
 		let meta: Record<string, unknown>
 		try {
 			meta = JSON.parse(metadata || '{}')
 		} catch (err) {
-			console.debug('[workflow-engine] malformed task metadata JSON:', err instanceof Error ? err.message : String(err))
+			console.debug(
+				'[workflow-engine] malformed task metadata JSON:',
+				err instanceof Error ? err.message : String(err),
+			)
 			meta = {}
 		}
 		const key = `_empty_retries:${stepId}`
@@ -1438,7 +1634,11 @@ export class WorkflowEngine {
 	 * Resolve the next step by evaluating transitions against structured outputs.
 	 * Order: transitions (first match) → explicit next → array order.
 	 */
-	private resolveNextStep(workflow: Workflow, currentStepId: string, outputs?: Record<string, string>): WorkflowStep | null {
+	private resolveNextStep(
+		workflow: Workflow,
+		currentStepId: string,
+		outputs?: Record<string, string>,
+	): WorkflowStep | null {
 		const currentStep = workflow.steps.find((s) => s.id === currentStepId)
 		if (!currentStep) return null
 
@@ -1495,7 +1695,13 @@ export function generateOutputSuffix(step: WorkflowStep): string | null {
 
 	if (tagEntries.length === 0 && (!artifacts || artifacts.length === 0)) return null
 
-	const lines: string[] = ['## Required Output Format', '', 'When you are done, provide your result in this exact format:', '', '<AUTOPILOT_RESULT>']
+	const lines: string[] = [
+		'## Required Output Format',
+		'',
+		'When you are done, provide your result in this exact format:',
+		'',
+		'<AUTOPILOT_RESULT>',
+	]
 
 	// All tags — same treatment. Tags with values get VALUE_PLACEHOLDER, others get description.
 	for (const [name, def] of tagEntries) {

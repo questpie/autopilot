@@ -256,7 +256,7 @@ function EventRow({ event, eventType, isRunning, isActiveThinking, isActiveProgr
     if (!event.summary) return null
     return (
       <div className="py-0.5">
-        <Markdown content={event.summary} className="prose prose-sm font-sans text-sm" />
+        <Markdown content={event.summary} />
         {isActiveProgress && (
           <span className="inline-block w-[7px] h-[13px] bg-foreground ml-0.5 align-text-bottom animate-pulse" />
         )}

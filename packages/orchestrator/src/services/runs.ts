@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto'
-import { eq, and, asc, gt } from 'drizzle-orm'
 import { ExecutionTargetSchema } from '@questpie/autopilot-spec'
 import type { WorkerCapability } from '@questpie/autopilot-spec'
-import { runs, runEvents } from '../db/company-schema'
+import { and, asc, eq, gt } from 'drizzle-orm'
 import type { CompanyDb } from '../db'
+import { runEvents, runs } from '../db/company-schema'
 
 function _getRun(db: CompanyDb, id: string) {
 	return db.select().from(runs).where(eq(runs.id, id)).get()
@@ -28,6 +28,7 @@ export class RunService {
 		id: string
 		agent_id: string
 		task_id?: string
+		project_id?: string
 		runtime: string
 		model?: string
 		provider?: string
@@ -52,7 +53,12 @@ export class RunService {
 		return _getRun(this.db, id)
 	}
 
-	async list(filter?: { status?: string; worker_id?: string; agent_id?: string; task_id?: string }) {
+	async list(filter?: {
+		status?: string
+		worker_id?: string
+		agent_id?: string
+		task_id?: string
+	}) {
 		const conditions = []
 		if (filter?.status) conditions.push(eq(runs.status, filter.status))
 		if (filter?.worker_id) conditions.push(eq(runs.worker_id, filter.worker_id))
@@ -99,7 +105,9 @@ export class RunService {
 			for (const t of cap.tags ?? []) workerTags.add(t)
 		}
 
-		const claimable = pending.find((r) => !excluded.has(r.id) && isEligible(r, workerId, workerTags))
+		const claimable = pending.find(
+			(r) => !excluded.has(r.id) && isEligible(r, workerId, workerTags),
+		)
 
 		if (!claimable) return undefined
 
@@ -159,26 +167,23 @@ export class RunService {
 
 	/** Update the instructions for a run. */
 	async updateInstructions(runId: string, instructions: string) {
-		await this.db
-			.update(runs)
-			.set({ instructions })
-			.where(eq(runs.id, runId))
+		await this.db.update(runs).set({ instructions }).where(eq(runs.id, runId))
 		return this.get(runId)
 	}
 
 	/** Append a compact event to a run. */
-	async appendEvent(
-		runId: string,
-		event: { type: string; summary?: string; metadata?: string },
-	) {
+	async appendEvent(runId: string, event: { type: string; summary?: string; metadata?: string }) {
 		const createdAt = new Date().toISOString()
-		const rows = await this.db.insert(runEvents).values({
-			run_id: runId,
-			type: event.type,
-			summary: event.summary,
-			metadata: event.metadata ?? '{}',
-			created_at: createdAt,
-		}).returning()
+		const rows = await this.db
+			.insert(runEvents)
+			.values({
+				run_id: runId,
+				type: event.type,
+				summary: event.summary,
+				metadata: event.metadata ?? '{}',
+				created_at: createdAt,
+			})
+			.returning()
 		return rows[0]
 	}
 
@@ -253,6 +258,7 @@ export class RunService {
 			id,
 			agent_id: original.agent_id,
 			task_id: original.task_id,
+			project_id: original.project_id,
 			runtime: original.runtime,
 			model: original.model,
 			provider: original.provider,
@@ -290,7 +296,10 @@ function isEligible(run: RunRow, workerId: string, workerTags: Set<string>): boo
 	try {
 		raw = JSON.parse(run.targeting)
 	} catch (err) {
-		console.warn(`[targeting] run=${run.id} malformed targeting JSON, treating as unconstrained:`, err)
+		console.warn(
+			`[targeting] run=${run.id} malformed targeting JSON, treating as unconstrained:`,
+			err,
+		)
 		return true
 	}
 
@@ -309,7 +318,11 @@ function isEligible(run: RunRow, workerId: string, workerTags: Set<string>): boo
 		return false
 	}
 	if (t.required_runtime && !workerTags.has(t.required_runtime) && !allowFallback) {
-		logSkip(run.id, workerId, `requires runtime "${t.required_runtime}", worker has [${[...workerTags]}]`)
+		logSkip(
+			run.id,
+			workerId,
+			`requires runtime "${t.required_runtime}", worker has [${[...workerTags]}]`,
+		)
 		return false
 	}
 	if (t.required_worker_tags?.length) {

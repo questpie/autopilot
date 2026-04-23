@@ -1,6 +1,8 @@
 import { and, eq } from 'drizzle-orm'
-import { userPreference } from '../db/auth-schema'
 import type { CompanyDb } from '../db'
+import { user, userPreference } from '../db/auth-schema'
+
+const LOCAL_DEV_USER_ID = 'local-dev-bypass'
 
 function parsePreferenceValue(raw: string): unknown {
 	try {
@@ -24,6 +26,24 @@ export interface UserPreferenceRecord {
 
 export class UserPreferenceService {
 	constructor(private db: CompanyDb) {}
+
+	async #ensurePreferenceUser(userId: string): Promise<void> {
+		if (userId !== LOCAL_DEV_USER_ID) return
+
+		const now = new Date()
+		await this.db
+			.insert(user)
+			.values({
+				id: LOCAL_DEV_USER_ID,
+				name: 'Local Dev (bypass)',
+				email: 'local-dev-bypass@localhost',
+				emailVerified: true,
+				role: 'owner',
+				createdAt: now,
+				updatedAt: now,
+			})
+			.onConflictDoNothing()
+	}
 
 	async list(userId: string): Promise<UserPreferenceRecord[]> {
 		const rows = await this.db
@@ -60,6 +80,8 @@ export class UserPreferenceService {
 	}
 
 	async set(userId: string, key: string, value: unknown): Promise<UserPreferenceRecord> {
+		await this.#ensurePreferenceUser(userId)
+
 		const now = new Date()
 		const serialized = serializePreferenceValue(value)
 

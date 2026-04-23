@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
 import { useVfsRead, useVfsStat } from '@/hooks/use-vfs'
@@ -11,6 +11,7 @@ import { TiptapEditor } from '@/components/ui/tiptap-editor'
 import { Button } from '@/components/ui/button'
 import { KvList } from '@/components/ui/kv-list'
 import { surfaceCardVariants } from '@/components/ui/surface-card'
+import { joinMarkdownDocument, splitMarkdownDocument } from '@/lib/markdown-document'
 import { cn } from '@/lib/utils'
 import {
 	buildPathSegments,
@@ -166,9 +167,16 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
   const { data, isLoading, error } = useVfsRead(uri)
   const statQuery = useVfsStat(uri)
   const queryClient = useQueryClient()
+  const viewer = data ? resolveViewer(path, data.contentType) : null
+  const markdownDocument = viewer?.type === 'markdown' && data?.content
+    ? splitMarkdownDocument(data.content)
+    : null
 
   const [editMode, setEditMode] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [markdownDraft, setMarkdownDraft] = useState('')
+  const [markdownSource, setMarkdownSource] = useState<{ uri: string; body: string } | null>(null)
+  const [markdownDirty, setMarkdownDirty] = useState(false)
 
   // Monaco editor ref — used for code/structured/plain files
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
@@ -180,42 +188,65 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
     editorRef.current = editor
   }, [])
 
+  useEffect(() => {
+    if (viewer?.type !== 'markdown') return
+
+    const nextContent = markdownDocument?.body ?? ''
+    tiptapContentRef.current = nextContent
+    setMarkdownDraft(nextContent)
+    setMarkdownSource({ uri, body: nextContent })
+    setMarkdownDirty(false)
+  }, [viewer?.type, markdownDocument?.body, uri])
+
   const handleEdit = useCallback(() => {
+    if (viewer?.type === 'markdown') return
     if (data) {
       tiptapContentRef.current = data.content ?? ''
     }
     setEditMode(true)
-  }, [data])
+  }, [data, viewer?.type])
 
   const handleCancel = useCallback(() => {
+    if (viewer?.type === 'markdown') {
+      const nextContent = markdownDocument?.body ?? ''
+      tiptapContentRef.current = nextContent
+      setMarkdownDraft(nextContent)
+      setMarkdownSource({ uri, body: nextContent })
+      setMarkdownDirty(false)
+      return
+    }
     // Reset Monaco editor content to the last saved value (code files)
     if (editorRef.current && data) {
       editorRef.current.setValue(data.content ?? '')
     }
-    // Tiptap resets via key-based remount (content prop drives initial state)
     setEditMode(false)
-  }, [data])
+  }, [data, markdownDocument?.body, uri, viewer?.type])
 
   const handleSave = useCallback(async () => {
-    const viewer = data ? resolveViewer(path, data.contentType) : null
     const content =
       viewer?.type === 'markdown'
-        ? tiptapContentRef.current
+        ? joinMarkdownDocument({
+            frontmatterBlock: markdownDocument?.frontmatterBlock ?? null,
+            body: tiptapContentRef.current,
+          })
         : editorRef.current?.getValue() ?? ''
     setSaving(true)
     try {
       await vfsWrite(uri, content)
       await queryClient.invalidateQueries({ queryKey: vfsKeys.read(uri) })
-      setEditMode(false)
+      if (viewer?.type === 'markdown') {
+        setMarkdownDirty(false)
+      } else {
+        setEditMode(false)
+      }
     } finally {
       setSaving(false)
     }
-  }, [uri, queryClient, data, path])
+  }, [uri, queryClient, viewer?.type, markdownDocument?.frontmatterBlock])
 
   // Only company:// URIs are writable (workspace is read-only)
   const canEdit = runId === null
 
-  const viewer = data ? resolveViewer(path, data.contentType) : null
   const isEditable = viewer && (viewer.type === 'code' || viewer.type === 'structured' || viewer.type === 'plain' || viewer.type === 'markdown')
   const fileName = getBaseName(path, path)
 
@@ -265,15 +296,43 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
 				/>
 			) : null}
 
-			{editMode && (
-				<p className="text-sm text-warning">Editing mode is active.</p>
-			)}
+      {viewer?.type === 'markdown' && canEdit ? (
+        <p className="text-sm text-muted-foreground">Inline markdown mode. Type `/` on an empty line to insert a block.</p>
+      ) : editMode ? (
+        <p className="text-sm text-warning">Editing mode is active.</p>
+      ) : null}
 		</div>
   )
 
   const toolbar = canEdit && isEditable && data && !isLoading && !error ? (
-    <div className="flex items-center gap-1">
-      {editMode ? (
+    viewer?.type === 'markdown' ? (
+      <div className="flex items-center gap-2">
+        {markdownDirty ? (
+          <>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={handleCancel}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              size="xs"
+              onClick={() => void handleSave()}
+              loading={saving}
+            >
+              Save
+            </Button>
+          </>
+        ) : (
+          <span className="font-mono text-[11px] text-muted-foreground">slash blocks</span>
+        )}
+      </div>
+    ) : (
+      <div className="flex items-center gap-1">
+        {editMode ? (
         <>
           <Button
             variant="ghost"
@@ -300,8 +359,9 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
         >
           Edit
         </Button>
-      )}
-    </div>
+        )}
+      </div>
+    )
   ) : null
 
   const content = (
@@ -324,19 +384,38 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
       {!isLoading && !error && data && (() => {
         if (!viewer) return null
 
-        if (viewer.type === 'markdown' && editMode) {
+        if (viewer.type === 'markdown') {
+          const savedMarkdownBody = markdownDocument?.body ?? ''
+          const editorContent = markdownSource?.uri === uri && markdownSource.body === savedMarkdownBody
+            ? markdownDraft
+            : savedMarkdownBody
+
           return (
-            <div className="h-full overflow-hidden">
+            <div className="h-full overflow-auto">
+              {markdownDocument?.frontmatterBlock ? (
+                <div className="border-b border-border px-6 py-4">
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-1 px-4 py-3 font-mono text-xs leading-5 text-muted-foreground">
+                    {markdownDocument.frontmatterBlock.trimEnd()}
+                  </pre>
+                </div>
+              ) : null}
               <TiptapEditor
-                content={data.content ?? ''}
-                editable
-                onChange={(md) => { tiptapContentRef.current = md }}
+                content={editorContent}
+                editable={canEdit}
+                className="h-full"
+                contentClassName="[&_.ProseMirror]:px-6 [&_.ProseMirror]:py-6"
+                onChange={(md) => {
+                  tiptapContentRef.current = md
+                  setMarkdownDraft(md)
+                  setMarkdownSource({ uri, body: savedMarkdownBody })
+                  setMarkdownDirty(md !== savedMarkdownBody)
+                }}
               />
             </div>
           )
         }
 
-        if (viewer.type === 'image' || viewer.type === 'pdf' || viewer.type === 'video' || viewer.type === 'docx' || (viewer.type === 'markdown' && !editMode)) {
+        if (viewer.type === 'image' || viewer.type === 'pdf' || viewer.type === 'video' || viewer.type === 'docx') {
           return (
             <FilePreviewSurface path={path} uri={uri} viewerType={viewer.type} data={data} variant="full" />
           )

@@ -1,4 +1,4 @@
-import type { WorkerEvent, RunArtifact, ResolvedCapabilities } from '@questpie/autopilot-spec'
+import type { ResolvedCapabilities, RunArtifact, WorkerEvent } from '@questpie/autopilot-spec'
 export type { WorkerEvent } from '@questpie/autopilot-spec'
 
 /**
@@ -11,43 +11,44 @@ export type { WorkerEvent } from '@questpie/autopilot-spec'
  * The runtime adapter should not need to resolve config or walk filesystems.
  */
 export interface RunContext {
-  runId: string
-  agentId: string
-  agentName: string | null
-  agentRole: string | null
-  taskId: string | null
-  taskTitle: string | null
-  taskDescription: string | null
-  instructions: string | null
-  orchestratorUrl: string
-  apiKey: string
-  /** Local dev mode — MCP server should use X-Local-Dev header instead of Bearer auth. */
-  localDev: boolean
-  /** For continuation runs: the worker-local session ID to resume. */
-  runtimeSessionRef: string | null
-  /** Per-run isolated workspace path. Overrides adapter's default workDir. */
-  workDir: string | null
-  /** Resolved capability intent from merged agent + step profiles. */
-  capabilities: ResolvedCapabilities | null
-  /** Resolved model for this run (after worker-local modelMap). Null = use runtime default. */
-  model: string | null
-  /** Small curated context content injected into the prompt (name → content). */
-  injectedContext: Record<string, string> | null
-  /** Navigation hints — paths where agent can find knowledge sources. */
-  contextHints: Array<{ type: string; path: string; description?: string; files?: string[] }> | null
+	runId: string
+	agentId: string
+	agentName: string | null
+	agentRole: string | null
+	taskId: string | null
+	projectId: string | null
+	taskTitle: string | null
+	taskDescription: string | null
+	instructions: string | null
+	orchestratorUrl: string
+	apiKey: string
+	/** Local dev mode — MCP server should use X-Local-Dev header instead of Bearer auth. */
+	localDev: boolean
+	/** For continuation runs: the worker-local session ID to resume. */
+	runtimeSessionRef: string | null
+	/** Per-run isolated workspace path. Overrides adapter's default workDir. */
+	workDir: string | null
+	/** Resolved capability intent from merged agent + step profiles. */
+	capabilities: ResolvedCapabilities | null
+	/** Resolved model for this run (after worker-local modelMap). Null = use runtime default. */
+	model: string | null
+	/** Small curated context content injected into the prompt (name → content). */
+	injectedContext: Record<string, string> | null
+	/** Navigation hints — paths where agent can find knowledge sources. */
+	contextHints: Array<{ type: string; path: string; description?: string; files?: string[] }> | null
 }
 
 /** Result returned by a runtime adapter after completing. */
 export interface RuntimeResult {
-  summary?: string
-  tokens?: { input: number; output: number }
-  artifacts?: RunArtifact[]
-  /** Worker-local session ID for future resume. */
-  sessionId?: string
-  /** Structured output fields extracted from the agent's result block.
-   *  Used by the workflow engine for generic transition matching.
-   *  E.g. { outcome: 'approved', priority: 'high' }. */
-  outputs?: Record<string, string>
+	summary?: string
+	tokens?: { input: number; output: number }
+	artifacts?: RunArtifact[]
+	/** Worker-local session ID for future resume. */
+	sessionId?: string
+	/** Structured output fields extracted from the agent's result block.
+	 *  Used by the workflow engine for generic transition matching.
+	 *  E.g. { outcome: 'approved', priority: 'high' }. */
+	outputs?: Record<string, string>
 }
 
 /**
@@ -57,12 +58,12 @@ export interface RuntimeResult {
  * into WorkerEvents.
  */
 export interface RuntimeAdapter {
-  /** Start executing a run. Returns when the runtime finishes. */
-  start(context: RunContext): Promise<RuntimeResult | undefined>
+	/** Start executing a run. Returns when the runtime finishes. */
+	start(context: RunContext): Promise<RuntimeResult | undefined>
 
-  /** Register event handler for normalized events. */
-  onEvent(handler: (event: WorkerEvent) => void): void
+	/** Register event handler for normalized events. */
+	onEvent(handler: (event: WorkerEvent) => void): void
 
-  /** Force stop the runtime. */
-  stop(): Promise<void>
+	/** Force stop the runtime. */
+	stop(): Promise<void>
 }

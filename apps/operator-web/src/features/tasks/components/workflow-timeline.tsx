@@ -248,17 +248,20 @@ export function WorkflowTimeline({
 									{/* Summary */}
 									{entry.run?.summary && (
 										<div className={surfaceCardVariants({ size: 'sm' })}>
-											<Markdown content={entry.run.summary} className="text-[12px]" />
+											<Markdown
+                        content={entry.run.summary}
+                        contentClassName="[&_.ProseMirror]:px-0 [&_.ProseMirror]:py-0 [&_.ProseMirror]:text-xs [&_.ProseMirror]:leading-5"
+                      />
 										</div>
 									)}
 
 									{/* Error */}
 									{entry.run?.error && (
 										<div className="rounded-xl border border-destructive/15 bg-destructive-surface px-3 py-3 shadow-xs">
-											<Markdown
-												content={entry.run.error}
-												className="text-[12px] text-destructive"
-											/>
+												<Markdown
+                          content={entry.run.error}
+                          contentClassName="[&_.ProseMirror]:px-0 [&_.ProseMirror]:py-0 [&_.ProseMirror]:text-xs [&_.ProseMirror]:leading-5 [&_.ProseMirror]:text-destructive [&_.ProseMirror_p]:text-destructive [&_.ProseMirror_code]:text-destructive"
+                        />
 										</div>
 									)}
 

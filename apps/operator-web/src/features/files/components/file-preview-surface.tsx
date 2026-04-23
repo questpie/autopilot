@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { VfsReadResult } from '@/api/vfs.api'
 import { Markdown } from '@/components/ui/markdown'
 import { Spinner } from '@/components/ui/spinner'
+import { splitMarkdownDocument } from '@/lib/markdown-document'
 import { surfaceCardVariants } from '@/components/ui/surface-card'
 import type { ViewerType } from '@/lib/viewer-registry'
 import { cn } from '@/lib/utils'
@@ -63,6 +64,9 @@ function useDocxPreview(uri: string, enabled: boolean) {
 export function FilePreviewSurface({ path, uri, viewerType, data, variant, fallback = null }: FilePreviewSurfaceProps) {
 	const contentUrl = buildContentUrl(uri)
 	const docx = useDocxPreview(uri, viewerType === 'docx' && variant !== 'card')
+  const markdownDocument = viewerType === 'markdown' && data?.content
+    ? splitMarkdownDocument(data.content)
+    : null
 
 	if (viewerType === 'image') {
 		if (variant === 'card') {
@@ -146,7 +150,12 @@ export function FilePreviewSurface({ path, uri, viewerType, data, variant, fallb
 		if (variant === 'inspector') {
 			return (
 				<div className="max-h-80 overflow-auto rounded-[18px] bg-muted/12 p-3">
-					<Markdown content={data.content} />
+          {markdownDocument?.frontmatterBlock ? (
+            <pre className="mb-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-1 px-3 py-2 font-mono text-[11px] leading-5 text-muted-foreground">
+              {markdownDocument.frontmatterBlock.trimEnd()}
+            </pre>
+          ) : null}
+					<Markdown content={markdownDocument?.body ?? data.content} />
 				</div>
 			)
 		}
@@ -154,7 +163,12 @@ export function FilePreviewSurface({ path, uri, viewerType, data, variant, fallb
 		return (
 			<div className="h-full overflow-auto">
 				<div className="mx-auto max-w-3xl px-6 py-6">
-					<Markdown content={data.content} />
+          {markdownDocument?.frontmatterBlock ? (
+            <pre className="mb-4 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-1 px-4 py-3 font-mono text-xs leading-5 text-muted-foreground">
+              {markdownDocument.frontmatterBlock.trimEnd()}
+            </pre>
+          ) : null}
+					<Markdown content={markdownDocument?.body ?? data.content} />
 				</div>
 			</div>
 		)

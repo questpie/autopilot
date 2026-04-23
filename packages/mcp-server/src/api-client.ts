@@ -2,8 +2,8 @@
  * Type-safe Hono RPC client for the Autopilot orchestrator API.
  */
 
-import { hc } from 'hono/client'
 import type { AppType } from '@questpie/autopilot-orchestrator'
+import { hc } from 'hono/client'
 import { env } from './env'
 
 const DEFAULT_BASE = 'http://localhost:7778'
@@ -26,5 +26,6 @@ const client = hc<AppType>(getBaseUrl(), { headers: authHeaders() })
 
 export const tasks = client.api.tasks
 export const runs = client.api.runs
+export const projectsApi = client.api.projects
 export const schedulesApi = client.api.schedules
 export const searchApi = client.api.search

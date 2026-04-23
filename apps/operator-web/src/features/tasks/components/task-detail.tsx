@@ -21,7 +21,7 @@ import { buildChatContextSearch } from '@/features/chat/lib/chat-context'
 import { setDraggedChatAttachment } from '@/features/chat/lib/chat-dnd'
 import { useQueryList } from '@/hooks/use-queries'
 import { useRuns } from '@/hooks/use-runs'
-import { useSessions } from '@/hooks/use-sessions'
+import { useSessions, useTaskThread } from '@/hooks/use-sessions'
 import {
 	useApproveTask,
 	useCancelTask,
@@ -135,6 +135,10 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 	const retryTaskMutation = useRetryTask()
 	const cancelTaskMutation = useCancelTask()
 	const navigate = useNavigate()
+
+	const isTaskActive =
+		detail?.status === 'active' || detail?.status === 'backlog' || detail?.status === 'blocked'
+	const taskThread = useTaskThread(detail?.id ?? null, isTaskActive)
 
 	const workflow = detail?.workflow_id
 		? ((workflowsQuery.data ?? []).find((w) => w.id === detail.workflow_id) ?? null)
@@ -390,7 +394,13 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 				<SmartText text={detail.title} />
 			</h1>
 
-			{detail.description && <Markdown content={detail.description} className="mt-4 text-[13px]" />}
+			{detail.description && (
+        <Markdown
+          content={detail.description}
+          className="mt-4"
+          contentClassName="[&_.ProseMirror]:px-0 [&_.ProseMirror]:py-0 [&_.ProseMirror]:text-[13px] [&_.ProseMirror]:leading-6"
+        />
+      )}
 
 			{timelineEntries.length > 0 && (
 				<>
@@ -414,6 +424,32 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 						runSessionIds={runSessionIds}
 						artifactsByRunId={artifactsByRunId}
 					/>
+				</>
+			)}
+
+			{taskThread.messages.length > 0 && (
+				<>
+					<div className="my-4" />
+					<p className="text-sm font-medium text-muted-foreground mb-3">Thread</p>
+					<div className="space-y-2">
+						{taskThread.messages.map((msg) => (
+							<div key={msg.id} className="flex gap-2 text-[13px]">
+								<span className="text-xs text-muted-foreground tabular-nums shrink-0">
+									{new Date(msg.created_at).toLocaleTimeString(undefined, {
+										hour: '2-digit',
+										minute: '2-digit',
+									})}
+								</span>
+								{msg.role === 'system' ? (
+									<span className="text-muted-foreground">
+										{msg.content.replace(/^\[task_progress\]\s*/, '')}
+									</span>
+								) : (
+									<Markdown content={msg.content} className="flex-1" />
+								)}
+							</div>
+						))}
+					</div>
 				</>
 			)}
 		</>

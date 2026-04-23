@@ -16,40 +16,43 @@ import dotenv from 'dotenv'
 import { createApp } from './api'
 import type { Services } from './api/app'
 import { createAuth } from './auth'
+import { ConfigManager } from './config/config-manager'
+import { ConfigService } from './config/config-service'
+import { importAuthoredConfigFromScopes } from './config/import-authored-config'
+import { discoverScopes } from './config/scope-resolver'
+import { MasterKeyError, hasMasterKey } from './crypto'
 import { createCompanyDb, createIndexDb } from './db'
 import { getEnv } from './env'
-import { discoverScopes, resolveConfig } from './config/scope-resolver'
-import { ConfigManager } from './config/config-manager'
+import { eventBus } from './events/event-bus'
+import { NotificationBridge, QueryResponseBridge, TaskProgressBridge } from './providers'
 import {
-	TaskService,
-	RunService,
-	WorkerService,
-	EnrollmentService,
-	WorkflowEngine,
 	ActivityService,
 	ArtifactService,
 	ConversationBindingService,
-	TaskRelationService,
-	TaskGraphService,
-	ParentJoinBridge,
+	DefaultWorkerRegistry,
 	DependencyBridge,
-		SecretService,
-		ProjectService,
-		QueryService,
-	SessionService,
-	SessionMessageService,
-	UserPreferenceService,
+	EnrollmentService,
+	KnowledgeService,
+	ParentJoinBridge,
+	ProjectService,
+	QueryService,
+	RunService,
 	ScheduleService,
 	SchedulerDaemon,
 	ScriptService,
+	SecretService,
+	SessionMessageService,
+	SessionService,
+	TaskGraphService,
+	TaskRelationService,
+	TaskService,
+	UserPreferenceService,
 	VfsService,
-	DefaultWorkerRegistry,
+	WorkerService,
+	WorkflowEngine,
 } from './services'
-import { Indexer } from './services/indexer'
 import type { AuthoredConfig } from './services'
-import { NotificationBridge, QueryResponseBridge, TaskProgressBridge } from './providers'
-import { eventBus } from './events/event-bus'
-import { hasMasterKey, MasterKeyError } from './crypto'
+import { Indexer } from './services/indexer'
 export interface StartServerOptions {
 	/** Absolute path to start scope discovery from. Defaults to first CLI arg or cwd. */
 	companyRoot?: string
@@ -68,8 +71,7 @@ export async function startServer(options?: StartServerOptions) {
 
 	if (!chain.companyRoot) {
 		throw new Error(
-			`No .autopilot/company.yaml found walking up from ${startDir}.\n` +
-				'Create one with: autopilot init',
+			`No .autopilot/company.yaml found walking up from ${startDir}.\nCreate one with: autopilot init`,
 		)
 	}
 
@@ -94,24 +96,23 @@ export async function startServer(options?: StartServerOptions) {
 	const { db: indexDb, raw: indexDbRaw } = await createIndexDb(companyRoot)
 	console.log('[server] databases initialized')
 
-	// ── 4. Build resolved config (company + project merge) ───────────────
-	const resolved = await resolveConfig(chain)
+	// ── 4. Create config-backed services and seed from FS if needed ───────
+	const projectService = new ProjectService(companyDb)
+	const configService = new ConfigService(companyDb)
+	let currentProjectId: string | null = null
 
-	const authoredConfig: AuthoredConfig = {
-		company: resolved.company,
-		agents: resolved.agents,
-		workflows: resolved.workflows,
-		environments: resolved.environments,
-		providers: resolved.providers,
-		capabilityProfiles: resolved.capabilityProfiles,
-		skills: resolved.skills,
-		context: resolved.context,
-		scripts: resolved.scripts,
-		defaults: resolved.defaults,
-		queues: resolved.company.queues ?? {},
+	if (!(await configService.hasAnyConfig())) {
+		const imported = await importAuthoredConfigFromScopes(configService, projectService, chain)
+		currentProjectId = imported.projectId
 	}
+
+	if (!currentProjectId && chain.projectRoot && chain.projectRoot !== chain.companyRoot) {
+		currentProjectId = (await projectService.findByPath(chain.projectRoot))?.id ?? null
+	}
+
+	const authoredConfig: AuthoredConfig = await configService.loadAuthoredConfig(currentProjectId)
 	console.log(
-		`[server] config loaded: ${resolved.agents.size} agents, ${resolved.workflows.size} workflows, ${resolved.environments.size} environments, ${resolved.providers.size} providers, ${resolved.skills.size} skills, ${resolved.context.size} context files, ${resolved.scripts.size} scripts`,
+		`[server] config loaded: ${authoredConfig.agents.size} agents, ${authoredConfig.workflows.size} workflows, ${authoredConfig.environments.size} environments, ${authoredConfig.providers.size} providers, ${authoredConfig.skills.size} skills, ${authoredConfig.context.size} context files, ${authoredConfig.scripts.size} scripts`,
 	)
 
 	// ── 5. Create auth ───────────────────────────────────────────────────
@@ -126,6 +127,7 @@ export async function startServer(options?: StartServerOptions) {
 	const { BlobStore } = await import('./services/blob-store')
 	const blobStore = new BlobStore(join(companyRoot, '.data'))
 	const artifactService = new ArtifactService(companyDb, blobStore)
+	const knowledgeService = new KnowledgeService(companyDb, blobStore, indexDb)
 	taskService.setArtifactService(artifactService)
 	const conversationBindingService = new ConversationBindingService(companyDb)
 	const taskRelationService = new TaskRelationService(companyDb)
@@ -133,7 +135,6 @@ export async function startServer(options?: StartServerOptions) {
 	const queryService = new QueryService(companyDb)
 	const sessionService = new SessionService(companyDb)
 	const sessionMessageService = new SessionMessageService(companyDb)
-	const projectService = new ProjectService(companyDb)
 	const userPreferenceService = new UserPreferenceService(companyDb)
 	const scheduleService = new ScheduleService(companyDb)
 	const scriptService = new ScriptService(authoredConfig)
@@ -186,6 +187,7 @@ export async function startServer(options?: StartServerOptions) {
 		enrollmentService,
 		activityService,
 		artifactService,
+		knowledgeService,
 		conversationBindingService,
 		taskRelationService,
 		taskGraphService,
@@ -194,6 +196,7 @@ export async function startServer(options?: StartServerOptions) {
 		queryService,
 		sessionService,
 		sessionMessageService,
+		configService,
 		projectService,
 		userPreferenceService,
 		scheduleService,
@@ -251,8 +254,8 @@ export async function startServer(options?: StartServerOptions) {
 	if (authoredConfig.providers.size > 0) {
 		notificationBridge.start()
 		queryResponseBridge.start()
-		taskProgressBridge.start()
 	}
+	taskProgressBridge.start()
 
 	// ── 7b. Start parent join bridge ────────────────────────────────────
 	const parentJoinBridge = new ParentJoinBridge(eventBus, taskRelationService, workflowEngine)
@@ -282,7 +285,7 @@ export async function startServer(options?: StartServerOptions) {
 	schedulerDaemon.start()
 
 	// ── 7d. Start search indexer ──────────────────────────────────────
-	const indexer = new Indexer({ companyDb, indexDb, authoredConfig })
+	const indexer = new Indexer({ companyDb, indexDb, authoredConfig, blobStore })
 	indexer.start().catch((err) => {
 		console.error(
 			'[server] indexer startup error:',
@@ -293,6 +296,8 @@ export async function startServer(options?: StartServerOptions) {
 	// ── 8. Config hot reload manager ────────────────────────────────────
 	const configManager = new ConfigManager(authoredConfig, {
 		companyRoot,
+		configService,
+		projectId: currentProjectId,
 		onReload: async (_cfg) => {
 			workflowEngine.refreshDefaults()
 			const issues = workflowEngine.validate()
@@ -355,8 +360,8 @@ export async function startServer(options?: StartServerOptions) {
 				`[server] startup recovery: marked ${staleWorkerIds.length} stale worker(s) offline`,
 			)
 		}
-		const leaseRecovery = await workerService.expireStaleAndRecover(
-			(runId) => failRunOnExpiry(runId, 'lease expired (orchestrator restart recovery)'),
+		const leaseRecovery = await workerService.expireStaleAndRecover((runId) =>
+			failRunOnExpiry(runId, 'lease expired (orchestrator restart recovery)'),
 		)
 		if (leaseRecovery.failedRunIds.length > 0) {
 			console.log(
@@ -374,8 +379,8 @@ export async function startServer(options?: StartServerOptions) {
 	const leaseExpiryTimer = setInterval(async () => {
 		try {
 			await workerService.expireStale(90_000)
-			const result = await workerService.expireStaleAndRecover(
-				(runId) => failRunOnExpiry(runId, 'lease expired (periodic cleanup)'),
+			const result = await workerService.expireStaleAndRecover((runId) =>
+				failRunOnExpiry(runId, 'lease expired (periodic cleanup)'),
 			)
 			if (result.failedRunIds.length > 0) {
 				console.log(
@@ -412,7 +417,7 @@ export async function startServer(options?: StartServerOptions) {
 
 	deferredTaskTimer.unref()
 
-	// ── 12. Start config file watcher ───────────────────────────────────
+	// ── 12. Start config reload hooks (DB-backed manager is a no-op here) ──
 	configManager.startWatching(chain)
 
 	// ── Stop function for graceful shutdown ─────────────────────────────

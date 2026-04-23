@@ -1,7 +1,16 @@
 import { randomBytes } from 'node:crypto'
-import { eq, and, or, sql, inArray } from 'drizzle-orm'
-import { tasks, runs, runEvents, artifacts, taskRelations, conversationBindings, workerLeases, scheduleExecutions } from '../db/company-schema'
+import { and, eq, inArray, or, sql } from 'drizzle-orm'
 import type { CompanyDb } from '../db'
+import {
+	artifacts,
+	conversationBindings,
+	runEvents,
+	runs,
+	scheduleExecutions,
+	taskRelations,
+	tasks,
+	workerLeases,
+} from '../db/company-schema'
 import type { ArtifactService } from './artifacts'
 
 /**
@@ -13,7 +22,7 @@ export function slugifyTaskId(title: string, maxLength = 60): string {
 	const slug = title
 		.normalize('NFKD')
 		// Strip combining diacritics (accents)
-		.replace(/[\u0300-\u036f]/g, '')
+		.replace(/\p{M}/gu, '')
 		.toLowerCase()
 		// Replace non-alphanumeric chars with dashes
 		.replace(/[^a-z0-9]+/g, '-')
@@ -53,6 +62,7 @@ export class TaskService {
 		status?: string
 		priority?: string
 		assigned_to?: string
+		project_id?: string
 		workflow_id?: string
 		workflow_step?: string
 		context?: string
@@ -82,11 +92,13 @@ export class TaskService {
 	async list(filter?: {
 		status?: string
 		assigned_to?: string
+		project_id?: string
 		workflow_id?: string
 	}) {
 		const conditions = []
 		if (filter?.status) conditions.push(eq(tasks.status, filter.status))
 		if (filter?.assigned_to) conditions.push(eq(tasks.assigned_to, filter.assigned_to))
+		if (filter?.project_id) conditions.push(eq(tasks.project_id, filter.project_id))
 		if (filter?.workflow_id) conditions.push(eq(tasks.workflow_id, filter.workflow_id))
 
 		if (conditions.length === 0) {
@@ -110,6 +122,7 @@ export class TaskService {
 			status: string
 			priority: string
 			assigned_to: string
+			project_id: string
 			workflow_id: string
 			workflow_step: string
 			context: string
@@ -134,12 +147,7 @@ export class TaskService {
 			.select({ count: sql<number>`count(distinct ${tasks.id})` })
 			.from(tasks)
 			.innerJoin(runs, eq(runs.task_id, tasks.id))
-			.where(
-				and(
-					eq(tasks.queue, queue),
-					inArray(runs.status, ['claimed', 'running']),
-				),
-			)
+			.where(and(eq(tasks.queue, queue), inArray(runs.status, ['claimed', 'running'])))
 			.get()
 		return result?.count ?? 0
 	}
@@ -149,7 +157,10 @@ export class TaskService {
 	 * 'fifo' = oldest created_at first. 'priority' = highest priority first, then oldest.
 	 * Only returns tasks whose start_after (if set) has elapsed.
 	 */
-	async findNextInQueue(queue: string, priorityOrder: 'fifo' | 'priority' = 'fifo'): Promise<TaskRow | undefined> {
+	async findNextInQueue(
+		queue: string,
+		priorityOrder: 'fifo' | 'priority' = 'fifo',
+	): Promise<TaskRow | undefined> {
 		const now = new Date().toISOString()
 		const conditions = [
 			eq(tasks.queue, queue),
@@ -174,10 +185,7 @@ export class TaskService {
 				.select({ id: runs.id })
 				.from(runs)
 				.where(
-					and(
-						eq(runs.task_id, task.id),
-						inArray(runs.status, ['pending', 'claimed', 'running']),
-					),
+					and(eq(runs.task_id, task.id), inArray(runs.status, ['pending', 'claimed', 'running'])),
 				)
 				.all()
 			if (activeRuns.length > 0) continue
@@ -206,11 +214,7 @@ export class TaskService {
 	 * List all tasks in a named queue with summary info.
 	 */
 	async listByQueue(queue: string): Promise<TaskRow[]> {
-		return await this.db
-			.select()
-			.from(tasks)
-			.where(eq(tasks.queue, queue))
-			.all()
+		return await this.db.select().from(tasks).where(eq(tasks.queue, queue)).all()
 	}
 
 	/**
@@ -237,10 +241,7 @@ export class TaskService {
 				.select({ id: runs.id })
 				.from(runs)
 				.where(
-					and(
-						eq(runs.task_id, task.id),
-						inArray(runs.status, ['pending', 'claimed', 'running']),
-					),
+					and(eq(runs.task_id, task.id), inArray(runs.status, ['pending', 'claimed', 'running'])),
 				)
 				.all()
 			if (activeRuns.length === 0) ready.push(task)
@@ -286,9 +287,10 @@ export class TaskService {
 			await tx.delete(artifacts).where(eq(artifacts.task_id, id)).run()
 
 			// 5. Delete task_relations (both directions)
-			await tx.delete(taskRelations).where(
-				or(eq(taskRelations.source_task_id, id), eq(taskRelations.target_task_id, id))!
-			).run()
+			await tx
+				.delete(taskRelations)
+				.where(or(eq(taskRelations.source_task_id, id), eq(taskRelations.target_task_id, id))!)
+				.run()
 
 			// 6. Delete conversation bindings
 			await tx.delete(conversationBindings).where(eq(conversationBindings.task_id, id)).run()

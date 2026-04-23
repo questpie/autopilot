@@ -92,6 +92,7 @@ describe('execution loop', () => {
 				id TEXT PRIMARY KEY,
 				agent_id TEXT NOT NULL,
 				task_id TEXT,
+				project_id TEXT,
 				worker_id TEXT,
 				runtime TEXT NOT NULL,
 				model TEXT,
@@ -110,7 +111,8 @@ describe('execution loop', () => {
 				runtime_session_ref TEXT,
 				resumed_from_run_id TEXT,
 				preferred_worker_id TEXT,
-				resumable INTEGER DEFAULT 0
+				resumable INTEGER DEFAULT 0,
+				targeting TEXT
 			)
 		`)
 		await rawClient.execute(`

@@ -105,7 +105,7 @@ describe('artifact kind normalization', () => {
 		// Ensure tables exist (some may not be in migrations yet)
 		await rawClient.execute(`
 			CREATE TABLE IF NOT EXISTS runs (
-				id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, task_id TEXT, worker_id TEXT,
+				id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, task_id TEXT, project_id TEXT, worker_id TEXT,
 				runtime TEXT NOT NULL, model TEXT, provider TEXT, variant TEXT,
 				status TEXT NOT NULL DEFAULT 'pending', initiated_by TEXT, instructions TEXT,
 				summary TEXT, tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0,

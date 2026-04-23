@@ -4,10 +4,10 @@
 import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
+import { type SearchScope, search } from '../../services/search'
 import type { AppEnv } from '../app'
-import { search, type SearchScope } from '../../services/search'
 
-const scopeSchema = z.enum(['tasks', 'runs', 'context', 'schedules', 'all'])
+const scopeSchema = z.enum(['tasks', 'runs', 'context', 'schedules', 'knowledge', 'all'])
 
 const searchRoute = new Hono<AppEnv>().get(
 	'/',

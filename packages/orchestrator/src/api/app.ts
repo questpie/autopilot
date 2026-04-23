@@ -11,42 +11,71 @@
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import type { Client } from '@libsql/client'
+import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
-import { HTTPException } from 'hono/http-exception'
-import { sql } from 'drizzle-orm'
-import * as authSchema from '../db/auth-schema'
-import type { Auth } from '../auth'
-import type { CompanyDb } from '../db'
-import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, AuthoredConfig, VfsService, ScriptService, UserPreferenceService, ProjectService } from '../services'
-import type { Client } from '@libsql/client'
-import type { Actor } from '../auth/types'
-import { authMiddleware, isLocalhostRequest, resolveActor as resolveActorFn } from './middleware/auth'
-import { workerAuthMiddleware } from './middleware/worker-auth'
 import { createMiddleware } from 'hono/factory'
-import { events } from './routes/events'
-import { tasks } from './routes/tasks'
-import { runs } from './routes/runs'
-import { workers } from './routes/workers'
-import { enrollment } from './routes/enrollment'
-import { previews } from './routes/previews'
-import { intake } from './routes/intake'
+import { HTTPException } from 'hono/http-exception'
+import type { Auth } from '../auth'
+import type { Actor } from '../auth/types'
+import type { ConfigService } from '../config/config-service'
+import type { CompanyDb } from '../db'
+import * as authSchema from '../db/auth-schema'
+import { env } from '../env'
+import type {
+	ActivityService,
+	ArtifactService,
+	AuthoredConfig,
+	ConversationBindingService,
+	EnrollmentService,
+	KnowledgeService,
+	ProjectService,
+	QueryService,
+	RunService,
+	ScheduleService,
+	ScriptService,
+	SecretService,
+	SessionMessageService,
+	SessionService,
+	TaskGraphService,
+	TaskRelationService,
+	TaskService,
+	UserPreferenceService,
+	VfsService,
+	WorkerService,
+	WorkflowEngine,
+} from '../services'
+import {
+	authMiddleware,
+	isLocalhostRequest,
+	resolveActor as resolveActorFn,
+} from './middleware/auth'
+import { workerAuthMiddleware } from './middleware/worker-auth'
 import { chatSessions } from './routes/chat-sessions'
+import { configRoute } from './routes/config'
 import { conversations } from './routes/conversations'
-import { taskGraph } from './routes/task-graph'
-import { secrets } from './routes/secrets'
+import { enrollment } from './routes/enrollment'
+import { events } from './routes/events'
+import { intake } from './routes/intake'
+import { invites } from './routes/invites'
+import { knowledgeRoute } from './routes/knowledge'
+import { preferences } from './routes/preferences'
+import { previews } from './routes/previews'
+import { projectsRoute } from './routes/projects'
 import { queries } from './routes/queries'
-import { sessionsRoute } from './routes/sessions'
+import { queues } from './routes/queues'
+import { runs } from './routes/runs'
 import { schedules } from './routes/schedules'
 import { scripts } from './routes/scripts'
-import { queues } from './routes/queues'
 import { searchRoute } from './routes/search'
+import { secrets } from './routes/secrets'
+import { sessionsRoute } from './routes/sessions'
+import { taskGraph } from './routes/task-graph'
+import { tasks } from './routes/tasks'
 import { vfs } from './routes/vfs'
-import { invites } from './routes/invites'
-import { preferences } from './routes/preferences'
-import { projectsRoute } from './routes/projects'
+import { workers } from './routes/workers'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -69,7 +98,9 @@ export interface Services {
 	vfsService: VfsService
 	scriptService: ScriptService
 	userPreferenceService: UserPreferenceService
-	projectService: ProjectService
+	projectService?: ProjectService
+	configService?: ConfigService
+	knowledgeService?: KnowledgeService
 }
 
 export interface AppEnv {
@@ -134,7 +165,9 @@ export function createApp(config: AppConfig) {
 		: [fallbackOrigin]
 
 	if (!rawOrigin && env.NODE_ENV === 'production') {
-		console.warn('[api] ⚠ CORS_ORIGIN not set in production — falling back to the orchestrator base URL. Set CORS_ORIGIN if operators use a separate origin.')
+		console.warn(
+			'[api] ⚠ CORS_ORIGIN not set in production — falling back to the orchestrator base URL. Set CORS_ORIGIN if operators use a separate origin.',
+		)
 	}
 
 	// ── Global middleware ─────────────────────────────────────────────────
@@ -143,7 +176,14 @@ export function createApp(config: AppConfig) {
 		cors({
 			origin: corsOrigin,
 			allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-			allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Worker-Secret', 'X-Provider-Secret', 'X-Local-Dev'],
+			allowHeaders: [
+				'Content-Type',
+				'Authorization',
+				'X-API-Key',
+				'X-Worker-Secret',
+				'X-Provider-Secret',
+				'X-Local-Dev',
+			],
 			credentials: true,
 		}),
 	)
@@ -182,7 +222,9 @@ export function createApp(config: AppConfig) {
 	})
 
 	// ── Public routes ────────────────────────────────────────────────────
-	app.get('/api/health', (c) => c.json({ ok: true, ts: new Date().toISOString(), version: orchestratorPkg.version }))
+	app.get('/api/health', (c) =>
+		c.json({ ok: true, ts: new Date().toISOString(), version: orchestratorPkg.version }),
+	)
 
 	app.get('/api/status', async (c) => {
 		const db = c.get('db')
@@ -196,22 +238,6 @@ export function createApp(config: AppConfig) {
 
 	// ── Config inspection (user auth required) ──────────────────────────
 	app.use('/api/config/*', userAuth)
-	app.get('/api/config/workflows', (c) => {
-		const cfg = c.get('authoredConfig')
-		return c.json([...cfg.workflows.values()], 200)
-	})
-	app.get('/api/config/agents', (c) => {
-		const cfg = c.get('authoredConfig')
-		return c.json([...cfg.agents.values()], 200)
-	})
-	app.get('/api/config/environments', (c) => {
-		const cfg = c.get('authoredConfig')
-		return c.json([...cfg.environments.values()], 200)
-	})
-	app.get('/api/config/providers', (c) => {
-		const cfg = c.get('authoredConfig')
-		return c.json([...cfg.providers.values()], 200)
-	})
 	app.get('/api/config/reload-status', (c) => {
 		if (!config.configManager) return c.json({ available: false }, 200)
 		return c.json({ available: true, ...config.configManager.status() }, 200)
@@ -291,6 +317,8 @@ export function createApp(config: AppConfig) {
 	app.use('/api/chat-sessions', userAuth)
 	app.use('/api/projects/*', userAuth)
 	app.use('/api/projects', userAuth)
+	app.use('/api/knowledge/*', userAuth)
+	app.use('/api/knowledge', userAuth)
 
 	// ── Schedule routes (user auth — operator surface) ───────────────
 	app.use('/api/schedules/*', userAuth)
@@ -320,7 +348,9 @@ export function createApp(config: AppConfig) {
 	app.use('/api/conversations/bindings', userAuth)
 
 	// ── Worker auth for machine routes ───────────────────────────────────
-	const workerAuth = workerAuthMiddleware({ allowLocalDevBypass: config.allowLocalDevBypass ?? false })
+	const workerAuth = workerAuthMiddleware({
+		allowLocalDevBypass: config.allowLocalDevBypass ?? false,
+	})
 	app.use('/api/workers/*', workerAuth)
 	// GET /api/workers listing: allow both user-session and worker auth
 	app.use('/api/workers', eitherAuth)
@@ -329,6 +359,7 @@ export function createApp(config: AppConfig) {
 
 	// ── All API routes (typed chain for Hono client inference) ───────────
 	const typedApp = app
+		.route('/api/config', configRoute)
 		.route('/api/enrollment', enrollment)
 		.route('/api/workers', workers)
 		.route('/api/runs', runs)
@@ -343,6 +374,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/sessions', sessionsRoute)
 		.route('/api/chat-sessions', chatSessions)
 		.route('/api/projects', projectsRoute)
+		.route('/api/knowledge', knowledgeRoute as Hono<AppEnv>)
 		.route('/api/schedules', schedules)
 		.route('/api/queues', queues)
 		.route('/api/search', searchRoute)

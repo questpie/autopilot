@@ -26,13 +26,13 @@ const DDL = [
 	`CREATE TABLE tasks (
 		id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT DEFAULT '',
 		type TEXT NOT NULL, status TEXT NOT NULL, priority TEXT DEFAULT 'medium',
-		assigned_to TEXT, workflow_id TEXT, workflow_step TEXT,
+		assigned_to TEXT, project_id TEXT, workflow_id TEXT, workflow_step TEXT,
 		context TEXT DEFAULT '{}', metadata TEXT DEFAULT '{}',
 		queue TEXT, start_after TEXT, scheduled_by TEXT,
 		created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 	)`,
 	`CREATE TABLE runs (
-		id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, task_id TEXT, worker_id TEXT,
+		id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, task_id TEXT, project_id TEXT, worker_id TEXT,
 		runtime TEXT NOT NULL, model TEXT, provider TEXT, variant TEXT, status TEXT NOT NULL DEFAULT 'pending',
 		initiated_by TEXT, instructions TEXT, summary TEXT,
 		tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0,

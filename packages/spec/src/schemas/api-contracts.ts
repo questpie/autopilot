@@ -1,9 +1,9 @@
 import { z } from 'zod'
-import { ExecutionTargetSchema } from './workflow'
-import { ExternalActionSchema } from './external-action'
-import { SecretRefSchema } from './secret-ref'
 import { ResolvedCapabilitiesSchema } from './capability-profile'
+import { ExternalActionSchema } from './external-action'
 import { StandaloneScriptSchema } from './script'
+import { SecretRefSchema } from './secret-ref'
+import { ExecutionTargetSchema } from './workflow'
 
 // ─── Shared ────────────────────────────────────────────────────────────────
 
@@ -61,6 +61,7 @@ export const ClaimedRunSchema = z.object({
 	id: z.string(),
 	agent_id: z.string(),
 	task_id: z.string().nullable(),
+	project_id: z.string().nullable().optional(),
 	runtime: z.string(),
 	status: z.string(),
 
@@ -118,12 +119,16 @@ export const ClaimedRunSchema = z.object({
 	/** Small curated context content injected into the prompt (name → content). */
 	injected_context: z.record(z.string(), z.string()).optional(),
 	/** Navigation hints telling the agent where to find knowledge sources. */
-	context_hints: z.array(z.object({
-		type: z.string(),
-		path: z.string(),
-		description: z.string().optional(),
-		files: z.array(z.string()).optional(),
-	})).optional(),
+	context_hints: z
+		.array(
+			z.object({
+				type: z.string(),
+				path: z.string(),
+				description: z.string().optional(),
+				files: z.array(z.string()).optional(),
+			}),
+		)
+		.optional(),
 })
 
 export const WorkerClaimResponseSchema = z.object({
