@@ -20,7 +20,7 @@ import * as authSchema from '../db/auth-schema'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, AuthoredConfig, VfsService, ScriptService, UserPreferenceService } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, AuthoredConfig, VfsService, ScriptService, UserPreferenceService, ProjectService } from '../services'
 import type { Client } from '@libsql/client'
 import type { Actor } from '../auth/types'
 import { authMiddleware, isLocalhostRequest, resolveActor as resolveActorFn } from './middleware/auth'
@@ -46,6 +46,7 @@ import { searchRoute } from './routes/search'
 import { vfs } from './routes/vfs'
 import { invites } from './routes/invites'
 import { preferences } from './routes/preferences'
+import { projectsRoute } from './routes/projects'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,7 @@ export interface Services {
 	vfsService: VfsService
 	scriptService: ScriptService
 	userPreferenceService: UserPreferenceService
+	projectService: ProjectService
 }
 
 export interface AppEnv {
@@ -287,6 +289,8 @@ export function createApp(config: AppConfig) {
 	app.use('/api/sessions', userAuth)
 	app.use('/api/chat-sessions/*', userAuth)
 	app.use('/api/chat-sessions', userAuth)
+	app.use('/api/projects/*', userAuth)
+	app.use('/api/projects', userAuth)
 
 	// ── Schedule routes (user auth — operator surface) ───────────────
 	app.use('/api/schedules/*', userAuth)
@@ -338,6 +342,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/queries', queries)
 		.route('/api/sessions', sessionsRoute)
 		.route('/api/chat-sessions', chatSessions)
+		.route('/api/projects', projectsRoute)
 		.route('/api/schedules', schedules)
 		.route('/api/queues', queues)
 		.route('/api/search', searchRoute)

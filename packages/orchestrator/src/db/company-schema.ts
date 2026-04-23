@@ -53,6 +53,26 @@ export const tasks = sqliteTable(
 	],
 )
 
+// ─── Projects ───────────────────────────────────────────────────────────────
+
+export const projects = sqliteTable(
+	'projects',
+	{
+		id: text('id').primaryKey(),
+		name: text('name').notNull(),
+		path: text('path').notNull(),
+		git_remote: text('git_remote'),
+		default_branch: text('default_branch'),
+		registered_at: text('registered_at').notNull(),
+		metadata: text('metadata').default('{}').notNull(),
+	},
+	(table) => [
+		uniqueIndex('uq_projects_path').on(table.path),
+		index('idx_projects_name').on(table.name),
+		index('idx_projects_registered_at').on(table.registered_at),
+	],
+)
+
 // ─── Runs (replaces agent_sessions) ────────────────────────────────────────
 
 export const runs = sqliteTable(

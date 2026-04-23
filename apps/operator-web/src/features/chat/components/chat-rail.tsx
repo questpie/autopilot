@@ -1,5 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useSearch } from '@tanstack/react-router'
+import { type ConversationViewModel, composeConversations } from '@/api/conversations.api'
+import { cancelRun } from '@/api/runs.api'
+import type { ChatAttachment } from '@/api/types'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { useActiveView } from '@/hooks/use-active-view'
+import { useAgents } from '@/hooks/use-agents'
+import {
+	useChatMessages,
+	useChatSessions,
+	useCreateChatSession,
+	useSendChatMessage,
+} from '@/hooks/use-chat-sessions'
+import { useQueryList } from '@/hooks/use-queries'
+import { useTasks } from '@/hooks/use-tasks'
 import {
 	ArrowLeftIcon,
 	ChatCircle,
@@ -9,21 +22,8 @@ import {
 	Plus,
 	PlusIcon,
 } from '@phosphor-icons/react'
-import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
-import { useAgents } from '@/hooks/use-agents'
-import type { ChatAttachment } from '@/api/types'
-import {
-	useChatMessages,
-	useChatSessions,
-	useCreateChatSession,
-	useSendChatMessage,
-} from '@/hooks/use-chat-sessions'
-import { useQueryList } from '@/hooks/use-queries'
-import { useTasks } from '@/hooks/use-tasks'
-import { cancelRun } from '@/api/runs.api'
-import { composeConversations } from '@/api/conversations.api'
-import { useActiveView } from '@/hooks/use-active-view'
+import { useSearch } from '@tanstack/react-router'
+import { useEffect, useMemo, useState } from 'react'
 import { useChatWorkspace } from '../chat-workspace-context'
 import { ChatComposer } from './chat-composer'
 import { ChatSessionList } from './chat-session-list'
@@ -104,8 +104,15 @@ function getAttachmentKey(attachment: ChatAttachment): string {
 }
 
 export function ChatRail() {
-	const { activeSessionId, historyOpen, showHistory, startNewChat, openSession } =
-		useChatWorkspace()
+	const {
+		activeSessionId,
+		historyOpen,
+		showHistory,
+		startNewChat,
+		openSession,
+		draftSeed,
+		clearDraftChat,
+	} = useChatWorkspace()
 	const activeView = useActiveView()
 	const routeSearch = useSearch({ strict: false }) as Record<string, unknown>
 	const [composerValue, setComposerValue] = useState('')
@@ -150,6 +157,39 @@ export function ChatRail() {
 		return { ...conversation, messages: messagesQuery.data ?? [] }
 	}, [activeSessionId, conversations, messagesQuery.data])
 
+	const draftConversation = useMemo<ConversationViewModel | null>(() => {
+		if (activeConversation || historyOpen) return null
+		if (!draftSeed && attachments.length === 0 && composerValue.trim().length === 0) return null
+
+		const primaryAttachment = attachments[0] ?? draftSeed?.attachments?.[0]
+		const now = new Date().toISOString()
+
+		return {
+			session: {
+				id: 'draft-chat',
+				provider_id: 'dashboard',
+				external_conversation_id: 'draft-chat',
+				external_thread_id: null,
+				mode: 'query',
+				task_id: null,
+				status: 'active',
+				created_at: now,
+				updated_at: now,
+				metadata: '{}',
+				runtime_session_ref: null,
+				preferred_worker_id: null,
+			},
+			displayType: 'query',
+			title: primaryAttachment?.label ?? 'New chat',
+			lastPreview: composerValue.trim() || draftSeed?.message || '',
+			time: '',
+			messages: [],
+			artifacts: [],
+			task: null,
+			queries: [],
+		}
+	}, [activeConversation, attachments, composerValue, draftSeed, historyOpen])
+
 	const isLoading =
 		sessionsQuery.isLoading ||
 		queriesQuery.isLoading ||
@@ -172,6 +212,14 @@ export function ChatRail() {
 	useEffect(() => {
 		if (runAppearedInQueries) setPendingRun(null)
 	}, [runAppearedInQueries])
+
+	useEffect(() => {
+		if (!draftSeed || activeSessionId) return
+		setComposerValue(draftSeed.message ?? '')
+		setAttachments(draftSeed.attachments ?? [])
+		setDismissedContextKeys([])
+		clearDraftChat()
+	}, [activeSessionId, clearDraftChat, draftSeed])
 
 	const activeRunId = queryRunId ?? pendingRunId
 	const isAgentThinking = isSending || hasActiveQuery || pendingRunId !== null
@@ -282,13 +330,13 @@ export function ChatRail() {
 						emptyDescription="Start a new one from the composer."
 						showHeader={false}
 					/>
-				) : activeConversation ? (
+				) : activeConversation || draftConversation ? (
 					<div className="flex h-full flex-col overflow-hidden">
 						<ChatThread
-							conversation={activeConversation}
+							conversation={activeConversation ?? draftConversation!}
 							isLoading={isLoading}
-							isAgentThinking={isAgentThinking}
-							activeRunId={activeRunId}
+							isAgentThinking={!!activeConversation && isAgentThinking}
+							activeRunId={activeConversation ? activeRunId : null}
 							onBack={handleStartNewChat}
 							onHistory={showHistory}
 							showHeader={false}

@@ -33,8 +33,9 @@ import {
 	TaskGraphService,
 	ParentJoinBridge,
 	DependencyBridge,
-	SecretService,
-	QueryService,
+		SecretService,
+		ProjectService,
+		QueryService,
 	SessionService,
 	SessionMessageService,
 	UserPreferenceService,
@@ -132,6 +133,7 @@ export async function startServer(options?: StartServerOptions) {
 	const queryService = new QueryService(companyDb)
 	const sessionService = new SessionService(companyDb)
 	const sessionMessageService = new SessionMessageService(companyDb)
+	const projectService = new ProjectService(companyDb)
 	const userPreferenceService = new UserPreferenceService(companyDb)
 	const scheduleService = new ScheduleService(companyDb)
 	const scriptService = new ScriptService(authoredConfig)
@@ -192,6 +194,7 @@ export async function startServer(options?: StartServerOptions) {
 		queryService,
 		sessionService,
 		sessionMessageService,
+		projectService,
 		userPreferenceService,
 		scheduleService,
 		scriptService,

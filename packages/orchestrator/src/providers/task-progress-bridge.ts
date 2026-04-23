@@ -1,3 +1,20 @@
+import type {
+	HandlerResult,
+	NotificationAction,
+	NotificationPayload,
+	Provider,
+} from '@questpie/autopilot-spec'
+import type { AutopilotEvent, EventBus } from '../events/event-bus'
+import type { ArtifactService } from '../services/artifacts'
+import type { ConversationBindingService } from '../services/conversation-bindings'
+import type { RunService } from '../services/runs'
+import type { SecretService } from '../services/secrets'
+import type { SessionMessageService } from '../services/session-messages'
+import type { SessionService } from '../services/sessions'
+import type { TaskService } from '../services/tasks'
+import type { AuthoredConfig } from '../services/workflow-engine'
+import { type HandlerRuntimeConfig, invokeProvider } from './handler-runtime'
+
 /**
  * Task progress bridge — maintains one editable progress message per task
  * for conversations.
@@ -11,17 +28,6 @@
  * task_changed event, this bridge sends ONE message per task and edits it
  * in-place as the task progresses through its workflow.
  */
-import type { AutopilotEvent, EventBus } from '../events/event-bus'
-import type { Provider, NotificationPayload, NotificationAction, HandlerResult } from '@questpie/autopilot-spec'
-import type { AuthoredConfig } from '../services/workflow-engine'
-import type { RunService } from '../services/runs'
-import type { TaskService } from '../services/tasks'
-import type { ArtifactService } from '../services/artifacts'
-import type { ConversationBindingService } from '../services/conversation-bindings'
-import type { SecretService } from '../services/secrets'
-import type { SessionService } from '../services/sessions'
-import type { SessionMessageService } from '../services/session-messages'
-import { invokeProvider, type HandlerRuntimeConfig } from './handler-runtime'
 
 type NormalizedStatus = 'working' | 'plan_ready' | 'waiting_for_review' | 'completed' | 'failed'
 
@@ -45,10 +51,7 @@ function computeNormalizedStatus(task: {
 	return 'working'
 }
 
-function summarizeLifecycleState(
-	task: { workflow_step?: string | null },
-	status: string,
-): string {
+function summarizeLifecycleState(task: { workflow_step?: string | null }, status: string): string {
 	if (status === 'blocked' || status === 'needs_approval') return 'Waiting for review.'
 	if (status === 'done') return 'Completed.'
 	if (status === 'failed') return 'Failed.'
@@ -58,6 +61,8 @@ function summarizeLifecycleState(
 
 export class TaskProgressBridge {
 	private unsubscribe: (() => void) | null = null
+	private static readonly DASHBOARD_TASK_PROVIDER_ID = 'dashboard'
+	private static readonly DASHBOARD_TASK_BINDING_ID = 'dashboard:task-thread'
 
 	/** taskId → bindingId → external message ID */
 	private messageIdByTask = new Map<string, Map<string, string>>()
@@ -93,16 +98,19 @@ export class TaskProgressBridge {
 			this.enqueueEvent(event)
 		})
 		// Periodic cleanup of stale tracking entries
-		this.cleanupTimer = setInterval(() => {
-			const staleThreshold = Date.now() - TaskProgressBridge.TRACKING_STALE_MS
-			for (const [taskId, lastSent] of this.lastProgressSent) {
-				if (lastSent < staleThreshold) {
-					this.lastProgressSent.delete(taskId)
-					this.messageIdByTask.delete(taskId)
-					this.sessionMsgIdByTask.delete(taskId)
+		this.cleanupTimer = setInterval(
+			() => {
+				const staleThreshold = Date.now() - TaskProgressBridge.TRACKING_STALE_MS
+				for (const [taskId, lastSent] of this.lastProgressSent) {
+					if (lastSent < staleThreshold) {
+						this.lastProgressSent.delete(taskId)
+						this.messageIdByTask.delete(taskId)
+						this.sessionMsgIdByTask.delete(taskId)
+					}
 				}
-			}
-		}, 5 * 60 * 1000) // every 5 minutes
+			},
+			5 * 60 * 1000,
+		) // every 5 minutes
 		this.cleanupTimer.unref()
 		console.log('[task-progress-bridge] started')
 	}
@@ -124,20 +132,24 @@ export class TaskProgressBridge {
 		if (!taskId) {
 			// Events without a deterministic task ID need async resolution
 			this.handleEvent(event).catch((err) => {
-				console.error('[task-progress-bridge] unhandled error:', err instanceof Error ? err.message : String(err))
+				console.error(
+					'[task-progress-bridge] unhandled error:',
+					err instanceof Error ? err.message : String(err),
+				)
 			})
 			return
 		}
 
 		const previous = this.taskEventChains.get(taskId) ?? Promise.resolve()
-		const next = previous
-			.catch(() => {})
-			.then(() => this.handleEvent(event))
+		const next = previous.catch(() => {}).then(() => this.handleEvent(event))
 
 		this.taskEventChains.set(taskId, next)
 		next
 			.catch((err) => {
-				console.error('[task-progress-bridge] unhandled error:', err instanceof Error ? err.message : String(err))
+				console.error(
+					'[task-progress-bridge] unhandled error:',
+					err instanceof Error ? err.message : String(err),
+				)
 			})
 			.finally(() => {
 				if (this.taskEventChains.get(taskId) === next) {
@@ -220,22 +232,33 @@ export class TaskProgressBridge {
 
 	// ── run_event: throttled progress updates ──────────────────────────────
 
-	private async handleRunEvent(event: { type: 'run_event'; runId: string; eventType: string; summary: string }): Promise<void> {
-		if (event.eventType !== 'started' && event.eventType !== 'progress' && event.eventType !== 'tool_use') return
+	private async handleRunEvent(event: {
+		type: 'run_event'
+		runId: string
+		eventType: string
+		summary: string
+	}): Promise<void> {
+		if (
+			event.eventType !== 'started' &&
+			event.eventType !== 'progress' &&
+			event.eventType !== 'tool_use'
+		)
+			return
 
 		const run = await this.runService.get(event.runId)
 		if (!run?.task_id) return
 
 		const taskId = run.task_id
+		const task = await this.taskService.get(taskId)
+		if (!task) return
+		await this.syncDashboardTaskThread(task, event.summary.slice(0, 200) || 'Working...', run)
+
 		const { targets } = await this.resolveDeliveryTargets(taskId)
 		if (targets.length === 0) return
 
 		// Throttle check
 		const lastSent = this.lastProgressSent.get(taskId) ?? 0
 		if (Date.now() - lastSent < TaskProgressBridge.PROGRESS_THROTTLE_MS) return
-
-		const task = await this.taskService.get(taskId)
-		if (!task) return
 
 		const status = computeNormalizedStatus(task)
 		const baseUrl = this.config.orchestratorUrl
@@ -252,14 +275,15 @@ export class TaskProgressBridge {
 
 	// ── run_completed: immediate update with summary ───────────────────────
 
-	private async handleRunCompleted(event: { type: 'run_completed'; runId: string; status: string }): Promise<void> {
+	private async handleRunCompleted(event: {
+		type: 'run_completed'
+		runId: string
+		status: string
+	}): Promise<void> {
 		const run = await this.runService.get(event.runId)
 		if (!run?.task_id) return
 
 		const taskId = run.task_id
-		const { targets } = await this.resolveDeliveryTargets(taskId)
-		if (targets.length === 0) return
-
 		const task = await this.taskService.get(taskId)
 		if (!task) return
 
@@ -272,9 +296,15 @@ export class TaskProgressBridge {
 		const preview = artifacts.find((a) => a.kind === 'preview_url')
 		if (preview) previewUrl = preview.ref_value
 
-		const summary = event.status === 'failed'
-			? (run.error ?? run.summary ?? 'Run failed.')
-			: (run.summary ?? 'Run completed.')
+		const summary =
+			event.status === 'failed'
+				? (run.error ?? run.summary ?? 'Run failed.')
+				: (run.summary ?? 'Run completed.')
+		await this.syncDashboardTaskThread(task, summary, run)
+		await this.appendDashboardRunResult(task.id, run, summary)
+
+		const { targets } = await this.resolveDeliveryTargets(taskId)
+		if (targets.length === 0) return
 
 		this.lastProgressSent.set(taskId, Date.now())
 
@@ -289,11 +319,12 @@ export class TaskProgressBridge {
 
 	// ── task_changed: immediate status update ──────────────────────────────
 
-	private async handleTaskChanged(event: { type: 'task_changed'; taskId: string; status: string }): Promise<void> {
+	private async handleTaskChanged(event: {
+		type: 'task_changed'
+		taskId: string
+		status: string
+	}): Promise<void> {
 		const taskId = event.taskId
-		const { targets } = await this.resolveDeliveryTargets(taskId)
-		if (targets.length === 0) return
-
 		const task = await this.taskService.get(taskId)
 		if (!task) return
 
@@ -305,8 +336,8 @@ export class TaskProgressBridge {
 		let previewUrl: string | undefined
 		if (status === 'waiting_for_review' || status === 'completed' || status === 'failed') {
 			const runs = await this.runService.list({ task_id: taskId })
-			const lastRun = runs.sort((a, b) =>
-				new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+			const lastRun = runs.sort(
+				(a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
 			)[0]
 			if (lastRun) {
 				if (lastRun.summary) summary = lastRun.summary
@@ -315,6 +346,10 @@ export class TaskProgressBridge {
 				if (preview) previewUrl = preview.ref_value
 			}
 		}
+		await this.syncDashboardTaskThread(task, summary)
+
+		const { targets } = await this.resolveDeliveryTargets(taskId)
+		if (targets.length === 0) return
 
 		this.lastProgressSent.set(taskId, Date.now())
 
@@ -336,17 +371,22 @@ export class TaskProgressBridge {
 
 	// ── task_created: initial card ────────────────────────────────────────
 
-	private async handleTaskCreated(event: { type: 'task_created'; taskId: string; title: string }): Promise<void> {
+	private async handleTaskCreated(event: {
+		type: 'task_created'
+		taskId: string
+		title: string
+	}): Promise<void> {
 		const taskId = event.taskId
 
 		const task = await this.taskService.get(taskId)
 		if (!task) return
 
-		const { targets } = await this.resolveDeliveryTargets(taskId)
-		if (targets.length === 0) return
-
 		const status = computeNormalizedStatus(task)
 		const baseUrl = this.config.orchestratorUrl
+		await this.syncDashboardTaskThread(task, summarizeLifecycleState(task, task.status))
+
+		const { targets } = await this.resolveDeliveryTargets(taskId)
+		if (targets.length === 0) return
 
 		this.lastProgressSent.set(taskId, Date.now())
 
@@ -362,7 +402,13 @@ export class TaskProgressBridge {
 
 	private async sendOrEditProgress(
 		target: DeliveryTarget,
-		task: { id: string; title: string; status: string; workflow_id?: string | null; workflow_step?: string | null },
+		task: {
+			id: string
+			title: string
+			status: string
+			workflow_id?: string | null
+			workflow_step?: string | null
+		},
 		status: NormalizedStatus,
 		opts: { baseUrl?: string; summary: string; previewUrl?: string },
 	): Promise<void> {
@@ -381,7 +427,8 @@ export class TaskProgressBridge {
 		} = {
 			orchestrator_url: opts.baseUrl,
 			event_type: 'task_progress',
-			severity: status === 'failed' ? 'error' : status === 'waiting_for_review' ? 'warning' : 'info',
+			severity:
+				status === 'failed' ? 'error' : status === 'waiting_for_review' ? 'warning' : 'info',
 			title: task.title,
 			summary: opts.summary,
 			task_id: task.id,
@@ -412,7 +459,12 @@ export class TaskProgressBridge {
 		// Create or update session message (skip for default-chat fallback to avoid noise)
 		if (!target.isDefaultChat) {
 			await this.updateSession(
-				{ provider_id: target.providerId, external_conversation_id: target.conversationId, external_thread_id: target.threadId, id: target.bindingId },
+				{
+					provider_id: target.providerId,
+					external_conversation_id: target.conversationId,
+					external_thread_id: target.threadId,
+					id: target.bindingId,
+				},
 				task,
 				opts.summary,
 				deliveredMessageId,
@@ -421,7 +473,12 @@ export class TaskProgressBridge {
 	}
 
 	private async updateSession(
-		binding: { provider_id: string; external_conversation_id: string; external_thread_id?: string | null; id: string },
+		binding: {
+			provider_id: string
+			external_conversation_id: string
+			external_thread_id?: string | null
+			id: string
+		},
 		task: { id: string },
 		summary: string,
 		deliveredMessageId?: string,
@@ -431,16 +488,21 @@ export class TaskProgressBridge {
 		const threadId = deliveredMessageId || (binding.external_thread_id ?? undefined)
 		if (!threadId) return
 
-		const taskSession = await this.sessionService.findOrCreate({
-			provider_id: binding.provider_id,
-			external_conversation_id: binding.external_conversation_id,
-			external_thread_id: threadId,
-			mode: 'task_thread',
-			task_id: task.id,
-		}).catch((err) => {
-			console.warn(`[task-progress-bridge] session creation failed for binding ${binding.id}:`, err instanceof Error ? err.message : String(err))
-			return undefined
-		})
+		const taskSession = await this.sessionService
+			.findOrCreate({
+				provider_id: binding.provider_id,
+				external_conversation_id: binding.external_conversation_id,
+				external_thread_id: threadId,
+				mode: 'task_thread',
+				task_id: task.id,
+			})
+			.catch((err) => {
+				console.warn(
+					`[task-progress-bridge] session creation failed for binding ${binding.id}:`,
+					err instanceof Error ? err.message : String(err),
+				)
+				return undefined
+			})
 
 		if (!taskSession) return
 
@@ -471,13 +533,135 @@ export class TaskProgressBridge {
 		}
 	}
 
+	private async syncDashboardTaskThread(
+		task: { id: string },
+		summary: string,
+		run?: {
+			id: string
+			status: string
+			runtime_session_ref: string | null
+			worker_id: string | null
+		},
+	): Promise<void> {
+		if (!this.sessionService || !this.sessionMessageService) return
+
+		const externalId = this.dashboardTaskExternalId(task.id)
+		const session = await this.sessionService
+			.findOrCreate({
+				provider_id: TaskProgressBridge.DASHBOARD_TASK_PROVIDER_ID,
+				external_conversation_id: externalId,
+				external_thread_id: externalId,
+				mode: 'task_thread',
+				task_id: task.id,
+			})
+			.catch((err) => {
+				console.warn(
+					`[task-progress-bridge] dashboard session creation failed for task ${task.id}:`,
+					err instanceof Error ? err.message : String(err),
+				)
+				return undefined
+			})
+
+		if (!session) return
+
+		if (run) {
+			const nextRuntimeSessionRef =
+				run.runtime_session_ref ??
+				(run.status === 'running' || run.status === 'claimed'
+					? null
+					: (session.runtime_session_ref ?? null))
+			const nextPreferredWorkerId = run.worker_id ?? session.preferred_worker_id ?? null
+			await this.sessionService.updateResumeState(
+				session.id,
+				nextRuntimeSessionRef,
+				nextPreferredWorkerId,
+			)
+		}
+
+		const bindingKey = `${TaskProgressBridge.DASHBOARD_TASK_BINDING_ID}:${task.id}`
+		const existingMsgId = this.sessionMsgIdByTask.get(task.id)?.get(bindingKey)
+		const content = `[task_progress] ${summary}`.slice(0, 2000)
+
+		if (existingMsgId) {
+			await this.sessionMessageService.updateDelivery(existingMsgId, { content })
+			return
+		}
+
+		const smsg = await this.sessionMessageService.create({
+			session_id: session.id,
+			role: 'system',
+			content,
+			metadata: JSON.stringify({
+				task_id: task.id,
+				notification_type: 'task_progress',
+			}),
+		})
+
+		if (!this.sessionMsgIdByTask.has(task.id)) {
+			this.sessionMsgIdByTask.set(task.id, new Map())
+		}
+		this.sessionMsgIdByTask.get(task.id)!.set(bindingKey, smsg.id)
+	}
+
+	private async appendDashboardRunResult(
+		taskId: string,
+		run: { id: string; status: string; summary: string | null; error: string | null },
+		summary: string,
+	): Promise<void> {
+		if (!this.sessionService || !this.sessionMessageService) return
+
+		const externalId = this.dashboardTaskExternalId(taskId)
+		const session = await this.sessionService
+			.findOrCreate({
+				provider_id: TaskProgressBridge.DASHBOARD_TASK_PROVIDER_ID,
+				external_conversation_id: externalId,
+				external_thread_id: externalId,
+				mode: 'task_thread',
+				task_id: taskId,
+			})
+			.catch((err) => {
+				console.warn(
+					`[task-progress-bridge] dashboard run result session failed for task ${taskId}:`,
+					err instanceof Error ? err.message : String(err),
+				)
+				return undefined
+			})
+
+		if (!session) return
+
+		await this.sessionMessageService.create({
+			session_id: session.id,
+			role: 'assistant',
+			content: summary,
+			metadata: JSON.stringify({
+				task_id: taskId,
+				run_id: run.id,
+				attachments: [
+					{
+						type: 'ref',
+						source: 'page',
+						label: `Run ${run.id.slice(0, 8)}`,
+						refType: 'run',
+						refId: run.id,
+						metadata: { runId: run.id, taskId },
+					},
+				],
+			}),
+		})
+	}
+
+	private dashboardTaskExternalId(taskId: string): string {
+		return `task:${taskId}`
+	}
+
 	/**
 	 * Resolve notification actions from real workflow step truth.
 	 * Only includes actions when the task is on a human_approval step.
 	 */
-	private resolveNotificationActions(
-		task: { workflow_id?: string | null; workflow_step?: string | null },
-	): NotificationAction[] | undefined {
+	private resolveNotificationActions(task: {
+		workflow_id?: string | null
+		workflow_step?: string | null
+	}): NotificationAction[] | undefined {
 		if (!task.workflow_id || !task.workflow_step) return undefined
 
 		const workflow = this.authoredConfig.workflows.get(task.workflow_id)
@@ -499,7 +683,13 @@ export class TaskProgressBridge {
 		runtimeConfig: HandlerRuntimeConfig,
 	): Promise<HandlerResult | null> {
 		try {
-			const result = await invokeProvider(provider, 'notify.send', payload, runtimeConfig, this.secretService)
+			const result = await invokeProvider(
+				provider,
+				'notify.send',
+				payload,
+				runtimeConfig,
+				this.secretService,
+			)
 			if (!result.ok) {
 				console.warn(`[task-progress-bridge] provider ${provider.id} failed: ${result.error}`)
 			}

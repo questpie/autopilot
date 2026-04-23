@@ -1,25 +1,25 @@
-import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import {
-	CaretRight,
-	CaretDown,
-	File,
-	FileText,
-	Wrench,
-	Robot,
-	Check,
-	X,
-	ArrowBendUpLeft,
-} from '@phosphor-icons/react'
-import { toast } from 'sonner'
-import { Markdown } from '@/components/ui/markdown'
+import type { ChatAttachment, RunEvent, SessionMessage } from '@/api/types'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-import { SmartText } from '@/lib/smart-links'
+import { Markdown } from '@/components/ui/markdown'
 import { useRunEvents } from '@/hooks/use-runs'
 import { useApproveTask, useRejectTask, useReplyTask } from '@/hooks/use-tasks'
-import { ToolCallCard, ThinkingBlock, ArtifactEventCard } from './run-event-feed'
-import type { ChatAttachment, SessionMessage, RunEvent } from '@/api/types'
+import { SmartText } from '@/lib/smart-links'
+import { cn } from '@/lib/utils'
+import {
+	ArrowBendUpLeft,
+	CaretDown,
+	CaretRight,
+	Check,
+	File,
+	FileText,
+	Robot,
+	Wrench,
+	X,
+} from '@phosphor-icons/react'
+import { Link } from '@tanstack/react-router'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { ArtifactEventCard, ThinkingBlock, ToolCallCard } from './run-event-feed'
 
 interface ChatMessageProps {
 	message: SessionMessage
@@ -237,10 +237,21 @@ function InlineRunEvents({ runId, fallbackContent }: { runId: string; fallbackCo
 		<div className="flex flex-col gap-1">
 			{items.map((item, idx) => {
 				if (item.kind === 'agent_group') {
-					return <AgentGroup key={item.agents[0]?.id ?? idx} agents={item.agents} events={item.children} />
+					return (
+						<AgentGroup
+							key={item.agents[0]?.id ?? idx}
+							agents={item.agents}
+							events={item.children}
+						/>
+					)
 				}
 				if (item.kind === 'tool_group') {
-					return <CollapsibleToolGroup key={idx} events={item.events} />
+					return (
+						<CollapsibleToolGroup
+							key={item.events.map((event) => event.id).join(':')}
+							events={item.events}
+						/>
+					)
 				}
 				if (item.kind === 'tool') {
 					return (
@@ -298,12 +309,16 @@ function getMessageAttachments(message: SessionMessage): ChatAttachment[] {
 
 	const meta = parseMessageMeta(message)
 	return Array.isArray(meta.attachments)
-		? meta.attachments.filter((attachment): attachment is ChatAttachment => !!attachment && typeof attachment === 'object')
+		? meta.attachments.filter(
+				(attachment): attachment is ChatAttachment =>
+					!!attachment && typeof attachment === 'object',
+			)
 		: []
 }
 
 function renderAttachmentLink(attachment: ChatAttachment) {
-	const label = attachment.name ?? attachment.label ?? attachment.url ?? attachment.refId ?? 'Attachment'
+	const label =
+		attachment.name ?? attachment.label ?? attachment.url ?? attachment.refId ?? 'Attachment'
 
 	if (attachment.url) {
 		return (
@@ -321,7 +336,11 @@ function renderAttachmentLink(attachment: ChatAttachment) {
 	if (attachment.type === 'ref' && attachment.refId) {
 		if (attachment.refType === 'task') {
 			return (
-				<Link to="/tasks" search={{ taskId: attachment.refId }} className="truncate max-w-[280px] text-primary hover:underline">
+				<Link
+					to="/tasks"
+					search={{ taskId: attachment.refId }}
+					className="truncate max-w-[280px] text-primary hover:underline"
+				>
 					{label}
 				</Link>
 			)
@@ -329,7 +348,11 @@ function renderAttachmentLink(attachment: ChatAttachment) {
 
 		if (attachment.refType === 'session') {
 			return (
-				<Link to="/chat" search={{ sessionId: attachment.refId }} className="truncate max-w-[280px] text-primary hover:underline">
+				<Link
+					to="/chat"
+					search={{ sessionId: attachment.refId }}
+					className="truncate max-w-[280px] text-primary hover:underline"
+				>
 					{label}
 				</Link>
 			)
@@ -337,7 +360,11 @@ function renderAttachmentLink(attachment: ChatAttachment) {
 
 		if (attachment.refType === 'file') {
 			return (
-				<Link to="/files" search={{ path: attachment.refId, view: 'file' }} className="truncate max-w-[280px] text-primary hover:underline">
+				<Link
+					to="/files"
+					search={{ path: attachment.refId, view: 'file' }}
+					className="truncate max-w-[280px] text-primary hover:underline"
+				>
 					{label}
 				</Link>
 			)
@@ -345,17 +372,26 @@ function renderAttachmentLink(attachment: ChatAttachment) {
 
 		if (attachment.refType === 'directory') {
 			return (
-				<Link to="/files" search={{ path: attachment.refId }} className="truncate max-w-[280px] text-primary hover:underline">
+				<Link
+					to="/files"
+					search={{ path: attachment.refId }}
+					className="truncate max-w-[280px] text-primary hover:underline"
+				>
 					{label}
 				</Link>
 			)
 		}
 
 		if (attachment.refType === 'run') {
-			const taskId = typeof attachment.metadata?.taskId === 'string' ? attachment.metadata.taskId : null
+			const taskId =
+				typeof attachment.metadata?.taskId === 'string' ? attachment.metadata.taskId : null
 			if (taskId) {
 				return (
-					<Link to="/tasks" search={{ taskId }} className="truncate max-w-[280px] text-primary hover:underline">
+					<Link
+						to="/tasks"
+						search={{ taskId }}
+						className="truncate max-w-[280px] text-primary hover:underline"
+					>
 						{label}
 					</Link>
 				)
@@ -377,19 +413,27 @@ function getAttachmentMeta(attachment: ChatAttachment) {
 	return null
 }
 
-function AttachmentBlock({ attachment, tone = 'muted' }: { attachment: ChatAttachment; tone?: 'muted' | 'subtle' }) {
-	const isText = attachment.type === 'text' && typeof attachment.content === 'string' && attachment.content.length > 0
+function AttachmentBlock({
+	attachment,
+	tone = 'muted',
+}: { attachment: ChatAttachment; tone?: 'muted' | 'subtle' }) {
+	const isText =
+		attachment.type === 'text' &&
+		typeof attachment.content === 'string' &&
+		attachment.content.length > 0
 	const Icon = isText ? FileText : File
 	const label = getAttachmentLabel(attachment)
 	const meta = getAttachmentMeta(attachment)
-	const containerClass = tone === 'subtle'
-		? 'rounded-xl border border-border/40 bg-muted/10 px-3 py-3'
-		: 'rounded-xl border border-border/60 bg-background/70 px-3 py-3'
+	const containerClass =
+		tone === 'subtle'
+			? 'rounded-xl border border-border/40 bg-muted/10 px-3 py-3'
+			: 'rounded-xl border border-border/60 bg-background/70 px-3 py-3'
 
 	if (isText) {
-		const preview = attachment.content!.length > 320
-			? `${attachment.content!.slice(0, 320)}...`
-			: attachment.content!
+		const preview =
+			attachment.content!.length > 320
+				? `${attachment.content!.slice(0, 320)}...`
+				: attachment.content!
 		return (
 			<div className={cn(containerClass, 'min-w-[220px] max-w-[360px]')}>
 				<div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
@@ -397,7 +441,9 @@ function AttachmentBlock({ attachment, tone = 'muted' }: { attachment: ChatAttac
 					<span className="truncate font-medium text-foreground">{label}</span>
 					{meta && <span className="truncate tabular-nums">{meta}</span>}
 				</div>
-				<pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground/90">{preview}</pre>
+				<pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground/90">
+					{preview}
+				</pre>
 			</div>
 		)
 	}
@@ -409,7 +455,9 @@ function AttachmentBlock({ attachment, tone = 'muted' }: { attachment: ChatAttac
 					<Icon size={14} />
 				</div>
 				<div className="min-w-0 flex-1">
-					<div className="truncate text-sm font-medium text-foreground">{renderAttachmentLink(attachment)}</div>
+					<div className="truncate text-sm font-medium text-foreground">
+						{renderAttachmentLink(attachment)}
+					</div>
 					{meta && <div className="mt-1 text-xs text-muted-foreground tabular-nums">{meta}</div>}
 				</div>
 			</div>
@@ -417,7 +465,10 @@ function AttachmentBlock({ attachment, tone = 'muted' }: { attachment: ChatAttac
 	)
 }
 
-function MessageAttachments({ attachments, tone = 'muted' }: { attachments: ChatAttachment[]; tone?: 'muted' | 'subtle' }) {
+function MessageAttachments({
+	attachments,
+	tone = 'muted',
+}: { attachments: ChatAttachment[]; tone?: 'muted' | 'subtle' }) {
 	if (attachments.length === 0) return null
 
 	return (
@@ -627,19 +678,23 @@ export function ChatMessage({
 		if (!isTaskProgress || !taskId) return null
 
 		return (
-			<div className="flex w-full justify-start">
-				<div className="max-w-[85%] px-4 py-2">
-					<p className="mb-1 text-sm font-medium text-muted-foreground">
-						Task update
-					</p>
+			<div className="flex w-full flex-col items-start justify-start">
+				<div className="max-w-[85%] rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 shadow-xs">
+					<div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+						<Robot size={12} className="shrink-0" />
+						<span>Task update</span>
+					</div>
 					{message.content && (
-						<p className="font-sans text-sm text-muted-foreground leading-relaxed">
-							{message.content.replace(/^\[task_progress\]\s*/, '')}
-						</p>
+						<Markdown
+							content={message.content.replace(/^\[task_progress\]\s*/, '')}
+							className="prose prose-sm font-sans text-sm text-foreground"
+						/>
 					)}
-					<TaskActionBar taskId={taskId} taskNeedsApproval={taskNeedsApproval} />
-					<p className="mt-2 text-xs text-muted-foreground tabular-nums">{timestamp}</p>
+					<div className="mt-3">
+						<TaskActionBar taskId={taskId} taskNeedsApproval={taskNeedsApproval} />
+					</div>
 				</div>
+				<p className="mt-2 px-1 text-xs text-muted-foreground tabular-nums">{timestamp}</p>
 			</div>
 		)
 	}

@@ -65,9 +65,7 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-msg-1' }))`
 			kind: 'conversation_channel',
 			handler: 'handlers/drain-handler.ts',
 			capabilities: [{ op: 'conversation.ingest' }, { op: 'notify.send' }],
-			events: [
-				{ types: ['run_completed'], statuses: ['completed', 'failed'] },
-			],
+			events: [{ types: ['run_completed'], statuses: ['completed', 'failed'] }],
 			config: {},
 			secret_refs: [],
 			description: '',
@@ -165,10 +163,7 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-msg-1' }))`
 		// update it manually via the DB
 		const { runs } = await import('../src/db/company-schema')
 		const { eq } = await import('drizzle-orm')
-		await dbResult.db
-			.update(runs)
-			.set({ worker_id: 'worker-1' })
-			.where(eq(runs.id, run1Id))
+		await dbResult.db.update(runs).set({ worker_id: 'worker-1' }).where(eq(runs.id, run1Id))
 
 		// 5. Emit run_completed event — bridge handles it and drains queue
 		eventBus.emit({ type: 'run_completed', runId: run1Id, status: 'completed' })
@@ -240,9 +235,7 @@ console.log(JSON.stringify({ ok: false, error: 'delivery failed' }))`
 			kind: 'conversation_channel',
 			handler,
 			capabilities: [{ op: 'notify.send' }],
-			events: [
-				{ types: ['run_completed'], statuses: ['completed', 'failed'] },
-			],
+			events: [{ types: ['run_completed'], statuses: ['completed', 'failed'] }],
 			config: { default_chat_id: defaultChatId },
 			secret_refs: [],
 			description: '',
@@ -466,10 +459,18 @@ console.log(JSON.stringify({ ok: false, error: 'delivery failed' }))`
 		bridge.stop()
 
 		const content = await Bun.file(invocationsFile).text()
-		const entries = content.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line))
+		const entries = content
+			.trim()
+			.split('\n')
+			.filter(Boolean)
+			.map((line) => JSON.parse(line))
 
-		const boundCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'bound-chat-123')
-		const defaultChatCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-bound')
+		const boundCalls = entries.filter(
+			(e: Record<string, unknown>) => e.conversation_id === 'bound-chat-123',
+		)
+		const defaultChatCalls = entries.filter(
+			(e: Record<string, unknown>) => e.conversation_id === 'default-chat-bound',
+		)
 		// NotificationBridge skips ALL delivery for tasks with task_thread bindings
 		// (TaskProgressBridge handles them instead)
 		expect(boundCalls.length).toBe(0)
@@ -527,7 +528,10 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-progress-' + counter })
 
 	beforeAll(async () => {
 		await mkdir(join(testRoot, '.autopilot', 'handlers'), { recursive: true })
-		await writeFile(join(testRoot, '.autopilot', 'handlers', 'progress-handler.ts'), PROGRESS_HANDLER_SRC)
+		await writeFile(
+			join(testRoot, '.autopilot', 'handlers', 'progress-handler.ts'),
+			PROGRESS_HANDLER_SRC,
+		)
 
 		dbResult = await createCompanyDb(testRoot)
 		runService = new RunService(dbResult.db)
@@ -619,12 +623,16 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-progress-' + counter })
 		expect(entries.length).toBeGreaterThanOrEqual(2)
 
 		// First call (progress/started): no edit_message_id
-		const progressCall = entries.find((e: Record<string, unknown>) => e.event_type === 'query_progress')
+		const progressCall = entries.find(
+			(e: Record<string, unknown>) => e.event_type === 'query_progress',
+		)
 		expect(progressCall).toBeDefined()
 		expect(progressCall.edit_message_id).toBeNull()
 
 		// Completion call: should have edit_message_id from the progress call's external_id
-		const completionCall = entries.find((e: Record<string, unknown>) => e.event_type === 'query_response')
+		const completionCall = entries.find(
+			(e: Record<string, unknown>) => e.event_type === 'query_response',
+		)
 		expect(completionCall).toBeDefined()
 		// The progress handler returned external_id='ext-progress-1', so completion should edit that
 		expect(completionCall.edit_message_id).toBe('ext-progress-1')
@@ -924,7 +932,9 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-restart-' + counter }))
 		const lines = content.trim().split('\n').filter(Boolean)
 		const entries = lines.map((l) => JSON.parse(l))
 
-		const completionCall = entries.find((e: Record<string, unknown>) => e.event_type === 'query_response')
+		const completionCall = entries.find(
+			(e: Record<string, unknown>) => e.event_type === 'query_response',
+		)
 		expect(completionCall).toBeDefined()
 		expect(completionCall.edit_message_id).toBe(savedExternalId)
 
@@ -1089,13 +1099,21 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-tpb-' + counter }))`
 
 		// Read first batch of invocations
 		let content = await Bun.file(logFilePath).text()
-		let entries = content.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+		let entries = content
+			.trim()
+			.split('\n')
+			.filter(Boolean)
+			.map((l) => JSON.parse(l))
 
 		// Should have exactly 2 calls — one for each binding
 		expect(entries.length).toBe(2)
 
-		const chatACalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'chat-A')
-		const chatBCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'chat-B')
+		const chatACalls = entries.filter(
+			(e: Record<string, unknown>) => e.conversation_id === 'chat-A',
+		)
+		const chatBCalls = entries.filter(
+			(e: Record<string, unknown>) => e.conversation_id === 'chat-B',
+		)
 
 		expect(chatACalls.length).toBe(1)
 		expect(chatBCalls.length).toBe(1)
@@ -1116,7 +1134,11 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-tpb-' + counter }))`
 
 		// Re-read log
 		content = await Bun.file(logFilePath).text()
-		entries = content.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+		entries = content
+			.trim()
+			.split('\n')
+			.filter(Boolean)
+			.map((l) => JSON.parse(l))
 
 		// Should now have 4 calls total (2 initial + 2 edits)
 		expect(entries.length).toBe(4)
@@ -1209,7 +1231,11 @@ describe('Stale busy worker detection', () => {
 	})
 
 	test('isUnavailable returns true for offline worker', async () => {
-		await workerService.register({ id: 'w-unavail-offline', name: 'Offline Worker', capabilities: '[]' })
+		await workerService.register({
+			id: 'w-unavail-offline',
+			name: 'Offline Worker',
+			capabilities: '[]',
+		})
 		await workerService.setOffline('w-unavail-offline')
 		const worker = await workerService.get('w-unavail-offline')
 		expect(worker).toBeDefined()
@@ -1221,14 +1247,22 @@ describe('Stale busy worker detection', () => {
 	})
 
 	test('isUnavailable returns false for fresh online worker', async () => {
-		await workerService.register({ id: 'w-unavail-fresh', name: 'Fresh Online', capabilities: '[]' })
+		await workerService.register({
+			id: 'w-unavail-fresh',
+			name: 'Fresh Online',
+			capabilities: '[]',
+		})
 		const worker = await workerService.get('w-unavail-fresh')
 		expect(worker).toBeDefined()
 		expect(workerService.isUnavailable(worker!, 90_000)).toBe(false)
 	})
 
 	test('isUnavailable returns true for busy worker with stale heartbeat', async () => {
-		await workerService.register({ id: 'w-unavail-busy-stale', name: 'Busy Stale', capabilities: '[]' })
+		await workerService.register({
+			id: 'w-unavail-busy-stale',
+			name: 'Busy Stale',
+			capabilities: '[]',
+		})
 		await workerService.setBusy('w-unavail-busy-stale')
 		const { workers } = await import('../src/db/company-schema')
 		const { eq } = await import('drizzle-orm')
@@ -1242,7 +1276,11 @@ describe('Stale busy worker detection', () => {
 	})
 
 	test('expireStale marks stale busy worker offline', async () => {
-		await workerService.register({ id: 'w-expire-busy', name: 'Busy To Expire', capabilities: '[]' })
+		await workerService.register({
+			id: 'w-expire-busy',
+			name: 'Busy To Expire',
+			capabilities: '[]',
+		})
 		await workerService.setBusy('w-expire-busy')
 		const { workers } = await import('../src/db/company-schema')
 		const { eq } = await import('drizzle-orm')
@@ -1265,10 +1303,7 @@ describe('Stale busy worker detection', () => {
 describe('markdownToTelegramHtml', () => {
 	// Copy of the function from telegram.ts for isolated testing
 	function escapeHtml(text: string): string {
-		return text
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
+		return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 	}
 
 	function markdownToTelegramHtml(text: string): string {
@@ -1337,7 +1372,9 @@ describe('markdownToTelegramHtml', () => {
 	})
 
 	test('converts links', () => {
-		expect(markdownToTelegramHtml('[click](https://example.com)')).toBe('<a href="https://example.com">click</a>')
+		expect(markdownToTelegramHtml('[click](https://example.com)')).toBe(
+			'<a href="https://example.com">click</a>',
+		)
 	})
 })
 
@@ -1375,9 +1412,7 @@ console.log(JSON.stringify({ ok: true }))`
 			kind: 'notification_channel',
 			handler: 'handlers/notif-trunc-handler.ts',
 			capabilities: [{ op: 'notify.send' }],
-			events: [
-				{ types: ['run_completed'], statuses: ['completed', 'failed'] },
-			],
+			events: [{ types: ['run_completed'], statuses: ['completed', 'failed'] }],
 			config: {},
 			secret_refs: [],
 			description: '',
@@ -1575,9 +1610,7 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-trunc-1' }))`
 			kind: 'conversation_channel',
 			handler: 'handlers/trunc-handler.ts',
 			capabilities: [{ op: 'conversation.ingest' }, { op: 'notify.send' }],
-			events: [
-				{ types: ['run_completed'], statuses: ['completed', 'failed'] },
-			],
+			events: [{ types: ['run_completed'], statuses: ['completed', 'failed'] }],
 			config: {},
 			secret_refs: [],
 			description: '',
@@ -1825,7 +1858,9 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-card-' + counter }))`
 		await writeFile(join(testRoot, 'card-counter.txt'), '0')
 
 		const eventBus = new EventBus()
-		const providers = new Map([['card-prov-1', makeCardProvider('card-prov-1', 'default-chat-card')]])
+		const providers = new Map([
+			['card-prov-1', makeCardProvider('card-prov-1', 'default-chat-card')],
+		])
 
 		const { TaskProgressBridge } = await import('../src/providers/task-progress-bridge')
 		const bridge = new TaskProgressBridge(
@@ -1872,7 +1907,9 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-card-' + counter }))`
 		const entries = lines.map((l) => JSON.parse(l))
 
 		// Should have at least one card sent to default-chat-card
-		const defaultChatCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-card')
+		const defaultChatCalls = entries.filter(
+			(e: Record<string, unknown>) => e.conversation_id === 'default-chat-card',
+		)
 		expect(defaultChatCalls.length).toBeGreaterThanOrEqual(1)
 		expect(defaultChatCalls[0].event_type).toBe('task_progress')
 		expect(defaultChatCalls[0].summary).toBe('Working...')
@@ -1883,7 +1920,9 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-card-' + counter }))`
 		await writeFile(join(testRoot, 'card-counter.txt'), '0')
 
 		const eventBus = new EventBus()
-		const providers = new Map([['card-prov-2', makeCardProvider('card-prov-2', 'default-chat-bound')]])
+		const providers = new Map([
+			['card-prov-2', makeCardProvider('card-prov-2', 'default-chat-bound')],
+		])
 
 		const { TaskProgressBridge } = await import('../src/providers/task-progress-bridge')
 		const bridge = new TaskProgressBridge(
@@ -1927,8 +1966,12 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-card-' + counter }))`
 		const entries = lines.map((l) => JSON.parse(l))
 
 		// Should go to explicit-chat-123, NOT default-chat-bound
-		const explicitCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'explicit-chat-123')
-		const defaultChatCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-bound')
+		const explicitCalls = entries.filter(
+			(e: Record<string, unknown>) => e.conversation_id === 'explicit-chat-123',
+		)
+		const defaultChatCalls = entries.filter(
+			(e: Record<string, unknown>) => e.conversation_id === 'default-chat-bound',
+		)
 		expect(explicitCalls.length).toBeGreaterThanOrEqual(1)
 		expect(defaultChatCalls.length).toBe(0)
 	})
@@ -1938,7 +1981,9 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-card-' + counter }))`
 		await writeFile(join(testRoot, 'card-counter.txt'), '0')
 
 		const eventBus = new EventBus()
-		const providers = new Map([['card-prov-3', makeCardProvider('card-prov-3', 'default-chat-fail')]])
+		const providers = new Map([
+			['card-prov-3', makeCardProvider('card-prov-3', 'default-chat-fail')],
+		])
 
 		const { TaskProgressBridge } = await import('../src/providers/task-progress-bridge')
 		const bridge = new TaskProgressBridge(
@@ -1987,11 +2032,85 @@ console.log(JSON.stringify({ ok: true, external_id: 'ext-card-' + counter }))`
 		const lines = content.trim().split('\n').filter(Boolean)
 		const entries = lines.map((l) => JSON.parse(l))
 
-		const failCard = entries.find((e: Record<string, unknown>) =>
-			e.conversation_id === 'default-chat-fail' && e.event_type === 'task_progress'
+		const failCard = entries.find(
+			(e: Record<string, unknown>) =>
+				e.conversation_id === 'default-chat-fail' && e.event_type === 'task_progress',
 		)
 		expect(failCard).toBeDefined()
 		expect(failCard.normalized_status).toBe('failed')
+	})
+
+	test('creates dashboard task thread with run history', async () => {
+		const eventBus = new EventBus()
+		const providers = new Map<string, Provider>()
+		const runtime = 'task-thread-test-runtime'
+
+		const { TaskProgressBridge } = await import('../src/providers/task-progress-bridge')
+		const bridge = new TaskProgressBridge(
+			eventBus,
+			makeConfig(providers),
+			runService,
+			taskService,
+			artifactService,
+			bindingService,
+			{ companyRoot: testRoot, orchestratorUrl: 'http://localhost:7778' },
+			undefined,
+			sessionService,
+			sessionMessageService,
+		)
+		bridge.start()
+
+		const taskId = `task-dashboard-thread-${Date.now()}`
+		await taskService.create({
+			id: taskId,
+			title: 'Dashboard task thread',
+			type: 'development',
+			created_by: 'test',
+		})
+
+		const runId = `run-dashboard-thread-${Date.now()}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			task_id: taskId,
+			runtime: runtime,
+			initiated_by: 'workflow-engine',
+			instructions: 'Implement the change',
+		})
+		await runService.claim('worker-dashboard', runtime)
+		await runService.start(runId)
+		await runService.complete(runId, {
+			status: 'completed',
+			summary: 'Implemented the requested change.',
+			runtime_session_ref: 'claude-task-thread',
+		})
+
+		eventBus.emit({ type: 'task_created', taskId, title: 'Dashboard task thread' })
+		eventBus.emit({ type: 'run_completed', runId, status: 'completed' })
+		await new Promise((r) => setTimeout(r, 2000))
+		bridge.stop()
+
+		const sessions = await sessionService.list({
+			provider_id: 'dashboard',
+			mode: 'task_thread',
+			status: 'active',
+		})
+		const session = sessions.find((candidate) => candidate.task_id === taskId)
+		expect(session).toBeDefined()
+		expect(session?.runtime_session_ref).toBe('claude-task-thread')
+
+		const messages = await sessionMessageService.listRecent(session!.id, 20)
+		expect(
+			messages.some(
+				(message) => message.role === 'system' && message.content.includes('[task_progress]'),
+			),
+		).toBe(true)
+		expect(
+			messages.some(
+				(message) =>
+					message.role === 'assistant' && message.content === 'Implemented the requested change.',
+			),
+		).toBe(true)
 	})
 })
 
@@ -2048,9 +2167,7 @@ console.log(JSON.stringify({ ok: true }))`
 			kind: 'conversation_channel',
 			handler: 'handlers/suppress-handler.ts',
 			capabilities: [{ op: 'notify.send' }],
-			events: [
-				{ types: ['run_completed'], statuses: ['completed', 'failed'] },
-			],
+			events: [{ types: ['run_completed'], statuses: ['completed', 'failed'] }],
 			config: { default_chat_id: 'default-chat-suppress' },
 			secret_refs: [],
 			description: '',
@@ -2111,7 +2228,9 @@ console.log(JSON.stringify({ ok: true }))`
 		const entries = lines.map((l) => JSON.parse(l))
 
 		// Should NOT have any calls to default-chat-suppress
-		const defaultChatCalls = entries.filter((e: Record<string, unknown>) => e.conversation_id === 'default-chat-suppress')
+		const defaultChatCalls = entries.filter(
+			(e: Record<string, unknown>) => e.conversation_id === 'default-chat-suppress',
+		)
 		expect(defaultChatCalls.length).toBe(0)
 	})
 })

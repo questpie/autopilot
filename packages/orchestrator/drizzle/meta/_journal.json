@@ -120,6 +120,13 @@
       "when": 1776211200000,
       "tag": "0016_user_preferences",
       "breakpoints": true
+		},
+		{
+			"idx": 17,
+			"version": "6",
+			"when": 1777046400000,
+			"tag": "0017_project_registration",
+			"breakpoints": true
     }
   ]
 }

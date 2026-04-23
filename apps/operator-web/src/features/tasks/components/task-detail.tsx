@@ -1,4 +1,4 @@
-import type { Task, TaskWithRelations } from '@/api/types'
+import type { Artifact, Task, TaskWithRelations } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,16 +10,13 @@ import {
 } from '@/components/ui/dialog'
 import {
 	InspectorHeader,
-	InspectorLayout,
 	type InspectorHeaderAction,
+	InspectorLayout,
 } from '@/components/ui/inspector-layout'
 import { KvList } from '@/components/ui/kv-list'
 import { Markdown } from '@/components/ui/markdown'
 import { Spinner } from '@/components/ui/spinner'
-import { StatusPill } from '@/components/ui/status-pill'
-import { surfaceCardVariants } from '@/components/ui/surface-card'
 import { Textarea } from '@/components/ui/textarea'
-import { useChatWorkspace } from '@/features/chat/chat-workspace-context'
 import { buildChatContextSearch } from '@/features/chat/lib/chat-context'
 import { setDraggedChatAttachment } from '@/features/chat/lib/chat-dnd'
 import { useQueryList } from '@/hooks/use-queries'
@@ -35,7 +32,6 @@ import {
 } from '@/hooks/use-tasks'
 import { useWorkflows } from '@/hooks/use-workflows'
 import { SmartText } from '@/lib/smart-links'
-import { taskStatusToPill } from '@/lib/status-colors'
 import { cn } from '@/lib/utils'
 import {
 	ArrowBendUpLeft,
@@ -49,9 +45,7 @@ import {
 } from '@phosphor-icons/react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
-import { buildTimeline } from '../lib/build-timeline'
-import { ArtifactList } from './artifact-list'
-import { RunViewerSheet } from './run-viewer-sheet'
+import { buildRunsTimeline, buildTimeline } from '../lib/build-timeline'
 import { WorkflowTimeline } from './workflow-timeline'
 
 interface TaskDetailProps {
@@ -126,11 +120,8 @@ function RelationChip({
 // ── Action dialog state type ────────────────────────────────────────────────
 type ActionDialog = 'approve' | 'reject' | 'reply' | 'cancel' | null
 
-const LIVE_RUN_STATUSES = new Set(['pending', 'claimed', 'running'])
-
 export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDetailProps) {
 	// ALL hooks before any early returns (React hooks rule)
-	const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 	const [actionDialog, setActionDialog] = useState<ActionDialog>(null)
 	const [actionMessage, setActionMessage] = useState('')
 	const workflowsQuery = useWorkflows()
@@ -143,7 +134,6 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 	const replyTask = useReplyTask()
 	const retryTaskMutation = useRetryTask()
 	const cancelTaskMutation = useCancelTask()
-	const { openSession } = useChatWorkspace()
 	const navigate = useNavigate()
 
 	const workflow = detail?.workflow_id
@@ -151,15 +141,30 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 		: null
 
 	const timelineEntries = useMemo(() => {
-		if (!workflow || !runsQuery.data || !detail) return []
+		if (!detail || !runsQuery.data) return []
 		let metadata: Record<string, unknown> = {}
 		try {
 			metadata = JSON.parse(detail.metadata ?? '{}')
 		} catch (_e) {
 			// malformed metadata — ignore
 		}
-		return buildTimeline(workflow.steps, runsQuery.data, detail.workflow_step ?? null, metadata)
+
+		if (workflow) {
+			return buildTimeline(workflow.steps, runsQuery.data, detail.workflow_step ?? null, metadata)
+		}
+
+		return buildRunsTimeline(runsQuery.data)
 	}, [workflow, runsQuery.data, detail])
+
+	const artifactsByRunId = useMemo(() => {
+		return (artifactsQuery.data ?? []).reduce<Record<string, Artifact[]>>((acc, artifact) => {
+			const runId = artifact.run_id
+			if (!runId) return acc
+			acc[runId] ??= []
+			acc[runId].push(artifact)
+			return acc
+		}, {})
+	}, [artifactsQuery.data])
 
 	const relatedSessions = useMemo(() => {
 		if (!detail) return []
@@ -179,6 +184,9 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 
 	const runSessionIds = useMemo(() => {
 		if (!detail) return {}
+		const dashboardTaskSessionId = relatedSessions.find(
+			(session) => session.provider_id === 'dashboard' && session.task_id === detail.id,
+		)?.id
 
 		const querySessionIds = new Map(
 			(queriesQuery.data ?? []).flatMap((query) =>
@@ -200,7 +208,8 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 				const sessionId = run.runtime_session_ref
 					? sessionByRuntimeRef.get(run.runtime_session_ref)
 					: undefined
-				return sessionId ? [[run.id, sessionId] as const] : []
+				if (sessionId) return [[run.id, sessionId] as const]
+				return dashboardTaskSessionId ? [[run.id, dashboardTaskSessionId] as const] : []
 			}),
 		)
 	}, [detail, queriesQuery.data, relatedSessions])
@@ -383,157 +392,30 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 
 			{detail.description && <Markdown content={detail.description} className="mt-4 text-[13px]" />}
 
-			{workflow && timelineEntries.length > 0 && (
+			{timelineEntries.length > 0 && (
 				<>
 					<div className="my-4" />
 					<div className="mb-3 flex items-center gap-2">
-						<p className="text-sm font-medium text-muted-foreground">Workflow</p>
-						<Link
-							to="/files"
-							search={{ path: `.autopilot/workflows/${detail.workflow_id}.yaml`, view: 'file' }}
-							className="text-sm text-primary hover:underline"
-						>
-							{workflow.name}
-						</Link>
+						<p className="text-sm font-medium text-muted-foreground">
+							{workflow ? 'Workflow timeline' : 'Run timeline'}
+						</p>
+						{workflow && (
+							<Link
+								to="/files"
+								search={{ path: `.autopilot/workflows/${detail.workflow_id}.yaml`, view: 'file' }}
+								className="text-sm text-primary hover:underline"
+							>
+								{workflow.name}
+							</Link>
+						)}
 					</div>
-					<WorkflowTimeline entries={timelineEntries} runSessionIds={runSessionIds} />
+					<WorkflowTimeline
+						entries={timelineEntries}
+						runSessionIds={runSessionIds}
+						artifactsByRunId={artifactsByRunId}
+					/>
 				</>
 			)}
-
-			{detail.runs.length > 0 && !(workflow && timelineEntries.length > 0) && (
-				<>
-					<div className="my-4" />
-					<p className="mb-3 text-sm font-medium text-muted-foreground">Runs</p>
-					<div className="space-y-1.5">
-						{detail.runs.map((run) => {
-							const runArtifacts = (artifactsQuery.data ?? []).filter((a) => a.run_id === run.id)
-							return (
-								<div key={run.id}>
-									<button
-										type="button"
-										onClick={() => setSelectedRunId(run.id)}
-										draggable
-										onDragStart={(e) => {
-											setDraggedChatAttachment(e.dataTransfer, {
-												type: 'ref',
-												source: 'drag',
-												label: `Run ${run.id.slice(0, 8)}`,
-												refType: 'run',
-												refId: run.id,
-												metadata: { runId: run.id, taskId: detail.id },
-											})
-										}}
-										className={cn(
-											surfaceCardVariants({ size: 'sm', interactive: true }),
-											'w-full text-left',
-										)}
-									>
-										<div className="flex items-center justify-between gap-2">
-											<StatusPill
-												status={taskStatusToPill(run.status)}
-												pulse={LIVE_RUN_STATUSES.has(run.status)}
-											/>
-											<div className="flex items-center gap-2 flex-wrap justify-end">
-												{runArtifacts.length > 0 && (
-													<span className="text-xs text-muted-foreground tabular-nums">
-														{runArtifacts.length} artifact{runArtifacts.length !== 1 ? 's' : ''}
-													</span>
-												)}
-												{run.worker_id && (
-													<span className="text-xs text-muted-foreground tabular-nums">
-														worker:{run.worker_id.slice(0, 8)}
-													</span>
-												)}
-												<span className="text-xs text-muted-foreground">{run.agent_id}</span>
-											</div>
-										</div>
-										<p className="mt-1 text-xs text-muted-foreground tabular-nums">
-											{run.id.slice(0, 16)}…
-										</p>
-										{run.summary && (
-											<div className="mt-1.5">
-												<Markdown content={run.summary} className="text-[12px]" />
-											</div>
-										)}
-										{run.error && (
-											<div className="mt-1 bg-destructive-surface px-2 py-1.5">
-												<Markdown content={run.error} className="text-[12px] text-destructive" />
-											</div>
-										)}
-										<div className="mt-1.5 flex flex-wrap gap-3">
-											{run.runtime_session_ref && (
-												<span className="text-xs text-muted-foreground tabular-nums">
-													runtime:{run.runtime_session_ref.slice(0, 12)}
-												</span>
-											)}
-											{run.preferred_worker_id && !run.worker_id && (
-												<span className="text-xs text-muted-foreground tabular-nums">
-													preferred:{run.preferred_worker_id.slice(0, 8)}
-												</span>
-											)}
-											{run.model && (
-												<span className="text-xs text-muted-foreground">{run.model}</span>
-											)}
-											{run.started_at && (
-												<span className="text-xs text-muted-foreground tabular-nums">
-													{formatTimestamp(run.started_at)}
-												</span>
-											)}
-										</div>
-									</button>
-									{(runSessionIds[run.id] || run.runtime_session_ref) && (
-										<div className="mt-1 flex flex-wrap gap-1.5 pl-3">
-											{runSessionIds[run.id] ? (
-												<Button
-													onClick={() => openSession(runSessionIds[run.id]!)}
-													size="xs"
-													variant="secondary"
-													draggable
-													onDragStart={(e) => {
-														setDraggedChatAttachment(e.dataTransfer, {
-															type: 'ref',
-															source: 'drag',
-															label: `Session ${runSessionIds[run.id]!.slice(0, 8)}`,
-															refType: 'session',
-															refId: runSessionIds[run.id]!,
-															metadata: { sessionId: runSessionIds[run.id]!, runId: run.id },
-														})
-													}}
-												>
-													<ChatCircle data-icon="inline-start" />
-													session:{runSessionIds[run.id].slice(0, 8)}
-												</Button>
-											) : (
-												<Badge variant="outline">
-													<ChatCircle data-icon="inline-start" />
-													runtime:{run.runtime_session_ref?.slice(0, 8) ?? 'unknown'}
-												</Badge>
-											)}
-										</div>
-									)}
-									{runArtifacts.length > 0 && (
-										<div className="mt-1 pl-3">
-											<ArtifactList artifacts={runArtifacts} />
-										</div>
-									)}
-								</div>
-							)
-						})}
-					</div>
-				</>
-			)}
-
-			{(() => {
-				const allArtifacts = artifactsQuery.data ?? []
-				if (allArtifacts.length === 0) return null
-				return (
-					<>
-						<div className="my-4" />
-						<p className="mb-3 text-sm font-medium text-muted-foreground">Artifacts</p>
-						<ArtifactList artifacts={allArtifacts} />
-					</>
-				)
-			})()}
 		</>
 	)
 
@@ -624,8 +506,6 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 
 	return (
 		<>
-			<RunViewerSheet runId={selectedRunId} onClose={() => setSelectedRunId(null)} />
-
 			{/* Approve dialog */}
 			<Dialog
 				open={actionDialog === 'approve'}

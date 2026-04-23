@@ -1,20 +1,20 @@
-import { useState, useCallback } from 'react'
-import type { ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
-import { cn } from '@/lib/utils'
-import { Sidebar } from './sidebar'
-import { CommandPalette, useCommandPaletteShortcut } from './command-palette'
-import { LayoutModeContext } from './layout-mode-context'
+import { type ChatDraftSeed, ChatWorkspaceContext } from '@/features/chat/chat-workspace-context'
+import { ChatRail } from '@/features/chat/components/chat-rail'
+import { useActiveView } from '@/hooks/use-active-view'
 import { useHydrateAppPreferences } from '@/hooks/use-app-preferences'
 import { useAutoEvents } from '@/hooks/use-auto-events'
-import { useActiveView } from '@/hooks/use-active-view'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
-import { ChatWorkspaceContext } from '@/features/chat/chat-workspace-context'
-import { ChatRail } from '@/features/chat/components/chat-rail'
-import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { ChatCircle } from '@phosphor-icons/react'
+import { useCallback, useState } from 'react'
+import type { ReactNode } from 'react'
+import { CommandPalette, useCommandPaletteShortcut } from './command-palette'
+import { LayoutModeContext } from './layout-mode-context'
+import { Sidebar } from './sidebar'
 
 /**
  * Layout mode for the main content area.
@@ -38,6 +38,7 @@ export function ShellLayout({ children }: ShellLayoutProps) {
 	const [chatRailOpen, setChatRailOpen] = useState(true)
 	const [chatHistoryOpen, setChatHistoryOpen] = useState(false)
 	const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(null)
+	const [chatDraftSeed, setChatDraftSeed] = useState<ChatDraftSeed | null>(null)
 	const openCommand = useCallback(() => setCommandOpen(true), [])
 	const activeView = useActiveView()
 	const isMobile = useIsMobile()
@@ -47,6 +48,7 @@ export function ShellLayout({ children }: ShellLayoutProps) {
 		open: chatRailOpen,
 		activeSessionId: activeChatSessionId,
 		historyOpen: chatHistoryOpen,
+		draftSeed: chatDraftSeed,
 		showHistory: () => {
 			setChatRailOpen(true)
 			setChatHistoryOpen(true)
@@ -55,11 +57,22 @@ export function ShellLayout({ children }: ShellLayoutProps) {
 			setChatRailOpen(true)
 			setChatHistoryOpen(false)
 			setActiveChatSessionId(sessionId)
+			setChatDraftSeed(null)
+		},
+		openDraftChat: (seed: ChatDraftSeed) => {
+			setChatRailOpen(true)
+			setChatHistoryOpen(false)
+			setActiveChatSessionId(null)
+			setChatDraftSeed(seed)
+		},
+		clearDraftChat: () => {
+			setChatDraftSeed(null)
 		},
 		startNewChat: () => {
 			setChatRailOpen(true)
 			setChatHistoryOpen(false)
 			setActiveChatSessionId(null)
+			setChatDraftSeed(null)
 		},
 		setOpen: (open: boolean) => setChatRailOpen(open),
 	}

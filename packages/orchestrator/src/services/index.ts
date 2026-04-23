@@ -48,6 +48,9 @@ export type { UserPreferenceRecord } from './user-preferences'
 export { SecretService } from './secrets'
 export type { SharedSecretRow } from './secrets'
 
+export { ProjectService } from './projects'
+export type { ProjectRow } from './projects'
+
 
 export { ScheduleService, computeNextRun, interpolateTemplate } from './schedules'
 export type { ScheduleRow, ScheduleExecutionRow } from './schedules'
