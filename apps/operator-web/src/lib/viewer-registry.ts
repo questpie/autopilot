@@ -4,7 +4,7 @@
  * Inspired by dashboard-v2 view-registry.ts, simplified for demo.
  */
 
-export type ViewerType = 'markdown' | 'image' | 'pdf' | 'structured' | 'code' | 'plain'
+export type ViewerType = 'markdown' | 'image' | 'pdf' | 'video' | 'docx' | 'structured' | 'code' | 'plain'
 
 export interface ViewerRegistration {
   test: (path: string, mime?: string) => boolean
@@ -58,6 +58,24 @@ const REGISTRY: ViewerRegistration[] = [
       ext(path) === 'pdf' || hasMime(mime, 'application/pdf'),
     type: 'pdf',
     label: 'PDF',
+    priority: 40,
+  },
+  // DOCX
+  {
+    test: (path, mime) =>
+      ext(path) === 'docx' ||
+      mime?.toLowerCase() === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    type: 'docx',
+    label: 'DOCX',
+    priority: 40,
+  },
+  // Video formats
+  {
+    test: (path, mime) =>
+      ['mp4', 'mov', 'webm', 'm4v', 'ogg'].includes(ext(path)) ||
+      hasMime(mime, 'video/'),
+    type: 'video',
+    label: 'Video',
     priority: 40,
   },
   // Structured data: JSON, YAML, CSV, XLSX

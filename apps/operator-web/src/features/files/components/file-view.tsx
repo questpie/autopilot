@@ -1,16 +1,25 @@
 import { useRef, useState, useCallback } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
-import { useVfsRead } from '@/hooks/use-vfs'
+import { useVfsRead, useVfsStat } from '@/hooks/use-vfs'
 import { useQueryClient } from '@tanstack/react-query'
 import { vfsWrite } from '@/api/vfs.api'
 import { vfsKeys } from '@/hooks/use-vfs'
 import { resolveViewer } from '@/lib/viewer-registry'
 import { Spinner } from '@/components/ui/spinner'
-import { Markdown } from '@/components/ui/markdown'
 import { TiptapEditor } from '@/components/ui/tiptap-editor'
 import { Button } from '@/components/ui/button'
+import { KvList } from '@/components/ui/kv-list'
+import { surfaceCardVariants } from '@/components/ui/surface-card'
 import { cn } from '@/lib/utils'
+import {
+	buildPathSegments,
+	buildUri,
+	formatBytes,
+	getBaseName,
+} from '../lib/file-paths'
+import { FilePreviewSurface } from './file-preview-surface'
+
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -19,33 +28,12 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
+import { InspectorShell } from './inspector-shell'
 
 interface FileViewProps {
   path: string
   runId: string | null
   onBack: (parentPath: string | null) => void
-}
-
-function buildReadUri(runId: string | null, path: string): string {
-  if (runId) {
-    return `workspace://run/${runId}/${path}`
-  }
-  return `company://${path}`
-}
-
-function formatBytes(bytes: number | null): string {
-  if (bytes === null) return 'unknown size'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function buildPathSegments(path: string): { label: string; path: string | null }[] {
-  const parts = path.split('/').filter(Boolean)
-  return parts.map((part, i) => ({
-    label: part,
-    path: i === parts.length - 1 ? null : parts.slice(0, i + 1).join('/'),
-  }))
 }
 
 /** Map file extension to a Monaco language identifier. */
@@ -101,10 +89,10 @@ function BreadcrumbNav({ runId, path, onBack }: BreadcrumbNavProps) {
   const segments = buildPathSegments(path)
   const rootLabel = runId ? `Run: ${runId.slice(0, 8)}…` : 'Files'
 
-  return (
-    <Breadcrumb>
-      <BreadcrumbList className="font-mono text-xs">
-        <BreadcrumbItem>
+	return (
+		<Breadcrumb>
+			<BreadcrumbList className="text-xs text-muted-foreground">
+				<BreadcrumbItem>
           <BreadcrumbLink
             className="cursor-pointer text-muted-foreground hover:text-primary px-1.5 py-0.5 transition-colors"
             onClick={() => onBack(null)}
@@ -174,8 +162,9 @@ function MonacoEditorView({ path, value, readOnly, onEditorMount }: MonacoEditor
 }
 
 export function FileView({ path, runId, onBack }: FileViewProps) {
-  const uri = buildReadUri(runId, path)
+  const uri = buildUri(runId, path)
   const { data, isLoading, error } = useVfsRead(uri)
+  const statQuery = useVfsStat(uri)
   const queryClient = useQueryClient()
 
   const [editMode, setEditMode] = useState(false)
@@ -228,143 +217,175 @@ export function FileView({ path, runId, onBack }: FileViewProps) {
 
   const viewer = data ? resolveViewer(path, data.contentType) : null
   const isEditable = viewer && (viewer.type === 'code' || viewer.type === 'structured' || viewer.type === 'plain' || viewer.type === 'markdown')
+  const fileName = getBaseName(path, path)
 
-  return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* Header: breadcrumb + file metadata + edit actions */}
-      <div className="shrink-0 bg-muted/30 px-4 py-3 flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-2">
-          <BreadcrumbNav runId={runId} path={path} onBack={onBack} />
-          {canEdit && isEditable && data && !isLoading && !error && (
-            <div className="flex items-center gap-1">
-              {editMode ? (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={handleCancel}
-                    disabled={saving}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="xs"
-                    onClick={() => void handleSave()}
-                    loading={saving}
-                  >
-                    Save
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={handleEdit}
-                >
-                  Edit
-                </Button>
-              )}
-            </div>
-          )}
+	const sidebar = (
+		<div className="space-y-4">
+			<div>
+				<p className="text-sm font-medium text-muted-foreground">File</p>
+				<p className="mt-2 truncate text-sm text-foreground">{fileName}</p>
+				<p className="mt-1 break-all text-xs text-muted-foreground">{path}</p>
+			</div>
+
+			{statQuery.isLoading ? (
+				<div className="flex items-center gap-2 text-muted-foreground">
+					<Spinner size="sm" />
+					<span className="text-sm">Loading metadata…</span>
+				</div>
+			) : statQuery.isError ? (
+				<p className="text-sm text-destructive">Failed to load metadata.</p>
+			) : statQuery.data ? (
+        <KvList
+          items={[
+						{
+							label: 'Scope',
+							value: <span className="text-sm text-muted-foreground">{runId ? `run:${runId.slice(0, 8)}` : 'company'}</span>,
+						},
+						{
+							label: 'Type',
+							value: <span className="text-sm text-muted-foreground">{statQuery.data.type}</span>,
+						},
+						{
+							label: 'Size',
+							value: <span className="text-sm text-muted-foreground tabular-nums">{formatBytes(data?.size ?? statQuery.data.size ?? null)}</span>,
+						},
+						{
+							label: 'MIME',
+							value: <span className="text-sm text-muted-foreground">{statQuery.data.mime_type ?? data?.contentType ?? '—'}</span>,
+						},
+						{
+							label: 'Writable',
+							value: <span className="text-sm text-muted-foreground">{statQuery.data.writable ? 'yes' : 'no'}</span>,
+						},
+						{
+							label: 'ETag',
+							value: <span className="break-all text-sm text-muted-foreground">{statQuery.data.etag ?? '—'}</span>,
+						},
+					]}
+				/>
+			) : null}
+
+			{editMode && (
+				<p className="text-sm text-warning">Editing mode is active.</p>
+			)}
+		</div>
+  )
+
+  const toolbar = canEdit && isEditable && data && !isLoading && !error ? (
+    <div className="flex items-center gap-1">
+      {editMode ? (
+        <>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={handleCancel}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="default"
+            size="xs"
+            onClick={() => void handleSave()}
+            loading={saving}
+          >
+            Save
+          </Button>
+        </>
+      ) : (
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={handleEdit}
+        >
+          Edit
+        </Button>
+      )}
+    </div>
+  ) : null
+
+  const content = (
+    <>
+      {isLoading && (
+        <div className="flex h-full items-center justify-center">
+          <Spinner size="lg" className="text-muted-foreground" />
         </div>
-        {data && (
-          <p className={cn('font-mono text-[11px] text-muted-foreground')}>
-            {formatBytes(data.size)} · {data.contentType}
-            {editMode && <span className="ml-2 text-warning">editing</span>}
-          </p>
-        )}
-      </div>
+      )}
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        {isLoading && (
-          <div className="flex h-full items-center justify-center">
-            <Spinner size="lg" className="text-muted-foreground" />
-          </div>
-        )}
+		{error && (
+			<div className="flex h-full items-center justify-center">
+				<div className="text-center">
+					<p className="text-sm font-medium text-muted-foreground">Failed to load file.</p>
+					<p className="mt-1 break-all text-xs text-muted-foreground">{path}</p>
+				</div>
+			</div>
+		)}
 
-        {error && (
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center">
-              <p className="text-sm font-medium text-muted-foreground">Failed to load file.</p>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">{path}</p>
-            </div>
-          </div>
-        )}
+      {!isLoading && !error && data && (() => {
+        if (!viewer) return null
 
-        {!isLoading && !error && data && (() => {
-          if (!viewer) return null
-
-          if (viewer.type === 'image') {
-            return (
-              <div className="flex h-full items-center justify-center overflow-auto p-6">
-                <img
-                  src={`/api/vfs/read?uri=${encodeURIComponent(uri)}`}
-                  alt={path}
-                  className="max-w-full"
-                />
-              </div>
-            )
-          }
-
-          if (viewer.type === 'markdown' && !editMode) {
-            return (
-              <div className="h-full overflow-auto">
-                <div className="mx-auto max-w-3xl px-6 py-6">
-                  <Markdown content={data.content ?? ''} />
-                </div>
-              </div>
-            )
-          }
-
-          if (viewer.type === 'markdown' && editMode) {
-            return (
-              <div className="h-full overflow-hidden">
-                <TiptapEditor
-                  content={data.content ?? ''}
-                  editable
-                  onChange={(md) => { tiptapContentRef.current = md }}
-                />
-              </div>
-            )
-          }
-
-          if (
-            viewer.type === 'code' ||
-            viewer.type === 'structured' ||
-            viewer.type === 'plain'
-          ) {
-            return (
-              <div className="h-full p-4">
-                <MonacoEditorView
-                  path={path}
-                  value={data.content ?? ''}
-                  readOnly={!editMode}
-                  onEditorMount={handleEditorMount}
-                />
-              </div>
-            )
-          }
-
+        if (viewer.type === 'markdown' && editMode) {
           return (
-            <div className="m-4 bg-muted/40 p-4">
-              <p className="font-mono text-xs text-muted-foreground">Preview not available for this file type.</p>
-              <div className="mt-3 space-y-1">
-                <p className="font-mono text-xs text-muted-foreground">
-                  <span className="text-foreground">Path:</span> {path}
-                </p>
-                <p className="font-mono text-xs text-muted-foreground">
-                  <span className="text-foreground">Size:</span> {formatBytes(data.size)}
-                </p>
-                <p className="font-mono text-xs text-muted-foreground">
-                  <span className="text-foreground">Type:</span> {data.contentType}
-                </p>
-              </div>
+            <div className="h-full overflow-hidden">
+              <TiptapEditor
+                content={data.content ?? ''}
+                editable
+                onChange={(md) => { tiptapContentRef.current = md }}
+              />
             </div>
           )
-        })()}
-      </div>
-    </div>
+        }
+
+        if (viewer.type === 'image' || viewer.type === 'pdf' || viewer.type === 'video' || viewer.type === 'docx' || (viewer.type === 'markdown' && !editMode)) {
+          return (
+            <FilePreviewSurface path={path} uri={uri} viewerType={viewer.type} data={data} variant="full" />
+          )
+        }
+
+        if (
+          data.isText &&
+          (viewer.type === 'code' ||
+            viewer.type === 'structured' ||
+            viewer.type === 'plain')
+        ) {
+          return (
+            <div className="h-full p-4">
+              <MonacoEditorView
+                path={path}
+                value={data.content ?? ''}
+                readOnly={!editMode}
+                onEditorMount={handleEditorMount}
+              />
+            </div>
+          )
+        }
+
+			return (
+				<div className={cn(surfaceCardVariants({ size: 'md' }), 'm-4')}>
+					<p className="text-sm text-muted-foreground">Preview not available for this file type.</p>
+					<div className="mt-3 space-y-1">
+						<p className="text-sm text-muted-foreground">
+							<span className="text-foreground">Path:</span> {path}
+						</p>
+						<p className="text-sm text-muted-foreground tabular-nums">
+							<span className="text-foreground">Size:</span> {formatBytes(data.size)}
+						</p>
+						<p className="text-sm text-muted-foreground">
+							<span className="text-foreground">Type:</span> {data.contentType}
+						</p>
+            </div>
+          </div>
+        )
+      })()}
+    </>
+  )
+
+  return (
+    <InspectorShell
+      header={<BreadcrumbNav runId={runId} path={path} onBack={onBack} />}
+      toolbar={toolbar}
+      sidebar={sidebar}
+      content={content}
+    />
   )
 }

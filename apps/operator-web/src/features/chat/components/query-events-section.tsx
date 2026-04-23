@@ -51,16 +51,16 @@ function ToolCallGroup({ events }: { events: RunEvent[] }) {
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left bg-muted/40 hover:bg-muted/60 transition-colors"
-      >
+		<button
+			type="button"
+			onClick={() => setOpen((v) => !v)}
+			className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left transition-colors hover:bg-muted/40"
+		>
         <CaretIcon className="size-3 shrink-0 text-muted-foreground" />
         <Wrench size={12} className="text-muted-foreground shrink-0" />
-        <span className="font-mono text-xs text-muted-foreground">
-          {events.length} tool call{events.length === 1 ? '' : 's'}
-        </span>
+				<span className="text-sm text-muted-foreground">
+					{events.length} tool call{events.length === 1 ? '' : 's'}
+				</span>
       </button>
       {open && (
         <div className="flex flex-col gap-0.5 mt-0.5">

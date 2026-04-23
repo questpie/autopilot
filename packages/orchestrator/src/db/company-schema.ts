@@ -10,6 +10,7 @@ export {
 	apikey,
 	rateLimit,
 	invite,
+	userPreference,
 } from './auth-schema'
 
 // ─── Tasks ──────────────────────────────────────────────────────────────────

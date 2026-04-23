@@ -3,7 +3,6 @@ import { ArrowUp, File, FileText, Paperclip, Stop, X } from '@phosphor-icons/rea
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { MetaChipButton } from '@/components/ui/meta-chip'
 import type { ChatAttachment } from '@/api/types'
 import { readDraggedChatAttachment } from '../lib/chat-dnd'
 import {
@@ -296,8 +295,10 @@ export function ChatComposer({
 			attachment.refId ??
 			`attachment-${index + 1}`
 		return (
-			<MetaChipButton
+			<Button
 				key={`${kind}-${label}-${index}`}
+				size="xs"
+				variant={kind === 'context' ? 'secondary' : 'outline'}
 				onClick={() => {
 					if (kind === 'context') {
 						onContextAttachmentRemove?.(attachment)
@@ -305,14 +306,13 @@ export function ChatComposer({
 					}
 					removeAttachment(index)
 				}}
-				icon={<Icon size={12} />}
 				className="max-w-full"
 				title="Remove attachment"
-				tone={kind === 'context' ? 'primary' : 'neutral'}
 			>
+				<Icon data-icon="inline-start" />
 				<span className="truncate max-w-[220px]">{label}</span>
-				<X size={12} />
-			</MetaChipButton>
+				<X data-icon="inline-end" />
+			</Button>
 		)
 	}
 

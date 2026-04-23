@@ -51,6 +51,8 @@ const EXT_MAP: Record<string, Icon> = {
   md: FileMd,
   mdx: FileMd,
   txt: FileText,
+  doc: FileText,
+  docx: FileText,
   pdf: FilePdf,
 
   // Images

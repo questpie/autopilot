@@ -4,38 +4,40 @@ import { TaskList } from './task-list'
 import { TaskDetail } from './task-detail'
 
 export function TasksScreen() {
-  useSetLayoutMode('immersive')
-  const {
-    tasks,
-    childToParent,
-    isLoading,
-    filter,
-    setFilter,
-    selectedTaskId,
-    selectTask,
-    taskDetail,
-    isDetailLoading,
-  } = useTasksScreen()
+	useSetLayoutMode('immersive')
+	const {
+		allTasks,
+		tasks,
+		childToParent,
+		isLoading,
+		filter,
+		setFilter,
+		selectedTaskId,
+		selectTask,
+		taskDetail,
+		isDetailLoading,
+	} = useTasksScreen()
 
-  if (selectedTaskId) {
-    return (
-      <TaskDetail
-        detail={taskDetail}
-        isLoading={isDetailLoading}
-        onBack={() => selectTask('')}
-        onSelectTask={selectTask}
-      />
-    )
-  }
+	if (selectedTaskId) {
+		return (
+			<TaskDetail
+				detail={taskDetail}
+				isLoading={isDetailLoading}
+				onBack={() => selectTask('')}
+				onSelectTask={selectTask}
+			/>
+		)
+	}
 
-  return (
-    <TaskList
-      tasks={tasks}
-      childToParent={childToParent}
-      filter={filter}
-      onFilterChange={setFilter}
-      onSelect={selectTask}
-      isLoading={isLoading}
-    />
-  )
+	return (
+		<TaskList
+			allTasks={allTasks}
+			tasks={tasks}
+			childToParent={childToParent}
+			filter={filter}
+			onFilterChange={setFilter}
+			onSelect={selectTask}
+			isLoading={isLoading}
+		/>
+	)
 }

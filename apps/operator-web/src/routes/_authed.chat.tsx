@@ -5,6 +5,11 @@ import { ChatScreen } from '@/features/chat'
 const searchSchema = z.object({
   sessionId: z.string().optional(),
   view: z.enum(['history']).optional(),
+  contextRefType: z.enum(['task', 'file', 'directory', 'run', 'session', 'artifact']).optional(),
+  contextRefId: z.string().optional(),
+  contextPath: z.string().optional(),
+  contextRunId: z.string().optional(),
+  contextLabel: z.string().optional(),
 })
 
 export const Route = createFileRoute('/_authed/chat')({

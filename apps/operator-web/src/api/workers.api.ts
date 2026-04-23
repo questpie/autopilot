@@ -1,9 +1,8 @@
 /**
  * Workers API — wired to GET /api/workers.
  *
- * NOTE: This endpoint requires worker auth (X-Worker-Secret), not user session auth.
- * In dev mode (allowLocalDevBypass), requests pass through without auth.
- * In production, this call will fail — the hook handles this gracefully.
+ * Worker lifecycle routes still require machine auth, but the top-level listing
+ * is operator-readable so the UI can observe connected workers.
  */
 import type { Worker, WorkerCapability } from './types'
 import { api } from '@/lib/api'

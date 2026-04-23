@@ -5,12 +5,22 @@ import { useQueryList } from '@/hooks/use-queries'
 import { useTasks } from '@/hooks/use-tasks'
 import { composeConversations } from '@/api/conversations.api'
 import type { ConversationViewModel } from '@/api/conversations.api'
+import { clearChatContextSearch, getChatContextSearch, type ChatContextSearch } from '../lib/chat-context'
 
 export function useChatScreen() {
   const location = useLocation()
-  const search = location.search as { sessionId?: string; view?: 'history' }
+  const search = location.search as {
+    sessionId?: string
+    view?: 'history'
+    contextRefType?: ChatContextSearch['contextRefType']
+    contextRefId?: string
+    contextPath?: string
+    contextRunId?: string
+    contextLabel?: string
+  }
   const activeId = search.sessionId ?? null
   const view = search.view ?? null
+  const contextSearch = getChatContextSearch(search)
 
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
@@ -66,11 +76,20 @@ export function useChatScreen() {
   }
 
   function clearConversation() {
-    void navigate({ to: '/chat', search: {} })
+    void navigate({ to: '/chat', search: { ...contextSearch } })
   }
 
   function goToHistory() {
-    void navigate({ to: '/chat', search: { view: 'history' } })
+    void navigate({ to: '/chat', search: { view: 'history', ...contextSearch } })
+  }
+
+  function clearContext() {
+    void navigate({
+      to: '/chat',
+      search: activeId
+        ? { sessionId: activeId }
+        : clearChatContextSearch(contextSearch),
+    })
   }
 
   return {
@@ -79,10 +98,12 @@ export function useChatScreen() {
     activeConversation,
     activeId,
     view,
+    contextSearch,
     searchQuery,
     setSearchQuery,
     selectConversation,
     clearConversation,
+    clearContext,
     goToHistory,
     isLoading,
     sendMutation,

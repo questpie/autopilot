@@ -12,7 +12,7 @@
  * - Existing task/workflow paths do not regress
  */
 import { test, expect, describe, beforeAll, afterAll } from 'bun:test'
-import { mkdir, rm } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Hono } from 'hono'
@@ -39,6 +39,8 @@ import {
 	QueryService,
 	SessionService,
 	SessionMessageService,
+	VfsService,
+	DefaultWorkerRegistry,
 } from '../src/services'
 import type { AppEnv, Services } from '../src/api/app'
 import type { Actor } from '../src/auth/types'
@@ -47,6 +49,7 @@ import { queries as queriesRoute } from '../src/api/routes/queries'
 import { runs as runsRoute } from '../src/api/routes/runs'
 import { workers as workersRoute } from '../src/api/routes/workers'
 import { tasks as tasksRoute } from '../src/api/routes/tasks'
+import { chatSessions as chatSessionsRoute } from '../src/api/routes/chat-sessions'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -106,6 +109,7 @@ function buildTestApp(companyRoot: string, db: CompanyDb, services: Services) {
 	app.route('/api/runs', runsRoute)
 	app.route('/api/workers', workersRoute)
 	app.route('/api/tasks', tasksRoute)
+	app.route('/api/chat-sessions', chatSessionsRoute)
 
 	return app
 }
@@ -144,6 +148,7 @@ beforeAll(async () => {
 	const secretService = new SecretService(db)
 	const queryService = new QueryService(db)
 	const sessionService = new SessionService(db)
+	const vfsService = new VfsService(testDir, new DefaultWorkerRegistry())
 
 	const workflowEngine = new WorkflowEngine(
 		DEFAULT_AUTHORED_CONFIG,
@@ -170,6 +175,10 @@ beforeAll(async () => {
 		queryService,
 		sessionService,
 		sessionMessageService: new SessionMessageService(db),
+		vfsService,
+		scriptService: {} as never,
+		userPreferenceService: {} as never,
+		scheduleService: {} as never,
 	}
 
 	app = buildTestApp(testDir, db, services)
@@ -809,6 +818,141 @@ describe('task regression', () => {
 		expect(instructions).toContain('Please review the attachment')
 		expect(instructions).toContain('design.png')
 		expect(instructions).toContain('mime: image/png')
+	})
+
+	test('chat session task ref attachments are hydrated with task content', async () => {
+		const task = await services.taskService.create({
+			id: `task-chat-context-${Date.now()}`,
+			title: 'Review homepage copy',
+			description: 'Give an opinion on whether the copy feels too generic.',
+			type: 'task',
+			status: 'blocked',
+			priority: 'high',
+			created_by: 'test',
+		})
+
+		const res = await app.request('/api/chat-sessions', post({
+			agentId: 'default-agent',
+			message: 'nazor?',
+			attachments: [{
+				type: 'ref',
+				label: `Task ${task!.id.slice(0, 8)} ${task!.title}`,
+				refType: 'task',
+				refId: task!.id,
+			}],
+		}))
+		expect(res.status).toBe(200)
+
+		const body = await res.json() as { run_id: string }
+		const run = await services.runService.get(body.run_id)
+		expect(run?.instructions).toContain('## Attached Context')
+		expect(run?.instructions).toContain(`Task ID: ${task!.id}`)
+		expect(run?.instructions).toContain('Review homepage copy')
+		expect(run?.instructions).toContain('Give an opinion on whether the copy feels too generic.')
+		expect(run?.instructions).toContain('Status: blocked')
+	})
+
+	test('chat session file and directory ref attachments are hydrated with VFS context', async () => {
+		await mkdir(join(testDir, '.autopilot', 'workflows'), { recursive: true })
+		await writeFile(
+			join(testDir, '.autopilot', 'workflows', 'arch-review.yaml'),
+			'name: arch-review\nsteps:\n  - id: inspect\n',
+		)
+		await writeFile(
+			join(testDir, '.autopilot', 'workflows', 'bounded-dev.yaml'),
+			'name: bounded-dev\nsteps:\n  - id: build\n',
+		)
+
+		const res = await app.request('/api/chat-sessions', post({
+			agentId: 'default-agent',
+			message: 'nazor na subory',
+			attachments: [
+				{
+					type: 'ref',
+					label: 'Current folder .autopilot/workflows',
+					refType: 'directory',
+					refId: '.autopilot/workflows',
+					metadata: { path: '.autopilot/workflows' },
+				},
+				{
+					type: 'ref',
+					label: '.autopilot/workflows/arch-review.yaml',
+					refType: 'file',
+					refId: '.autopilot/workflows/arch-review.yaml',
+					metadata: { path: '.autopilot/workflows/arch-review.yaml' },
+				},
+			],
+		}))
+		expect(res.status).toBe(200)
+
+		const body = await res.json() as { run_id: string }
+		const run = await services.runService.get(body.run_id)
+		expect(run?.instructions).toContain('Directory: .autopilot/workflows')
+		expect(run?.instructions).toContain('arch-review.yaml')
+		expect(run?.instructions).toContain('bounded-dev.yaml')
+		expect(run?.instructions).toContain('name: arch-review')
+		expect(run?.instructions).toContain('steps:')
+	})
+
+	test('chat session run and artifact ref attachments are hydrated with run summary and artifact content', async () => {
+		const runId = `run-chat-run-context-${Date.now()}`
+		await services.runService.create({
+			id: runId,
+			agent_id: 'default-agent',
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'review artifacts',
+		})
+		await services.runService.appendEvent(runId, {
+			type: 'progress',
+			summary: 'Reading workflow files',
+		})
+		await services.runService.complete(runId, {
+			status: 'completed',
+			summary: 'The workflow looks coherent but needs naming cleanup.',
+		})
+
+		const artifactId = `artifact-chat-context-${Date.now()}`
+		await services.artifactService.create({
+			id: artifactId,
+			run_id: runId,
+			kind: 'doc',
+			title: 'workflow-notes.md',
+			ref_kind: 'inline',
+			ref_value: '# Notes\nThe YAML is readable, but aliases are inconsistent.',
+			mime_type: 'text/markdown',
+		})
+
+		const res = await app.request('/api/chat-sessions', post({
+			agentId: 'default-agent',
+			message: 'co si myslis?',
+			attachments: [
+				{
+					type: 'ref',
+					label: `Run ${runId.slice(0, 8)}`,
+					refType: 'run',
+					refId: runId,
+					metadata: { runId },
+				},
+				{
+					type: 'ref',
+					label: 'workflow-notes.md',
+					refType: 'artifact',
+					refId: artifactId,
+					metadata: { artifactId, runId },
+				},
+			],
+		}))
+		expect(res.status).toBe(200)
+
+		const body = await res.json() as { run_id: string }
+		const run = await services.runService.get(body.run_id)
+		expect(run?.instructions).toContain(`Run ID: ${runId}`)
+		expect(run?.instructions).toContain('The workflow looks coherent but needs naming cleanup.')
+		expect(run?.instructions).toContain('Reading workflow files')
+		expect(run?.instructions).toContain('Artifact ID:')
+		expect(run?.instructions).toContain('workflow-notes.md')
+		expect(run?.instructions).toContain('The YAML is readable, but aliases are inconsistent.')
 	})
 
 	test('mutable query instructions include Autopilot-native tooling bias', () => {

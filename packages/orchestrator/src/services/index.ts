@@ -42,6 +42,9 @@ export type { SessionRow } from './sessions'
 export { SessionMessageService } from './session-messages'
 export type { SessionMessageRow } from './session-messages'
 
+export { UserPreferenceService } from './user-preferences'
+export type { UserPreferenceRecord } from './user-preferences'
+
 export { SecretService } from './secrets'
 export type { SharedSecretRow } from './secrets'
 

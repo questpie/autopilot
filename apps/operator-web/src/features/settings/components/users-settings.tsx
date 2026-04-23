@@ -12,6 +12,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { SurfaceSection } from '@/components/ui/surface-section'
+import { surfaceCardVariants } from '@/components/ui/surface-card'
+import { cn } from '@/lib/utils'
 
 /** Roles accepted by the custom invite API (/api/invites) */
 type UserRole = 'owner' | 'admin' | 'member' | 'viewer'
@@ -101,7 +104,7 @@ export function UsersSettings() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="font-mono text-xs text-muted-foreground">Manage team members and their access roles.</p>
+        <p className="text-sm text-muted-foreground">Manage team members and their access roles.</p>
         <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
           <DialogTrigger render={<Button size="sm" variant="outline" />}>
             Invite User
@@ -112,7 +115,7 @@ export function UsersSettings() {
             </DialogHeader>
             <div className="space-y-3 py-2">
               <div className="space-y-1">
-                <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Email</p>
+                <p className="text-xs font-medium text-muted-foreground">Email</p>
                 <Input
                   type="email"
                   placeholder="user@example.com"
@@ -121,11 +124,11 @@ export function UsersSettings() {
                 />
               </div>
               <div className="space-y-1">
-                <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Role</p>
+                <p className="text-xs font-medium text-muted-foreground">Role</p>
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                  className="h-8 w-full rounded-none border border-input bg-transparent px-2.5 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+                  className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/20"
                 >
                   {ROLE_OPTIONS.map((r) => (
                     <option key={r} value={r}>{r}</option>
@@ -133,7 +136,7 @@ export function UsersSettings() {
                 </select>
               </div>
               {inviteError && (
-                <p className="font-mono text-xs text-destructive">{inviteError}</p>
+                <p className="text-sm text-destructive">{inviteError}</p>
               )}
             </div>
             <DialogFooter showCloseButton>
@@ -152,55 +155,50 @@ export function UsersSettings() {
       {usersQuery.isPending ? (
         <div className="flex items-center gap-2 py-4 text-muted-foreground">
           <Spinner size="sm" />
-          <span className="font-mono text-xs">Loading users...</span>
+          <span className="text-sm">Loading users...</span>
         </div>
       ) : usersQuery.error ? (
-        <p className="font-mono text-xs text-destructive">Failed to load users: {usersQuery.error.message}</p>
+        <p className="text-sm text-destructive">Failed to load users: {usersQuery.error.message}</p>
       ) : (
-        <div className="bg-muted/40">
-          {/* Header row */}
-          <div className="grid grid-cols-[1fr_1fr_120px_100px] gap-2 bg-muted/30 px-4 py-2">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Name</p>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Email</p>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Role</p>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Status</p>
-          </div>
-
+        <SurfaceSection title="Users">
           {usersQuery.data.length === 0 ? (
-            <p className="px-4 py-4 font-mono text-xs text-muted-foreground">No users found.</p>
+            <p className="text-sm text-muted-foreground">No users found.</p>
           ) : (
-            usersQuery.data.map((u) => (
-              <div
-                key={u.id}
-                className="grid grid-cols-[1fr_1fr_120px_100px] items-center gap-2 px-4 py-2"
-              >
-                <p className="font-mono text-xs text-foreground truncate">{u.name}</p>
-                <p className="font-mono text-xs text-muted-foreground truncate">{u.email}</p>
-                <select
-                  value={u.role ?? 'user'}
-                  onChange={(e) => {
-                    const role = AUTH_ROLE_OPTIONS.find((r) => r === e.target.value)
-                    if (role) setRoleMutation.mutate({ userId: u.id, role })
-                  }}
-                  className="h-7 rounded-none border border-input bg-transparent px-1.5 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:opacity-50"
-                  disabled={setRoleMutation.isPending}
-                >
-                  {AUTH_ROLE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-                <Button
-                  size="xs"
-                  variant={u.banned ? 'outline' : 'destructive'}
-                  onClick={() => banMutation.mutate({ userId: u.id, ban: !u.banned })}
-                  loading={banMutation.isPending && banMutation.variables?.userId === u.id}
-                >
-                  {u.banned ? 'Unban' : 'Ban'}
-                </Button>
-              </div>
-            ))
+            <div className="space-y-2">
+              {usersQuery.data.map((u) => (
+                <div key={u.id} className={cn(surfaceCardVariants({ size: 'sm' }), 'flex items-center justify-between gap-4')}>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{u.name}</p>
+                    <p className="truncate text-sm text-muted-foreground">{u.email}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={u.role ?? 'user'}
+                      onChange={(e) => {
+                        const role = AUTH_ROLE_OPTIONS.find((r) => r === e.target.value)
+                        if (role) setRoleMutation.mutate({ userId: u.id, role })
+                      }}
+                      className="h-9 rounded-md border border-input bg-card px-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/20 disabled:opacity-50"
+                      disabled={setRoleMutation.isPending}
+                    >
+                      {AUTH_ROLE_OPTIONS.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                    <Button
+                      size="xs"
+                      variant={u.banned ? 'outline' : 'destructive'}
+                      onClick={() => banMutation.mutate({ userId: u.id, ban: !u.banned })}
+                      loading={banMutation.isPending && banMutation.variables?.userId === u.id}
+                    >
+                      {u.banned ? 'Unban' : 'Ban'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-        </div>
+        </SurfaceSection>
       )}
     </div>
   )

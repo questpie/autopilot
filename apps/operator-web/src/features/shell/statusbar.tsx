@@ -14,11 +14,11 @@ export function Statusbar() {
 		onlineWorkers.length === 0 ? 'bg-destructive' : busyCount > 0 ? 'bg-warning' : 'bg-success'
 
 	return (
-		<footer className="flex h-7 shrink-0 items-center  px-4">
+		<footer className="flex h-9 shrink-0 items-center border-t border-border/70 bg-background/80 px-4 backdrop-blur-sm">
 			{/* Left: worker connection status */}
 			<div className="flex items-center gap-1.5">
-				<div className={`size-1.5 ${statusColor}`} />
-				<span className="font-mono text-[11px] text-muted-foreground">
+				<div className={`size-1.5 rounded-full ${statusColor}`} />
+				<span className="text-xs text-muted-foreground tabular-nums">
 					{statusLabel}
 					{workerName && ` \u00b7 ${workerName}`}
 				</span>
@@ -27,7 +27,7 @@ export function Statusbar() {
 			<div className="flex-1" />
 
 			{/* Right: worker count */}
-			<span className="font-mono text-[11px] text-muted-foreground">
+			<span className="text-xs text-muted-foreground tabular-nums">
 				{onlineWorkers.length} worker{onlineWorkers.length !== 1 ? 's' : ''}
 			</span>
 		</footer>

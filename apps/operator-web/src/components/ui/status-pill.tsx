@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/i18n'
 
 const statusPillVariants = cva(
-  'inline-flex items-center gap-1.5 rounded-none px-2 py-0.5 font-mono text-[11px] font-medium',
+  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium shadow-xs',
   {
     variants: {
       status: {

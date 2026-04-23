@@ -23,6 +23,7 @@ export interface VfsReadResult {
   content: string
   contentType: string
   size: number | null
+  isText: boolean
 }
 
 export async function vfsDiff(uri: string, includeDirty = true): Promise<VfsDiffResult> {
@@ -37,11 +38,12 @@ export async function vfsRead(uri: string): Promise<VfsReadResult> {
   if (!res.ok) {
     throw new ApiError(res.status, res.statusText)
   }
-  const content = await res.text()
   const contentType = res.headers.get('content-type') ?? 'application/octet-stream'
   const sizeHeader = res.headers.get('x-vfs-size')
   const size = sizeHeader ? Number(sizeHeader) : null
-  return { content, contentType, size }
+  const isText = res.headers.get('x-vfs-text') === 'true'
+  const content = isText ? await res.text() : ''
+  return { content, contentType, size, isText }
 }
 
 export async function vfsWrite(uri: string, content: string): Promise<void> {

@@ -2,6 +2,30 @@ import type { Task, TaskWithRelations, TaskRelation, Artifact, ActivityEntry, Ad
 import { api, configFetch } from '@/lib/api'
 import { getRuns } from './runs.api'
 
+export interface CreateTaskInput {
+	title: string
+	type: string
+	description?: string
+	status?: string
+	priority?: Task['priority']
+	assigned_to?: string
+	workflow_id?: string
+	workflow_step?: string
+	context?: string
+	metadata?: string
+	queue?: string
+	start_after?: string
+	scheduled_by?: string
+	depends_on?: string[]
+	created_by?: string
+}
+
+export async function createTask(input: CreateTaskInput): Promise<Task> {
+	const res = await api.api.tasks.$post({ json: input })
+	if (!res.ok) throw new Error(`Failed to create task: ${res.status}`)
+	return res.json() as Promise<Task>
+}
+
 export async function getTasks(filters?: { status?: string; assigned_to?: string; workflow_id?: string }): Promise<Task[]> {
   const query: Record<string, string> = {}
   if (filters?.status) query.status = filters.status

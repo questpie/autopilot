@@ -15,7 +15,7 @@ function SectionHeader({ children, action, className, ...props }: SectionHeaderP
       )}
       {...props}
     >
-      <span className="font-mono text-[10px] font-medium uppercase tracking-[0.5px] text-foreground-subtle">
+      <span className="text-sm font-medium text-foreground-subtle">
         {children}
       </span>
       {action && <div className="shrink-0">{action}</div>}

@@ -4,6 +4,9 @@ import { authClient } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { SurfaceSection } from '@/components/ui/surface-section'
+import { surfaceCardVariants } from '@/components/ui/surface-card'
+import { cn } from '@/lib/utils'
 import { useSession } from '@/hooks/use-session'
 
 export function SecuritySettings() {
@@ -98,22 +101,16 @@ export function SecuritySettings() {
 
   const twoFactorEnabled = user?.twoFactorEnabled ?? false
 
-  return (
-    <div className="space-y-6">
-      {/* 2FA */}
-      <div className="bg-muted/40">
-        <div className="bg-muted/30 px-4 py-3">
-          <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Two-Factor Authentication
-          </p>
-        </div>
-        <div className="space-y-4 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-foreground">Authenticator App (TOTP)</p>
-              <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                {twoFactorEnabled ? 'Enabled — your account is protected with 2FA.' : 'Disabled — enable for extra security.'}
-              </p>
+	return (
+		<div className="space-y-6">
+			{/* 2FA */}
+			<SurfaceSection title="Two-factor authentication" contentClassName="space-y-4">
+					<div className="flex items-center justify-between">
+						<div>
+							<p className="text-sm text-foreground">Authenticator App (TOTP)</p>
+							<p className="mt-1 text-sm text-muted-foreground">
+								{twoFactorEnabled ? 'Enabled — your account is protected with 2FA.' : 'Disabled — enable for extra security.'}
+							</p>
             </div>
             {!twoFactorEnabled && !totpUri && (
               <Button
@@ -136,15 +133,15 @@ export function SecuritySettings() {
             )}
           </div>
 
-          {/* QR / TOTP URI setup flow */}
-          {totpUri && (
-            <div className="space-y-3 bg-muted/30 p-3">
-              <p className="font-mono text-xs text-muted-foreground">
-                Scan this URI with your authenticator app (or copy it manually):
-              </p>
-              <p className="break-all font-mono text-xs text-foreground">{totpUri}</p>
-              <div className="space-y-1">
-                <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Verification Code</p>
+					{/* QR / TOTP URI setup flow */}
+					{totpUri && (
+						<div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+							<p className="text-sm text-muted-foreground">
+								Scan this URI with your authenticator app (or copy it manually):
+							</p>
+							<p className="break-all font-mono text-[12px] text-foreground">{totpUri}</p>
+							<div className="space-y-1">
+								<p className="text-xs font-medium text-muted-foreground">Verification code</p>
                 <div className="flex gap-2">
                   <Input
                     value={totpCode}
@@ -161,21 +158,21 @@ export function SecuritySettings() {
                     Verify
                   </Button>
                 </div>
-                {(totpError || verifyTotpMutation.error) && (
-                  <p className="font-mono text-xs text-destructive">
-                    {totpError || verifyTotpMutation.error?.message}
-                  </p>
-                )}
+								{(totpError || verifyTotpMutation.error) && (
+									<p className="text-sm text-destructive">
+										{totpError || verifyTotpMutation.error?.message}
+									</p>
+								)}
               </div>
             </div>
           )}
 
-          {/* Disable 2FA flow */}
-          {twoFactorEnabled && (
-            <div className="space-y-3 bg-muted/30 p-3">
-              <p className="font-mono text-xs text-muted-foreground">
-                Enter your password to disable two-factor authentication.
-              </p>
+					{/* Disable 2FA flow */}
+					{twoFactorEnabled && (
+						<div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+							<p className="text-sm text-muted-foreground">
+								Enter your password to disable two-factor authentication.
+							</p>
               <div className="flex gap-2">
                 <Input
                   type="password"
@@ -193,67 +190,56 @@ export function SecuritySettings() {
                   Disable
                 </Button>
               </div>
-              {(disableError || disableTwoFactorMutation.error) && (
-                <p className="font-mono text-xs text-destructive">
-                  {disableError || disableTwoFactorMutation.error?.message}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+							{(disableError || disableTwoFactorMutation.error) && (
+								<p className="text-sm text-destructive">
+									{disableError || disableTwoFactorMutation.error?.message}
+								</p>
+							)}
+						</div>
+					)}
+			</SurfaceSection>
 
-      {/* Active sessions */}
-      <div className="bg-muted/40">
-        <div className="bg-muted/30 px-4 py-3">
-          <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Active Sessions
-          </p>
-        </div>
-        <div>
-          {sessionsQuery.isPending ? (
-            <div className="flex items-center gap-2 px-4 py-4 text-muted-foreground">
-              <Spinner size="sm" />
-              <span className="font-mono text-xs">Loading sessions...</span>
-            </div>
-          ) : sessionsQuery.error ? (
-            <p className="px-4 py-4 font-mono text-xs text-destructive">
-              Failed to load sessions: {sessionsQuery.error.message}
-            </p>
-          ) : !sessionsQuery.data || sessionsQuery.data.length === 0 ? (
-            <p className="px-4 py-4 font-mono text-xs text-muted-foreground">No active sessions.</p>
-          ) : (
-            sessionsQuery.data.map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center justify-between px-4 py-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-mono text-xs text-foreground truncate">
-                    {s.userAgent ?? 'Unknown client'}
-                  </p>
-                  <p className="font-mono text-[10px] text-muted-foreground">
-                    {s.ipAddress ?? 'Unknown IP'} — expires{' '}
-                    {new Date(s.expiresAt).toLocaleDateString()}
-                  </p>
-                </div>
-                <Button
-                  size="xs"
-                  variant="destructive"
-                  className="ml-4 shrink-0"
-                  onClick={() => revokeSessionMutation.mutate(s.token)}
-                  loading={
-                    revokeSessionMutation.isPending &&
-                    revokeSessionMutation.variables === s.token
-                  }
-                >
-                  Revoke
-                </Button>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  )
+			{/* Active sessions */}
+			<SurfaceSection title="Active sessions" contentClassName="p-0">
+					{sessionsQuery.isPending ? (
+						<div className="flex items-center gap-2 px-4 py-4 text-muted-foreground">
+							<Spinner size="sm" />
+							<span className="text-sm">Loading sessions...</span>
+						</div>
+					) : sessionsQuery.error ? (
+						<p className="px-4 py-4 text-sm text-destructive">
+							Failed to load sessions: {sessionsQuery.error.message}
+						</p>
+					) : !sessionsQuery.data || sessionsQuery.data.length === 0 ? (
+						<p className="px-4 py-4 text-sm text-muted-foreground">No active sessions.</p>
+					) : (
+						<div className="space-y-2 px-4 py-4">
+							{sessionsQuery.data.map((s) => (
+								<div key={s.id} className={cn(surfaceCardVariants({ size: 'sm' }), 'flex items-center justify-between gap-4')}>
+									<div className="min-w-0 flex-1">
+										<p className="truncate text-sm font-medium text-foreground">
+											{s.userAgent ?? 'Unknown client'}
+										</p>
+										<p className="mt-1 text-xs text-muted-foreground tabular-nums">
+											{s.ipAddress ?? 'Unknown IP'} — expires {new Date(s.expiresAt).toLocaleDateString()}
+										</p>
+									</div>
+									<Button
+										size="xs"
+										variant="destructive"
+										onClick={() => revokeSessionMutation.mutate(s.token)}
+										loading={
+											revokeSessionMutation.isPending &&
+											revokeSessionMutation.variables === s.token
+										}
+									>
+										Revoke
+									</Button>
+								</div>
+							))}
+						</div>
+					)}
+			</SurfaceSection>
+		</div>
+	)
 }

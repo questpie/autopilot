@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { DashboardScreen } from '@/features/dashboard'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authed/')({
-  component: DashboardScreen,
+  beforeLoad: () => {
+    throw redirect({ to: '/chat' })
+  },
 })

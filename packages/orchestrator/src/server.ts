@@ -37,6 +37,7 @@ import {
 	QueryService,
 	SessionService,
 	SessionMessageService,
+	UserPreferenceService,
 	ScheduleService,
 	SchedulerDaemon,
 	ScriptService,
@@ -131,6 +132,7 @@ export async function startServer(options?: StartServerOptions) {
 	const queryService = new QueryService(companyDb)
 	const sessionService = new SessionService(companyDb)
 	const sessionMessageService = new SessionMessageService(companyDb)
+	const userPreferenceService = new UserPreferenceService(companyDb)
 	const scheduleService = new ScheduleService(companyDb)
 	const scriptService = new ScriptService(authoredConfig)
 
@@ -190,6 +192,7 @@ export async function startServer(options?: StartServerOptions) {
 		queryService,
 		sessionService,
 		sessionMessageService,
+		userPreferenceService,
 		scheduleService,
 		scriptService,
 		vfsService,

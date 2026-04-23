@@ -1,56 +1,48 @@
-import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface FilterTabsProps<T extends string> {
-  tabs: readonly T[]
-  active: T
-  getLabel: (tab: T) => string
-  getCount?: (tab: T) => number | undefined
-  onChange: (tab: T) => void
-  className?: string
+	tabs: readonly T[]
+	active: T
+	getLabel: (tab: T) => string
+	getCount?: (tab: T) => number | undefined
+	onChange: (tab: T) => void
+	variant?: React.ComponentProps<typeof TabsList>['variant']
+	className?: string
 }
 
 function FilterTabs<T extends string>({
-  tabs,
-  active,
-  getLabel,
-  getCount,
-  onChange,
-  className,
+	tabs,
+	active,
+	getLabel,
+	getCount,
+	onChange,
+	variant = 'default',
+	className,
 }: FilterTabsProps<T>) {
-  return (
-    <div className={cn('flex items-center gap-1', className)}>
-      {tabs.map((tab) => {
-        const count = getCount?.(tab)
-        return (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => onChange(tab)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[12px] transition-colors',
-              active === tab
-                ? 'bg-surface-3 text-foreground'
-                : 'text-foreground-muted hover:bg-surface-2 hover:text-foreground',
-            )}
-          >
-            {getLabel(tab)}
-            {count !== undefined && count > 0 && (
-              <span
-                className={cn(
-                  'rounded-full px-1.5 py-0.5 text-[10px] leading-none tabular-nums',
-                  active === tab
-                    ? 'bg-surface-4 text-foreground'
-                    : 'bg-surface-2 text-foreground-subtle',
-                )}
-              >
-                {count}
-              </span>
-            )}
-          </button>
-        )
-      })}
-    </div>
-  )
+	return (
+		<Tabs value={active} onValueChange={(value) => onChange(value as T)} className={className}>
+			<TabsList variant={variant} className="max-w-full justify-start overflow-x-auto">
+				{tabs.map((tab) => {
+					const count = getCount?.(tab)
+
+					return (
+						<TabsTrigger key={tab} value={tab}>
+							{getLabel(tab)}
+							{count !== undefined && count > 0 ? (
+								<Badge
+									variant={active === tab ? 'secondary' : 'outline'}
+									className="h-4 min-w-4 px-1.5 font-mono tabular-nums"
+								>
+									{count}
+								</Badge>
+							) : null}
+						</TabsTrigger>
+					)
+				})}
+			</TabsList>
+		</Tabs>
+	)
 }
 
 export { FilterTabs }

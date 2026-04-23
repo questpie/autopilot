@@ -20,7 +20,7 @@ import * as authSchema from '../db/auth-schema'
 import type { Auth } from '../auth'
 import type { CompanyDb } from '../db'
 import { env } from '../env'
-import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, AuthoredConfig, VfsService, ScriptService } from '../services'
+import type { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, TaskRelationService, TaskGraphService, SecretService, QueryService, SessionService, SessionMessageService, ScheduleService, AuthoredConfig, VfsService, ScriptService, UserPreferenceService } from '../services'
 import type { Client } from '@libsql/client'
 import type { Actor } from '../auth/types'
 import { authMiddleware, isLocalhostRequest, resolveActor as resolveActorFn } from './middleware/auth'
@@ -45,6 +45,7 @@ import { queues } from './routes/queues'
 import { searchRoute } from './routes/search'
 import { vfs } from './routes/vfs'
 import { invites } from './routes/invites'
+import { preferences } from './routes/preferences'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ export interface Services {
 	scheduleService: ScheduleService
 	vfsService: VfsService
 	scriptService: ScriptService
+	userPreferenceService: UserPreferenceService
 }
 
 export interface AppEnv {
@@ -296,6 +298,8 @@ export function createApp(config: AppConfig) {
 
 	// ── Search routes (user auth — operator surface) ─────────────────
 	app.use('/api/search', userAuth)
+	app.use('/api/preferences/*', userAuth)
+	app.use('/api/preferences', userAuth)
 
 	// ── VFS routes (user auth — operator surface) ────────────────────
 	app.use('/api/vfs/*', userAuth)
@@ -337,6 +341,7 @@ export function createApp(config: AppConfig) {
 		.route('/api/schedules', schedules)
 		.route('/api/queues', queues)
 		.route('/api/search', searchRoute)
+		.route('/api/preferences', preferences)
 		.route('/api/vfs', vfs)
 		.route('/api/scripts', scripts)
 		.route('/api/invites', invites)

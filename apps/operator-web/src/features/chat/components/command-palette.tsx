@@ -119,14 +119,14 @@ export function CommandPalette({ filter, onSelect, onClose }: CommandPaletteProp
     return null
   }
 
-  return (
-    <div
-      ref={containerRef}
-      role="listbox"
-      aria-label="Slash commands"
-      className="absolute bottom-full left-0 right-0 z-50 mb-1 bg-popover ring-1 ring-foreground/10"
-    >
-      {filtered.map((cmd, idx) => (
+	return (
+		<div
+			ref={containerRef}
+			role="listbox"
+			aria-label="Slash commands"
+			className="absolute bottom-full left-0 right-0 z-50 mb-2 overflow-hidden rounded-xl bg-popover shadow-lg ring-1 ring-border/60"
+		>
+			{filtered.map((cmd, idx) => (
         <div
           key={cmd.id}
           role="option"
@@ -136,30 +136,30 @@ export function CommandPalette({ filter, onSelect, onClose }: CommandPaletteProp
             e.preventDefault()
             onSelect(cmd)
           }}
-          className={cn(
-            'flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm',
-            'text-muted-foreground transition-colors',
-            idx === activeIndex
-              ? 'bg-muted text-foreground'
-              : 'hover:bg-muted/50 hover:text-foreground',
-          )}
-        >
-          <span className="shrink-0 text-muted-foreground">{cmd.icon}</span>
-          <span className="font-mono text-xs font-medium text-foreground">{cmd.name}</span>
-          {cmd.argHint && (
-            <span className="font-mono text-xs text-muted-foreground/60">{cmd.argHint}</span>
-          )}
-          <span className="ml-auto truncate text-xs text-muted-foreground">{cmd.description}</span>
+				className={cn(
+					'flex cursor-pointer items-center gap-2.5 px-3 py-2.5 text-sm',
+					'text-muted-foreground transition-colors',
+					idx === activeIndex
+						? 'bg-muted text-foreground'
+						: 'hover:bg-muted/50 hover:text-foreground',
+				)}
+			>
+				<span className="shrink-0 text-muted-foreground">{cmd.icon}</span>
+				<span className="text-sm font-medium text-foreground">{cmd.name}</span>
+				{cmd.argHint && (
+					<span className="text-xs text-muted-foreground/60">{cmd.argHint}</span>
+				)}
+				<span className="ml-auto truncate text-xs text-muted-foreground">{cmd.description}</span>
           {idx === activeIndex && (
             <Kbd className="ml-2 shrink-0">↵</Kbd>
           )}
         </div>
       ))}
 
-      <div className="flex items-center gap-3 border-t border-border/50 px-3 py-1.5">
-        <span className="font-mono text-[10px] text-muted-foreground/50">
-          ↑↓ navigate · ↵ select · esc close
-        </span>
+		<div className="flex items-center gap-3 border-t border-border/50 px-3 py-1.5">
+			<span className="text-[10px] text-muted-foreground/50">
+				↑↓ navigate · ↵ select · esc close
+			</span>
       </div>
     </div>
   )

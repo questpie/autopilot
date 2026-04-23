@@ -8,7 +8,7 @@
  * Property names are camelCase to match Better Auth's internal field names.
  * Column names use snake_case following the default Better Auth convention.
  */
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core'
 
 // ─── User (core + admin plugin + twoFactor plugin) ─────────────────────────
 
@@ -181,5 +181,24 @@ export const invite = sqliteTable(
 		uniqueIndex('invite_email_unique').on(table.email),
 		uniqueIndex('invite_token_unique').on(table.token),
 		index('invite_token_idx').on(table.token),
+	],
+)
+
+// ─── User Preferences ────────────────────────────────────────────────────────
+
+export const userPreference = sqliteTable(
+	'user_preference',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		key: text('key').notNull(),
+		value: text('value').notNull().default('null'),
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.userId, table.key] }),
+		index('user_preference_user_id_idx').on(table.userId),
 	],
 )

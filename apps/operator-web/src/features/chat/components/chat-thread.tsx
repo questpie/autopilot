@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo } from 'react'
 import { ArrowLeft, ClockCounterClockwise, ChatTeardrop } from '@phosphor-icons/react'
+import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
@@ -20,18 +21,13 @@ interface ChatThreadProps {
 }
 
 function ThreadMetaChip({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'neutral' | 'live' | 'warning' }) {
-	const toneClass =
-		tone === 'live'
-			? 'bg-info-surface text-info'
-			: tone === 'warning'
-				? 'bg-warning-surface text-warning'
-				: 'bg-muted/40 text-muted-foreground'
+	const variant = tone === 'live' ? 'info' : tone === 'warning' ? 'warning' : 'outline'
 
 	return (
-		<span className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium ${toneClass}`}>
+		<Badge variant={variant} className="max-w-[180px]">
 			<span className="opacity-70">{label}:</span>
-			<span className="max-w-[180px] truncate">{value}</span>
-		</span>
+			<span className="truncate">{value}</span>
+		</Badge>
 	)
 }
 

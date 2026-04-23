@@ -1,14 +1,20 @@
 import { useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { Toaster } from '@/components/ui/sonner'
-import { SidebarProvider, SidebarInset, useSidebar } from '@/components/ui/sidebar'
-import { SidebarTrigger } from '@/components/ui/sidebar'
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
 import { Sidebar } from './sidebar'
-import { Statusbar } from './statusbar'
 import { CommandPalette, useCommandPaletteShortcut } from './command-palette'
 import { LayoutModeContext } from './layout-mode-context'
+import { useHydrateAppPreferences } from '@/hooks/use-app-preferences'
 import { useAutoEvents } from '@/hooks/use-auto-events'
+import { useActiveView } from '@/hooks/use-active-view'
+import { useIsMobile } from '@/hooks/use-mobile'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { ChatWorkspaceContext } from '@/features/chat/chat-workspace-context'
+import { ChatRail } from '@/features/chat/components/chat-rail'
+import { Button } from '@/components/ui/button'
+import { ChatCircle } from '@phosphor-icons/react'
 
 /**
  * Layout mode for the main content area.
@@ -20,56 +26,125 @@ import { useAutoEvents } from '@/hooks/use-auto-events'
  */
 export type LayoutMode = 'wide' | 'default' | 'full' | 'immersive'
 
-function FloatingSidebarTrigger() {
-  const { open } = useSidebar()
-  if (open) return null
-  return (
-    <div className="absolute top-2 left-2 z-50">
-      <SidebarTrigger />
-    </div>
-  )
-}
-
 interface ShellLayoutProps {
-  children: ReactNode
+	children: ReactNode
 }
 
 export function ShellLayout({ children }: ShellLayoutProps) {
-  useAutoEvents()
-  const [commandOpen, setCommandOpen] = useState(false)
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('wide')
-  const openCommand = useCallback(() => setCommandOpen(true), [])
+	useAutoEvents()
+	useHydrateAppPreferences()
+	const [commandOpen, setCommandOpen] = useState(false)
+	const [layoutMode, setLayoutMode] = useState<LayoutMode>('wide')
+	const [chatRailOpen, setChatRailOpen] = useState(true)
+	const [chatHistoryOpen, setChatHistoryOpen] = useState(false)
+	const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(null)
+	const openCommand = useCallback(() => setCommandOpen(true), [])
+	const activeView = useActiveView()
+	const isMobile = useIsMobile()
+	const showDesktopChatRail = chatRailOpen && !isMobile && activeView !== 'chat'
 
-  useCommandPaletteShortcut(openCommand)
+	const chatWorkspace = {
+		open: chatRailOpen,
+		activeSessionId: activeChatSessionId,
+		historyOpen: chatHistoryOpen,
+		showHistory: () => {
+			setChatRailOpen(true)
+			setChatHistoryOpen(true)
+		},
+		openSession: (sessionId: string) => {
+			setChatRailOpen(true)
+			setChatHistoryOpen(false)
+			setActiveChatSessionId(sessionId)
+		},
+		startNewChat: () => {
+			setChatRailOpen(true)
+			setChatHistoryOpen(false)
+			setActiveChatSessionId(null)
+		},
+		setOpen: (open: boolean) => setChatRailOpen(open),
+	}
 
-  return (
-    <LayoutModeContext.Provider value={{ setLayoutMode }}>
-      <SidebarProvider>
-        <Sidebar onSearchOpen={openCommand} />
-        <SidebarInset className="relative h-dvh overflow-hidden">
-          <FloatingSidebarTrigger />
-          <div
-            id="main-content"
-            className="min-h-0 min-w-0 flex-1 overflow-y-auto"
-            tabIndex={-1}
-          >
-            <div
-              className={cn(
-                'min-w-0 h-full',
-                layoutMode === 'default' && 'mx-auto max-w-5xl p-2 md:p-3 lg:p-4',
-                layoutMode === 'wide' && 'p-2 md:p-3',
-                layoutMode === 'full' && 'p-1 md:p-2',
-                layoutMode === 'immersive' && '',
-              )}
-            >
-              {children}
-            </div>
-          </div>
-          <Statusbar />
-        </SidebarInset>
-        <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
-        <Toaster position="bottom-right" />
-      </SidebarProvider>
-    </LayoutModeContext.Provider>
-  )
+	useCommandPaletteShortcut(openCommand)
+
+	return (
+		<ChatWorkspaceContext.Provider value={chatWorkspace}>
+			<LayoutModeContext.Provider value={{ setLayoutMode }}>
+				<SidebarProvider>
+					<Sidebar onSearchOpen={openCommand} />
+					<div className="bg-sidebar pt-3 h-dvh w-full">
+						<SidebarInset className="flex h-full flex-col overflow-hidden rounded-tl-2xl">
+							{showDesktopChatRail ? (
+								<div className="flex min-h-0 flex-1 gap-3 pr-2">
+									<div className="min-h-0 min-w-0 flex-1">
+										<div
+											id="main-content"
+											className="min-h-0 min-w-0 h-full overflow-y-auto"
+											tabIndex={-1}
+										>
+											<div
+												className={cn(
+													'min-w-0 h-full',
+													layoutMode === 'default' && 'mx-auto max-w-5xl p-2 md:p-3 lg:p-4',
+													layoutMode === 'wide' && 'p-2 md:p-3',
+													layoutMode === 'full' && 'p-1 md:p-2',
+													layoutMode === 'immersive' && '',
+												)}
+											>
+												{children}
+											</div>
+										</div>
+									</div>
+									<aside className="h-full w-[420px] shrink-0 min-w-[360px] max-w-[460px] py-2">
+										<ChatRail />
+									</aside>
+								</div>
+							) : (
+								<div
+									id="main-content"
+									className="min-h-0 min-w-0 flex-1 overflow-y-auto"
+									tabIndex={-1}
+								>
+									<div
+										className={cn(
+											'min-w-0 h-full',
+											layoutMode === 'default' && 'mx-auto max-w-5xl p-2 md:p-3 lg:p-4',
+											layoutMode === 'wide' && 'p-2 md:p-3',
+											layoutMode === 'full' && 'p-1 md:p-2',
+											layoutMode === 'immersive' && '',
+										)}
+									>
+										{children}
+									</div>
+								</div>
+							)}
+							{!chatRailOpen && activeView !== 'chat' && (
+								<Button
+									size="icon-sm"
+									variant="outline"
+									onClick={() => setChatRailOpen(true)}
+									className="absolute bottom-4 right-3 z-40 rounded-full bg-background/92 shadow-xs"
+									title="Open chat"
+								>
+									<ChatCircle size={16} weight="fill" />
+								</Button>
+							)}
+						</SidebarInset>
+						{isMobile && activeView !== 'chat' && (
+							<Sheet open={chatRailOpen} onOpenChange={setChatRailOpen}>
+								<SheetContent
+									side="right"
+									className="w-full p-0 sm:max-w-md"
+									showCloseButton={false}
+								>
+									<ChatRail />
+								</SheetContent>
+							</Sheet>
+						)}
+						<CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+						<Toaster position="bottom-right" />
+					</div>
+				</SidebarProvider>
+			</LayoutModeContext.Provider>
+		</ChatWorkspaceContext.Provider>
+	)
 }

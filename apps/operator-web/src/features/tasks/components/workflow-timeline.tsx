@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { CaretRight, ChatCircle } from '@phosphor-icons/react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Markdown } from '@/components/ui/markdown'
-import { MetaChip, MetaChipButton } from '@/components/ui/meta-chip'
 import { surfaceCardVariants } from '@/components/ui/surface-card'
 import { useChatWorkspace } from '@/features/chat/chat-workspace-context'
 import { setDraggedChatAttachment } from '@/features/chat/lib/chat-dnd'
@@ -153,10 +154,10 @@ export function WorkflowTimeline({ entries, className, runSessionIds = {} }: Wor
               {(sessionId || entry.run?.runtime_session_ref) && (
                 <div className="mt-1 ml-4 flex flex-wrap gap-1.5">
 						{sessionId ? (
-							<MetaChipButton
+							<Button
 								onClick={() => openSession(sessionId)}
-								tone="primary"
-								icon={<ChatCircle size={10} />}
+								size="xs"
+								variant="secondary"
 								draggable
 								onDragStart={(e) => {
 									setDraggedChatAttachment(e.dataTransfer, {
@@ -169,12 +170,14 @@ export function WorkflowTimeline({ entries, className, runSessionIds = {} }: Wor
 									})
 								}}
 							>
+								<ChatCircle data-icon="inline-start" />
 								session:{sessionId.slice(0, 8)}
-							</MetaChipButton>
+							</Button>
 						) : (
-							<MetaChip icon={<ChatCircle size={10} />}>
+							<Badge variant="outline">
+								<ChatCircle data-icon="inline-start" />
 								runtime:{entry.run?.runtime_session_ref?.slice(0, 8) ?? 'unknown'}
-							</MetaChip>
+							</Badge>
 						)}
                 </div>
               )}

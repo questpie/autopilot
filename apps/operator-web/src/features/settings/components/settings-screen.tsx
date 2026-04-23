@@ -1,9 +1,13 @@
-import { useAppStore } from '@/stores/app.store'
+import { useNavigate, useSearch } from '@tanstack/react-router'
+import type { AppLocale as Locale, AppTheme as Theme } from '@/stores/app.store'
 import { useSetLayoutMode } from '@/features/shell/layout-mode-context'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ToggleSwitch } from '@/components/ui/toggle-switch'
-import { changeLanguage } from '@/lib/i18n'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { SurfaceSection } from '@/components/ui/surface-section'
+import { useAppPreferences } from '@/hooks/use-app-preferences'
 import { useSession } from '@/hooks/use-session'
+import { MachinesSettings } from './machines-settings'
 import { ProfileSettings } from './profile-settings'
 import { SecuritySettings } from './security-settings'
 import { UsersSettings } from './users-settings'
@@ -17,14 +21,9 @@ interface SettingsSectionProps {
 
 function SettingsSection({ title, children }: SettingsSectionProps) {
   return (
-    <div className="bg-muted/40">
-      <div className="bg-muted/30 px-4 py-3">
-        <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {title}
-        </p>
-      </div>
-      <div>{children}</div>
-    </div>
+    <SurfaceSection title={title} contentClassName="p-0">
+      {children}
+    </SurfaceSection>
   )
 }
 
@@ -38,11 +37,11 @@ interface SettingRowProps {
 
 function SettingRow({ label, description, control }: SettingRowProps) {
   return (
-    <div className="flex items-center justify-between px-4 py-3">
+    <div className="flex items-center justify-between gap-6 px-4 py-4">
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-foreground">{label}</p>
+        <p className="text-sm font-medium text-foreground">{label}</p>
         {description && (
-          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+          <p className="mt-1 text-sm text-muted-foreground text-pretty">{description}</p>
         )}
       </div>
       <div className="ml-4 shrink-0">{control}</div>
@@ -50,82 +49,10 @@ function SettingRow({ label, description, control }: SettingRowProps) {
   )
 }
 
-// ── Theme option button ───────────────────────────────────────────────────────
-
-type Theme = 'dark' | 'light' | 'system'
-
-interface ThemeOptionProps {
-  value: Theme
-  label: string
-  current: Theme
-  onSelect: (theme: Theme) => void
-}
-
-function ThemeOption({ value, label, current, onSelect }: ThemeOptionProps) {
-  const isActive = current === value
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(value)}
-      className={[
-        'px-3 py-1.5 font-mono text-xs transition-colors',
-        isActive
-          ? 'bg-foreground text-background'
-          : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground',
-      ].join(' ')}
-    >
-      {label}
-    </button>
-  )
-}
-
-// ── Locale option button ──────────────────────────────────────────────────────
-
-type Locale = 'sk' | 'en' | 'auto'
-
-interface LocaleOptionProps {
-  value: Locale
-  label: string
-  current: Locale
-  onSelect: (locale: Locale) => void
-}
-
-function LocaleOption({ value, label, current, onSelect }: LocaleOptionProps) {
-  const isActive = current === value
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(value)}
-      className={[
-        'px-3 py-1.5 font-mono text-xs transition-colors',
-        isActive
-          ? 'bg-foreground text-background'
-          : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground',
-      ].join(' ')}
-    >
-      {label}
-    </button>
-  )
-}
-
 // ── App preferences tab ───────────────────────────────────────────────────────
 
 function AppPreferencesTab() {
-  const theme = useAppStore((s) => s.theme)
-  const setTheme = useAppStore((s) => s.setTheme)
-  const locale = useAppStore((s) => s.locale) as Locale
-  const setLocale = useAppStore((s) => s.setLocale)
-  const developerMode = useAppStore((s) => s.developerMode)
-  const setDeveloperMode = useAppStore((s) => s.setDeveloperMode)
-
-  function handleThemeChange(next: Theme) {
-    setTheme(next)
-  }
-
-  function handleLocaleChange(next: Locale) {
-    setLocale(next)
-    changeLanguage(next)
-  }
+  const { theme, setTheme, locale, setLocale, developerMode, setDeveloperMode } = useAppPreferences()
 
   return (
     <div className="space-y-6">
@@ -134,11 +61,19 @@ function AppPreferencesTab() {
           label="Theme"
           description="Controls the color scheme of the interface"
           control={
-            <div className="flex gap-1">
-              <ThemeOption value="dark" label="Dark" current={theme} onSelect={handleThemeChange} />
-              <ThemeOption value="light" label="Light" current={theme} onSelect={handleThemeChange} />
-              <ThemeOption value="system" label="System" current={theme} onSelect={handleThemeChange} />
-            </div>
+            <ToggleGroup
+              value={[theme]}
+              onValueChange={(value) => {
+                if (value[0]) setTheme(value[0] as Theme)
+              }}
+              variant="outline"
+              size="sm"
+              spacing={1}
+            >
+              <ToggleGroupItem value="dark">Dark</ToggleGroupItem>
+              <ToggleGroupItem value="light">Light</ToggleGroupItem>
+              <ToggleGroupItem value="system">System</ToggleGroupItem>
+            </ToggleGroup>
           }
         />
       </SettingsSection>
@@ -148,11 +83,19 @@ function AppPreferencesTab() {
           label="Interface language"
           description="The language used throughout the UI"
           control={
-            <div className="flex gap-1">
-              <LocaleOption value="auto" label="Auto" current={locale} onSelect={handleLocaleChange} />
-              <LocaleOption value="en" label="English" current={locale} onSelect={handleLocaleChange} />
-              <LocaleOption value="sk" label="Slovenčina" current={locale} onSelect={handleLocaleChange} />
-            </div>
+            <ToggleGroup
+              value={[locale]}
+              onValueChange={(value) => {
+                if (value[0]) setLocale(value[0] as Locale)
+              }}
+              variant="outline"
+              size="sm"
+              spacing={1}
+            >
+              <ToggleGroupItem value="auto">Auto</ToggleGroupItem>
+              <ToggleGroupItem value="en">English</ToggleGroupItem>
+              <ToggleGroupItem value="sk">Slovenčina</ToggleGroupItem>
+            </ToggleGroup>
           }
         />
       </SettingsSection>
@@ -186,21 +129,40 @@ function AppPreferencesTab() {
 export function SettingsScreen() {
   useSetLayoutMode('default')
   const { user } = useSession()
+  const navigate = useNavigate()
+  const search = useSearch({ from: '/_authed/settings' })
 
   const canManageUsers = user?.role === 'owner' || user?.role === 'admin'
+  const canManageMachines = canManageUsers
+  const activeTab = search.tab ?? 'profile'
+
+  if (activeTab === 'machines') {
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="text-2xl font-semibold text-foreground">Machines</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Worker connections, join tokens, and machine enrollment.
+          </p>
+        </div>
+
+        <MachinesSettings canManageMachines={canManageMachines} />
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Page heading */}
       <div>
-        <p className="font-mono text-lg font-medium text-foreground">Settings</p>
-        <p className="font-mono text-xs text-muted-foreground">
+        <p className="text-2xl font-semibold text-foreground">Settings</p>
+        <p className="mt-1 text-sm text-muted-foreground">
           Profile, security, and application preferences
         </p>
       </div>
 
-      <Tabs defaultValue="profile">
-        <TabsList variant="line">
+      <Tabs value={activeTab} onValueChange={(value) => void navigate({ to: '/settings', search: { tab: value as 'profile' | 'security' | 'users' | 'preferences' | 'machines' } })}>
+        <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           {canManageUsers && <TabsTrigger value="users">Users</TabsTrigger>}

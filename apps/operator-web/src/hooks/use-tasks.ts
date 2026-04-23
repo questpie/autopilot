@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getTasks, getTaskRelations, getTaskDetail, getTaskActivity, getTaskArtifacts, approveTask, rejectTask, replyTask, retryTask, cancelTask } from '@/api/tasks.api'
+import { createTask, getTasks, getTaskRelations, getTaskDetail, getTaskActivity, getTaskArtifacts, approveTask, rejectTask, replyTask, retryTask, cancelTask, type CreateTaskInput } from '@/api/tasks.api'
+import { chatSessionKeys } from './use-chat-sessions'
+import { queryKeys } from './use-queries'
+import { runKeys } from './use-runs'
 
 export const taskKeys = {
   all: ['tasks'] as const,
@@ -10,11 +13,28 @@ export const taskKeys = {
   artifacts: (id: string) => ['tasks', id, 'artifacts'] as const,
 }
 
+function invalidateTaskSideEffects(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: taskKeys.all })
+  void queryClient.invalidateQueries({ queryKey: chatSessionKeys.all })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.all })
+  void queryClient.invalidateQueries({ queryKey: runKeys.all })
+}
+
 export function useTasks(filters?: { status?: string; assigned_to?: string; workflow_id?: string }) {
   return useQuery({
     queryKey: taskKeys.list(filters),
     queryFn: () => getTasks(filters),
   })
+}
+
+export function useCreateTask() {
+	const queryClient = useQueryClient()
+	return useMutation({
+		mutationFn: (input: CreateTaskInput) => createTask(input),
+		onSuccess: () => {
+			invalidateTaskSideEffects(queryClient)
+		},
+	})
 }
 
 export function useTaskRelations() {
@@ -55,7 +75,7 @@ export function useApproveTask() {
     onSuccess: (_data, id) => {
       void queryClient.invalidateQueries({ queryKey: taskKeys.detail(id) })
       void queryClient.invalidateQueries({ queryKey: taskKeys.activity(id) })
-      void queryClient.invalidateQueries({ queryKey: taskKeys.all })
+      invalidateTaskSideEffects(queryClient)
     },
   })
 }
@@ -67,7 +87,7 @@ export function useRejectTask() {
     onSuccess: (_data, { id }) => {
       void queryClient.invalidateQueries({ queryKey: taskKeys.detail(id) })
       void queryClient.invalidateQueries({ queryKey: taskKeys.activity(id) })
-      void queryClient.invalidateQueries({ queryKey: taskKeys.all })
+      invalidateTaskSideEffects(queryClient)
     },
   })
 }
@@ -79,7 +99,7 @@ export function useReplyTask() {
     onSuccess: (_data, { id }) => {
       void queryClient.invalidateQueries({ queryKey: taskKeys.detail(id) })
       void queryClient.invalidateQueries({ queryKey: taskKeys.activity(id) })
-      void queryClient.invalidateQueries({ queryKey: taskKeys.all })
+      invalidateTaskSideEffects(queryClient)
     },
   })
 }
@@ -91,7 +111,7 @@ export function useRetryTask() {
     onSuccess: (_data, id) => {
       void queryClient.invalidateQueries({ queryKey: taskKeys.detail(id) })
       void queryClient.invalidateQueries({ queryKey: taskKeys.activity(id) })
-      void queryClient.invalidateQueries({ queryKey: taskKeys.all })
+      invalidateTaskSideEffects(queryClient)
     },
   })
 }
@@ -103,7 +123,7 @@ export function useCancelTask() {
     onSuccess: (_data, { id }) => {
       void queryClient.invalidateQueries({ queryKey: taskKeys.detail(id) })
       void queryClient.invalidateQueries({ queryKey: taskKeys.activity(id) })
-      void queryClient.invalidateQueries({ queryKey: taskKeys.all })
+      invalidateTaskSideEffects(queryClient)
     },
   })
 }

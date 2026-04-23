@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { authClient } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SurfaceSection } from '@/components/ui/surface-section'
 import { useSession } from '@/hooks/use-session'
 
 export function ProfileSettings() {
@@ -82,23 +83,17 @@ export function ProfileSettings() {
     changePasswordMutation.mutate({ currentPassword, newPassword })
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Display name */}
-      <div className="bg-muted/40">
-        <div className="bg-muted/30 px-4 py-3">
-          <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Profile
-          </p>
-        </div>
-        <div className="space-y-4 p-4">
-          <div className="space-y-1">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Email</p>
-            <p className="font-mono text-xs text-muted-foreground">{user?.email ?? '—'}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Display Name</p>
-            <div className="flex gap-2">
+	return (
+		<div className="space-y-6">
+			{/* Display name */}
+			<SurfaceSection title="Profile" contentClassName="space-y-4">
+					<div className="space-y-1">
+						<p className="text-xs font-medium text-muted-foreground">Email</p>
+						<p className="text-sm text-muted-foreground">{user?.email ?? '—'}</p>
+					</div>
+					<div className="space-y-1">
+						<p className="text-xs font-medium text-muted-foreground">Display name</p>
+						<div className="flex gap-2">
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -114,49 +109,42 @@ export function ProfileSettings() {
                 {nameSaved ? 'Saved' : 'Save'}
               </Button>
             </div>
-            {nameError && (
-              <p className="font-mono text-xs text-destructive">{nameError}</p>
-            )}
-            {updateNameMutation.error && (
-              <p className="font-mono text-xs text-destructive">
-                {updateNameMutation.error.message}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+						{nameError && (
+							<p className="text-sm text-destructive">{nameError}</p>
+						)}
+						{updateNameMutation.error && (
+							<p className="text-sm text-destructive">
+								{updateNameMutation.error.message}
+							</p>
+						)}
+					</div>
+			</SurfaceSection>
 
-      {/* Change password */}
-      <div className="bg-muted/40">
-        <div className="bg-muted/30 px-4 py-3">
-          <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Change Password
-          </p>
-        </div>
-        <div className="space-y-3 p-4">
-          <div className="space-y-1">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Current Password</p>
-            <Input
+			{/* Change password */}
+			<SurfaceSection title="Change password" contentClassName="space-y-3">
+					<div className="space-y-1">
+						<p className="text-xs font-medium text-muted-foreground">Current password</p>
+						<Input
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               className="max-w-xs"
               placeholder="Current password"
             />
-          </div>
-          <div className="space-y-1">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">New Password</p>
-            <Input
+					</div>
+					<div className="space-y-1">
+						<p className="text-xs font-medium text-muted-foreground">New password</p>
+						<Input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               className="max-w-xs"
               placeholder="Min 12 characters"
             />
-          </div>
-          <div className="space-y-1">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Confirm New Password</p>
-            <Input
+					</div>
+					<div className="space-y-1">
+						<p className="text-xs font-medium text-muted-foreground">Confirm new password</p>
+						<Input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -164,24 +152,23 @@ export function ProfileSettings() {
               placeholder="Repeat new password"
             />
           </div>
-          {passwordError && (
-            <p className="font-mono text-xs text-destructive">{passwordError}</p>
-          )}
-          {changePasswordMutation.error && (
-            <p className="font-mono text-xs text-destructive">
-              {changePasswordMutation.error.message}
-            </p>
-          )}
+					{passwordError && (
+						<p className="text-sm text-destructive">{passwordError}</p>
+					)}
+					{changePasswordMutation.error && (
+						<p className="text-sm text-destructive">
+							{changePasswordMutation.error.message}
+						</p>
+					)}
           <Button
             size="sm"
             variant="outline"
             onClick={handlePasswordChange}
             loading={changePasswordMutation.isPending}
           >
-            {passwordSaved ? 'Password Changed' : 'Change Password'}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
+						{passwordSaved ? 'Password Changed' : 'Change Password'}
+					</Button>
+			</SurfaceSection>
+		</div>
+	)
 }

@@ -1,28 +1,27 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { SupportedLocale } from '@/lib/i18n'
-
-type Theme = 'dark' | 'light' | 'system'
-type Locale = SupportedLocale | 'auto'
+import type { AppLocale, AppTheme } from '@/lib/app-preferences'
 
 interface AppState {
-  theme: Theme
-  setTheme: (theme: Theme) => void
-  locale: Locale
-  setLocale: (locale: Locale) => void
+  theme: AppTheme
+  setTheme: (theme: AppTheme) => void
+  locale: AppLocale
+  setLocale: (locale: AppLocale) => void
   developerMode: boolean
   setDeveloperMode: (enabled: boolean) => void
+  hydratePreferences: (input: Partial<Pick<AppState, 'theme' | 'locale' | 'developerMode'>>) => void
 }
 
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      theme: 'dark' satisfies Theme,
+      theme: 'dark' satisfies AppTheme,
       setTheme: (theme) => set({ theme }),
-      locale: 'auto' satisfies Locale,
+      locale: 'auto' satisfies AppLocale,
       setLocale: (locale) => set({ locale }),
       developerMode: false,
       setDeveloperMode: (developerMode) => set({ developerMode }),
+      hydratePreferences: (input) => set(input),
     }),
     {
       name: 'questpie-app-store',
@@ -34,3 +33,5 @@ export const useAppStore = create<AppState>()(
     },
   ),
 )
+
+export type { AppTheme, AppLocale }

@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner'
 import { Markdown } from '@/components/ui/markdown'
 import { Button } from '@/components/ui/button'
-import { MetaChip } from '@/components/ui/meta-chip'
+import { cn } from '@/lib/utils'
 import { SmartText } from '@/lib/smart-links'
 import { useRunEvents } from '@/hooks/use-runs'
 import { useApproveTask, useRejectTask, useReplyTask } from '@/hooks/use-tasks'
@@ -366,35 +366,54 @@ function renderAttachmentLink(attachment: ChatAttachment) {
 	return <span className="truncate max-w-[280px]">{label}</span>
 }
 
+function getAttachmentLabel(attachment: ChatAttachment) {
+	return attachment.name ?? attachment.label ?? attachment.url ?? attachment.refId ?? 'Attachment'
+}
+
+function getAttachmentMeta(attachment: ChatAttachment) {
+	if (attachment.refType) return attachment.refType
+	if (attachment.mimeType) return attachment.mimeType
+	if (attachment.type) return attachment.type
+	return null
+}
+
 function AttachmentBlock({ attachment, tone = 'muted' }: { attachment: ChatAttachment; tone?: 'muted' | 'subtle' }) {
 	const isText = attachment.type === 'text' && typeof attachment.content === 'string' && attachment.content.length > 0
 	const Icon = isText ? FileText : File
+	const label = getAttachmentLabel(attachment)
+	const meta = getAttachmentMeta(attachment)
 	const containerClass = tone === 'subtle'
-		? 'rounded-md border border-border/40 bg-muted/10 px-3 py-2'
-		: 'rounded-md border border-border/60 bg-background/60 px-3 py-2'
+		? 'rounded-xl border border-border/40 bg-muted/10 px-3 py-3'
+		: 'rounded-xl border border-border/60 bg-background/70 px-3 py-3'
 
 	if (isText) {
-		const label = attachment.name ?? attachment.label ?? attachment.url ?? attachment.refId ?? 'Attachment'
 		const preview = attachment.content!.length > 320
 			? `${attachment.content!.slice(0, 320)}...`
 			: attachment.content!
 		return (
-			<div className={containerClass}>
+			<div className={cn(containerClass, 'min-w-[220px] max-w-[360px]')}>
 				<div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
 					<Icon size={12} />
-					<span className="truncate">{label}</span>
-					{attachment.mimeType && <span className="tabular-nums">{attachment.mimeType}</span>}
+					<span className="truncate font-medium text-foreground">{label}</span>
+					{meta && <span className="truncate tabular-nums">{meta}</span>}
 				</div>
-				<pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground">{preview}</pre>
+				<pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground/90">{preview}</pre>
 			</div>
 		)
 	}
 
 	return (
-		<MetaChip icon={<Icon size={12} />} className="max-w-full">
-			{renderAttachmentLink(attachment)}
-			{attachment.mimeType && <span className="tabular-nums">{attachment.mimeType}</span>}
-		</MetaChip>
+		<div className={cn(containerClass, 'min-w-[200px] max-w-[320px]')}>
+			<div className="flex items-start gap-2">
+				<div className="mt-0.5 shrink-0 text-muted-foreground">
+					<Icon size={14} />
+				</div>
+				<div className="min-w-0 flex-1">
+					<div className="truncate text-sm font-medium text-foreground">{renderAttachmentLink(attachment)}</div>
+					{meta && <div className="mt-1 text-xs text-muted-foreground tabular-nums">{meta}</div>}
+				</div>
+			</div>
+		</div>
 	)
 }
 
@@ -402,7 +421,7 @@ function MessageAttachments({ attachments, tone = 'muted' }: { attachments: Chat
 	if (attachments.length === 0) return null
 
 	return (
-		<div className="mt-2 flex flex-col gap-2">
+		<div className="mb-3 flex flex-wrap gap-2">
 			{attachments.map((attachment, index) => (
 				<AttachmentBlock
 					key={`${attachment.name ?? attachment.label ?? attachment.url ?? attachment.refId ?? 'attachment'}-${index}`}
@@ -628,13 +647,15 @@ export function ChatMessage({
 	if (isUser) {
 		return (
 			<div className="flex w-full items-end flex-col justify-end">
+				<div className="max-w-[72%]">
+					<MessageAttachments attachments={attachments} />
+				</div>
 				<div className="max-w-[72%] rounded-lg bg-secondary px-3 py-2.5 shadow-xs">
 					{message.content && (
 						<p className="font-sans text-sm leading-relaxed text-secondary-foreground whitespace-pre-wrap wrap-break-word">
 							<SmartText text={message.content} />
 						</p>
 					)}
-					<MessageAttachments attachments={attachments} />
 				</div>
 				{!!isNextAssistant && (
 					<p className="text-xs text-muted-foreground tabular-nums">{timestamp}</p>
@@ -646,6 +667,9 @@ export function ChatMessage({
 	// Assistant — one unified block: events interleaved with text, chronological
 	return (
 		<div className="flex w-full flex-col items-start justify-start">
+			<div className="max-w-[85%] px-4">
+				<MessageAttachments attachments={attachments} tone="subtle" />
+			</div>
 			<div className="max-w-[85%] bg-transparent px-4 py-3">
 				{/* <div className="flex items-center gap-4 justify-between">
 					<p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -657,7 +681,6 @@ export function ChatMessage({
 				) : (
 					<Markdown content={message.content} className="prose prose-sm font-sans text-sm" />
 				)}
-				<MessageAttachments attachments={attachments} tone="subtle" />
 				{taskId && <TaskActionBar taskId={taskId} taskNeedsApproval={taskNeedsApproval} />}
 			</div>
 			{!isNextAssistant && (

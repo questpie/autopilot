@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
+import { AnimatePresence, m } from 'framer-motion'
 import { Wrench, CheckCircle, XCircle, ArrowsClockwise, Brain, Globe, FileText, File, Robot, HandPalm } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import { Markdown } from '@/components/ui/markdown'
+import { DURATION, EASING, useMotionPreference } from '@/lib/motion'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -40,6 +42,44 @@ export function ToolCallCard({ summary, status }: ToolCallCardProps) {
       {STATUS_ICONS[status]}
     </div>
   )
+}
+
+function LiveToolCallTicker({ event, isRunning }: { event: RunStreamEvent; isRunning: boolean }) {
+  const motion = useMotionPreference()
+  const isAgent = (event.summary ?? '').startsWith('Agent:')
+  const status = isRunning ? 'running' : 'done'
+  const tickerKey = `${event.eventType ?? event.type}-${event.created_at ?? ''}-${event.summary ?? ''}-${status}`
+
+  return (
+    <div className="min-h-6 overflow-hidden">
+      <AnimatePresence initial={false} mode="wait">
+        <m.div
+          key={tickerKey}
+          initial={motion.shouldReduce ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={motion.shouldReduce ? { opacity: 1, y: 0 } : { opacity: 0, y: -6 }}
+          transition={{
+            duration: motion.d(DURATION.normal),
+            ease: EASING.enter,
+          }}
+        >
+          {isAgent ? (
+            <div className="flex items-center gap-2 py-0.5 pl-4 text-sm text-muted-foreground">
+              <Robot size={10} className="shrink-0" />
+              <span className="truncate flex-1">{event.summary}</span>
+              {STATUS_ICONS[status]}
+            </div>
+          ) : (
+            <ToolCallRow event={event} status={status} />
+          )}
+        </m.div>
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function ToolCallRow({ event, status }: { event: RunStreamEvent; status: 'running' | 'done' | 'error' }) {
+  return <ToolCallCard summary={event.summary ?? 'tool call'} status={status} />
 }
 
 // ── ThinkingBlock ─────────────────────────────────────────────────────────
@@ -137,6 +177,11 @@ export function RunEventFeed({ events, isStreaming }: RunEventFeedProps) {
   const lastThinkingIdx = useMemo(() => findLastIndex(dedupedEvents, (et) => et === 'thinking' || et === 'reasoning'), [dedupedEvents])
   const lastProgressIdx = useMemo(() => findLastIndex(dedupedEvents, (et) => et === 'progress'), [dedupedEvents])
   const lastEventIdx = dedupedEvents.length - 1
+  const currentToolEvent = lastToolUseIdx >= 0 ? dedupedEvents[lastToolUseIdx] ?? null : null
+  const timelineEvents = useMemo(
+    () => dedupedEvents.filter((event) => (event.eventType ?? event.type) !== 'tool_use'),
+    [dedupedEvents],
+  )
 
   if (events.length === 0) return null
 
@@ -148,19 +193,20 @@ export function RunEventFeed({ events, isStreaming }: RunEventFeedProps) {
         </p>
         <div className="flex flex-col gap-0.5">
           {!hasRenderableEvents && isStreaming && <ThinkingBlock isActive />}
-          {dedupedEvents.map((ev, idx) => {
+          {timelineEvents.map((ev, idx) => {
             const et = ev.eventType ?? ev.type
             return (
               <EventRow
-                key={idx}
+                key={`${et}-${ev.created_at ?? idx}-${idx}`}
                 event={ev}
                 eventType={et}
-                isRunning={isStreaming && idx === lastToolUseIdx && idx === lastEventIdx}
-                isActiveThinking={isStreaming && idx === lastThinkingIdx && idx === lastEventIdx}
-                isActiveProgress={isStreaming && idx === lastProgressIdx && idx === lastEventIdx}
+                isRunning={false}
+                isActiveThinking={isStreaming && dedupedEvents[lastThinkingIdx] === ev && lastThinkingIdx === lastEventIdx}
+                isActiveProgress={isStreaming && dedupedEvents[lastProgressIdx] === ev && lastProgressIdx === lastEventIdx}
               />
             )
           })}
+          {currentToolEvent && <LiveToolCallTicker event={currentToolEvent} isRunning={isStreaming && lastToolUseIdx === lastEventIdx} />}
         </div>
       </div>
     </div>

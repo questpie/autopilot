@@ -6,6 +6,7 @@ import { useSetLayoutMode } from '@/features/shell/layout-mode-context'
 import { useAgents } from '@/hooks/use-agents'
 import type { ChatAttachment } from '@/api/types'
 import { cancelRun } from '@/api/runs.api'
+import { buildChatContextAttachment } from '../lib/chat-context'
 import { useChatScreen } from '../hooks/use-chat-screen'
 import { ChatSessionList } from './chat-session-list'
 import { ChatThread } from './chat-thread'
@@ -19,10 +20,12 @@ export function ChatScreen() {
 		activeConversation,
 		activeId,
 		view,
+		contextSearch,
 		searchQuery,
 		setSearchQuery,
 		selectConversation,
 		clearConversation,
+		clearContext,
 		goToHistory,
 		isLoading,
 		sendMutation,
@@ -40,16 +43,19 @@ export function ChatScreen() {
 	const agents = agentsQuery.data ?? []
 	const effectiveAgentId = selectedAgentId ?? agents[0]?.id ?? null
 	const composerAgents = agents.map((a) => ({ id: a.id, name: a.name, model: a.model }))
+	const contextAttachment = buildChatContextAttachment(contextSearch)
+	const contextAttachments = contextAttachment ? [contextAttachment] : []
+	const outgoingAttachments = [...contextAttachments, ...attachments]
 
 	async function handleSend() {
 		const text = composerValue.trim()
-		if (!text && attachments.length === 0) return
+		if (!text && outgoingAttachments.length === 0) return
 
 		if (activeId) {
 			const result = await sendMutation.mutateAsync({
 				sessionId: activeId,
 				message: text,
-				attachments,
+				attachments: outgoingAttachments,
 			})
 			setComposerValue('')
 			setAttachments([])
@@ -61,7 +67,7 @@ export function ChatScreen() {
 			const result = await createMutation.mutateAsync({
 				agentId: effectiveAgentId,
 				message: text,
-				attachments,
+				attachments: outgoingAttachments,
 			})
 			setComposerValue('')
 			setAttachments([])
@@ -119,7 +125,9 @@ export function ChatScreen() {
 					value={composerValue}
 					onChange={setComposerValue}
 					attachments={attachments}
+					contextAttachments={contextAttachments}
 					onAttachmentsChange={setAttachments}
+					onContextAttachmentRemove={() => clearContext()}
 					onSend={() => void handleSend()}
 					onNewSession={handleNew}
 					onStop={() => void handleStop()}
@@ -175,7 +183,9 @@ export function ChatScreen() {
 						value={composerValue}
 						onChange={setComposerValue}
 						attachments={attachments}
+						contextAttachments={contextAttachments}
 						onAttachmentsChange={setAttachments}
+						onContextAttachmentRemove={() => clearContext()}
 						onSend={() => void handleSend()}
 						onNewSession={handleNew}
 						isSending={isSending}
