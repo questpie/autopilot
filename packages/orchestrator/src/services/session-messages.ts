@@ -82,6 +82,33 @@ export class SessionMessageService {
 			.get()
 	}
 
+	/** Create or update the assistant message for a query in place. */
+	async upsertAssistantForQuery(input: {
+		session_id: string
+		query_id: string
+		content: string
+		external_message_id?: string | null
+	}): Promise<SessionMessageRow> {
+		const existing = await this.findAssistantForQuery(input.query_id)
+		if (existing) {
+			await this.updateDelivery(existing.id, {
+				content: input.content,
+				external_message_id: input.external_message_id,
+			})
+			const row = await this.get(existing.id)
+			if (!row) throw new Error(`Failed to read back assistant session message ${existing.id}`)
+			return row
+		}
+
+		return this.create({
+			session_id: input.session_id,
+			role: 'assistant',
+			content: input.content,
+			query_id: input.query_id,
+			external_message_id: input.external_message_id ?? undefined,
+		})
+	}
+
 	/** List the latest N messages for a session, returned in chronological (oldest-first) order. */
 	async listRecent(sessionId: string, limit = 20): Promise<SessionMessageRow[]> {
 		// Select latest N by ordering DESC, then reverse for chronological order

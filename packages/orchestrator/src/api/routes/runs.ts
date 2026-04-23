@@ -13,6 +13,57 @@ import type { ResolvedCapabilities, CapabilityProfile } from '@questpie/autopilo
 import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
 
+function parseEventMetadata(raw: string | null | undefined): Record<string, unknown> | undefined {
+	if (!raw) return undefined
+	try {
+		const parsed = JSON.parse(raw) as Record<string, unknown>
+		return Object.keys(parsed).length > 0 ? parsed : undefined
+	} catch {
+		return undefined
+	}
+}
+
+function parseLastEventId(raw: string | undefined): number | null {
+	if (!raw) return null
+	const parsed = Number.parseInt(raw, 10)
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+async function finalizeLinkedQuery(
+	services: AppEnv['Variables']['services'],
+	runId: string,
+	result: {
+		status: 'completed' | 'failed'
+		summary?: string
+		mutated_repo?: boolean
+		runtime_session_ref?: string
+		error?: string
+	},
+): Promise<void> {
+	const query = await services.queryService.getByRunIdAnyStatus(runId)
+	if (!query) return
+
+	await services.queryService.complete(query.id, {
+		status: result.status,
+		summary: result.summary,
+		mutated_repo: result.mutated_repo,
+		runtime_session_ref: result.runtime_session_ref,
+		error: result.error,
+	})
+
+	if (!query.session_id) return
+
+	const content = result.status === 'failed'
+		? (result.error ?? result.summary ?? 'Query failed.')
+		: (result.summary ?? 'Query completed.')
+
+	await services.sessionMessageService?.upsertAssistantForQuery({
+		session_id: query.session_id,
+		query_id: query.id,
+		content,
+	})
+}
+
 const runs = new Hono<AppEnv>()
 	// GET /runs — list runs (optional status/agent/task filter)
 	.get(
@@ -66,18 +117,28 @@ const runs = new Hono<AppEnv>()
 			const { id } = c.req.valid('param')
 			const run = await runService.get(id)
 			if (!run) return c.json({ error: 'run not found' }, 404)
+			const lastEventId = parseLastEventId(c.req.header('last-event-id') ?? undefined)
 
 			const { readable, writable } = new TransformStream()
 			const writer = writable.getWriter()
 			const encoder = new TextEncoder()
 
-			function send(data: string): void {
-				writer.write(encoder.encode(`data: ${data}\n\n`)).catch(() => {})
+			function send(data: string, eventId?: number): void {
+				const prefix = eventId ? `id: ${eventId}\n` : ''
+				writer.write(encoder.encode(`${prefix}data: ${data}\n\n`)).catch(() => {})
 			}
 
-			const existingEvents = await runService.getEvents(id)
+			const existingEvents = lastEventId === null
+				? await runService.getEvents(id)
+				: await runService.getEventsSince(id, lastEventId)
 			for (const evt of existingEvents) {
-				send(JSON.stringify({ type: 'run_event', eventType: evt.type, summary: evt.summary, created_at: evt.created_at }))
+				send(JSON.stringify({
+					type: 'run_event',
+					eventType: evt.type,
+					summary: evt.summary,
+					created_at: evt.created_at,
+					metadata: parseEventMetadata(evt.metadata),
+				}), evt.id)
 			}
 
 			const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
@@ -95,7 +156,13 @@ const runs = new Hono<AppEnv>()
 
 			const unsubscribe = eventBus.subscribe((event) => {
 				if (event.type === 'run_event' && event.runId === id) {
-					send(JSON.stringify({ type: 'run_event', eventType: event.eventType, summary: event.summary }))
+					send(JSON.stringify({
+						type: 'run_event',
+						eventType: event.eventType,
+						summary: event.summary,
+						created_at: event.created_at,
+						metadata: event.metadata,
+					}), event.eventId)
 				} else if (event.type === 'run_completed' && event.runId === id) {
 					runService.get(id).then((finalRun) => {
 						send(JSON.stringify({ type: 'run_completed', status: event.status, summary: finalRun?.summary ?? '' }))
@@ -231,17 +298,21 @@ const runs = new Hono<AppEnv>()
 				})
 			}
 
+			const metadata = { artifact_id: artId, kind: normalizedKind, preview_url: previewUrl }
+			const event = await runService.appendEvent(id, {
+				type: 'artifact',
+				summary: body.title,
+				metadata: JSON.stringify(metadata),
+			})
+
 			eventBus.emit({
 				type: 'run_event',
 				runId: id,
 				eventType: 'artifact',
 				summary: body.title,
-			})
-
-			await runService.appendEvent(id, {
-				type: 'artifact',
-				summary: body.title,
-				metadata: JSON.stringify({ artifact_id: artId, kind: normalizedKind, preview_url: previewUrl }),
+				eventId: event?.id,
+				created_at: event?.created_at,
+				metadata,
 			})
 
 			return c.json({ id: artId, preview_url: previewUrl }, 201)
@@ -309,9 +380,14 @@ const runs = new Hono<AppEnv>()
 			// If first event is 'started', transition to running
 			if (run.status === 'claimed' && body.type === 'started') {
 				await runService.start(id)
+				eventBus.emit({
+					type: 'run_started',
+					runId: id,
+					agentId: run.agent_id,
+				})
 			}
 
-			await runService.appendEvent(id, {
+			const event = await runService.appendEvent(id, {
 				type: body.type,
 				summary: body.summary,
 				metadata: body.metadata ? JSON.stringify(body.metadata) : undefined,
@@ -322,6 +398,9 @@ const runs = new Hono<AppEnv>()
 				runId: id,
 				eventType: body.type,
 				summary: body.summary,
+				eventId: event?.id,
+				created_at: event?.created_at,
+				metadata: body.metadata,
 			})
 
 			return c.json({ ok: true as const }, 200)
@@ -333,7 +412,8 @@ const runs = new Hono<AppEnv>()
 		zValidator('param', z.object({ id: z.string() })),
 		zValidator('json', RunCompletionSchema),
 		async (c) => {
-			const { runService, workerService, workflowEngine, artifactService } = c.get('services')
+			const services = c.get('services')
+			const { runService, workerService, workflowEngine, artifactService } = services
 			const { id } = c.req.valid('param')
 			const body = c.req.valid('json')
 
@@ -357,13 +437,13 @@ const runs = new Hono<AppEnv>()
 			})
 
 			// Register artifacts reported by the worker
-			const validArtifactKinds = new Set(ArtifactKindSchema.options)
 			let hasPreviewFiles = false
 			let previewEntry: string | null = null
 			const previewFileTitles: string[] = []
 			if (body.artifacts?.length) {
 				for (const art of body.artifacts) {
-					const normalizedKind = validArtifactKinds.has(art.kind) ? art.kind : 'other'
+					const kindParse = ArtifactKindSchema.safeParse(art.kind)
+					const normalizedKind = kindParse.success ? kindParse.data : 'other'
 					const artMetadata = art.metadata ? { ...art.metadata } : {}
 					if (normalizedKind !== art.kind) {
 						artMetadata.original_kind = art.kind
@@ -421,6 +501,15 @@ const runs = new Hono<AppEnv>()
 				})
 			}
 
+			const hasMutation = body.artifacts?.some((a) => a.kind === 'changed_file') ?? false
+			await finalizeLinkedQuery(services, id, {
+				status: body.status,
+				summary: body.summary,
+				mutated_repo: hasMutation,
+				runtime_session_ref: body.runtime_session_ref,
+				error: body.error,
+			})
+
 			// Release worker lease for this run + update worker status
 			if (run.worker_id) {
 				const lease = await workerService.getActiveLeaseForRun(run.worker_id, id)
@@ -439,22 +528,6 @@ const runs = new Hono<AppEnv>()
 				runId: id,
 				status: body.status,
 			})
-
-			// Query completion: if this run belongs to a query, update the query record
-			const { queryService } = c.get('services')
-			if (queryService) {
-				const queryRow = await queryService.getByRunId(id)
-				if (queryRow) {
-					const hasMutation = body.artifacts?.some((a) => a.kind === 'changed_file') ?? false
-					await queryService.complete(queryRow.id, {
-						status: body.status,
-						summary: body.summary,
-						mutated_repo: hasMutation,
-						runtime_session_ref: body.runtime_session_ref,
-						error: body.error,
-					})
-				}
-			}
 
 			// Workflow progression: advance on success, mark failed on failure
 			if (run.task_id) {
@@ -483,7 +556,8 @@ const runs = new Hono<AppEnv>()
 		zValidator('param', z.object({ id: z.string() })),
 		zValidator('json', z.object({ reason: z.string().optional() }).optional()),
 		async (c) => {
-			const { runService, workerService, workflowEngine } = c.get('services')
+			const services = c.get('services')
+			const { runService, workerService, workflowEngine } = services
 			const { id } = c.req.valid('param')
 			const body = c.req.valid('json')
 
@@ -512,6 +586,12 @@ const runs = new Hono<AppEnv>()
 			if (run.task_id) {
 				await workflowEngine.handleRunFailure(run.task_id, id)
 			}
+
+			await finalizeLinkedQuery(services, id, {
+				status: 'failed',
+				summary: result.summary ?? undefined,
+				error: result.error ?? undefined,
+			})
 
 			eventBus.emit({ type: 'run_completed', runId: id, status: 'failed' })
 

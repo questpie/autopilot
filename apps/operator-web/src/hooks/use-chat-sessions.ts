@@ -1,3 +1,4 @@
+import type { ChatAttachment } from '@/api/types'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getChatSessions,
@@ -31,8 +32,15 @@ export function useChatMessages(id: string | null) {
 export function useCreateChatSession() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ agentId, message }: { agentId: string; message: string }) =>
-      createChatSession(agentId, message),
+    mutationFn: ({
+      agentId,
+      message,
+      attachments,
+    }: {
+      agentId: string
+      message: string
+      attachments?: ChatAttachment[]
+    }) => createChatSession(agentId, message, attachments),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: chatSessionKeys.all })
       void queryClient.invalidateQueries({ queryKey: queryKeys.all })
@@ -43,8 +51,15 @@ export function useCreateChatSession() {
 export function useSendChatMessage() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ sessionId, message }: { sessionId: string; message: string }) =>
-      sendChatMessage(sessionId, message),
+    mutationFn: ({
+      sessionId,
+      message,
+      attachments,
+    }: {
+      sessionId: string
+      message: string
+      attachments?: ChatAttachment[]
+    }) => sendChatMessage(sessionId, message, attachments),
     onSuccess: (_data, { sessionId }) => {
       void queryClient.invalidateQueries({ queryKey: chatSessionKeys.messages(sessionId) })
       void queryClient.invalidateQueries({ queryKey: chatSessionKeys.list() })

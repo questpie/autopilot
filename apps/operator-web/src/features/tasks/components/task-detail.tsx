@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeft, ChatCircle, Timer, Lightning, FileText, ArrowSquareOut, Check, X, ArrowBendUpLeft, ArrowCounterClockwise, Stop } from '@phosphor-icons/react'
+import { ArrowLeft, ChatCircle, Timer, Lightning, Check, X, ArrowBendUpLeft, ArrowCounterClockwise, Stop } from '@phosphor-icons/react'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/ui/status-pill'
@@ -14,13 +14,20 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { KvList } from '@/components/ui/kv-list'
+import { InspectorLayout } from '@/components/ui/inspector-layout'
+import { MetaChip, MetaChipButton } from '@/components/ui/meta-chip'
+import { surfaceCardVariants } from '@/components/ui/surface-card'
 import { taskStatusToPill } from '@/lib/status-colors'
 import { cn } from '@/lib/utils'
 import { SmartText } from '@/lib/smart-links'
 import type { TaskWithRelations, Task } from '@/api/types'
+import { useQueryList } from '@/hooks/use-queries'
+import { useSessions } from '@/hooks/use-sessions'
 import { useWorkflows } from '@/hooks/use-workflows'
 import { useRuns } from '@/hooks/use-runs'
 import { useTaskArtifacts, useApproveTask, useRejectTask, useReplyTask, useRetryTask, useCancelTask } from '@/hooks/use-tasks'
+import { useChatWorkspace } from '@/features/chat/chat-workspace-context'
+import { setDraggedChatAttachment } from '@/features/chat/lib/chat-dnd'
 import { buildTimeline } from '../lib/build-timeline'
 import { WorkflowTimeline } from './workflow-timeline'
 import { RunViewerSheet } from './run-viewer-sheet'
@@ -76,16 +83,16 @@ function RelationChip({
   relation: string
   onSelect?: (id: string) => void
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect ? () => onSelect(task.id) : undefined}
-      className={cn(
-        'inline-flex items-center gap-1.5 bg-muted/40 px-2 py-1 text-left transition-colors',
-        onSelect && 'hover:bg-muted cursor-pointer',
-        !onSelect && 'cursor-default',
-      )}
-    >
+	return (
+		<button
+			type="button"
+			onClick={onSelect ? () => onSelect(task.id) : undefined}
+			className={cn(
+				surfaceCardVariants({ size: 'sm', interactive: !!onSelect }),
+				'inline-flex items-center gap-1.5 text-left',
+				!onSelect && 'cursor-default',
+			)}
+		>
       <span className="text-[10px] text-muted-foreground">{relation}</span>
       <span className="truncate text-[12px] text-foreground max-w-[200px]">{task.title}</span>
     </button>
@@ -95,19 +102,24 @@ function RelationChip({
 // ── Action dialog state type ────────────────────────────────────────────────
 type ActionDialog = 'approve' | 'reject' | 'reply' | 'cancel' | null
 
+const LIVE_RUN_STATUSES = new Set(['pending', 'claimed', 'running'])
+
 export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDetailProps) {
   // ALL hooks before any early returns (React hooks rule)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [actionDialog, setActionDialog] = useState<ActionDialog>(null)
   const [actionMessage, setActionMessage] = useState('')
   const workflowsQuery = useWorkflows()
+  const queriesQuery = useQueryList()
   const runsQuery = useRuns(detail?.id ? { task_id: detail.id } : undefined)
   const artifactsQuery = useTaskArtifacts(detail?.id ?? null)
+  const sessionsQuery = useSessions()
   const approveTask = useApproveTask()
   const rejectTask = useRejectTask()
   const replyTask = useReplyTask()
   const retryTaskMutation = useRetryTask()
   const cancelTaskMutation = useCancelTask()
+  const { openSession } = useChatWorkspace()
 
   const workflow = detail?.workflow_id
     ? (workflowsQuery.data ?? []).find((w) => w.id === detail.workflow_id) ?? null
@@ -124,12 +136,54 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
     return buildTimeline(workflow.steps, runsQuery.data, detail.workflow_step ?? null, metadata)
   }, [workflow, runsQuery.data, detail])
 
+  const relatedSessions = useMemo(() => {
+    if (!detail) return []
+    const runtimeRefs = new Set(
+      detail.runs
+        .map((run) => run.runtime_session_ref)
+        .filter((value): value is string => value !== null),
+    )
+
+    return (sessionsQuery.data ?? [])
+      .filter((session) => {
+        if (session.task_id === detail.id) return true
+        return !!session.runtime_session_ref && runtimeRefs.has(session.runtime_session_ref)
+      })
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+  }, [detail, sessionsQuery.data])
+
+  const runSessionIds = useMemo(() => {
+    if (!detail) return {}
+
+    const querySessionIds = new Map(
+      (queriesQuery.data ?? []).flatMap((query) => (
+        query.run_id && query.session_id ? [[query.run_id, query.session_id] as const] : []
+      )),
+    )
+
+    const sessionByRuntimeRef = new Map(
+      relatedSessions.flatMap((session) => (
+        session.runtime_session_ref ? [[session.runtime_session_ref, session.id] as const] : []
+      )),
+    )
+
+    return Object.fromEntries(
+      detail.runs.flatMap((run) => {
+        const querySessionId = querySessionIds.get(run.id)
+        if (querySessionId) return [[run.id, querySessionId] as const]
+
+        const sessionId = run.runtime_session_ref ? sessionByRuntimeRef.get(run.runtime_session_ref) : undefined
+        return sessionId ? [[run.id, sessionId] as const] : []
+      }),
+    )
+  }, [detail, queriesQuery.data, relatedSessions])
+
   // ── Action bar conditions ────────────────────────────────────────────────
   const currentStep = workflow && detail?.workflow_step
     ? workflow.steps.find((s) => s.id === detail.workflow_step) ?? null
     : null
-  const isHumanApproval = currentStep?.type === 'human_approval' && detail?.status === 'active'
-  const canReply = detail?.type === 'task'
+  const isHumanApproval = currentStep?.type === 'human_approval' && detail?.status === 'blocked'
+  const canReply = isHumanApproval
   const canRetry = detail?.status === 'failed'
   const canCancel = detail?.status === 'active' || detail?.status === 'backlog' || detail?.status === 'blocked'
 
@@ -166,8 +220,8 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 
   if (isLoading && !detail) {
     return (
-      <div className="flex h-full flex-col">
-        <div className="flex items-center gap-3 px-4 py-3 shrink-0">
+			<div className="flex h-full flex-col">
+				<div className="flex items-center gap-3 px-4 py-3 shrink-0">
           <Button size="icon-xs" variant="ghost" onClick={onBack} title="Back to tasks">
             <ArrowLeft size={14} weight="bold" />
           </Button>
@@ -202,59 +256,265 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
     detail.dependencies.length > 0 ||
     detail.dependents.length > 0
 
-  return (
-    <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 shrink-0">
-        <Button size="icon-xs" variant="ghost" onClick={onBack} title="Back to tasks">
-          <ArrowLeft size={14} weight="bold" />
+  const header = (
+    <div className="flex items-center gap-3">
+      <Button size="icon-xs" variant="ghost" onClick={onBack} title="Back to tasks">
+        <ArrowLeft size={14} weight="bold" />
+      </Button>
+      <span className="text-xs text-muted-foreground tabular-nums">{detail.id.slice(0, 12)}…</span>
+      <div className="flex-1" />
+      <StatusPill
+        status={taskStatusToPill(detail.status)}
+        pulse={detail.status === 'active'}
+      />
+      {isHumanApproval && (
+        <>
+          <Button size="xs" variant="default" onClick={() => setActionDialog('approve')}>
+            <Check size={11} weight="bold" />
+            Approve
+          </Button>
+          <Button size="xs" variant="destructive" onClick={() => setActionDialog('reject')}>
+            <X size={11} weight="bold" />
+            Reject
+          </Button>
+        </>
+      )}
+      {canReply && (
+        <Button size="xs" variant="outline" onClick={() => setActionDialog('reply')}>
+          <ArrowBendUpLeft size={11} weight="bold" />
+          Reply
         </Button>
-        <span className="font-mono text-[11px] text-muted-foreground">{detail.id.slice(0, 12)}…</span>
-        <div className="flex-1" />
-        <StatusPill
-          status={taskStatusToPill(detail.status)}
-          pulse={detail.status === 'active'}
-        />
-        {isHumanApproval && (
+      )}
+      {canRetry && (
+        <Button size="xs" variant="outline" onClick={handleRetry} loading={retryTaskMutation.isPending}>
+          <ArrowCounterClockwise size={11} weight="bold" />
+          Retry
+        </Button>
+      )}
+      {canCancel && (
+        <Button size="xs" variant="destructive" onClick={() => setActionDialog('cancel')}>
+          <Stop size={11} weight="bold" />
+          Cancel
+        </Button>
+      )}
+    </div>
+  )
+
+  const content = (
+    <>
+      <h1
+        className="text-xl font-semibold leading-snug text-foreground"
+        draggable
+        onDragStart={(e) => {
+          setDraggedChatAttachment(e.dataTransfer, {
+            type: 'ref',
+            source: 'drag',
+            label: `Task ${detail.id.slice(0, 8)} ${detail.title}`,
+            refType: 'task',
+            refId: detail.id,
+            metadata: { view: 'tasks', taskId: detail.id },
+          })
+        }}
+      >
+        <SmartText text={detail.title} />
+      </h1>
+
+      {detail.description && (
+        <Markdown content={detail.description} className="mt-4 text-[13px]" />
+      )}
+
+      {workflow && timelineEntries.length > 0 && (
+        <>
+          <div className="my-4" />
+          <div className="mb-3 flex items-center gap-2">
+            <p className="text-sm font-medium text-muted-foreground">Workflow</p>
+            <Link
+              to="/files"
+              search={{ path: `.autopilot/workflows/${detail.workflow_id}.yaml`, view: 'file' }}
+              className="text-sm text-primary hover:underline"
+            >
+              {workflow.name}
+            </Link>
+          </div>
+          <WorkflowTimeline entries={timelineEntries} runSessionIds={runSessionIds} />
+        </>
+      )}
+
+      {detail.runs.length > 0 && !(workflow && timelineEntries.length > 0) && (
+        <>
+          <div className="my-4" />
+          <p className="mb-3 text-sm font-medium text-muted-foreground">Runs</p>
+          <div className="space-y-1.5">
+            {detail.runs.map((run) => {
+              const runArtifacts = (artifactsQuery.data ?? []).filter((a) => a.run_id === run.id)
+              return (
+                <div key={run.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRunId(run.id)}
+                    draggable
+                    onDragStart={(e) => {
+                      setDraggedChatAttachment(e.dataTransfer, {
+                        type: 'ref',
+                        source: 'drag',
+                        label: `Run ${run.id.slice(0, 8)}`,
+                        refType: 'run',
+                        refId: run.id,
+                        metadata: { runId: run.id, taskId: detail.id },
+                      })
+                    }}
+                    className={cn(surfaceCardVariants({ size: 'sm', interactive: true }), 'w-full text-left')}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <StatusPill status={taskStatusToPill(run.status)} pulse={LIVE_RUN_STATUSES.has(run.status)} />
+                      <div className="flex items-center gap-2 flex-wrap justify-end">
+                        {runArtifacts.length > 0 && (
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            {runArtifacts.length} artifact{runArtifacts.length !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {run.worker_id && (
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            worker:{run.worker_id.slice(0, 8)}
+                          </span>
+                        )}
+                        <span className="text-xs text-muted-foreground">{run.agent_id}</span>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground tabular-nums">{run.id.slice(0, 16)}…</p>
+                    {run.summary && (
+                      <div className="mt-1.5">
+                        <Markdown content={run.summary} className="text-[12px]" />
+                      </div>
+                    )}
+                    {run.error && (
+                      <div className="mt-1 bg-destructive-surface px-2 py-1.5">
+                        <Markdown content={run.error} className="text-[12px] text-destructive" />
+                      </div>
+                    )}
+                    <div className="mt-1.5 flex flex-wrap gap-3">
+                      {run.runtime_session_ref && (
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          runtime:{run.runtime_session_ref.slice(0, 12)}
+                        </span>
+                      )}
+                      {run.preferred_worker_id && !run.worker_id && (
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          preferred:{run.preferred_worker_id.slice(0, 8)}
+                        </span>
+                      )}
+                      {run.model && <span className="text-xs text-muted-foreground">{run.model}</span>}
+                      {run.started_at && (
+                        <span className="text-xs text-muted-foreground tabular-nums">{formatTimestamp(run.started_at)}</span>
+                      )}
+                    </div>
+                  </button>
+                  {(runSessionIds[run.id] || run.runtime_session_ref) && (
+                    <div className="mt-1 flex flex-wrap gap-1.5 pl-3">
+							{runSessionIds[run.id] ? (
+								<MetaChipButton
+									onClick={() => openSession(runSessionIds[run.id]!)}
+									tone="primary"
+									icon={<ChatCircle size={10} />}
+									draggable
+									onDragStart={(e) => {
+										setDraggedChatAttachment(e.dataTransfer, {
+											type: 'ref',
+											source: 'drag',
+											label: `Session ${runSessionIds[run.id]!.slice(0, 8)}`,
+											refType: 'session',
+											refId: runSessionIds[run.id]!,
+											metadata: { sessionId: runSessionIds[run.id]!, runId: run.id },
+										})
+									}}
+								>
+									session:{runSessionIds[run.id].slice(0, 8)}
+								</MetaChipButton>
+							) : (
+								<MetaChip icon={<ChatCircle size={10} />}>
+									runtime:{run.runtime_session_ref?.slice(0, 8) ?? 'unknown'}
+								</MetaChip>
+							)}
+                    </div>
+                  )}
+                  {runArtifacts.length > 0 && (
+                    <div className="mt-1 pl-3">
+                      <ArtifactList artifacts={runArtifacts} />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {(() => {
+        const allArtifacts = artifactsQuery.data ?? []
+        if (allArtifacts.length === 0) return null
+        return (
           <>
-            <Button size="xs" variant="default" onClick={() => setActionDialog('approve')}>
-              <Check size={11} weight="bold" />
-              Approve
-            </Button>
-            <Button size="xs" variant="destructive" onClick={() => setActionDialog('reject')}>
-              <X size={11} weight="bold" />
-              Reject
-            </Button>
+            <div className="my-4" />
+            <p className="mb-3 text-sm font-medium text-muted-foreground">Artifacts</p>
+            <ArtifactList artifacts={allArtifacts} />
           </>
-        )}
-        {canReply && (
-          <Button size="xs" variant="outline" onClick={() => setActionDialog('reply')}>
-            <ArrowBendUpLeft size={11} weight="bold" />
-            Reply
-          </Button>
-        )}
-        {canRetry && (
-          <Button size="xs" variant="outline" onClick={handleRetry} loading={retryTaskMutation.isPending}>
-            <ArrowCounterClockwise size={11} weight="bold" />
-            Retry
-          </Button>
-        )}
-        {canCancel && (
-          <Button size="xs" variant="destructive" onClick={() => setActionDialog('cancel')}>
-            <Stop size={11} weight="bold" />
-            Cancel
-          </Button>
-        )}
-      </div>
+        )
+      })()}
+    </>
+  )
 
-      {/* Run viewer sheet */}
-      <RunViewerSheet runId={selectedRunId} onClose={() => setSelectedRunId(null)} />
+  const sidebar = (
+    <>
+      <KvList
+        items={[
+          ...(detail.assigned_to
+            ? [{ label: 'Agent', value: <span className="text-sm">{detail.assigned_to}</span> }]
+            : []),
+          { label: 'Priority', value: <span className="text-[12px] capitalize">{detail.priority}</span> },
+          { label: 'Type', value: <TaskTypeBadge type={detail.type} /> },
+          ...(workflow
+            ? [{ label: 'Workflow', value: <span className="text-sm">{workflow.name}</span> }]
+            : []),
+          ...(detail.workflow_step
+            ? [{ label: 'Current Step', value: <span className="text-sm">{detail.workflow_step}</span> }]
+            : []),
+          { label: 'Created', value: <span className="text-xs text-muted-foreground tabular-nums">{formatTimestamp(detail.created_at)}</span> },
+          { label: 'Updated', value: <span className="text-xs text-muted-foreground tabular-nums">{formatTimestamp(detail.updated_at)}</span> },
+        ]}
+      />
 
-      {/* Approve dialog */}
+      {hasRelated && (
+        <>
+          <div className="mt-5" />
+          <p className="mb-2 mt-4 text-sm font-medium text-muted-foreground">Relations</p>
+          <div className="flex flex-wrap gap-1.5">
+            {detail.parents.map((t) => (
+              <RelationChip key={t.id} task={t} relation="parent" onSelect={onSelectTask} />
+            ))}
+            {detail.children.map((t) => (
+              <RelationChip key={t.id} task={t} relation="child" onSelect={onSelectTask} />
+            ))}
+            {detail.dependencies.map((t) => (
+              <RelationChip key={t.id} task={t} relation="depends on" onSelect={onSelectTask} />
+            ))}
+            {detail.dependents.map((t) => (
+              <RelationChip key={t.id} task={t} relation="blocks" onSelect={onSelectTask} />
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+
+  return (
+		<>
+			<RunViewerSheet runId={selectedRunId} onClose={() => setSelectedRunId(null)} />
+
+			{/* Approve dialog */}
       <Dialog open={actionDialog === 'approve'} onOpenChange={(open) => { if (!open) closeActionDialog() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xs uppercase tracking-widest">Approve Step</DialogTitle>
+					<DialogTitle className="text-sm font-semibold">Approve step</DialogTitle>
           </DialogHeader>
           <p className="text-[13px] text-muted-foreground">
             Approve this workflow step? The workflow will advance to the next step.
@@ -272,10 +532,10 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
       <Dialog open={actionDialog === 'reject'} onOpenChange={(open) => { if (!open) closeActionDialog() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xs uppercase tracking-widest">Reject Step</DialogTitle>
+					<DialogTitle className="text-sm font-semibold">Reject step</DialogTitle>
           </DialogHeader>
           <Textarea
-            className="font-mono text-xs"
+					className="text-sm"
             placeholder="Reason for rejection (required)..."
             rows={4}
             value={actionMessage}
@@ -301,10 +561,10 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
       <Dialog open={actionDialog === 'reply'} onOpenChange={(open) => { if (!open) closeActionDialog() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xs uppercase tracking-widest">Reply to Task</DialogTitle>
+					<DialogTitle className="text-sm font-semibold">Reply to task</DialogTitle>
           </DialogHeader>
           <Textarea
-            className="font-mono text-xs"
+					className="text-sm"
             placeholder="Send a reply message..."
             rows={4}
             value={actionMessage}
@@ -330,10 +590,10 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
       <Dialog open={actionDialog === 'cancel'} onOpenChange={(open) => { if (!open) closeActionDialog() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xs uppercase tracking-widest">Cancel Task</DialogTitle>
+					<DialogTitle className="text-sm font-semibold">Cancel task</DialogTitle>
           </DialogHeader>
           <Textarea
-            className="font-mono text-xs"
+					className="text-sm"
             placeholder="Reason for cancellation (required)..."
             rows={4}
             value={actionMessage}
@@ -355,222 +615,13 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
         </DialogContent>
       </Dialog>
 
-      {/* Two-column content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left column */}
-        <div className="flex-1 min-w-0 overflow-y-auto px-6 py-6">
-          {/* Title */}
-          <h1 className="text-xl font-semibold leading-snug text-foreground">
-            <SmartText text={detail.title} />
-          </h1>
-
-          {/* Description */}
-          {detail.description && (
-            <Markdown content={detail.description} className="mt-6 text-[13px]" />
-          )}
-
-          {/* Workflow Timeline */}
-          {workflow && timelineEntries.length > 0 && (
-            <>
-              <div className="my-5" />
-              <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Workflow Progress</p>
-              <WorkflowTimeline entries={timelineEntries} />
-            </>
-          )}
-
-          {/* Cross-references — workflow link, artifact file links, session links */}
-          {(() => {
-            const fileArtifacts = (artifactsQuery.data ?? []).filter(
-              (a) => a.ref_kind === 'file' && a.ref_value,
-            )
-            const sessionRefs = detail.runs
-              .map((r) => r.runtime_session_ref)
-              .filter((s): s is string => s !== null)
-            const uniqueSessions = [...new Set(sessionRefs)]
-            const hasRefs = detail.workflow_id || fileArtifacts.length > 0 || uniqueSessions.length > 0
-            if (!hasRefs) return null
-            return (
-              <>
-                <div className="my-5" />
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Cross-references
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {detail.workflow_id && workflow && (
-                    <span className="inline-flex items-center gap-1 bg-muted/40 px-2 py-1 font-mono text-[11px] text-foreground">
-                      <ArrowSquareOut size={10} className="text-muted-foreground" />
-                      workflow:{' '}
-                      <Link
-                        to="/files"
-                        search={{ path: `.autopilot/workflows/${detail.workflow_id}.yaml`, view: 'file' }}
-                        className="text-primary hover:underline"
-                      >
-                        {workflow.name}
-                      </Link>
-                    </span>
-                  )}
-                  {uniqueSessions.map((sid) => (
-                    <Link
-                      key={sid}
-                      to="/chat"
-                      search={{ sessionId: sid }}
-                      className="inline-flex items-center gap-1 bg-muted/40 px-2 py-1 font-mono text-[11px] text-primary hover:bg-muted"
-                    >
-                      <ChatCircle size={10} />
-                      session:{sid.slice(0, 8)}
-                    </Link>
-                  ))}
-                  {fileArtifacts.map((a) => (
-                    <Link
-                      key={a.id}
-                      to="/files"
-                      search={{ path: a.ref_value, view: 'file' }}
-                      className="inline-flex items-center gap-1 bg-muted/40 px-2 py-1 font-mono text-[11px] text-primary hover:bg-muted"
-                    >
-                      <FileText size={10} />
-                      {a.title || a.ref_value.split('/').pop() || a.ref_value}
-                    </Link>
-                  ))}
-                </div>
-              </>
-            )
-          })()}
-
-          {/* Runs (non-workflow tasks only) */}
-          {!workflow && detail.runs.length > 0 && (
-            <>
-              <div className="my-5" />
-              <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Runs</p>
-              <div className="space-y-2">
-                {detail.runs.map((run) => {
-                  const runArtifacts = (artifactsQuery.data ?? []).filter((a) => a.run_id === run.id)
-                  return (
-                    <div key={run.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedRunId(run.id)}
-                        className="w-full text-left bg-muted/40 px-3 py-2.5 hover:bg-muted transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <StatusPill status={taskStatusToPill(run.status)} />
-                          <div className="flex items-center gap-2">
-                            {runArtifacts.length > 0 && (
-                              <span className="font-mono text-[10px] text-muted-foreground">
-                                {runArtifacts.length} artifact{runArtifacts.length !== 1 ? 's' : ''}
-                              </span>
-                            )}
-                            <span className="font-mono text-[11px] text-muted-foreground">{run.agent_id}</span>
-                          </div>
-                        </div>
-                        <p className="mt-1 font-mono text-[10px] text-muted-foreground">{run.id.slice(0, 16)}…</p>
-                        {run.summary && (
-                          <div className="mt-1.5">
-                            <Markdown content={run.summary} className="text-[12px]" />
-                          </div>
-                        )}
-                        {run.error && (
-                          <div className="mt-1 bg-destructive-surface px-2 py-1.5">
-                            <Markdown content={run.error} className="text-[12px] text-destructive" />
-                          </div>
-                        )}
-                        <div className="mt-1.5 flex gap-3">
-                          {run.model && <span className="font-mono text-[10px] text-muted-foreground">{run.model}</span>}
-                          {run.started_at && (
-                            <span className="font-mono text-[10px] text-muted-foreground">{formatTimestamp(run.started_at)}</span>
-                          )}
-                        </div>
-                      </button>
-                      {runArtifacts.length > 0 && (
-                        <div className="mt-1 pl-3">
-                          <ArtifactList artifacts={runArtifacts} />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
-
-          {/* Task-level artifacts (all runs combined) */}
-          {(() => {
-            const allArtifacts = artifactsQuery.data ?? []
-            if (allArtifacts.length === 0) return null
-            return (
-              <>
-                <div className="my-5" />
-                <p className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Artifacts
-                </p>
-                <ArtifactList artifacts={allArtifacts} />
-              </>
-            )
-          })()}
-        </div>
-
-        {/* Right column */}
-        <div className="w-[300px] shrink-0 overflow-y-auto bg-muted/20 px-4 py-5">
-          <KvList
-            items={[
-              {
-                label: 'Status',
-                value: (
-                  <StatusPill
-                    status={taskStatusToPill(detail.status)}
-                    pulse={detail.status === 'active'}
-                  />
-                ),
-              },
-              ...(detail.assigned_to
-                ? [{ label: 'Agent', value: <span className="font-mono text-[12px]">{detail.assigned_to}</span> }]
-                : []),
-              {
-                label: 'Priority',
-                value: <span className="text-[12px] capitalize">{detail.priority}</span>,
-              },
-              {
-                label: 'Type',
-                value: <TaskTypeBadge type={detail.type} />,
-              },
-              ...(workflow
-                ? [{ label: 'Workflow', value: <span className="font-mono text-[12px]">{workflow.name}</span> }]
-                : []),
-              ...(detail.workflow_step
-                ? [{ label: 'Current Step', value: <span className="font-mono text-[12px]">{detail.workflow_step}</span> }]
-                : []),
-              {
-                label: 'Created',
-                value: <span className="font-mono text-[11px] text-muted-foreground">{formatTimestamp(detail.created_at)}</span>,
-              },
-              {
-                label: 'Updated',
-                value: <span className="font-mono text-[11px] text-muted-foreground">{formatTimestamp(detail.updated_at)}</span>,
-              },
-            ]}
-          />
-
-          {hasRelated && (
-            <>
-              <div className="mt-5" />
-              <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Relations</p>
-              <div className="flex flex-wrap gap-1.5">
-                {detail.parents.map((t) => (
-                  <RelationChip key={t.id} task={t} relation="parent" onSelect={onSelectTask} />
-                ))}
-                {detail.children.map((t) => (
-                  <RelationChip key={t.id} task={t} relation="child" onSelect={onSelectTask} />
-                ))}
-                {detail.dependencies.map((t) => (
-                  <RelationChip key={t.id} task={t} relation="depends on" onSelect={onSelectTask} />
-                ))}
-                {detail.dependents.map((t) => (
-                  <RelationChip key={t.id} task={t} relation="blocks" onSelect={onSelectTask} />
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+      <InspectorLayout
+        header={header}
+        content={content}
+        sidebar={sidebar}
+        contentClassName="overflow-y-auto px-5 py-3.5"
+        sidebarClassName="bg-transparent px-3 py-2"
+      />
+		</>
   )
 }

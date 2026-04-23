@@ -3,6 +3,7 @@ import { useRunDetail, useRunEvents } from '@/hooks/use-runs'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { StatusPill } from '@/components/ui/status-pill'
 import { Spinner } from '@/components/ui/spinner'
+import { setDraggedChatAttachment } from '@/features/chat/lib/chat-dnd'
 import { taskStatusToPill } from '@/lib/status-colors'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -68,25 +69,25 @@ interface TimelineEventItem {
 }
 
 function TimelineItem({ event, isLast }: { event: TimelineEventItem; isLast: boolean }) {
-  return (
-    <div className="flex gap-3 py-2">
-      <div className="flex flex-col items-center">
-        <div className={`size-2 shrink-0 ${eventDotClass(event.type)}`} />
-        {!isLast && <div className="w-px flex-1 bg-border" />}
-      </div>
-      <div className="flex-1 min-w-0 pb-1">
-        <div className="flex items-center gap-2">
-          <p className="font-mono text-[11px] text-muted-foreground">{eventTypeLabel(event.type)}</p>
-          {event.created_at && (
-            <p className="font-mono text-[10px] text-muted-foreground/60 ml-auto shrink-0">
-              {formatTs(event.created_at)}
-            </p>
-          )}
-        </div>
-        {event.summary && (
-          <p className="font-mono text-xs text-foreground break-words mt-0.5">{event.summary}</p>
-        )}
-      </div>
+	return (
+		<div className="flex gap-3 py-2">
+			<div className="flex flex-col items-center">
+				<div className={`size-2 shrink-0 rounded-full ${eventDotClass(event.type)}`} />
+				{!isLast && <div className="w-px flex-1 bg-border" />}
+			</div>
+			<div className="flex-1 min-w-0 pb-1">
+				<div className="flex items-center gap-2">
+					<p className="text-xs font-medium text-muted-foreground">{eventTypeLabel(event.type)}</p>
+					{event.created_at && (
+						<p className="ml-auto shrink-0 text-xs text-muted-foreground/60 tabular-nums">
+							{formatTs(event.created_at)}
+						</p>
+					)}
+				</div>
+				{event.summary && (
+					<p className="mt-0.5 break-words text-sm text-foreground">{event.summary}</p>
+				)}
+			</div>
     </div>
   )
 }
@@ -97,12 +98,12 @@ function LiveTimeline({ runId }: { runId: string }) {
   const stream = useRunStream(runId)
 
   if (stream.events.length === 0) {
-    return (
-      <div className="flex items-center gap-2 py-4 text-muted-foreground">
-        <Spinner size="sm" />
-        <span className="font-mono text-xs">Waiting for events…</span>
-      </div>
-    )
+		return (
+			<div className="flex items-center gap-2 py-4 text-muted-foreground">
+				<Spinner size="sm" />
+				<span className="text-sm">Waiting for events…</span>
+			</div>
+		)
   }
 
   return (
@@ -119,12 +120,12 @@ function LiveTimeline({ runId }: { runId: string }) {
           isLast={i === stream.events.length - 1 && stream.isComplete}
         />
       ))}
-      {!stream.isComplete && (
-        <div className="flex items-center gap-2 py-2 text-muted-foreground">
-          <Spinner size="sm" />
-          <span className="font-mono text-[11px]">Running…</span>
-        </div>
-      )}
+		{!stream.isComplete && (
+			<div className="flex items-center gap-2 py-2 text-muted-foreground">
+				<Spinner size="sm" />
+				<span className="text-sm">Running…</span>
+			</div>
+		)}
     </div>
   )
 }
@@ -135,24 +136,22 @@ function PersistedTimeline({ runId }: { runId: string }) {
   const eventsQuery = useRunEvents(runId)
 
   if (eventsQuery.isLoading) {
-    return (
-      <div className="flex items-center gap-2 py-4 text-muted-foreground">
-        <Spinner size="sm" />
-        <span className="font-mono text-xs">Loading events…</span>
-      </div>
-    )
-  }
+		return (
+			<div className="flex items-center gap-2 py-4 text-muted-foreground">
+				<Spinner size="sm" />
+				<span className="text-sm">Loading events…</span>
+			</div>
+		)
+	}
 
   if (eventsQuery.isError) {
-    return (
-      <p className="font-mono text-xs text-destructive py-4">Failed to load events.</p>
-    )
+		return <p className="py-4 text-sm text-destructive">Failed to load events.</p>
   }
 
   const events = eventsQuery.data ?? []
 
   if (events.length === 0) {
-    return <p className="font-mono text-xs text-muted-foreground py-4">No events recorded.</p>
+		return <p className="py-4 text-sm text-muted-foreground">No events recorded.</p>
   }
 
   return (
@@ -187,13 +186,26 @@ export function RunViewerSheet({ runId, onClose }: RunViewerSheetProps) {
 
   return (
     <Sheet open={!!runId} onOpenChange={(open) => { if (!open) onClose() }}>
-      <SheetContent side="right" className="flex flex-col gap-0 w-full sm:max-w-lg p-0">
-        {/* Header */}
-        <SheetHeader className="bg-muted/30 px-4 py-3 gap-1">
-          <div className="flex items-center gap-2 pr-8">
-            <SheetTitle className="font-mono text-[11px] text-muted-foreground font-normal">
-              {runId ? `${runId.slice(0, 16)}…` : '—'}
-            </SheetTitle>
+		<SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-lg">
+			{/* Header */}
+			<SheetHeader
+				className="gap-1 border-b border-border/60 bg-muted/20 px-4 py-3"
+				draggable={!!run}
+				onDragStart={run ? (e) => {
+					setDraggedChatAttachment(e.dataTransfer, {
+						type: 'ref',
+						source: 'drag',
+						label: `Run ${run.id.slice(0, 8)}`,
+						refType: 'run',
+						refId: run.id,
+						metadata: { runId: run.id, taskId: run.task_id, agentId: run.agent_id },
+					})
+				} : undefined}
+			>
+				<div className="flex items-center gap-2 pr-8">
+					<SheetTitle className="text-sm font-medium text-muted-foreground tabular-nums">
+						{runId ? `${runId.slice(0, 16)}…` : '—'}
+					</SheetTitle>
             {run && (
               <StatusPill
                 status={taskStatusToPill(run.status)}
@@ -202,26 +214,26 @@ export function RunViewerSheet({ runId, onClose }: RunViewerSheetProps) {
             )}
           </div>
 
-          {run && (
-            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-              {run.agent_id && (
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  <span className="text-muted-foreground/60 uppercase tracking-wider mr-1">agent</span>
-                  {run.agent_id}
-                </span>
-              )}
-              {run.model && (
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  <span className="text-muted-foreground/60 uppercase tracking-wider mr-1">model</span>
-                  {run.model}
-                </span>
-              )}
-              {run.started_at && (
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  <span className="text-muted-foreground/60 uppercase tracking-wider mr-1">duration</span>
-                  {formatDuration(run.started_at, run.ended_at) ?? '—'}
-                </span>
-              )}
+				{run && (
+					<div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+						{run.agent_id && (
+							<span className="text-xs text-muted-foreground">
+								<span className="mr-1 text-muted-foreground/60">agent</span>
+								{run.agent_id}
+							</span>
+						)}
+						{run.model && (
+							<span className="text-xs text-muted-foreground">
+								<span className="mr-1 text-muted-foreground/60">model</span>
+								{run.model}
+							</span>
+						)}
+						{run.started_at && (
+							<span className="text-xs text-muted-foreground tabular-nums">
+								<span className="mr-1 text-muted-foreground/60">duration</span>
+								{formatDuration(run.started_at, run.ended_at) ?? '—'}
+							</span>
+						)}
             </div>
           )}
         </SheetHeader>
@@ -230,22 +242,22 @@ export function RunViewerSheet({ runId, onClose }: RunViewerSheetProps) {
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {!runId && null}
 
-          {runId && runQuery.isLoading && (
-            <div className="flex items-center gap-2 py-4 text-muted-foreground">
-              <Spinner size="sm" />
-              <span className="font-mono text-xs">Loading run…</span>
-            </div>
-          )}
+			{runId && runQuery.isLoading && (
+				<div className="flex items-center gap-2 py-4 text-muted-foreground">
+					<Spinner size="sm" />
+					<span className="text-sm">Loading run…</span>
+				</div>
+			)}
 
-          {runId && !runQuery.isLoading && !run && (
-            <p className="font-mono text-xs text-muted-foreground py-4">Run not found.</p>
-          )}
+			{runId && !runQuery.isLoading && !run && (
+				<p className="py-4 text-sm text-muted-foreground">Run not found.</p>
+			)}
 
-          {runId && run && (
-            <>
-              <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                Event Timeline
-              </p>
+			{runId && run && (
+				<>
+					<p className="mb-3 text-sm font-medium text-muted-foreground">
+						Event Timeline
+					</p>
               {isLive ? (
                 <LiveTimeline runId={runId} />
               ) : (

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Wrench, CheckCircle, XCircle, ArrowsClockwise, Brain, Globe, FileText, File, Robot } from '@phosphor-icons/react'
+import { Wrench, CheckCircle, XCircle, ArrowsClockwise, Brain, Globe, FileText, File, Robot, HandPalm } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import { Markdown } from '@/components/ui/markdown'
 
@@ -34,7 +34,7 @@ const STATUS_ICONS = {
 
 export function ToolCallCard({ summary, status }: ToolCallCardProps) {
   return (
-    <div className="flex items-center gap-2 py-0.5 font-mono text-xs text-muted-foreground">
+    <div className="flex items-center gap-2 py-0.5 text-sm text-muted-foreground">
       <Wrench size={10} className="shrink-0" />
       <span className="truncate flex-1">{summary}</span>
       {STATUS_ICONS[status]}
@@ -52,7 +52,7 @@ export function ThinkingBlock({ isActive }: ThinkingBlockProps) {
   const Icon = isActive ? ArrowsClockwise : Brain
 
   return (
-    <div className="flex items-center gap-2 py-0.5 font-mono text-xs text-muted-foreground italic">
+    <div className="flex items-center gap-2 py-0.5 text-sm text-muted-foreground italic">
       <Icon size={10} className={isActive ? 'animate-spin shrink-0' : 'shrink-0'} />
       <span className="truncate">{isActive ? 'Thinking…' : 'Thought'}</span>
     </div>
@@ -73,7 +73,7 @@ export function ArtifactEventCard({ title, previewUrl, kind }: ArtifactEventCard
   else if (kind === 'doc') Icon = FileText
 
   return (
-    <div className="flex items-center gap-2 py-0.5 font-mono text-xs text-muted-foreground">
+    <div className="flex items-center gap-2 py-0.5 text-sm text-muted-foreground">
       <Icon size={10} className="shrink-0" />
       <span className="truncate flex-1">{title}</span>
       {previewUrl && (
@@ -115,8 +115,23 @@ function deduplicateEvents(events: RunStreamEvent[]): RunStreamEvent[] {
   return result
 }
 
+function isRenderableEvent(event: RunStreamEvent): boolean {
+  const eventType = event.eventType ?? event.type
+
+  if (eventType === 'started' || eventType === 'message_sent') return false
+  if (eventType === 'thinking' || eventType === 'reasoning') return true
+  if (eventType === 'artifact' || eventType === 'run_completed' || eventType === 'error' || eventType === 'approval_needed') return true
+  if (eventType === 'tool_use') return true
+  if (eventType === 'progress') return !!event.summary
+  return !!event.summary
+}
+
 export function RunEventFeed({ events, isStreaming }: RunEventFeedProps) {
   const dedupedEvents = useMemo(() => deduplicateEvents(events), [events])
+  const hasRenderableEvents = useMemo(
+    () => dedupedEvents.some((event) => isRenderableEvent(event)),
+    [dedupedEvents],
+  )
 
   const lastToolUseIdx = useMemo(() => findLastIndex(dedupedEvents, (et) => et === 'tool_use'), [dedupedEvents])
   const lastThinkingIdx = useMemo(() => findLastIndex(dedupedEvents, (et) => et === 'thinking' || et === 'reasoning'), [dedupedEvents])
@@ -128,10 +143,11 @@ export function RunEventFeed({ events, isStreaming }: RunEventFeedProps) {
   return (
     <div className="flex w-full justify-start">
       <div className="max-w-[85%] px-4 py-3">
-        <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
+        <p className="mb-1.5 text-sm font-medium text-muted-foreground">
           Assistant
         </p>
         <div className="flex flex-col gap-0.5">
+          {!hasRenderableEvents && isStreaming && <ThinkingBlock isActive />}
           {dedupedEvents.map((ev, idx) => {
             const et = ev.eventType ?? ev.type
             return (
@@ -167,7 +183,7 @@ function EventRow({ event, eventType, isRunning, isActiveThinking, isActiveProgr
     if (isAgent) {
       const status = isRunning ? 'running' : 'done'
       return (
-        <div className="flex items-center gap-2 py-0.5 font-mono text-xs text-muted-foreground pl-4">
+        <div className="flex items-center gap-2 py-0.5 pl-4 text-sm text-muted-foreground">
           <Robot size={10} className="shrink-0" />
           <span className="truncate flex-1">{event.summary}</span>
           {STATUS_ICONS[status]}
@@ -205,7 +221,7 @@ function EventRow({ event, eventType, isRunning, isActiveThinking, isActiveProgr
   if (eventType === 'run_completed') {
     const isError = event.status === 'failed'
     return (
-      <div className={cn('flex items-center gap-2 py-0.5 font-mono text-xs', isError ? 'text-destructive' : 'text-muted-foreground')}>
+      <div className={cn('flex items-center gap-2 py-0.5 text-sm', isError ? 'text-destructive' : 'text-muted-foreground')}>
         {isError ? <XCircle size={10} /> : <CheckCircle size={10} />}
         <span>{isError ? 'Run failed' : 'Run completed'}</span>
         {event.summary && <span className="text-muted-foreground truncate">— {event.summary}</span>}
@@ -215,12 +231,21 @@ function EventRow({ event, eventType, isRunning, isActiveThinking, isActiveProgr
 
   if (eventType === 'error') {
     return (
-      <div className="flex items-center gap-2 py-0.5 font-mono text-xs text-destructive">
+      <div className="flex items-center gap-2 py-0.5 text-sm text-destructive">
         <XCircle size={10} />
         <span className="truncate">{event.summary ?? 'error'}</span>
       </div>
     )
   }
+
+  if (eventType === 'approval_needed') {
+		return (
+			<div className="flex items-center gap-2 py-0.5 text-sm text-warning">
+				<HandPalm size={10} />
+				<span>{event.summary ?? 'Approval needed'}</span>
+			</div>
+		)
+	}
 
   if (eventType === 'started' || eventType === 'message_sent') {
     return null
@@ -242,7 +267,7 @@ function EventRow({ event, eventType, isRunning, isActiveThinking, isActiveProgr
   if (!event.summary) return null
 
   return (
-    <p className="font-mono text-xs text-muted-foreground py-0.5 truncate">
+    <p className="py-0.5 text-sm text-muted-foreground truncate">
       {event.summary}
     </p>
   )

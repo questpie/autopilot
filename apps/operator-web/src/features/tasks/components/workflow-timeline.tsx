@@ -1,13 +1,18 @@
 import { useState } from 'react'
-import { CaretRight } from '@phosphor-icons/react'
+import { CaretRight, ChatCircle } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import { Markdown } from '@/components/ui/markdown'
+import { MetaChip, MetaChipButton } from '@/components/ui/meta-chip'
+import { surfaceCardVariants } from '@/components/ui/surface-card'
+import { useChatWorkspace } from '@/features/chat/chat-workspace-context'
+import { setDraggedChatAttachment } from '@/features/chat/lib/chat-dnd'
 import type { TimelineEntry } from '../lib/build-timeline'
 import { formatDuration } from '../lib/build-timeline'
 
 interface WorkflowTimelineProps {
   entries: TimelineEntry[]
   className?: string
+  runSessionIds?: Record<string, string>
 }
 
 const STATUS_ICON: Record<string, { icon: string; color: string }> = {
@@ -27,8 +32,9 @@ function defaultExpanded(entries: TimelineEntry[]): Set<number> {
   return set
 }
 
-export function WorkflowTimeline({ entries, className }: WorkflowTimelineProps) {
+export function WorkflowTimeline({ entries, className, runSessionIds = {} }: WorkflowTimelineProps) {
   const [expanded, setExpanded] = useState(() => defaultExpanded(entries))
+  const { openSession } = useChatWorkspace()
 
   if (entries.length === 0) return null
 
@@ -56,7 +62,7 @@ export function WorkflowTimeline({ entries, className }: WorkflowTimelineProps) 
                 <div className={cn('w-px flex-1', !isLast && 'bg-border')} />
               </div>
               <div className="pb-2">
-                <p className="font-mono text-[11px] text-foreground-subtle italic">
+                <p className="text-xs text-foreground-subtle italic">
                   {entry.label} — &quot;{entry.annotation}&quot;
                 </p>
               </div>
@@ -67,6 +73,7 @@ export function WorkflowTimeline({ entries, className }: WorkflowTimelineProps) 
         const duration = entry.run ? formatDuration(entry.run.started_at, entry.run.ended_at) : ''
         const hasDetails = !!(entry.run?.summary || entry.run?.error || entry.run)
         const isOpen = expanded.has(i)
+        const sessionId = entry.run ? runSessionIds[entry.run.id] : undefined
 
         return (
           <div key={`${entry.stepId}-${i}`} className="flex gap-3 pl-1">
@@ -89,6 +96,17 @@ export function WorkflowTimeline({ entries, className }: WorkflowTimelineProps) 
               <button
                 type="button"
                 onClick={hasDetails ? () => toggle(i) : undefined}
+                draggable={!!entry.run}
+                onDragStart={entry.run ? (e) => {
+                  setDraggedChatAttachment(e.dataTransfer, {
+                    type: 'ref',
+                    source: 'drag',
+                    label: `Run ${entry.run!.id.slice(0, 8)} ${entry.label}`,
+                    refType: 'run',
+                    refId: entry.run!.id,
+                    metadata: { runId: entry.run!.id, taskId: entry.run!.task_id, stepId: entry.stepId },
+                  })
+                } : undefined}
                 className={cn(
                   'flex w-full items-center gap-2 text-left',
                   hasDetails && 'cursor-pointer',
@@ -118,19 +136,48 @@ export function WorkflowTimeline({ entries, className }: WorkflowTimelineProps) 
                   {entry.label}
                 </span>
                 {entry.isHumanApproval && (
-                  <span className="bg-warning-surface px-1 py-0.5 font-mono text-[10px] text-warning">
+                  <span className="rounded-full bg-warning-surface px-2 py-0.5 text-[10px] font-medium text-warning">
                     approval
                   </span>
                 )}
                 {duration && (
-                  <span className="font-mono text-[11px] text-foreground-subtle">{duration}</span>
+                  <span className="text-xs text-foreground-subtle tabular-nums">{duration}</span>
                 )}
                 {entry.run && !isOpen && (
-                  <span className="ml-auto truncate max-w-[200px] font-mono text-[11px] text-foreground-subtle">
+                  <span className="ml-auto max-w-[200px] truncate text-xs text-foreground-subtle">
                     {entry.run.agent_id}
                   </span>
                 )}
               </button>
+
+              {(sessionId || entry.run?.runtime_session_ref) && (
+                <div className="mt-1 ml-4 flex flex-wrap gap-1.5">
+						{sessionId ? (
+							<MetaChipButton
+								onClick={() => openSession(sessionId)}
+								tone="primary"
+								icon={<ChatCircle size={10} />}
+								draggable
+								onDragStart={(e) => {
+									setDraggedChatAttachment(e.dataTransfer, {
+										type: 'ref',
+										source: 'drag',
+										label: `Session ${sessionId.slice(0, 8)}`,
+										refType: 'session',
+										refId: sessionId,
+										metadata: { sessionId, runId: entry.run?.id },
+									})
+								}}
+							>
+								session:{sessionId.slice(0, 8)}
+							</MetaChipButton>
+						) : (
+							<MetaChip icon={<ChatCircle size={10} />}>
+								runtime:{entry.run?.runtime_session_ref?.slice(0, 8) ?? 'unknown'}
+							</MetaChip>
+						)}
+                </div>
+              )}
 
               {/* Collapsible details */}
               {hasDetails && isOpen && (
@@ -138,14 +185,14 @@ export function WorkflowTimeline({ entries, className }: WorkflowTimelineProps) 
                   {/* Agent + run ID */}
                   {entry.run && (
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-foreground-subtle">
+                      <span className="text-xs text-foreground-subtle">
                         {entry.run.agent_id}
                       </span>
-                      <span className="font-mono text-[10px] text-foreground-subtle">
+                      <span className="text-xs text-foreground-subtle tabular-nums">
                         {entry.run.id.slice(0, 12)}&hellip;
                       </span>
                       {entry.run.model && (
-                        <span className="font-mono text-[10px] text-foreground-subtle">
+                        <span className="text-xs text-foreground-subtle">
                           {entry.run.model}
                         </span>
                       )}
@@ -154,30 +201,30 @@ export function WorkflowTimeline({ entries, className }: WorkflowTimelineProps) 
 
                   {/* Summary */}
                   {entry.run?.summary && (
-                    <div className="bg-muted/40 px-3 py-2">
+                    <div className={surfaceCardVariants({ size: 'sm' })}>
                       <Markdown content={entry.run.summary} className="text-[12px]" />
                     </div>
                   )}
 
                   {/* Error */}
                   {entry.run?.error && (
-                    <div className="bg-destructive-surface px-3 py-2">
+                    <div className="rounded-xl border border-destructive/15 bg-destructive-surface px-3 py-3 shadow-xs">
                       <Markdown content={entry.run.error} className="text-[12px] text-destructive" />
                     </div>
                   )}
 
                   {/* Human approval hint */}
                   {entry.isHumanApproval && entry.status === 'pending' && (
-                    <p className="font-mono text-[11px] text-foreground-subtle italic">
-                      Waiting for human approval
-                    </p>
+                      <p className="text-xs text-foreground-subtle italic">
+                        Waiting for human approval
+                      </p>
                   )}
                 </div>
               )}
 
               {/* Non-collapsible hints for pending steps */}
               {!hasDetails && entry.isHumanApproval && entry.status === 'pending' && (
-                <p className="mt-1 font-mono text-[11px] text-foreground-subtle italic">
+                <p className="mt-1 text-xs text-foreground-subtle italic">
                   Waiting for human approval
                 </p>
               )}

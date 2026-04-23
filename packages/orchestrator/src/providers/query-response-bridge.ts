@@ -373,6 +373,14 @@ export class QueryResponseBridge {
 
 		// Batch queued messages into one prompt
 		const batchedPrompt = queued.map((m) => m.content).join('\n')
+		const currentAttachments = queued.flatMap((message) => {
+			try {
+				const meta = JSON.parse(message.metadata ?? '{}') as Record<string, unknown>
+				return Array.isArray(meta.attachments) ? meta.attachments : []
+			} catch {
+				return []
+			}
+		})
 
 		// Get system notifications since the previous query
 		const systemMsgs = await this.sessionMessageService.listSystemSince(
@@ -386,6 +394,7 @@ export class QueryResponseBridge {
 			sessionMessages: systemMsgs,
 			allowMutation: true,
 			hasResume,
+			currentAttachments,
 		})
 
 		const agentId = previousQuery.agent_id

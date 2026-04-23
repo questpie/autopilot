@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, asc, gt } from 'drizzle-orm'
 import { ExecutionTargetSchema } from '@questpie/autopilot-spec'
 import type { WorkerCapability } from '@questpie/autopilot-spec'
 import { runs, runEvents } from '../db/company-schema'
@@ -10,7 +10,12 @@ function _getRun(db: CompanyDb, id: string) {
 }
 
 function _getRunEvents(db: CompanyDb, runId: string) {
-	return db.select().from(runEvents).where(eq(runEvents.run_id, runId)).all()
+	return db
+		.select()
+		.from(runEvents)
+		.where(eq(runEvents.run_id, runId))
+		.orderBy(asc(runEvents.id))
+		.all()
 }
 
 export type RunRow = NonNullable<Awaited<ReturnType<typeof _getRun>>>
@@ -166,18 +171,30 @@ export class RunService {
 		runId: string,
 		event: { type: string; summary?: string; metadata?: string },
 	) {
-		await this.db.insert(runEvents).values({
+		const createdAt = new Date().toISOString()
+		const rows = await this.db.insert(runEvents).values({
 			run_id: runId,
 			type: event.type,
 			summary: event.summary,
 			metadata: event.metadata ?? '{}',
-			created_at: new Date().toISOString(),
-		})
+			created_at: createdAt,
+		}).returning()
+		return rows[0]
 	}
 
 	/** Get events for a run, ordered by creation time. */
 	async getEvents(runId: string) {
 		return _getRunEvents(this.db, runId)
+	}
+
+	/** Get events for a run strictly after a persisted event ID. */
+	async getEventsSince(runId: string, lastEventId: number) {
+		return this.db
+			.select()
+			.from(runEvents)
+			.where(and(eq(runEvents.run_id, runId), gt(runEvents.id, lastEventId)))
+			.orderBy(asc(runEvents.id))
+			.all()
 	}
 
 	/** Complete a run with final status, optional summary/tokens, and session ref. */

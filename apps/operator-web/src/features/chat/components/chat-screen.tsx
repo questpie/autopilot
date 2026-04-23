@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { SquareBuildLogo } from '@/components/brand/square-build-logo'
 import { useSetLayoutMode } from '@/features/shell/layout-mode-context'
 import { useAgents } from '@/hooks/use-agents'
+import type { ChatAttachment } from '@/api/types'
 import { cancelRun } from '@/api/runs.api'
 import { useChatScreen } from '../hooks/use-chat-screen'
 import { ChatSessionList } from './chat-session-list'
@@ -29,6 +30,7 @@ export function ChatScreen() {
 	} = useChatScreen()
 
 	const [composerValue, setComposerValue] = useState('')
+	const [attachments, setAttachments] = useState<ChatAttachment[]>([])
 	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
 	// Track run from mutation response to bridge the gap before query data catches up.
 	// Scoped to sessionId so it doesn't leak across conversations.
@@ -41,18 +43,28 @@ export function ChatScreen() {
 
 	async function handleSend() {
 		const text = composerValue.trim()
-		if (!text) return
+		if (!text && attachments.length === 0) return
 
 		if (activeId) {
-			const result = await sendMutation.mutateAsync({ sessionId: activeId, message: text })
+			const result = await sendMutation.mutateAsync({
+				sessionId: activeId,
+				message: text,
+				attachments,
+			})
 			setComposerValue('')
+			setAttachments([])
 			// Only track pendingRun for new runs — queued messages attach to the existing active run
 			if (result.run_id && !result.queued)
 				setPendingRun({ runId: result.run_id, sessionId: activeId })
 		} else {
 			if (!effectiveAgentId) return
-			const result = await createMutation.mutateAsync({ agentId: effectiveAgentId, message: text })
+			const result = await createMutation.mutateAsync({
+				agentId: effectiveAgentId,
+				message: text,
+				attachments,
+			})
 			setComposerValue('')
+			setAttachments([])
 			if (result.run_id) setPendingRun({ runId: result.run_id, sessionId: result.session_id })
 			selectConversation(result.session_id)
 		}
@@ -61,6 +73,7 @@ export function ChatScreen() {
 	function handleNew() {
 		clearConversation()
 		setComposerValue('')
+		setAttachments([])
 	}
 
 	async function handleStop() {
@@ -105,6 +118,8 @@ export function ChatScreen() {
 				<ChatComposer
 					value={composerValue}
 					onChange={setComposerValue}
+					attachments={attachments}
+					onAttachmentsChange={setAttachments}
 					onSend={() => void handleSend()}
 					onNewSession={handleNew}
 					onStop={() => void handleStop()}
@@ -143,14 +158,14 @@ export function ChatScreen() {
 			<div className="flex flex-1 flex-col items-center justify-center px-6">
 				<div className="w-full max-w-2xl">
 					{/* Brand + Greeting */}
-					<div className="mb-4 flex flex-col items-center gap-4">
+					<div className="mb-6 flex flex-col items-center gap-4 text-center">
 						<div className="flex flex-col items-center gap-2">
 							<SquareBuildLogo size={40} />
-							<span className="font-heading text-xs font-bold tracking-widest text-muted-foreground/60 uppercase">
+							<span className="text-sm font-medium text-muted-foreground/80">
 								Autopilot
 							</span>
 						</div>
-						<h1 className="font-mono text-lg font-medium text-foreground">
+						<h1 className="text-balance text-2xl font-semibold text-foreground">
 							What can I help you with?
 						</h1>
 					</div>
@@ -159,6 +174,8 @@ export function ChatScreen() {
 					<ChatComposer
 						value={composerValue}
 						onChange={setComposerValue}
+						attachments={attachments}
+						onAttachmentsChange={setAttachments}
 						onSend={() => void handleSend()}
 						onNewSession={handleNew}
 						isSending={isSending}
@@ -177,8 +194,8 @@ export function ChatScreen() {
 					{/* Recent conversations */}
 					{recentConversations.length > 0 && (
 						<div className="mt-8">
-							<div className="flex items-center justify-between mb-2">
-								<p className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+							<div className="mb-3 flex items-center justify-between">
+								<p className="text-sm font-medium text-muted-foreground">
 									Recent
 								</p>
 								<Button
@@ -191,18 +208,18 @@ export function ChatScreen() {
 									<span>View all</span>
 								</Button>
 							</div>
-							<div className="bg-muted/40">
+							<div className="overflow-hidden rounded-lg bg-card/40">
 								{recentConversations.map((conv) => (
 									<button
 										key={conv.session.id}
 										type="button"
 										onClick={() => selectConversation(conv.session.id)}
-										className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-muted"
+										className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-[background-color,color] hover:bg-muted/50"
 									>
-										<span className="truncate text-sm text-foreground">
+										<span className="truncate text-sm font-medium text-foreground">
 											{conv.title || 'New conversation'}
 										</span>
-										<span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+										<span className="shrink-0 text-xs text-muted-foreground tabular-nums">
 											{conv.time}
 										</span>
 									</button>

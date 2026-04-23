@@ -171,6 +171,20 @@ export interface Session {
 // ── Session Message ──
 export type SessionMessageRole = 'user' | 'assistant' | 'system'
 
+export interface ChatAttachment {
+  type: 'text' | 'file' | 'ref' | string
+  name?: string
+  url?: string
+  content?: string
+  mimeType?: string
+  size?: number
+  source?: 'upload' | 'paste' | 'drag' | 'page' | string
+  label?: string
+  refType?: 'task' | 'file' | 'directory' | 'session' | 'run' | 'artifact' | 'page' | string
+  refId?: string
+  metadata?: Record<string, unknown>
+}
+
 export interface SessionMessage {
   id: string
   session_id: string
@@ -180,7 +194,16 @@ export interface SessionMessage {
   external_message_id: string | null
   // Runtime DB field — JSON string stored as text
   metadata: string
+  attachments?: ChatAttachment[] | null
   created_at: string
+}
+
+export interface UserPreference {
+  user_id: string
+  key: string
+  value: unknown
+  created_at: string
+  updated_at: string
 }
 
 // ── Worker ──
@@ -418,4 +441,3 @@ export interface VfsDiffResult {
     deletions: number
   }
 }
-

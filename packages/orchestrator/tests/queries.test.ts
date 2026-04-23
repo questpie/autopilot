@@ -37,6 +37,7 @@ import {
 	TaskGraphService,
 	SecretService,
 	QueryService,
+	SessionService,
 	SessionMessageService,
 } from '../src/services'
 import type { AppEnv, Services } from '../src/api/app'
@@ -142,6 +143,7 @@ beforeAll(async () => {
 	const taskRelationService = new TaskRelationService(db)
 	const secretService = new SecretService(db)
 	const queryService = new QueryService(db)
+	const sessionService = new SessionService(db)
 
 	const workflowEngine = new WorkflowEngine(
 		DEFAULT_AUTHORED_CONFIG,
@@ -166,6 +168,7 @@ beforeAll(async () => {
 		workflowEngine,
 		secretService,
 		queryService,
+		sessionService,
 		sessionMessageService: new SessionMessageService(db),
 	}
 
@@ -489,6 +492,65 @@ describe('query completion on run finish', () => {
 		expect(query.mutated_repo).toBe(false)
 	})
 
+	test('session-backed query persists final assistant message before complete returns', async () => {
+		const session = await services.sessionService.findOrCreate({
+			provider_id: 'dashboard',
+			external_conversation_id: `conv-query-session-${Date.now()}`,
+		})
+		const query = await services.queryService.create({
+			prompt: 'Need a durable reply',
+			agent_id: 'default-agent',
+			allow_repo_mutation: false,
+			session_id: session.id,
+			created_by: 'test',
+		})
+		const runId = `run-query-session-${Date.now()}`
+		await services.runService.create({
+			id: runId,
+			agent_id: 'default-agent',
+			runtime: 'claude-code',
+			initiated_by: 'test',
+			instructions: 'durable reply',
+		})
+		await services.queryService.linkRun(query.id, runId)
+
+		const completeRes = await app.request(
+			`/api/runs/${runId}/complete`,
+			post({ status: 'completed', summary: 'Durable reply' }),
+		)
+		expect(completeRes.status).toBe(200)
+
+		const stored = await services.sessionMessageService.findAssistantForQuery(query.id)
+		expect(stored).toBeDefined()
+		expect(stored?.content).toBe('Durable reply')
+
+		const completedQuery = await services.queryService.get(query.id)
+		expect(completedQuery?.status).toBe('completed')
+		expect(completedQuery?.summary).toBe('Durable reply')
+	})
+
+	test('cancel marks linked query as failed', async () => {
+		const createRes = await app.request(
+			'/api/queries',
+			post({ prompt: 'Cancel me' }),
+		)
+		const { query_id, run_id } = (await createRes.json()) as {
+			query_id: string
+			run_id: string
+		}
+
+		const cancelRes = await app.request(
+			`/api/runs/${run_id}/cancel`,
+			post({ reason: 'cancelled by test' }),
+		)
+		expect(cancelRes.status).toBe(200)
+
+		const queryRes = await app.request(`/api/queries/${query_id}`)
+		const query = (await queryRes.json()) as { status: string; summary: string | null }
+		expect(query.status).toBe('failed')
+		expect(query.summary).toBe('cancelled by test')
+	})
+
 	test('worker claim marks mutable query runs as shared-checkout workspace_mode:none', async () => {
 		const workerId = `worker-mutable-query-${Date.now()}`
 		const runtime = `mutable-query-${Date.now()}`
@@ -683,27 +745,70 @@ describe('task regression', () => {
 	})
 })
 
-describe('buildQueryInstructions', () => {
-	test('mutable query instructions include artifact guidance', () => {
-		const instructions = buildQueryInstructions('build a dashboard', {
-			allowMutation: true,
-			hasResume: false,
+	describe('buildQueryInstructions', () => {
+		test('mutable query instructions include artifact guidance', () => {
+			const instructions = buildQueryInstructions('build a dashboard', {
+				allowMutation: true,
+				hasResume: false,
+			})
+			expect(instructions).toContain('mutable')
+			expect(instructions).toContain('artifact_create')
+			expect(instructions).toContain('rendered preview')
+			expect(instructions).toContain('Autopilot-native primitives')
+			expect(instructions).toContain('task')
 		})
-		expect(instructions).toContain('mutable')
-		expect(instructions).toContain('preview_file')
-		expect(instructions).toContain('preview_dir')
-		expect(instructions).toContain('AUTOPILOT_RESULT')
-		expect(instructions).toContain('task')
-	})
 
-	test('mutable query instructions explain natural preview selection', () => {
+	test('mutable query instructions explain self-contained HTML artifact expectations', () => {
 		const instructions = buildQueryInstructions('build a reveal.js deck', {
 			allowMutation: true,
 			hasResume: false,
 		})
-		expect(instructions).toContain('single self-contained')
-		expect(instructions).toContain('The user should be able to ask naturally')
-		expect(instructions).toContain('presentation.html')
+			expect(instructions).toContain('self-contained files')
+			expect(instructions).toContain('Tailwind via CDN')
+		expect(instructions).toContain('proper HTML structure')
+	})
+
+	test('current attachments are injected into query instructions', () => {
+		const instructions = buildQueryInstructions('Review this file', {
+			allowMutation: true,
+			hasResume: false,
+			currentAttachments: [
+				{
+					type: 'text',
+					name: 'notes.txt',
+					mimeType: 'text/plain',
+					content: 'Important note\nSecond line',
+					metadata: { view: 'tasks', taskId: 'task-123' },
+				},
+			],
+		})
+		expect(instructions).toContain('## Attached Context')
+		expect(instructions).toContain('notes.txt')
+		expect(instructions).toContain('mime: text/plain')
+		expect(instructions).toContain('Important note')
+		expect(instructions).toContain('"taskId":"task-123"')
+	})
+
+	test('history attachments are surfaced on cold start', () => {
+		const instructions = buildQueryInstructions('Continue', {
+			allowMutation: true,
+			hasResume: false,
+			sessionMessages: [{
+				id: 'smsg-1',
+				session_id: 'sess-1',
+				role: 'user',
+				content: 'Please review the attachment',
+				query_id: null,
+				external_message_id: null,
+				metadata: JSON.stringify({
+					attachments: [{ type: 'file', name: 'design.png', mimeType: 'image/png' }],
+				}),
+				created_at: new Date().toISOString(),
+			}],
+		})
+		expect(instructions).toContain('Please review the attachment')
+		expect(instructions).toContain('design.png')
+		expect(instructions).toContain('mime: image/png')
 	})
 
 	test('mutable query instructions include Autopilot-native tooling bias', () => {

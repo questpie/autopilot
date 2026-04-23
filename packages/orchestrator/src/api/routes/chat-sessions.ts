@@ -12,7 +12,6 @@ import { randomBytes } from 'node:crypto'
 import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import { eventBus } from '../../events/event-bus'
 import { buildQueryInstructions } from '../../services/queries'
 import type { AppEnv } from '../app'
 
@@ -74,7 +73,7 @@ const chatSessions = new Hono<AppEnv>()
 			}),
 		),
 		async (c) => {
-			const { sessionMessageService, queryService } = c.get('services')
+			const { sessionMessageService } = c.get('services')
 			const { id } = c.req.valid('param')
 			const query = c.req.valid('query')
 			const limit = query.limit ? Number.parseInt(query.limit, 10) : 200
@@ -85,24 +84,6 @@ const chatSessions = new Hono<AppEnv>()
 				const attachments = Array.isArray(meta.attachments) ? meta.attachments : null
 				return { ...msg, attachments }
 			})
-
-			// Merge completed query summaries as assistant messages
-			const sessionQueries = await queryService.listBySession(id)
-			for (const q of sessionQueries) {
-				if (q.summary && (q.status === 'completed' || q.status === 'failed')) {
-					enriched.push({
-						id: `qsummary-${q.id}`,
-						session_id: id,
-						role: 'assistant',
-						content: q.summary,
-						query_id: q.id,
-						external_message_id: null,
-						metadata: '{}',
-						created_at: q.ended_at ?? q.created_at,
-						attachments: null,
-					})
-				}
-			}
 
 			// Sort chronologically
 			enriched.sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -152,6 +133,7 @@ const chatSessions = new Hono<AppEnv>()
 				sessionMessages: [],
 				allowMutation: true,
 				hasResume: false,
+				currentAttachments: body.attachments,
 			})
 
 			const query = await queryService.create({
@@ -269,6 +251,7 @@ const chatSessions = new Hono<AppEnv>()
 				sessionMessages: instructionMessages,
 				allowMutation: true,
 				hasResume: effectiveResume,
+				currentAttachments: body.attachments,
 			})
 
 			const query = await queryService.create({

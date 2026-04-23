@@ -4,6 +4,19 @@ import { queries } from '../db/company-schema'
 import type { CompanyDb } from '../db'
 import type { SessionMessageRow } from './session-messages'
 
+export interface QueryInstructionAttachment {
+	type?: string
+	name?: string
+	url?: string
+	content?: string
+	mimeType?: string
+	size?: number
+	label?: string
+	refType?: string
+	refId?: string
+	metadata?: Record<string, unknown>
+}
+
 function _getQuery(db: CompanyDb, id: string) {
 	return db.select().from(queries).where(eq(queries.id, id)).get()
 }
@@ -193,6 +206,7 @@ export interface BuildQueryInstructionsOpts {
 	sessionMessages?: SessionMessageRow[]
 	allowMutation: boolean
 	hasResume: boolean
+	currentAttachments?: QueryInstructionAttachment[]
 }
 
 /** Build instructions envelope for a query run. */
@@ -219,12 +233,24 @@ export function buildQueryInstructions(
 		parts.push('## Conversation History\n')
 		for (const msg of msgs.slice(-20)) {
 			const meta = safeParseMetadata(msg.metadata)
+			const attachments = getAttachments(meta)
 			const senderName = typeof meta.sender_name === 'string' ? meta.sender_name : undefined
 			const roleLabel = msg.role === 'system' ? '[system]'
 				: msg.role === 'assistant' ? '[assistant]'
 				: senderName ? `[user:${senderName}]` : '[user]'
 			const content = msg.content.length > 2000 ? msg.content.slice(0, 2000) + '...' : msg.content
 			parts.push(`${roleLabel} ${content}`)
+			for (const attachment of attachments) {
+				parts.push(...formatAttachmentLines(attachment, 'history'))
+			}
+		}
+	}
+
+	const currentAttachments = opts.currentAttachments ?? []
+	if (currentAttachments.length > 0) {
+		parts.push('## Attached Context\n')
+		for (const attachment of currentAttachments) {
+			parts.push(...formatAttachmentLines(attachment, 'current'))
 		}
 	}
 
@@ -295,4 +321,41 @@ function safeParseMetadata(raw: string | null | undefined): Record<string, unkno
 	} catch {
 		return {}
 	}
+}
+
+function getAttachments(meta: Record<string, unknown>): QueryInstructionAttachment[] {
+	return Array.isArray(meta.attachments)
+		? meta.attachments.filter((attachment): attachment is QueryInstructionAttachment => !!attachment && typeof attachment === 'object')
+		: []
+}
+
+function formatAttachmentLines(
+	attachment: QueryInstructionAttachment,
+	mode: 'current' | 'history',
+): string[] {
+	const label = attachment.name ?? attachment.label ?? attachment.url ?? attachment.refId ?? 'attachment'
+	const lines = [`- ${label}`]
+	if (attachment.type) lines.push(`  type: ${attachment.type}`)
+	if (attachment.mimeType) lines.push(`  mime: ${attachment.mimeType}`)
+	if (typeof attachment.size === 'number') lines.push(`  size: ${attachment.size} bytes`)
+	if (attachment.refType) lines.push(`  ref_type: ${attachment.refType}`)
+	if (attachment.refId) lines.push(`  ref_id: ${attachment.refId}`)
+	if (attachment.url) lines.push(`  url: ${attachment.url}`)
+	if (attachment.metadata && Object.keys(attachment.metadata).length > 0) {
+		const metadata = JSON.stringify(attachment.metadata)
+		lines.push(`  metadata: ${metadata.length > 500 ? `${metadata.slice(0, 500)}...` : metadata}`)
+	}
+
+	if (attachment.content) {
+		const maxLen = mode === 'current' ? 6000 : 1500
+		const content = attachment.content.length > maxLen
+			? `${attachment.content.slice(0, maxLen)}...`
+			: attachment.content
+		lines.push('  content: |')
+		for (const line of content.split('\n')) {
+			lines.push(`    ${line}`)
+		}
+	}
+
+	return lines
 }
