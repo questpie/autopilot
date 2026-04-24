@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { basename, posix } from 'node:path'
-import { and, eq, inArray, like, or } from 'drizzle-orm'
+import { and, eq, like, or } from 'drizzle-orm'
 import type { CompanyDb, IndexDb } from '../db'
 import { artifactBlobs, knowledge } from '../db/company-schema'
 import type { BlobStore } from './blob-store'
@@ -31,6 +31,10 @@ export type KnowledgeRow = typeof knowledge.$inferSelect
 
 export interface KnowledgeDocument extends KnowledgeRow {
 	content: string
+}
+
+export interface KnowledgeContent extends KnowledgeRow {
+	content: Buffer
 }
 
 function normalizePath(path: string): string {
@@ -137,6 +141,26 @@ export class KnowledgeService {
 		return null
 	}
 
+	async read(path: string, input: KnowledgeScopeInput = {}): Promise<KnowledgeContent | null> {
+		const normalizedPath = normalizePath(path)
+		const scopes = visibleScopes(input).reverse()
+		for (const scope of scopes) {
+			const row = await this.db
+				.select()
+				.from(knowledge)
+				.where(
+					and(
+						eq(knowledge.path, normalizedPath),
+						eq(knowledge.scope_type, scope.scopeType),
+						eq(knowledge.scope_id, scope.scopeId),
+					),
+				)
+				.get()
+			if (row) return { ...row, content: await this.readBlob(row) }
+		}
+		return null
+	}
+
 	async write(input: KnowledgeWriteInput): Promise<KnowledgeDocument> {
 		const path = normalizePath(input.path)
 		const { scopeType, scopeId } = resolveWriteScope(input)
@@ -226,6 +250,11 @@ export class KnowledgeService {
 	}
 
 	private async withContent(row: KnowledgeRow): Promise<KnowledgeDocument> {
+		const content = await this.readBlob(row)
+		return { ...row, content: content.toString('utf-8') }
+	}
+
+	private async readBlob(row: KnowledgeRow): Promise<Buffer> {
 		const blob = await this.db
 			.select()
 			.from(artifactBlobs)
@@ -234,7 +263,7 @@ export class KnowledgeService {
 		if (!blob) throw new Error(`Blob row missing for knowledge ${row.id}: ${row.blob_id}`)
 		const content = await this.blobStore.get(blob.storage_key)
 		if (!content) throw new Error(`Blob file missing for knowledge ${row.id}: ${blob.storage_key}`)
-		return { ...row, content: content.toString('utf-8') }
+		return content
 	}
 
 	private async index(row: KnowledgeRow, content: Buffer): Promise<void> {

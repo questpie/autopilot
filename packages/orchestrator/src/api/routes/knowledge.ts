@@ -10,6 +10,7 @@ const scopeQuerySchema = z.object({
 	scope_id: z.string().optional(),
 	project_id: z.string().optional(),
 	task_id: z.string().optional(),
+	raw: z.enum(['true', 'false']).optional(),
 })
 
 const writeBodySchema = z.object({
@@ -45,6 +46,10 @@ function serviceUnavailable() {
 	return Response.json({ error: 'knowledge service not available' }, { status: 503 })
 }
 
+function isTextMime(mimeType: string): boolean {
+	return /(^text\/)|markdown|yaml|json|xml|javascript|typescript/.test(mimeType)
+}
+
 const knowledgeRoute = new Hono<AppEnv>()
 	.get('/', zValidator('query', scopeQuerySchema), async (c) => {
 		const { knowledgeService } = c.get('services')
@@ -65,10 +70,21 @@ const knowledgeRoute = new Hono<AppEnv>()
 	.get('/*', zValidator('query', scopeQuerySchema), async (c) => {
 		const { knowledgeService } = c.get('services')
 		if (!knowledgeService) return serviceUnavailable()
-		const doc = await knowledgeService.get(
-			pathFromRequest(c.req.url),
-			scopeFrom(c.req.valid('query')),
-		)
+		const query = c.req.valid('query')
+		if (query.raw === 'true') {
+			const doc = await knowledgeService.read(pathFromRequest(c.req.url), scopeFrom(query))
+			if (!doc) return c.json({ error: 'knowledge document not found' }, 404)
+			return new Response(new Uint8Array(doc.content), {
+				status: 200,
+				headers: {
+					'Content-Type': doc.mime_type,
+					'Content-Length': String(doc.content.length),
+					'X-Knowledge-Size': String(doc.content.length),
+					'X-Knowledge-Text': isTextMime(doc.mime_type) ? 'true' : 'false',
+				},
+			})
+		}
+		const doc = await knowledgeService.get(pathFromRequest(c.req.url), scopeFrom(query))
 		if (!doc) return c.json({ error: 'knowledge document not found' }, 404)
 		return c.json(doc, 200)
 	})

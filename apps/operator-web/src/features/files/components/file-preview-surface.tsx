@@ -1,25 +1,24 @@
-import { useEffect, useState } from 'react'
 import type { VfsReadResult } from '@/api/vfs.api'
 import { Markdown } from '@/components/ui/markdown'
 import { Spinner } from '@/components/ui/spinner'
-import { splitMarkdownDocument } from '@/lib/markdown-document'
 import { surfaceCardVariants } from '@/components/ui/surface-card'
-import type { ViewerType } from '@/lib/viewer-registry'
+import { splitMarkdownDocument } from '@/lib/markdown-document'
 import { cn } from '@/lib/utils'
-import { buildContentUrl } from '../lib/file-paths'
+import type { ViewerType } from '@/lib/viewer-registry'
+import { useEffect, useState } from 'react'
 
 type FilePreviewVariant = 'full' | 'inspector' | 'card'
 
 interface FilePreviewSurfaceProps {
 	path: string
-	uri: string
+	contentUrl: string
 	viewerType: ViewerType
 	data?: VfsReadResult | null
 	variant: FilePreviewVariant
 	fallback?: React.ReactNode
 }
 
-function useDocxPreview(uri: string, enabled: boolean) {
+function useDocxPreview(contentUrl: string, enabled: boolean) {
 	const [html, setHtml] = useState('')
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
@@ -38,7 +37,7 @@ function useDocxPreview(uri: string, enabled: boolean) {
 			try {
 				setLoading(true)
 				setError(null)
-				const res = await fetch(buildContentUrl(uri), { credentials: 'include' })
+				const res = await fetch(contentUrl, { credentials: 'include' })
 				if (!res.ok) throw new Error(`Failed to fetch DOCX: ${res.status}`)
 
 				const mammoth = await import('mammoth')
@@ -47,7 +46,8 @@ function useDocxPreview(uri: string, enabled: boolean) {
 				if (cancelled) return
 				setHtml(result.value)
 			} catch (err) {
-				if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to render DOCX preview')
+				if (!cancelled)
+					setError(err instanceof Error ? err.message : 'Failed to render DOCX preview')
 			} finally {
 				if (!cancelled) setLoading(false)
 			}
@@ -56,17 +56,22 @@ function useDocxPreview(uri: string, enabled: boolean) {
 		return () => {
 			cancelled = true
 		}
-	}, [enabled, uri])
+	}, [contentUrl, enabled])
 
 	return { html, loading, error }
 }
 
-export function FilePreviewSurface({ path, uri, viewerType, data, variant, fallback = null }: FilePreviewSurfaceProps) {
-	const contentUrl = buildContentUrl(uri)
-	const docx = useDocxPreview(uri, viewerType === 'docx' && variant !== 'card')
-  const markdownDocument = viewerType === 'markdown' && data?.content
-    ? splitMarkdownDocument(data.content)
-    : null
+export function FilePreviewSurface({
+	path,
+	contentUrl,
+	viewerType,
+	data,
+	variant,
+	fallback = null,
+}: FilePreviewSurfaceProps) {
+	const docx = useDocxPreview(contentUrl, viewerType === 'docx' && variant !== 'card')
+	const markdownDocument =
+		viewerType === 'markdown' && data?.content ? splitMarkdownDocument(data.content) : null
 
 	if (viewerType === 'image') {
 		if (variant === 'card') {
@@ -74,23 +79,41 @@ export function FilePreviewSurface({ path, uri, viewerType, data, variant, fallb
 		}
 
 		if (variant === 'inspector') {
-			return <img src={contentUrl} alt={path} className="max-w-full rounded-md outline outline-1 outline-black/10 dark:outline-white/10" />
+			return (
+				<img
+					src={contentUrl}
+					alt={path}
+					className="max-w-full rounded-md outline outline-1 outline-black/10 dark:outline-white/10"
+				/>
+			)
 		}
 
 		return (
 			<div className="flex h-full items-center justify-center overflow-auto p-6">
-				<img src={contentUrl} alt={path} className="max-w-full outline outline-1 outline-black/10 dark:outline-white/10" />
+				<img
+					src={contentUrl}
+					alt={path}
+					className="max-w-full outline outline-1 outline-black/10 dark:outline-white/10"
+				/>
 			</div>
 		)
 	}
 
 	if (viewerType === 'pdf') {
 		if (variant === 'card') {
-			return <iframe src={`${contentUrl}#toolbar=0&navpanes=0&scrollbar=0`} title={path} className="pointer-events-none h-full w-full bg-white" />
+			return (
+				<iframe
+					src={`${contentUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+					title={path}
+					className="pointer-events-none h-full w-full bg-white"
+				/>
+			)
 		}
 
 		if (variant === 'inspector') {
-			return <iframe src={contentUrl} title={path} className="h-80 w-full rounded-md bg-background" />
+			return (
+				<iframe src={contentUrl} title={path} className="h-80 w-full rounded-md bg-background" />
+			)
 		}
 
 		return <iframe src={contentUrl} title={path} className="h-full w-full bg-background" />
@@ -98,15 +121,26 @@ export function FilePreviewSurface({ path, uri, viewerType, data, variant, fallb
 
 	if (viewerType === 'video') {
 		if (variant === 'card') {
-			return <video src={contentUrl} muted preload="metadata" className="h-full w-full object-cover" />
+			return (
+				<video src={contentUrl} muted preload="metadata" className="h-full w-full object-cover" />
+			)
 		}
 
 		if (variant === 'inspector') {
-			return <video src={contentUrl} controls playsInline className="max-h-80 w-full rounded-md bg-black" />
+			return (
+				// biome-ignore lint/a11y/useMediaCaption: User-uploaded video files do not provide caption tracks.
+				<video
+					src={contentUrl}
+					controls
+					playsInline
+					className="max-h-80 w-full rounded-md bg-black"
+				/>
+			)
 		}
 
 		return (
 			<div className="flex h-full items-center justify-center overflow-auto p-6">
+				{/* biome-ignore lint/a11y/useMediaCaption: User-uploaded video files do not provide caption tracks. */}
 				<video src={contentUrl} controls playsInline className="max-h-full max-w-full bg-black" />
 			</div>
 		)
@@ -123,14 +157,19 @@ export function FilePreviewSurface({ path, uri, viewerType, data, variant, fallb
 			)
 		}
 		if (docx.error) {
-			return variant === 'full'
-				? <div className={cn(surfaceCardVariants({ size: 'md' }), 'max-w-lg')}><p className="text-sm text-destructive">{docx.error}</p></div>
-				: <p className="text-sm text-destructive">{docx.error}</p>
+			return variant === 'full' ? (
+				<div className={cn(surfaceCardVariants({ size: 'md' }), 'max-w-lg')}>
+					<p className="text-sm text-destructive">{docx.error}</p>
+				</div>
+			) : (
+				<p className="text-sm text-destructive">{docx.error}</p>
+			)
 		}
 
 		if (variant === 'inspector') {
 			return (
-				<div className="prose prose-sm max-h-80 overflow-auto rounded-[18px] bg-muted/12 p-3 dark:prose-invert">
+				<div className="prose prose-sm max-h-80 overflow-auto rounded-lg bg-muted/12 p-3 dark:prose-invert">
+					{/* biome-ignore lint/security/noDangerouslySetInnerHtml: Mammoth returns HTML for local DOCX previews. */}
 					<div dangerouslySetInnerHTML={{ __html: docx.html }} />
 				</div>
 			)
@@ -139,6 +178,7 @@ export function FilePreviewSurface({ path, uri, viewerType, data, variant, fallb
 		return (
 			<div className="h-full overflow-auto">
 				<div className="prose prose-sm mx-auto max-w-4xl px-6 py-6 dark:prose-invert">
+					{/* biome-ignore lint/security/noDangerouslySetInnerHtml: Mammoth returns HTML for local DOCX previews. */}
 					<div dangerouslySetInnerHTML={{ __html: docx.html }} />
 				</div>
 			</div>
@@ -149,12 +189,12 @@ export function FilePreviewSurface({ path, uri, viewerType, data, variant, fallb
 		if (variant === 'card') return fallback
 		if (variant === 'inspector') {
 			return (
-				<div className="max-h-80 overflow-auto rounded-[18px] bg-muted/12 p-3">
-          {markdownDocument?.frontmatterBlock ? (
-            <pre className="mb-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-1 px-3 py-2 font-mono text-[11px] leading-5 text-muted-foreground">
-              {markdownDocument.frontmatterBlock.trimEnd()}
-            </pre>
-          ) : null}
+				<div className="max-h-80 overflow-auto rounded-lg bg-muted/12 p-3">
+					{markdownDocument?.frontmatterBlock ? (
+						<pre className="mb-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-1 px-3 py-2 font-mono text-[11px] leading-5 text-muted-foreground">
+							{markdownDocument.frontmatterBlock.trimEnd()}
+						</pre>
+					) : null}
 					<Markdown content={markdownDocument?.body ?? data.content} />
 				</div>
 			)
@@ -163,24 +203,29 @@ export function FilePreviewSurface({ path, uri, viewerType, data, variant, fallb
 		return (
 			<div className="h-full overflow-auto">
 				<div className="mx-auto max-w-3xl px-6 py-6">
-          {markdownDocument?.frontmatterBlock ? (
-            <pre className="mb-4 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-1 px-4 py-3 font-mono text-xs leading-5 text-muted-foreground">
-              {markdownDocument.frontmatterBlock.trimEnd()}
-            </pre>
-          ) : null}
+					{markdownDocument?.frontmatterBlock ? (
+						<pre className="mb-4 overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-1 px-4 py-3 font-mono text-xs leading-5 text-muted-foreground">
+							{markdownDocument.frontmatterBlock.trimEnd()}
+						</pre>
+					) : null}
 					<Markdown content={markdownDocument?.body ?? data.content} />
 				</div>
 			</div>
 		)
 	}
 
-	if (data?.isText && (viewerType === 'plain' || viewerType === 'structured' || viewerType === 'code')) {
+	if (
+		data?.isText &&
+		(viewerType === 'plain' || viewerType === 'structured' || viewerType === 'code')
+	) {
 		const text = data.content.slice(0, variant === 'full' ? 8000 : 2400)
 		if (variant === 'card') return fallback
 		if (variant === 'inspector') {
 			return (
-				<div className="max-h-80 overflow-auto rounded-[18px] bg-muted/12 p-3">
-					<pre className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{text}</pre>
+				<div className="max-h-80 overflow-auto rounded-lg bg-muted/12 p-3">
+					<pre className="whitespace-pre-wrap break-words text-xs text-muted-foreground">
+						{text}
+					</pre>
 				</div>
 			)
 		}

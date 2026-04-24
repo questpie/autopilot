@@ -140,7 +140,7 @@ export async function startServer(options?: StartServerOptions) {
 	const scriptService = new ScriptService(authoredConfig)
 
 	const workerRegistry = new DefaultWorkerRegistry()
-	const vfsService = new VfsService(companyRoot, workerRegistry)
+	const vfsService = new VfsService(workerRegistry)
 
 	// ── 6b. Validate master key if shared secrets are in use ────────────
 	if (!hasMasterKey()) {

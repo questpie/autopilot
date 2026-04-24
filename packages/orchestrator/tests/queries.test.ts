@@ -11,45 +11,47 @@
  * - Query completion on run completion
  * - Existing task/workflow paths do not regress
  */
-import { test, expect, describe, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { Hono } from 'hono'
+import { join } from 'node:path'
 import {
 	QueryRequestSchema,
 	QueryResultSchema,
 	QueryRowSchema,
 	RunCompletionSchema,
 } from '@questpie/autopilot-spec'
-import { buildQueryInstructions } from '../src/services/queries'
-import { createCompanyDb, type CompanyDbResult, companySchema, type CompanyDb } from '../src/db'
-import {
-	TaskService,
-	RunService,
-	WorkerService,
-	EnrollmentService,
-	WorkflowEngine,
-	ActivityService,
-	ArtifactService,
-	ConversationBindingService,
-	TaskRelationService,
-	TaskGraphService,
-	SecretService,
-	QueryService,
-	SessionService,
-	SessionMessageService,
-	VfsService,
-	DefaultWorkerRegistry,
-} from '../src/services'
+import { Hono } from 'hono'
 import type { AppEnv, Services } from '../src/api/app'
-import type { Actor } from '../src/auth/types'
-import type { AuthoredConfig } from '../src/services'
+import { chatSessions as chatSessionsRoute } from '../src/api/routes/chat-sessions'
 import { queries as queriesRoute } from '../src/api/routes/queries'
 import { runs as runsRoute } from '../src/api/routes/runs'
-import { workers as workersRoute } from '../src/api/routes/workers'
 import { tasks as tasksRoute } from '../src/api/routes/tasks'
-import { chatSessions as chatSessionsRoute } from '../src/api/routes/chat-sessions'
+import { workers as workersRoute } from '../src/api/routes/workers'
+import type { Actor } from '../src/auth/types'
+import { type CompanyDb, type CompanyDbResult, companySchema, createCompanyDb } from '../src/db'
+import {
+	ActivityService,
+	ArtifactService,
+	BlobStore,
+	ConversationBindingService,
+	DefaultWorkerRegistry,
+	EnrollmentService,
+	KnowledgeService,
+	QueryService,
+	RunService,
+	SecretService,
+	SessionMessageService,
+	SessionService,
+	TaskGraphService,
+	TaskRelationService,
+	TaskService,
+	VfsService,
+	WorkerService,
+	WorkflowEngine,
+} from '../src/services'
+import type { AuthoredConfig } from '../src/services'
+import { buildQueryInstructions } from '../src/services/queries'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -72,15 +74,18 @@ const DEFAULT_AUTHORED_CONFIG: AuthoredConfig = {
 		defaults: {},
 	},
 	agents: new Map([
-		['default-agent', {
-			id: 'default-agent',
-			name: 'Default Agent',
-			role: 'You are a helpful assistant.',
-			capability_profiles: [],
-			triggers: [],
-			fs_scope: { include: [], exclude: [] },
-			secret_refs: [],
-		}],
+		[
+			'default-agent',
+			{
+				id: 'default-agent',
+				name: 'Default Agent',
+				role: 'You are a helpful assistant.',
+				capability_profiles: [],
+				triggers: [],
+				fs_scope: { include: [], exclude: [] },
+				secret_refs: [],
+			},
+		],
 	]),
 	workflows: new Map(),
 	environments: new Map(),
@@ -148,7 +153,8 @@ beforeAll(async () => {
 	const secretService = new SecretService(db)
 	const queryService = new QueryService(db)
 	const sessionService = new SessionService(db)
-	const vfsService = new VfsService(testDir, new DefaultWorkerRegistry())
+	const vfsService = new VfsService(new DefaultWorkerRegistry())
+	const knowledgeService = new KnowledgeService(db, new BlobStore(join(testDir, '.data')))
 
 	const workflowEngine = new WorkflowEngine(
 		DEFAULT_AUTHORED_CONFIG,
@@ -175,6 +181,7 @@ beforeAll(async () => {
 		queryService,
 		sessionService,
 		sessionMessageService: new SessionMessageService(db),
+		knowledgeService,
 		vfsService,
 		scriptService: {} as never,
 		userPreferenceService: {} as never,
@@ -187,7 +194,7 @@ beforeAll(async () => {
 afterAll(async () => {
 	dbResult.raw.close()
 	await rm(testDir, { recursive: true, force: true })
-	delete process.env.AUTOPILOT_MASTER_KEY
+	process.env.AUTOPILOT_MASTER_KEY = undefined
 })
 
 // ─── Schema Tests ─────────────────────────────────────────────────────────
@@ -277,10 +284,7 @@ describe('QueryRowSchema', () => {
 
 describe('POST /api/queries', () => {
 	test('creates a query + taskless run', async () => {
-		const res = await app.request(
-			'/api/queries',
-			post({ prompt: 'List all agents' }),
-		)
+		const res = await app.request('/api/queries', post({ prompt: 'List all agents' }))
 		expect(res.status).toBe(201)
 
 		const body = (await res.json()) as {
@@ -295,7 +299,11 @@ describe('POST /api/queries', () => {
 		// Verify the run exists and has NO task_id
 		const runRes = await app.request(`/api/runs/${body.run_id}`)
 		expect(runRes.status).toBe(200)
-		const run = (await runRes.json()) as { id: string; task_id: string | null; instructions: string }
+		const run = (await runRes.json()) as {
+			id: string
+			task_id: string | null
+			instructions: string
+		}
 		expect(run.task_id).toBeNull()
 		expect(run.instructions).toContain('Query Mode')
 		expect(run.instructions).toContain('List all agents')
@@ -329,10 +337,7 @@ describe('POST /api/queries', () => {
 	})
 
 	test('uses company default agent when none specified', async () => {
-		const res = await app.request(
-			'/api/queries',
-			post({ prompt: 'Hello' }),
-		)
+		const res = await app.request('/api/queries', post({ prompt: 'Hello' }))
 		expect(res.status).toBe(201)
 
 		const body = (await res.json()) as { query_id: string }
@@ -385,24 +390,15 @@ describe('GET /api/queries/:id', () => {
 describe('query completion on run finish', () => {
 	test('query status updates to completed when its run completes', async () => {
 		// Create a query
-		const createRes = await app.request(
-			'/api/queries',
-			post({ prompt: 'Inspect state' }),
-		)
+		const createRes = await app.request('/api/queries', post({ prompt: 'Inspect state' }))
 		const { query_id, run_id } = (await createRes.json()) as {
 			query_id: string
 			run_id: string
 		}
 
 		// Simulate worker claim + complete
-		await app.request(
-			'/api/workers/claim',
-			post({ worker_id: 'w-1' }),
-		)
-		await app.request(
-			`/api/runs/${run_id}/events`,
-			post({ type: 'started', summary: 'Starting' }),
-		)
+		await app.request('/api/workers/claim', post({ worker_id: 'w-1' }))
+		await app.request(`/api/runs/${run_id}/events`, post({ type: 'started', summary: 'Starting' }))
 		await app.request(
 			`/api/runs/${run_id}/complete`,
 			post({ status: 'completed', summary: 'State looks good.' }),
@@ -410,7 +406,12 @@ describe('query completion on run finish', () => {
 
 		// Check query is now completed (GET returns QueryResultSchema shape)
 		const queryRes = await app.request(`/api/queries/${query_id}`)
-		const query = (await queryRes.json()) as { query_id: string; status: string; summary: string; mutated_repo: boolean }
+		const query = (await queryRes.json()) as {
+			query_id: string
+			status: string
+			summary: string
+			mutated_repo: boolean
+		}
 		expect(query.query_id).toBe(query_id)
 		expect(query.status).toBe('completed')
 		expect(query.summary).toBe('State looks good.')
@@ -429,14 +430,8 @@ describe('query completion on run finish', () => {
 		}
 
 		// Simulate worker claim + complete with changed_file artifacts
-		await app.request(
-			'/api/workers/claim',
-			post({ worker_id: 'w-1' }),
-		)
-		await app.request(
-			`/api/runs/${run_id}/events`,
-			post({ type: 'started', summary: 'Starting' }),
-		)
+		await app.request('/api/workers/claim', post({ worker_id: 'w-1' }))
+		await app.request(`/api/runs/${run_id}/events`, post({ type: 'started', summary: 'Starting' }))
 		await app.request(
 			`/api/runs/${run_id}/complete`,
 			post({
@@ -462,24 +457,15 @@ describe('query completion on run finish', () => {
 
 	test('mutated_repo stays false when run has no changed_file artifacts', async () => {
 		// Create a read-only query
-		const createRes = await app.request(
-			'/api/queries',
-			post({ prompt: 'Just inspect' }),
-		)
+		const createRes = await app.request('/api/queries', post({ prompt: 'Just inspect' }))
 		const { query_id, run_id } = (await createRes.json()) as {
 			query_id: string
 			run_id: string
 		}
 
 		// Complete with a doc artifact (not a changed_file)
-		await app.request(
-			'/api/workers/claim',
-			post({ worker_id: 'w-1' }),
-		)
-		await app.request(
-			`/api/runs/${run_id}/events`,
-			post({ type: 'started', summary: 'Starting' }),
-		)
+		await app.request('/api/workers/claim', post({ worker_id: 'w-1' }))
+		await app.request(`/api/runs/${run_id}/events`, post({ type: 'started', summary: 'Starting' }))
 		await app.request(
 			`/api/runs/${run_id}/complete`,
 			post({
@@ -539,10 +525,7 @@ describe('query completion on run finish', () => {
 	})
 
 	test('cancel marks linked query as failed', async () => {
-		const createRes = await app.request(
-			'/api/queries',
-			post({ prompt: 'Cancel me' }),
-		)
+		const createRes = await app.request('/api/queries', post({ prompt: 'Cancel me' }))
 		const { query_id, run_id } = (await createRes.json()) as {
 			query_id: string
 			run_id: string
@@ -577,12 +560,11 @@ describe('query completion on run finish', () => {
 			post({ prompt: 'build a previewable deck', runtime, allow_repo_mutation: true }),
 		)
 
-		const claimRes = await app.request(
-			'/api/workers/claim',
-			post({ worker_id: workerId, runtime }),
-		)
+		const claimRes = await app.request('/api/workers/claim', post({ worker_id: workerId, runtime }))
 		expect(claimRes.status).toBe(200)
-		const claim = await claimRes.json() as { run: { task_id: string | null; workspace_mode?: string | null } | null }
+		const claim = (await claimRes.json()) as {
+			run: { task_id: string | null; workspace_mode?: string | null } | null
+		}
 		expect(claim.run?.task_id).toBeNull()
 		expect(claim.run?.workspace_mode).toBe('none')
 	})
@@ -604,12 +586,11 @@ describe('query completion on run finish', () => {
 			post({ prompt: 'inspect this file only', runtime, allow_repo_mutation: false }),
 		)
 
-		const claimRes = await app.request(
-			'/api/workers/claim',
-			post({ worker_id: workerId, runtime }),
-		)
+		const claimRes = await app.request('/api/workers/claim', post({ worker_id: workerId, runtime }))
 		expect(claimRes.status).toBe(200)
-		const claim = await claimRes.json() as { run: { task_id: string | null; workspace_mode?: string | null } | null }
+		const claim = (await claimRes.json()) as {
+			run: { task_id: string | null; workspace_mode?: string | null } | null
+		}
 		expect(claim.run?.task_id).toBeNull()
 		expect(claim.run?.workspace_mode ?? null).toBeNull()
 	})
@@ -636,10 +617,16 @@ describe('query completion on run finish', () => {
 				}),
 			)
 
-			const query1Res = await app.request('/api/queries', post({ prompt: 'shared checkout 1', runtime }))
-			const query1 = await query1Res.json() as { run_id: string }
-			const query2Res = await app.request('/api/queries', post({ prompt: 'shared checkout 2', runtime }))
-			const query2 = await query2Res.json() as { run_id: string }
+			const query1Res = await app.request(
+				'/api/queries',
+				post({ prompt: 'shared checkout 1', runtime }),
+			)
+			const query1 = (await query1Res.json()) as { run_id: string }
+			const query2Res = await app.request(
+				'/api/queries',
+				post({ prompt: 'shared checkout 2', runtime }),
+			)
+			const query2 = (await query2Res.json()) as { run_id: string }
 
 			const firstClaimRes = await app.request(
 				'/api/workers/claim',
@@ -651,7 +638,9 @@ describe('query completion on run finish', () => {
 					worktree_isolation_available: true,
 				}),
 			)
-			const firstClaim = await firstClaimRes.json() as { run: { id: string; task_id: string | null } | null }
+			const firstClaim = (await firstClaimRes.json()) as {
+				run: { id: string; task_id: string | null } | null
+			}
 			expect(firstClaim.run?.task_id).toBeNull()
 			expect([query1.run_id, query2.run_id]).toContain(firstClaim.run?.id ?? '')
 
@@ -682,10 +671,14 @@ describe('query completion on run finish', () => {
 					worktree_isolation_available: true,
 				}),
 			)
-			const secondClaim = await secondClaimRes.json() as { run: { id: string; task_id: string | null } | null }
+			const secondClaim = (await secondClaimRes.json()) as {
+				run: { id: string; task_id: string | null } | null
+			}
 			expect(secondClaim.run?.id).toBe(isolatedRunId)
 
-			const deferredQueryIds = [query1.run_id, query2.run_id].filter((id) => id !== firstClaim.run?.id)
+			const deferredQueryIds = [query1.run_id, query2.run_id].filter(
+				(id) => id !== firstClaim.run?.id,
+			)
 			for (const queryRunId of deferredQueryIds) {
 				const deferredQuery = await services.runService.get(queryRunId)
 				expect(deferredQuery?.status).toBe('pending')
@@ -720,7 +713,7 @@ describe('query completion on run finish', () => {
 				worktree_isolation_available: true,
 			}),
 		)
-		const firstClaim = await firstClaimRes.json() as { run: { id: string } | null }
+		const firstClaim = (await firstClaimRes.json()) as { run: { id: string } | null }
 		expect(firstClaim.run).not.toBeNull()
 
 		const secondClaimRes = await app.request(
@@ -733,7 +726,7 @@ describe('query completion on run finish', () => {
 				worktree_isolation_available: true,
 			}),
 		)
-		const secondClaim = await secondClaimRes.json() as { run: { id: string } | null }
+		const secondClaim = (await secondClaimRes.json()) as { run: { id: string } | null }
 		expect(secondClaim.run).toBeNull()
 	})
 })
@@ -754,26 +747,26 @@ describe('task regression', () => {
 	})
 })
 
-	describe('buildQueryInstructions', () => {
-		test('mutable query instructions include artifact guidance', () => {
-			const instructions = buildQueryInstructions('build a dashboard', {
-				allowMutation: true,
-				hasResume: false,
-			})
-			expect(instructions).toContain('mutable')
-			expect(instructions).toContain('artifact_create')
-			expect(instructions).toContain('rendered preview')
-			expect(instructions).toContain('Autopilot-native primitives')
-			expect(instructions).toContain('task')
+describe('buildQueryInstructions', () => {
+	test('mutable query instructions include artifact guidance', () => {
+		const instructions = buildQueryInstructions('build a dashboard', {
+			allowMutation: true,
+			hasResume: false,
 		})
+		expect(instructions).toContain('mutable')
+		expect(instructions).toContain('artifact_create')
+		expect(instructions).toContain('rendered preview')
+		expect(instructions).toContain('Autopilot-native primitives')
+		expect(instructions).toContain('task')
+	})
 
 	test('mutable query instructions explain self-contained HTML artifact expectations', () => {
 		const instructions = buildQueryInstructions('build a reveal.js deck', {
 			allowMutation: true,
 			hasResume: false,
 		})
-			expect(instructions).toContain('self-contained files')
-			expect(instructions).toContain('Tailwind via CDN')
+		expect(instructions).toContain('self-contained files')
+		expect(instructions).toContain('Tailwind via CDN')
 		expect(instructions).toContain('proper HTML structure')
 	})
 
@@ -802,18 +795,20 @@ describe('task regression', () => {
 		const instructions = buildQueryInstructions('Continue', {
 			allowMutation: true,
 			hasResume: false,
-			sessionMessages: [{
-				id: 'smsg-1',
-				session_id: 'sess-1',
-				role: 'user',
-				content: 'Please review the attachment',
-				query_id: null,
-				external_message_id: null,
-				metadata: JSON.stringify({
-					attachments: [{ type: 'file', name: 'design.png', mimeType: 'image/png' }],
-				}),
-				created_at: new Date().toISOString(),
-			}],
+			sessionMessages: [
+				{
+					id: 'smsg-1',
+					session_id: 'sess-1',
+					role: 'user',
+					content: 'Please review the attachment',
+					query_id: null,
+					external_message_id: null,
+					metadata: JSON.stringify({
+						attachments: [{ type: 'file', name: 'design.png', mimeType: 'image/png' }],
+					}),
+					created_at: new Date().toISOString(),
+				},
+			],
 		})
 		expect(instructions).toContain('Please review the attachment')
 		expect(instructions).toContain('design.png')
@@ -831,19 +826,24 @@ describe('task regression', () => {
 			created_by: 'test',
 		})
 
-		const res = await app.request('/api/chat-sessions', post({
-			agentId: 'default-agent',
-			message: 'nazor?',
-			attachments: [{
-				type: 'ref',
-				label: `Task ${task!.id.slice(0, 8)} ${task!.title}`,
-				refType: 'task',
-				refId: task!.id,
-			}],
-		}))
+		const res = await app.request(
+			'/api/chat-sessions',
+			post({
+				agentId: 'default-agent',
+				message: 'nazor?',
+				attachments: [
+					{
+						type: 'ref',
+						label: `Task ${task!.id.slice(0, 8)} ${task!.title}`,
+						refType: 'task',
+						refId: task!.id,
+					},
+				],
+			}),
+		)
 		expect(res.status).toBe(200)
 
-		const body = await res.json() as { run_id: string }
+		const body = (await res.json()) as { run_id: string }
 		const run = await services.runService.get(body.run_id)
 		expect(run?.instructions).toContain('## Attached Context')
 		expect(run?.instructions).toContain(`Task ID: ${task!.id}`)
@@ -852,42 +852,47 @@ describe('task regression', () => {
 		expect(run?.instructions).toContain('Status: blocked')
 	})
 
-	test('chat session file and directory ref attachments are hydrated with VFS context', async () => {
-		await mkdir(join(testDir, '.autopilot', 'workflows'), { recursive: true })
-		await writeFile(
-			join(testDir, '.autopilot', 'workflows', 'arch-review.yaml'),
-			'name: arch-review\nsteps:\n  - id: inspect\n',
-		)
-		await writeFile(
-			join(testDir, '.autopilot', 'workflows', 'bounded-dev.yaml'),
-			'name: bounded-dev\nsteps:\n  - id: build\n',
-		)
+	test('chat session file and directory ref attachments are hydrated with knowledge context', async () => {
+		if (!services.knowledgeService) throw new Error('knowledge service unavailable')
+		await services.knowledgeService.write({
+			path: 'workflows/arch-review.yaml',
+			content: 'name: arch-review\nsteps:\n  - id: inspect\n',
+			mime_type: 'text/yaml',
+		})
+		await services.knowledgeService.write({
+			path: 'workflows/bounded-dev.yaml',
+			content: 'name: bounded-dev\nsteps:\n  - id: build\n',
+			mime_type: 'text/yaml',
+		})
 
-		const res = await app.request('/api/chat-sessions', post({
-			agentId: 'default-agent',
-			message: 'nazor na subory',
-			attachments: [
-				{
-					type: 'ref',
-					label: 'Current folder .autopilot/workflows',
-					refType: 'directory',
-					refId: '.autopilot/workflows',
-					metadata: { path: '.autopilot/workflows' },
-				},
-				{
-					type: 'ref',
-					label: '.autopilot/workflows/arch-review.yaml',
-					refType: 'file',
-					refId: '.autopilot/workflows/arch-review.yaml',
-					metadata: { path: '.autopilot/workflows/arch-review.yaml' },
-				},
-			],
-		}))
+		const res = await app.request(
+			'/api/chat-sessions',
+			post({
+				agentId: 'default-agent',
+				message: 'nazor na subory',
+				attachments: [
+					{
+						type: 'ref',
+						label: 'Current folder workflows',
+						refType: 'directory',
+						refId: 'workflows',
+						metadata: { path: 'workflows' },
+					},
+					{
+						type: 'ref',
+						label: 'workflows/arch-review.yaml',
+						refType: 'file',
+						refId: 'workflows/arch-review.yaml',
+						metadata: { path: 'workflows/arch-review.yaml' },
+					},
+				],
+			}),
+		)
 		expect(res.status).toBe(200)
 
-		const body = await res.json() as { run_id: string }
+		const body = (await res.json()) as { run_id: string }
 		const run = await services.runService.get(body.run_id)
-		expect(run?.instructions).toContain('Directory: .autopilot/workflows')
+		expect(run?.instructions).toContain('Directory: workflows')
 		expect(run?.instructions).toContain('arch-review.yaml')
 		expect(run?.instructions).toContain('bounded-dev.yaml')
 		expect(run?.instructions).toContain('name: arch-review')
@@ -923,29 +928,32 @@ describe('task regression', () => {
 			mime_type: 'text/markdown',
 		})
 
-		const res = await app.request('/api/chat-sessions', post({
-			agentId: 'default-agent',
-			message: 'co si myslis?',
-			attachments: [
-				{
-					type: 'ref',
-					label: `Run ${runId.slice(0, 8)}`,
-					refType: 'run',
-					refId: runId,
-					metadata: { runId },
-				},
-				{
-					type: 'ref',
-					label: 'workflow-notes.md',
-					refType: 'artifact',
-					refId: artifactId,
-					metadata: { artifactId, runId },
-				},
-			],
-		}))
+		const res = await app.request(
+			'/api/chat-sessions',
+			post({
+				agentId: 'default-agent',
+				message: 'co si myslis?',
+				attachments: [
+					{
+						type: 'ref',
+						label: `Run ${runId.slice(0, 8)}`,
+						refType: 'run',
+						refId: runId,
+						metadata: { runId },
+					},
+					{
+						type: 'ref',
+						label: 'workflow-notes.md',
+						refType: 'artifact',
+						refId: artifactId,
+						metadata: { artifactId, runId },
+					},
+				],
+			}),
+		)
 		expect(res.status).toBe(200)
 
-		const body = await res.json() as { run_id: string }
+		const body = (await res.json()) as { run_id: string }
 		const run = await services.runService.get(body.run_id)
 		expect(run?.instructions).toContain(`Run ID: ${runId}`)
 		expect(run?.instructions).toContain('The workflow looks coherent but needs naming cleanup.')

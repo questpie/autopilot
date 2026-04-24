@@ -45,6 +45,7 @@ const COMPANY_TYPES: ConfigTypeOption[] = [
 		label: 'Capabilities',
 		description: 'Capability profiles used by steps and agents',
 	},
+	{ id: 'skills', label: 'Skills', description: 'Installed skill definitions and markdown bodies' },
 	{ id: 'scripts', label: 'Scripts', description: 'Standalone script definitions' },
 	{ id: 'context', label: 'Context', description: 'Global markdown context files', context: true },
 ]
@@ -61,6 +62,7 @@ const PROJECT_TYPES: ConfigTypeOption[] = [
 	{ id: 'providers', label: 'Providers', description: 'Project-scoped provider overrides' },
 	{ id: 'environments', label: 'Environments', description: 'Project environment overrides' },
 	{ id: 'capabilities', label: 'Capabilities', description: 'Project capability overrides' },
+	{ id: 'skills', label: 'Skills', description: 'Project skill overrides' },
 	{ id: 'scripts', label: 'Scripts', description: 'Project script overrides' },
 	{ id: 'context', label: 'Context', description: 'Project markdown context files', context: true },
 ]
@@ -105,6 +107,13 @@ function createDefaultRecord(type: ConfigEntityType, id: string) {
 			return { id, name: '', description: '', required_tags: [], secret_refs: [] }
 		case 'capabilities':
 			return { id, description: '', skills: [], mcp_servers: [], context: [], prompts: [] }
+		case 'skills':
+			return {
+				id,
+				manifest: { name: id, description: '', tags: [], roles: ['all'], scripts: [] },
+				body: '',
+				path: `db://skills/${id}/SKILL.md`,
+			}
 		case 'scripts':
 			return {
 				id,

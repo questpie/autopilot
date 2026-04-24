@@ -248,6 +248,7 @@ export type ConfigEntityType =
 	| 'environments'
 	| 'providers'
 	| 'capabilities'
+	| 'skills'
 	| 'scripts'
 	| 'context'
 
@@ -301,6 +302,22 @@ export interface CapabilityProfileConfig {
 	mcp_servers: string[]
 	context: string[]
 	prompts: string[]
+}
+
+export interface SkillConfig {
+	id: string
+	manifest: {
+		name: string
+		description: string
+		version?: string
+		tags?: string[]
+		roles?: string[]
+		author?: string
+		forked_from?: string
+		scripts?: string[]
+	}
+	body: string
+	path: string
 }
 
 export interface ContextConfigRecord {
@@ -526,4 +543,23 @@ export interface VfsDiffResult {
 		insertions: number
 		deletions: number
 	}
+}
+
+// ── Knowledge ──
+
+export interface KnowledgeDocumentRecord {
+	id: string
+	path: string
+	title: string
+	content_hash: string
+	blob_id: string
+	mime_type: string
+	scope_type: 'company' | 'project' | 'task'
+	scope_id: string
+	created_at: string
+	updated_at: string
+}
+
+export interface KnowledgeDocument extends KnowledgeDocumentRecord {
+	content: string
 }

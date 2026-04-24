@@ -25,16 +25,21 @@ function safeParseJson(raw: string | null | undefined): Record<string, unknown> 
 	}
 }
 
-function isTextLikeContent(mimeType: string | null | undefined, refKind: string | undefined): boolean {
+function isTextLikeContent(
+	mimeType: string | null | undefined,
+	refKind: string | undefined,
+): boolean {
 	if (refKind === 'inline') return true
 	if (!mimeType) return false
-	return mimeType.startsWith('text/')
-		|| mimeType.includes('json')
-		|| mimeType.includes('yaml')
-		|| mimeType.includes('xml')
-		|| mimeType.includes('markdown')
-		|| mimeType.includes('javascript')
-		|| mimeType.includes('typescript')
+	return (
+		mimeType.startsWith('text/') ||
+		mimeType.includes('json') ||
+		mimeType.includes('yaml') ||
+		mimeType.includes('xml') ||
+		mimeType.includes('markdown') ||
+		mimeType.includes('javascript') ||
+		mimeType.includes('typescript')
+	)
 }
 
 async function resolveArtifactTextContent(
@@ -59,74 +64,123 @@ async function hydrateAttachments(
 ): Promise<QueryInstructionAttachment[] | undefined> {
 	if (!attachments || attachments.length === 0) return attachments
 
-	return Promise.all(attachments.map(async (attachment) => {
-		if (attachment.refType === 'task' && attachment.refId) {
-			const task = await services.taskService.get(attachment.refId)
-			if (!task) return attachment
+	return Promise.all(
+		attachments.map(async (attachment) => {
+			if (attachment.refType === 'task' && attachment.refId) {
+				const task = await services.taskService.get(attachment.refId)
+				if (!task) return attachment
 
-			const description = task.description?.trim()
-			const taskContext = [
-				`Task ID: ${task.id}`,
-				`Title: ${task.title}`,
-				`Status: ${task.status}`,
-				`Type: ${task.type}`,
-				task.priority ? `Priority: ${task.priority}` : null,
-				task.assigned_to ? `Assigned to: ${task.assigned_to}` : null,
-				task.workflow_id ? `Workflow: ${task.workflow_id}` : null,
-				task.workflow_step ? `Workflow step: ${task.workflow_step}` : null,
-				description ? `Description:\n${description}` : null,
-			].filter((line): line is string => !!line).join('\n')
+				const description = task.description?.trim()
+				const taskContext = [
+					`Task ID: ${task.id}`,
+					`Title: ${task.title}`,
+					`Status: ${task.status}`,
+					`Type: ${task.type}`,
+					task.priority ? `Priority: ${task.priority}` : null,
+					task.assigned_to ? `Assigned to: ${task.assigned_to}` : null,
+					task.workflow_id ? `Workflow: ${task.workflow_id}` : null,
+					task.workflow_step ? `Workflow step: ${task.workflow_step}` : null,
+					description ? `Description:\n${description}` : null,
+				]
+					.filter((line): line is string => !!line)
+					.join('\n')
 
-			return {
-				...attachment,
-				name: attachment.name ?? task.title,
-				label: attachment.label ?? task.title,
-				content: attachment.content ?? taskContext,
-				metadata: {
-					...(attachment.metadata ?? {}),
-					taskId: task.id,
-					title: task.title,
-					status: task.status,
-					type: task.type,
-					priority: task.priority,
-					assigned_to: task.assigned_to,
-					workflow_id: task.workflow_id,
-					workflow_step: task.workflow_step,
-				},
+				return {
+					...attachment,
+					name: attachment.name ?? task.title,
+					label: attachment.label ?? task.title,
+					content: attachment.content ?? taskContext,
+					metadata: {
+						...(attachment.metadata ?? {}),
+						taskId: task.id,
+						title: task.title,
+						status: task.status,
+						type: task.type,
+						priority: task.priority,
+						assigned_to: task.assigned_to,
+						workflow_id: task.workflow_id,
+						workflow_step: task.workflow_step,
+					},
+				}
 			}
-		}
 
-		if (attachment.refType === 'file' || attachment.refType === 'directory') {
-			const path = typeof attachment.metadata?.path === 'string'
-				? attachment.metadata.path
-				: (typeof attachment.refId === 'string' ? attachment.refId : null)
-			if (!path) return attachment
+			if (attachment.refType === 'file' || attachment.refType === 'directory') {
+				const path =
+					typeof attachment.metadata?.path === 'string'
+						? attachment.metadata.path
+						: typeof attachment.refId === 'string'
+							? attachment.refId
+							: null
+				if (!path) return attachment
 
-			const runId = typeof attachment.metadata?.runId === 'string'
-				? attachment.metadata.runId
-				: null
-			const uri = runId ? `workspace://run/${runId}/${path}` : `company://${path}`
+				const runId =
+					typeof attachment.metadata?.runId === 'string' ? attachment.metadata.runId : null
+				const uri = runId ? `workspace://run/${runId}/${path}` : null
 
-			if (attachment.refType === 'file') {
+				if (attachment.refType === 'file') {
+					try {
+						const file = runId
+							? await services.vfsService.read(uri!)
+							: await services.knowledgeService?.read(path)
+						if (!file) return attachment
+						const mimeType = 'mimeType' in file ? file.mimeType : file.mime_type
+						const size = 'size' in file ? file.size : file.content.length
+						const isText =
+							'isText' in file ? file.isText : /(^text\/)|markdown|yaml|json/.test(mimeType)
+						const content = isText ? Buffer.from(file.content).toString('utf-8') : undefined
+
+						return {
+							...attachment,
+							name: attachment.name ?? path.split('/').pop() ?? path,
+							label: attachment.label ?? path,
+							mimeType: attachment.mimeType ?? mimeType,
+							size: attachment.size ?? size,
+							content: attachment.content ?? content,
+							metadata: {
+								...(attachment.metadata ?? {}),
+								path,
+								runId,
+								...(uri ? { uri } : {}),
+								isText,
+							},
+						}
+					} catch {
+						return attachment
+					}
+				}
+
 				try {
-					const file = await services.vfsService.read(uri)
-					const content = file.isText
-						? Buffer.from(file.content).toString('utf-8')
-						: undefined
+					const entries = runId
+						? (await services.vfsService.list(uri!)).entries
+						: ((await services.knowledgeService?.list({ path })) ?? []).map((doc) => ({
+								name: doc.path.split('/').pop() ?? doc.path,
+								path: doc.path,
+								type: 'file' as const,
+								mime_type: doc.mime_type,
+							}))
+					const visibleEntries = entries.slice(0, 40)
+					const directoryContext = [
+						`Directory: ${path}`,
+						`Entries: ${entries.length}`,
+						...visibleEntries.map((entry) => {
+							const kind = entry.type === 'directory' ? 'dir' : 'file'
+							const size =
+								'size' in entry && typeof entry.size === 'number' ? ` (${entry.size} B)` : ''
+							return `- ${kind}: ${entry.path}${size}`
+						}),
+					].join('\n')
 
 					return {
 						...attachment,
 						name: attachment.name ?? path.split('/').pop() ?? path,
 						label: attachment.label ?? path,
-						mimeType: attachment.mimeType ?? file.mimeType,
-						size: attachment.size ?? file.size,
-						content: attachment.content ?? content,
+						content: attachment.content ?? directoryContext,
 						metadata: {
 							...(attachment.metadata ?? {}),
 							path,
 							runId,
-							uri,
-							isText: file.isText,
+							...(uri ? { uri } : {}),
+							entryCount: entries.length,
 						},
 					}
 				} catch {
@@ -134,135 +188,115 @@ async function hydrateAttachments(
 				}
 			}
 
-			try {
-				const listing = await services.vfsService.list(uri)
-				const visibleEntries = listing.entries.slice(0, 40)
-				const directoryContext = [
-					`Directory: ${path}`,
-					`Entries: ${listing.entries.length}`,
-					...visibleEntries.map((entry) => {
-						const kind = entry.type === 'directory' ? 'dir' : 'file'
-						const size = typeof entry.size === 'number' ? ` (${entry.size} B)` : ''
-						return `- ${kind}: ${entry.path}${size}`
-					}),
-				].join('\n')
+			if (attachment.refType === 'run') {
+				const runId =
+					typeof attachment.metadata?.runId === 'string'
+						? attachment.metadata.runId
+						: typeof attachment.refId === 'string'
+							? attachment.refId
+							: null
+				if (!runId) return attachment
+
+				const run = await services.runService.get(runId)
+				if (!run) return attachment
+
+				const [events, artifacts] = await Promise.all([
+					services.runService.getEvents(runId),
+					services.artifactService.listForRun(runId),
+				])
+
+				const recentEvents = events
+					.filter((event) => event.summary)
+					.slice(-10)
+					.map((event) => `- ${event.type}: ${event.summary}`)
+
+				const artifactLines = artifacts
+					.slice(0, 10)
+					.map((artifact) => `- ${artifact.kind}: ${artifact.title}`)
+
+				const runContext = [
+					`Run ID: ${run.id}`,
+					`Status: ${run.status}`,
+					`Agent: ${run.agent_id}`,
+					`Runtime: ${run.runtime}`,
+					run.model ? `Model: ${run.model}` : null,
+					run.task_id ? `Task ID: ${run.task_id}` : null,
+					run.summary ? `Summary:\n${run.summary}` : null,
+					run.error ? `Error:\n${run.error}` : null,
+					recentEvents.length > 0 ? 'Recent events:' : null,
+					...recentEvents,
+					artifactLines.length > 0 ? 'Artifacts:' : null,
+					...artifactLines,
+				]
+					.filter((line): line is string => !!line)
+					.join('\n')
 
 				return {
 					...attachment,
-					name: attachment.name ?? path.split('/').pop() ?? path,
-					label: attachment.label ?? path,
-					content: attachment.content ?? directoryContext,
+					label: attachment.label ?? `Run ${run.id.slice(0, 8)}`,
+					content: attachment.content ?? runContext,
 					metadata: {
 						...(attachment.metadata ?? {}),
-						path,
-						runId,
-						uri,
-						entryCount: listing.entries.length,
+						runId: run.id,
+						status: run.status,
+						agent_id: run.agent_id,
+						runtime: run.runtime,
+						model: run.model,
+						taskId: run.task_id,
+						artifactCount: artifacts.length,
 					},
 				}
-			} catch {
-				return attachment
 			}
-		}
 
-		if (attachment.refType === 'run') {
-			const runId = typeof attachment.metadata?.runId === 'string'
-				? attachment.metadata.runId
-				: (typeof attachment.refId === 'string' ? attachment.refId : null)
-			if (!runId) return attachment
+			if (attachment.refType === 'artifact') {
+				const artifactId =
+					typeof attachment.metadata?.artifactId === 'string'
+						? attachment.metadata.artifactId
+						: typeof attachment.refId === 'string'
+							? attachment.refId
+							: null
+				if (!artifactId) return attachment
 
-			const run = await services.runService.get(runId)
-			if (!run) return attachment
+				const artifact = await services.artifactService.get(artifactId)
+				if (!artifact) return attachment
 
-			const [events, artifacts] = await Promise.all([
-				services.runService.getEvents(runId),
-				services.artifactService.listForRun(runId),
-			])
+				const textContent = await resolveArtifactTextContent(services, artifactId)
+				const artifactMeta = safeParseJson(artifact.metadata)
+				const artifactContext = [
+					`Artifact ID: ${artifact.id}`,
+					`Title: ${artifact.title}`,
+					`Kind: ${artifact.kind}`,
+					`Ref kind: ${artifact.ref_kind}`,
+					`Run ID: ${artifact.run_id}`,
+					artifact.task_id ? `Task ID: ${artifact.task_id}` : null,
+					artifact.mime_type ? `MIME: ${artifact.mime_type}` : null,
+					artifact.ref_kind === 'url' ? `URL: ${artifact.ref_value}` : null,
+					textContent ? `Content:\n${textContent}` : null,
+				]
+					.filter((line): line is string => !!line)
+					.join('\n')
 
-			const recentEvents = events
-				.filter((event) => event.summary)
-				.slice(-10)
-				.map((event) => `- ${event.type}: ${event.summary}`)
-
-			const artifactLines = artifacts
-				.slice(0, 10)
-				.map((artifact) => `- ${artifact.kind}: ${artifact.title}`)
-
-			const runContext = [
-				`Run ID: ${run.id}`,
-				`Status: ${run.status}`,
-				`Agent: ${run.agent_id}`,
-				`Runtime: ${run.runtime}`,
-				run.model ? `Model: ${run.model}` : null,
-				run.task_id ? `Task ID: ${run.task_id}` : null,
-				run.summary ? `Summary:\n${run.summary}` : null,
-				run.error ? `Error:\n${run.error}` : null,
-				recentEvents.length > 0 ? 'Recent events:' : null,
-				...recentEvents,
-				artifactLines.length > 0 ? 'Artifacts:' : null,
-				...artifactLines,
-			].filter((line): line is string => !!line).join('\n')
-
-			return {
-				...attachment,
-				label: attachment.label ?? `Run ${run.id.slice(0, 8)}`,
-				content: attachment.content ?? runContext,
-				metadata: {
-					...(attachment.metadata ?? {}),
-					runId: run.id,
-					status: run.status,
-					agent_id: run.agent_id,
-					runtime: run.runtime,
-					model: run.model,
-					taskId: run.task_id,
-					artifactCount: artifacts.length,
-				},
+				return {
+					...attachment,
+					name: attachment.name ?? artifact.title,
+					label: attachment.label ?? artifact.title,
+					mimeType: attachment.mimeType ?? artifact.mime_type ?? undefined,
+					content: attachment.content ?? artifactContext,
+					metadata: {
+						...(attachment.metadata ?? {}),
+						artifactId: artifact.id,
+						runId: artifact.run_id,
+						taskId: artifact.task_id,
+						kind: artifact.kind,
+						refKind: artifact.ref_kind,
+						...artifactMeta,
+					},
+				}
 			}
-		}
 
-		if (attachment.refType === 'artifact') {
-			const artifactId = typeof attachment.metadata?.artifactId === 'string'
-				? attachment.metadata.artifactId
-				: (typeof attachment.refId === 'string' ? attachment.refId : null)
-			if (!artifactId) return attachment
-
-			const artifact = await services.artifactService.get(artifactId)
-			if (!artifact) return attachment
-
-			const textContent = await resolveArtifactTextContent(services, artifactId)
-			const artifactMeta = safeParseJson(artifact.metadata)
-			const artifactContext = [
-				`Artifact ID: ${artifact.id}`,
-				`Title: ${artifact.title}`,
-				`Kind: ${artifact.kind}`,
-				`Ref kind: ${artifact.ref_kind}`,
-				`Run ID: ${artifact.run_id}`,
-				artifact.task_id ? `Task ID: ${artifact.task_id}` : null,
-				artifact.mime_type ? `MIME: ${artifact.mime_type}` : null,
-				artifact.ref_kind === 'url' ? `URL: ${artifact.ref_value}` : null,
-				textContent ? `Content:\n${textContent}` : null,
-			].filter((line): line is string => !!line).join('\n')
-
-			return {
-				...attachment,
-				name: attachment.name ?? artifact.title,
-				label: attachment.label ?? artifact.title,
-				mimeType: attachment.mimeType ?? artifact.mime_type ?? undefined,
-				content: attachment.content ?? artifactContext,
-				metadata: {
-					...(attachment.metadata ?? {}),
-					artifactId: artifact.id,
-					runId: artifact.run_id,
-					taskId: artifact.task_id,
-					kind: artifact.kind,
-					refKind: artifact.ref_kind,
-					...artifactMeta,
-				},
-			}
-		}
-
-		return attachment
-	}))
+			return attachment
+		}),
+	)
 }
 
 const attachmentSchema = z
@@ -424,13 +458,8 @@ const chatSessions = new Hono<AppEnv>()
 			}),
 		),
 		async (c) => {
-			const {
-				sessionService,
-				sessionMessageService,
-				queryService,
-				runService,
-				workerService,
-			} = c.get('services')
+			const { sessionService, sessionMessageService, queryService, runService, workerService } =
+				c.get('services')
 			const services = c.get('services')
 			const authoredConfig = c.get('authoredConfig')
 			const { id } = c.req.valid('param')

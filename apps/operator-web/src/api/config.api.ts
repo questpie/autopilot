@@ -9,6 +9,7 @@ import type {
 	ProjectConfig,
 	ProviderConfig,
 	Script,
+	SkillConfig,
 	Workflow,
 } from './types'
 
@@ -20,6 +21,7 @@ export type ConfigRecord =
 	| EnvironmentConfig
 	| ProviderConfig
 	| CapabilityProfileConfig
+	| SkillConfig
 	| Script
 	| ContextConfigRecord
 
