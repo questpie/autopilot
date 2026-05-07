@@ -84,7 +84,7 @@ export function AuthBrandPanel() {
       <div className="relative z-10 flex flex-col items-center gap-6">
         <SquareBuildLogo size={64} />
         <div className="flex flex-col items-center gap-2">
-          <span className="font-heading text-2xl font-bold tracking-[-0.05em] text-foreground">
+          <span className="font-heading text-2xl font-bold tracking-normal text-foreground">
             QUESTPIE
           </span>
           <p className="font-heading px-6 text-center text-balance text-xs tracking-widest text-muted-foreground/60 uppercase">

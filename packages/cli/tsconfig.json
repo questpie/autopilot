@@ -2,14 +2,11 @@
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
 		"outDir": "dist",
-		"rootDir": "src",
+		"rootDir": ".",
+		"declaration": false,
+		"declarationMap": false,
 		"skipLibCheck": true,
-		"types": [
-			"@types/bun"
-		]
+		"types": ["@types/bun"]
 	},
-	"include": [
-		"src",
-		"tests"
-	]
+	"include": ["src"]
 }

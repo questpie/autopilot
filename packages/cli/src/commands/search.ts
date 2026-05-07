@@ -1,18 +1,33 @@
 import { Command } from 'commander'
 import { program } from '../program'
-import { section, dim, error, separator, badge } from '../utils/format'
 import { createApiClient } from '../utils/client'
+import { badge, dim, error, section, separator } from '../utils/format'
+
+type SearchScope = 'tasks' | 'runs' | 'context' | 'knowledge' | 'schedules' | 'all'
+const SEARCH_SCOPES = new Set<SearchScope>([
+	'tasks',
+	'runs',
+	'context',
+	'knowledge',
+	'schedules',
+	'all',
+])
 
 program.addCommand(
 	new Command('search')
 		.description('Full-text search across tasks, runs, context files, and schedules')
 		.argument('<query>', 'Search query')
-		.option('-s, --scope <scope>', 'Scope: tasks, runs, context, schedules, all', 'all')
+		.option('-s, --scope <scope>', 'Scope: tasks, runs, context, knowledge, schedules, all', 'all')
 		.action(async (query: string, opts: { scope: string }) => {
 			try {
+				if (!SEARCH_SCOPES.has(opts.scope as SearchScope)) {
+					console.error(error(`Invalid scope: ${opts.scope}`))
+					process.exit(1)
+				}
+				const scope = opts.scope as SearchScope
 				const client = createApiClient()
 				const res = await client.api.search.$get({
-					query: { q: query, scope: opts.scope },
+					query: { q: query, scope },
 				})
 
 				if (!res.ok) {
@@ -49,7 +64,8 @@ program.addCommand(
 					// Strip HTML tags from snippet for CLI display
 					const cleanSnippet = result.snippet.replace(/<\/?b>/g, '')
 					if (cleanSnippet) {
-						const truncated = cleanSnippet.length > 120 ? `${cleanSnippet.slice(0, 120)}...` : cleanSnippet
+						const truncated =
+							cleanSnippet.length > 120 ? `${cleanSnippet.slice(0, 120)}...` : cleanSnippet
 						console.log(`  ${dim(truncated)}`)
 					}
 					console.log('')

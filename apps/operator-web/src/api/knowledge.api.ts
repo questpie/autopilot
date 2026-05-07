@@ -2,9 +2,9 @@ import { ApiError } from '@/lib/api'
 import type {
 	KnowledgeDocument,
 	KnowledgeDocumentRecord,
-	VfsListEntry,
-	VfsListResult,
-	VfsStatResult,
+	ResourceListEntry,
+	ResourceListResult,
+	ResourceStatResult,
 } from './types'
 
 export interface KnowledgeScopeParams {
@@ -42,17 +42,66 @@ function scopedPath(path: string, scope?: KnowledgeScopeParams, extra?: Record<s
 }
 
 function isTextMime(mimeType: string): boolean {
-	return /(^text\/)|markdown|yaml|json|xml|javascript|typescript/.test(mimeType)
+	return /(^text\/)|markdown|yaml|json|xml|javascript|typescript|openapi|swagger/.test(mimeType)
+}
+
+function isTextPath(path: string): boolean {
+	const lower = path.toLowerCase()
+	return (
+		lower.endsWith('.md') ||
+		lower.endsWith('.markdown') ||
+		lower.endsWith('.openapi') ||
+		lower.endsWith('.openapi.json') ||
+		lower.endsWith('.openapi.yaml') ||
+		lower.endsWith('.openapi.yml') ||
+		lower.endsWith('/openapi.json') ||
+		lower.endsWith('/openapi.yaml') ||
+		lower.endsWith('/openapi.yml') ||
+		lower.endsWith('/swagger.json') ||
+		lower.endsWith('/swagger.yaml') ||
+		lower.endsWith('/swagger.yml')
+	)
+}
+
+function inferContentType(path: string, browserType?: string): string {
+	if (browserType && browserType !== 'application/octet-stream') return browserType
+	const lower = path.toLowerCase()
+	if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'text/markdown'
+	if (
+		lower.endsWith('.openapi') ||
+		lower.endsWith('.openapi.yaml') ||
+		lower.endsWith('.openapi.yml') ||
+		lower.endsWith('/openapi.yaml') ||
+		lower.endsWith('/openapi.yml') ||
+		lower.endsWith('/swagger.yaml') ||
+		lower.endsWith('/swagger.yml')
+	) {
+		return 'application/vnd.oai.openapi+yaml'
+	}
+	if (
+		lower.endsWith('.openapi.json') ||
+		lower.endsWith('/openapi.json') ||
+		lower.endsWith('/swagger.json')
+	) {
+		return 'application/vnd.oai.openapi+json'
+	}
+	if (lower.endsWith('.yaml') || lower.endsWith('.yml')) return 'text/yaml'
+	if (lower.endsWith('.json')) return 'application/json'
+	if (lower.endsWith('.txt')) return 'text/plain'
+	return 'application/octet-stream'
 }
 
 function nameFromPath(path: string): string {
 	return path.split('/').filter(Boolean).pop() ?? path
 }
 
-function toDirectoryEntries(docs: KnowledgeDocumentRecord[], path: string | null): VfsListEntry[] {
+function toDirectoryEntries(
+	docs: KnowledgeDocumentRecord[],
+	path: string | null,
+): ResourceListEntry[] {
 	const prefix = normalizePath(path)
-	const directories = new Map<string, VfsListEntry>()
-	const files = new Map<string, VfsListEntry>()
+	const directories = new Map<string, ResourceListEntry>()
+	const files = new Map<string, ResourceListEntry>()
 
 	for (const doc of docs) {
 		const normalized = normalizePath(doc.path)
@@ -87,7 +136,7 @@ export function knowledgeContentUrl(path: string, scope?: KnowledgeScopeParams):
 export async function knowledgeList(
 	path: string | null,
 	scope?: KnowledgeScopeParams,
-): Promise<VfsListResult> {
+): Promise<ResourceListResult> {
 	const params = new URLSearchParams()
 	const normalized = normalizePath(path)
 	if (normalized) params.set('path', normalized)
@@ -100,7 +149,6 @@ export async function knowledgeList(
 	}
 	const docs = (await res.json()) as KnowledgeDocumentRecord[]
 	return {
-		uri: normalized ? `knowledge:${normalized}` : 'knowledge:',
 		entries: toDirectoryEntries(docs, normalized),
 	}
 }
@@ -119,7 +167,7 @@ export async function knowledgeRead(
 		content,
 		contentType: document.mime_type,
 		size: new TextEncoder().encode(content).length,
-		isText: isTextMime(document.mime_type),
+		isText: isTextMime(document.mime_type) || isTextPath(path),
 		document,
 	}
 }
@@ -127,11 +175,10 @@ export async function knowledgeRead(
 export async function knowledgeStat(
 	path: string | null,
 	scope?: KnowledgeScopeParams,
-): Promise<VfsStatResult> {
+): Promise<ResourceStatResult> {
 	const normalized = normalizePath(path)
 	if (!normalized) {
 		return {
-			uri: 'knowledge:',
 			type: 'directory',
 			size: 0,
 			mime_type: null,
@@ -144,7 +191,6 @@ export async function knowledgeStat(
 	if (read.ok) {
 		const doc = (await read.json()) as KnowledgeDocument
 		return {
-			uri: `knowledge:${normalized}`,
 			type: 'file',
 			size: new TextEncoder().encode(doc.content ?? '').length,
 			mime_type: doc.mime_type,
@@ -156,7 +202,6 @@ export async function knowledgeStat(
 	const list = await knowledgeList(normalized, scope)
 	if (list.entries.length > 0) {
 		return {
-			uri: `knowledge:${normalized}`,
 			type: 'directory',
 			size: 0,
 			mime_type: null,
@@ -197,7 +242,7 @@ export async function knowledgeUpload(
 	const res = await fetch(scopedPath(path, scope), {
 		method: 'PUT',
 		credentials: 'include',
-		headers: { 'Content-Type': file.type || 'application/octet-stream' },
+		headers: { 'Content-Type': inferContentType(path, file.type) },
 		body: file,
 	})
 	if (!res.ok) {
@@ -218,7 +263,7 @@ export async function knowledgeDelete(path: string, scope?: KnowledgeScopeParams
 export async function knowledgeSearch(
 	query: string,
 	scope?: KnowledgeScopeParams,
-): Promise<VfsListResult> {
+): Promise<ResourceListResult> {
 	const params = new URLSearchParams({ q: query })
 	appendScope(params, scope)
 	const res = await fetch(`/api/knowledge/search?${params.toString()}`, { credentials: 'include' })
@@ -227,7 +272,6 @@ export async function knowledgeSearch(
 	}
 	const payload = (await res.json()) as { results: KnowledgeDocument[] }
 	return {
-		uri: `knowledge-search:${query}`,
 		entries: payload.results.map((doc) => ({
 			name: nameFromPath(doc.path),
 			path: doc.path,

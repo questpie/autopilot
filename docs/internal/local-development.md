@@ -12,8 +12,8 @@
 ## 1. Prerequisites
 
 - **Bun 1.3+** — `curl -fsSL https://bun.sh/install | bash`
-- **Git** — for company state versioning and repo operations
-- **Anthropic API key** — for running agents locally
+- **Git** — for project run workspaces and repo operations
+- At least one local coding-agent runtime when exercising workers
 
 ## 2. Setup
 
@@ -25,21 +25,14 @@ bun install
 
 ## 3. Running the Orchestrator
 
-The orchestrator needs a company directory to run against. Create one first:
+The local stack imports any bootstrap `.autopilot/` bundle into DB config, then runs DB-backed orchestrator state plus a local worker:
 
 ```bash
-# Scaffold a test company (from monorepo root)
-bun packages/cli/bin/autopilot.ts init test-company
-cd test-company
-
-# Set your API key
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Start the orchestrator
-bun ../packages/cli/bin/autopilot.ts start
+bun packages/cli/bin/autopilot.ts bootstrap
+bun packages/cli/bin/autopilot.ts start
 ```
 
-This starts the watcher, scheduler, webhook server (:7777), and API server (:7778).
+This starts the orchestrator API (:7778), scheduler/bridges, and local worker. Runtime execution goes through `spawn-agent`.
 
 ### Using the installed CLI
 
@@ -48,7 +41,7 @@ If you have the CLI installed globally (`bun add -g @questpie/autopilot`), it us
 ## 4. Running the Dashboard
 
 ```bash
-cd apps/dashboard-v2
+cd apps/operator-web
 bun dev
 ```
 
@@ -112,7 +105,7 @@ The tunnel stays open as long as the command runs. No account needed for quick t
 
 Canonical rule: each runtime has one central env reader.
 
-- dashboard: `apps/dashboard-v2/src/lib/env.ts`
+- operator-web: `apps/operator-web/src/lib/env.ts`
 - orchestrator: `packages/orchestrator/src/env.ts`
 - mcp: `packages/mcp-server/src/env.ts`
 
@@ -149,7 +142,7 @@ For local source dev, auth browser calls default to `http://localhost:7778`. For
 ```
 questpie-autopilot/
 ├── apps/
-│   ├── dashboard-v2/     # Living Dashboard (Vite + React + TanStack Start)
+│   ├── operator-web/     # Operator UI (Vite + React)
 │   ├── docs/             # Public documentation (Fumadocs)
 │   └── web/              # Landing page (TanStack Start)
 ├── packages/

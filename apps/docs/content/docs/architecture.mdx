@@ -7,9 +7,10 @@ Autopilot splits into three layers:
 
 - **Orchestrator** — the control plane. Owns tasks, runs, workflow progression, events, artifacts, and durable previews.
 - **Workers** — execution nodes. Run on real machines with real repo access, toolchains, and credentials.
-- **`.autopilot/`** — repo-authored policy. Agents, workflows, environments, providers, and handlers — all versioned in git.
+- **Config registry** — live runtime configuration for agents, workflows, teams, providers, schedules, renderers, and MCP servers.
+- **`.autopilot/`** — import/export, seed, pack, local fixture, and migration format for config; not the live source of truth after import.
 
-Every client (CLI, bound conversations, future Worker App) operates over the same primitives. The orchestrator is the system of record. Workers execute. The repo defines the rules.
+Every client (CLI, MCP, bound conversations, and Operator Web) operates over the same primitives. The orchestrator is the system of record. Workers execute. The config registry and Knowledge API define shared operational truth.
 
 ## At a glance
 

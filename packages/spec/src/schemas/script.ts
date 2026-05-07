@@ -4,8 +4,12 @@
  * or be referenced from workflow step actions by ID.
  */
 import { z } from 'zod'
-import { FsScopeSchema } from './agent'
 import { ScriptRunnerSchema } from './external-action'
+
+export const WorkspaceScopeSchema = z.object({
+	read: z.array(z.string()).default([]),
+	write: z.array(z.string()).default([]),
+})
 
 export const ScriptInputSchema = z.object({
 	name: z.string(),
@@ -22,8 +26,8 @@ export const ScriptOutputSchema = z.object({
 })
 
 export const ScriptSandboxSchema = z.object({
-	/** Filesystem access scopes. Defaults to read-only workspace root. */
-	fs_scope: FsScopeSchema.default({ read: ['.'], write: [] }),
+	/** Workspace access scopes. Defaults to read-only workspace root. */
+	workspace_scope: WorkspaceScopeSchema.default({ read: ['.'], write: [] }),
 	/** Network access policy. Phase 1: advisory only, enforcement deferred to Phase 6. */
 	network: z.enum(['none', 'local', 'unrestricted']).default('unrestricted'),
 	/** Max execution time in ms. */

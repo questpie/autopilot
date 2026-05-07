@@ -3,10 +3,38 @@ import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { betterAuth } from 'better-auth'
 import { hashPassword, verifyPassword } from 'better-auth/crypto'
 import { bearer, admin, twoFactor } from 'better-auth/plugins'
+import { createAccessControl } from 'better-auth/plugins/access'
+import {
+	adminAc as builtInAdminAc,
+	defaultStatements,
+	userAc as builtInUserAc,
+} from 'better-auth/plugins/admin/access'
 import { eq, sql } from 'drizzle-orm'
 import type { CompanyDb } from '../db'
 import * as authSchema from '../db/auth-schema'
 import { env } from '../env'
+
+// ─── Product role model ────────────────────────────────────────────────────
+// Four product roles: owner | admin | member | viewer. owner and admin both
+// pass admin-plugin checks (adminRoles below). member is the default for
+// invited users. viewer is read-only by convention.
+//
+// We attach Better Auth access-control statements so admin SDK setRole accepts
+// these names on both server and client; the runtime permission gates that
+// matter for product mutations live in our own roles middleware.
+const ac = createAccessControl(defaultStatements)
+const ownerRole = ac.newRole({ ...builtInAdminAc.statements })
+const adminRole = ac.newRole({ ...builtInAdminAc.statements })
+const memberRole = ac.newRole({ ...builtInUserAc.statements })
+const viewerRole = ac.newRole({ ...builtInUserAc.statements })
+
+export const productRoles = {
+	owner: ownerRole,
+	admin: adminRole,
+	member: memberRole,
+	viewer: viewerRole,
+}
+export const productAccessControl = ac
 
 /** Minimal mail service interface for email verification. */
 interface MailService {
@@ -140,7 +168,22 @@ export async function createAuth(db: CompanyDb, _companyRoot: string, mail?: Mai
 			},
 		},
 
-		plugins: [bearer(), apiKey(), admin(), twoFactor()],
+		plugins: [
+			bearer(),
+			apiKey(),
+			// Product roles: owner | admin | member | viewer.
+			// owner and admin both pass adminRoles checks; defaultRole is overridden
+			// per-user by databaseHooks.user.create.before (first user = owner,
+			// subsequent users = member) but kept here so the plugin's own creation
+			// flows align with the product model.
+			admin({
+				ac,
+				roles: productRoles,
+				defaultRole: 'member',
+				adminRoles: ['owner', 'admin'],
+			}),
+			twoFactor(),
+		],
 	})
 
 	return auth

@@ -16,14 +16,10 @@ import { SurfaceSection } from '@/components/ui/surface-section'
 import { surfaceCardVariants } from '@/components/ui/surface-card'
 import { cn } from '@/lib/utils'
 
-/** Roles accepted by the custom invite API (/api/invites) */
+/** Product role model — used everywhere in invites, user role updates, and the actor.role check. */
 type UserRole = 'owner' | 'admin' | 'member' | 'viewer'
 
-/** Roles accepted by better-auth authClient.admin.setRole() */
-type AuthRole = 'admin' | 'user'
-
 const ROLE_OPTIONS: UserRole[] = ['owner', 'admin', 'member', 'viewer']
-const AUTH_ROLE_OPTIONS: AuthRole[] = ['admin', 'user']
 
 interface InvitePayload {
   email: string
@@ -56,7 +52,7 @@ export function UsersSettings() {
   })
 
   const setRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: AuthRole }) => {
+    mutationFn: async ({ userId, role }: { userId: string; role: UserRole }) => {
       const result = await authClient.admin.setRole({ userId, role })
       if (result.error) throw new Error(result.error.message)
     },
@@ -173,15 +169,15 @@ export function UsersSettings() {
                   </div>
                   <div className="flex items-center gap-2">
                     <select
-                      value={u.role ?? 'user'}
+                      value={(u.role as UserRole | undefined) ?? 'member'}
                       onChange={(e) => {
-                        const role = AUTH_ROLE_OPTIONS.find((r) => r === e.target.value)
+                        const role = ROLE_OPTIONS.find((r) => r === e.target.value)
                         if (role) setRoleMutation.mutate({ userId: u.id, role })
                       }}
                       className="h-9 rounded-md border border-input bg-card px-2 text-sm outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/20 disabled:opacity-50"
                       disabled={setRoleMutation.isPending}
                     >
-                      {AUTH_ROLE_OPTIONS.map((r) => (
+                      {ROLE_OPTIONS.map((r) => (
                         <option key={r} value={r}>{r}</option>
                       ))}
                     </select>

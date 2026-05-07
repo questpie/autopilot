@@ -284,6 +284,15 @@ function EventRow({ event, eventType, isRunning, isActiveThinking, isActiveProgr
     )
   }
 
+  if (eventType === 'retry_scheduled') {
+    return (
+      <div className="flex items-center gap-2 py-0.5 text-sm text-warning">
+        <ArrowsClockwise size={10} />
+        <span className="truncate">{event.summary ?? 'Retry scheduled'}</span>
+      </div>
+    )
+  }
+
   if (eventType === 'approval_needed') {
 		return (
 			<div className="flex items-center gap-2 py-0.5 text-sm text-warning">

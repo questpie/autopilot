@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import { program } from '../program'
-import { section, badge, dim, table, separator, error } from '../utils/format'
 import { getBaseUrl } from '../utils/client'
+import { badge, dim, error, section, separator, table } from '../utils/format'
 import { getAuthHeaders, loadCredentials } from './auth'
 
 type WorkflowDef = {
@@ -85,14 +85,16 @@ workflowsCmd.addCommand(
 					const isLast = i === wf.steps.length - 1
 					const prefix = isLast ? '└─' : '├─'
 					const cont = isLast ? '  ' : '│ '
-					const typeColor = step.type === 'agent' ? 'cyan' : step.type === 'human_approval' ? 'yellow' : 'green'
+					const typeColor =
+						step.type === 'agent' ? 'cyan' : step.type === 'human_approval' ? 'yellow' : 'green'
 					const agent = step.agent_id ? ` (${step.agent_id})` : ''
 
 					console.log(`  ${prefix} ${badge(step.type, typeColor)} ${step.id}${agent}`)
 					if (step.instructions) console.log(`  ${cont}  ${dim(step.instructions)}`)
 					if (step.targeting) {
 						const t = step.targeting
-						if (t.required_runtime) console.log(`  ${cont}  ${dim(`runtime: ${t.required_runtime}`)}`)
+						if (t.required_runtime)
+							console.log(`  ${cont}  ${dim(`runtime: ${t.required_runtime}`)}`)
 						if (t.environment) console.log(`  ${cont}  ${dim(`env: ${t.environment}`)}`)
 					}
 					if (step.actions?.length) {
@@ -123,7 +125,11 @@ workflowsCmd.addCommand(
 				const workflows = new Map(workflowList.map((w) => [w.id, w]))
 				const environments = new Map(environmentList.map((e) => [e.id, e]))
 
-				console.log(dim(`Loaded: ${agents.size} agents, ${workflows.size} workflows, ${environments.size} environments`))
+				console.log(
+					dim(
+						`Loaded: ${agents.size} agents, ${workflows.size} workflows, ${environments.size} environments`,
+					),
+				)
 
 				const defaults = {
 					runtime: company.defaults.runtime ?? 'claude-code',
@@ -131,14 +137,25 @@ workflowsCmd.addCommand(
 					task_assignee: company.defaults.task_assignee,
 				}
 				const engine = new orch.WorkflowEngine(
-					{ company, agents, workflows, environments, providers: new Map(), capabilityProfiles: new Map(), defaults },
+					{
+						company,
+						agents,
+						workflows,
+						environments,
+						providers: new Map(),
+						capabilityProfiles: new Map(),
+						skills: new Map(),
+						context: new Map(),
+						scripts: new Map(),
+						defaults,
+					},
 					null as never,
 					null as never,
 				)
 				const issues = engine.validate()
 
 				if (issues.length === 0) {
-					console.log(badge('VALID', 'green') + ' All config references are consistent')
+					console.log(`${badge('VALID', 'green')} All config references are consistent`)
 				} else {
 					console.log(badge('ISSUES FOUND', 'red'))
 					for (const issue of issues) {

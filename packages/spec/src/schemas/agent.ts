@@ -1,10 +1,5 @@
 import { z } from 'zod'
 
-export const FsScopeSchema = z.object({
-	read: z.array(z.string()).default([]),
-	write: z.array(z.string()).default([]),
-})
-
 /**
  * Declarative trigger shape for agent YAML. Reserved for future use.
  * Currently inert — no runtime code reads or dispatches agent triggers.
@@ -26,7 +21,6 @@ export const AgentSchema = z.object({
 	provider: z.string().optional(),
 	/** Behavioral variant hint (e.g. 'extended-thinking'). Carried as canonical intent; variant-specific adapter behavior is deferred. */
 	variant: z.string().optional(),
-	fs_scope: FsScopeSchema.optional(),
 	/** Reserved. Agent triggers are declared but not read at runtime. Scheduling uses ScheduleService. */
 	triggers: z.array(AgentTriggerSchema).default([]),
 	/** Capability profile IDs active for all runs by this agent. Step-level profiles extend these. */

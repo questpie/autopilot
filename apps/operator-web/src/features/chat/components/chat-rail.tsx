@@ -50,7 +50,7 @@ function buildContextAttachment(
 		}
 	}
 
-	if (activeView === 'files') {
+	if (activeView === 'knowledge') {
 		const selected = typeof search.selected === 'string' && search.selected ? search.selected : null
 		const path = typeof search.path === 'string' && search.path ? search.path : null
 		const runId = typeof search.runId === 'string' && search.runId ? search.runId : null
@@ -59,21 +59,21 @@ function buildContextAttachment(
 			return {
 				type: 'ref',
 				source: 'page',
-				label: `Current file ${selected}`,
+				label: `Current resource ${selected}`,
 				refType: 'file',
 				refId: selected,
-				metadata: { view: 'files', path: selected, runId },
+				metadata: { view: 'knowledge', path: selected, runId },
 			}
 		}
 
-		if (path && search.view === 'file') {
+		if (path && search.view === 'resource') {
 			return {
 				type: 'ref',
 				source: 'page',
-				label: `Current file ${path}`,
+				label: `Current resource ${path}`,
 				refType: 'file',
 				refId: path,
-				metadata: { view: 'files', path, runId },
+				metadata: { view: 'knowledge', path, runId },
 			}
 		}
 
@@ -81,10 +81,10 @@ function buildContextAttachment(
 			return {
 				type: 'ref',
 				source: 'page',
-				label: path ? `Current folder ${path}` : `Current run ${runId?.slice(0, 8)}`,
+				label: path ? `Current collection ${path}` : `Current run ${runId?.slice(0, 8)}`,
 				refType: path ? 'directory' : 'run',
 				refId: path ?? runId ?? undefined,
-				metadata: { view: 'files', path, runId },
+				metadata: { view: 'knowledge', path, runId },
 			}
 		}
 	}

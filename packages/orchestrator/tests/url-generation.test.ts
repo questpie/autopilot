@@ -110,7 +110,7 @@ const DDL = [
 		allow_repo_mutation INTEGER DEFAULT 0, mutated_repo INTEGER DEFAULT 0,
 		summary TEXT, runtime_session_ref TEXT, created_by TEXT NOT NULL,
 		created_at TEXT NOT NULL, ended_at TEXT, metadata TEXT DEFAULT '{}',
-		session_id TEXT
+		session_id TEXT, promoted_task_id TEXT
 	)`,
 	`CREATE TABLE sessions (
 		id TEXT PRIMARY KEY, provider_id TEXT NOT NULL,

@@ -3,10 +3,10 @@ import { mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
-import { createCompanyDb, type CompanyDbResult, type CompanyDb } from '../src/db'
-import { runs as runsRoute } from '../src/api/routes/runs'
-import { RunService } from '../src/services/runs'
 import type { AppEnv, Services } from '../src/api/app'
+import { runs as runsRoute } from '../src/api/routes/runs'
+import { type CompanyDb, type CompanyDbResult, createCompanyDb } from '../src/db'
+import { RunService } from '../src/services/runs'
 
 function buildTestApp(companyRoot: string, db: CompanyDb, services: Services) {
 	const app = new Hono<AppEnv>()
@@ -65,7 +65,7 @@ describe('runs stream replay cursoring', () => {
 			sessionService: {} as never,
 			sessionMessageService: {} as never,
 			scheduleService: {} as never,
-			vfsService: {} as never,
+			workspaceInspectionService: {} as never,
 			scriptService: {} as never,
 			userPreferenceService: {} as never,
 		} satisfies Services
@@ -94,7 +94,10 @@ describe('runs stream replay cursoring', () => {
 		const second = await runService.appendEvent(runId, {
 			type: 'artifact',
 			summary: 'preview ready',
-			metadata: JSON.stringify({ preview_url: 'https://example.test/preview', kind: 'preview_url' }),
+			metadata: JSON.stringify({
+				preview_url: 'https://example.test/preview',
+				kind: 'preview_url',
+			}),
 		})
 		await runService.complete(runId, { status: 'completed', summary: 'done' })
 		return { runId, first: first!, second: second! }

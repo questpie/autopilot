@@ -15,19 +15,20 @@ import {
 	SidebarTrigger,
 	useSidebar,
 } from '@/components/ui/sidebar'
-import { type SavedFilesLocation, locationKey } from '@/features/files/lib/file-paths'
+import {
+	type SavedKnowledgeLocation,
+	locationKey,
+} from '@/features/knowledge/lib/knowledge-locations'
 import { NewTaskModal } from '@/features/tasks/components/new-task-modal'
 import { useActiveView } from '@/hooks/use-active-view'
 import { useAppPreferences } from '@/hooks/use-app-preferences'
-import { useFilesPreferences } from '@/hooks/use-files-preferences'
+import { useKnowledgePreferences } from '@/hooks/use-knowledge-preferences'
 import { useSession } from '@/hooks/use-session'
 import { useTasks } from '@/hooks/use-tasks'
 import { authClient } from '@/lib/auth'
 import { fileIcon } from '@/lib/file-icons'
 import { cn } from '@/lib/utils'
 import {
-	ChatCircle,
-	CheckSquare,
 	ClockCounterClockwise,
 	Folder,
 	Gear,
@@ -41,12 +42,6 @@ import {
 } from '@phosphor-icons/react'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
-
-const PRIMARY_NAV_ITEMS = [
-	{ id: 'chat', label: 'Chat', to: '/chat', icon: ChatCircle },
-	{ id: 'tasks', label: 'Tasks', to: '/tasks', icon: CheckSquare },
-	{ id: 'files', label: 'Files', to: '/files', icon: Folder },
-] as const
 
 const MAX_QUICK_TASKS = 5
 
@@ -165,19 +160,14 @@ function TasksSection({ onCreate }: { onCreate: () => void }) {
 	)
 }
 
-const FILE_LINKS = [
-	{ label: 'Open files', path: null },
-	{ label: 'Context library', path: '.autopilot/context' },
-	{ label: 'Workflows', path: '.autopilot/workflows' },
-	{ label: 'Company root', path: '.' },
-] as const
+const KNOWLEDGE_LINKS = [{ label: 'Knowledge root', path: null }] as const
 
-function buildFilesSearch(location: Pick<SavedFilesLocation, 'path' | 'runId' | 'type'>) {
+function buildKnowledgeSearch(location: Pick<SavedKnowledgeLocation, 'path' | 'runId' | 'type'>) {
 	if (location.type === 'file') {
 		return {
 			runId: location.runId ?? undefined,
 			path: location.path ?? undefined,
-			view: 'file' as const,
+			view: 'resource' as const,
 			selected: undefined,
 		}
 	}
@@ -190,16 +180,16 @@ function buildFilesSearch(location: Pick<SavedFilesLocation, 'path' | 'runId' | 
 	}
 }
 
-function getActiveFilesKeys(search: {
+function getActiveKnowledgeKeys(search: {
 	path?: string
 	runId?: string
-	view?: 'file'
+	view?: 'resource'
 	selected?: string
 }) {
 	const keys = new Set<string>()
 	const runId = search.runId ?? null
 
-	if (search.view === 'file') {
+	if (search.view === 'resource') {
 		keys.add(locationKey({ path: search.path ?? null, runId, type: 'file' }))
 	} else {
 		keys.add(locationKey({ path: search.path ?? null, runId, type: 'directory' }))
@@ -213,13 +203,13 @@ function getActiveFilesKeys(search: {
 	return keys
 }
 
-function FilesLocationItem({
+function KnowledgeLocationItem({
 	location,
 	active,
 	icon,
 	meta,
 }: {
-	location: SavedFilesLocation
+	location: SavedKnowledgeLocation
 	active: boolean
 	icon?: typeof Folder
 	meta?: React.ReactNode
@@ -231,7 +221,7 @@ function FilesLocationItem({
 	return (
 		<SidebarMenuItem>
 			<SidebarMenuButton
-				render={<Link to="/files" search={buildFilesSearch(location)} />}
+				render={<Link to="/knowledge" search={buildKnowledgeSearch(location)} />}
 				isActive={active}
 				size="sm"
 			>
@@ -243,17 +233,17 @@ function FilesLocationItem({
 	)
 }
 
-function FilesSection() {
+function KnowledgeSection() {
 	const view = useActiveView()
 	const search = useSearch({ strict: false }) as {
 		path?: string
 		runId?: string
-		view?: 'file'
+		view?: 'resource'
 		selected?: string
 	}
-	const { pinned, recent } = useFilesPreferences()
-	const activeKeys = useMemo(() => getActiveFilesKeys(search), [search])
-	const showDynamic = view === 'files'
+	const { pinned, recent } = useKnowledgePreferences()
+	const activeKeys = useMemo(() => getActiveKnowledgeKeys(search), [search])
+	const showDynamic = view === 'knowledge'
 	const pinnedKeys = useMemo(
 		() => new Set(pinned.map((location) => locationKey(location))),
 		[pinned],
@@ -267,16 +257,16 @@ function FilesSection() {
 				path: null,
 				runId: search.runId,
 				type: 'directory' as const,
-				label: 'Run workspace',
+				label: 'Project run',
 				viewedAt: new Date().toISOString(),
 			}
 		: null
 
 	return (
-		<RailSection title="Library" tone="sidebar">
+		<RailSection title="Knowledge" tone="sidebar">
 			<SidebarGroupContent>
 				<SidebarMenu>
-					{FILE_LINKS.map((item) => {
+					{KNOWLEDGE_LINKS.map((item) => {
 						const location = {
 							path: item.path,
 							runId: null,
@@ -285,10 +275,10 @@ function FilesSection() {
 							viewedAt: new Date().toISOString(),
 						}
 						return (
-							<FilesLocationItem
+							<KnowledgeLocationItem
 								key={item.label}
 								location={location}
-								active={view === 'files' && activeKeys.has(locationKey(location))}
+								active={view === 'knowledge' && activeKeys.has(locationKey(location))}
 							/>
 						)
 					})}
@@ -298,7 +288,7 @@ function FilesSection() {
 							<div className="px-2 pt-3 pb-1 text-[11px] font-medium text-sidebar-foreground/45">
 								Current
 							</div>
-							<FilesLocationItem
+							<KnowledgeLocationItem
 								location={currentRunLocation}
 								active={activeKeys.has(locationKey(currentRunLocation))}
 								icon={HardDrives}
@@ -312,7 +302,7 @@ function FilesSection() {
 								Pinned
 							</div>
 							{pinned.slice(0, 4).map((location) => (
-								<FilesLocationItem
+								<KnowledgeLocationItem
 									key={locationKey(location)}
 									location={location}
 									active={activeKeys.has(locationKey(location))}
@@ -328,7 +318,7 @@ function FilesSection() {
 								Recent
 							</div>
 							{recentItems.map((location) => (
-								<FilesLocationItem
+								<KnowledgeLocationItem
 									key={locationKey(location)}
 									location={location}
 									active={activeKeys.has(locationKey(location))}
@@ -397,6 +387,7 @@ function SidebarUserFooter() {
 			<div className="rounded-[18px] bg-sidebar-accent/28 p-1.5 ring-1 ring-sidebar-border/45">
 				<div className="flex items-center gap-1">
 					<button
+						type="button"
 						onClick={() => void navigate({ to: '/settings' })}
 						className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left transition-[background-color,color,transform] hover:bg-sidebar-accent active:scale-[0.99]"
 					>
@@ -408,6 +399,7 @@ function SidebarUserFooter() {
 						</span>
 					</button>
 					<button
+						type="button"
 						onClick={cycleTheme}
 						className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,transform] hover:bg-sidebar-accent hover:text-foreground active:scale-[0.96]"
 						title={`Theme: ${theme}`}
@@ -415,6 +407,7 @@ function SidebarUserFooter() {
 						{theme === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
 					</button>
 					<button
+						type="button"
 						onClick={() => void authClient.signOut().then(() => navigate({ to: '/login' }))}
 						className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,transform] hover:bg-sidebar-accent hover:text-foreground active:scale-[0.96]"
 						title="Sign out"
@@ -433,7 +426,6 @@ interface SidebarProps {
 
 export function Sidebar({ onSearchOpen }: SidebarProps) {
 	const [newTaskOpen, setNewTaskOpen] = useState(false)
-	const activeView = useActiveView()
 	const sidebarProps = useSidebar()
 
 	return (
@@ -456,52 +448,12 @@ export function Sidebar({ onSearchOpen }: SidebarProps) {
 							<MagnifyingGlassIcon />
 						</Button>
 					)}
-					{/* {activeView !== 'chat' && (
-						<Button
-							size="icon-xs"
-							variant="ghost"
-							onClick={() => setChatOpen(!chatOpen)}
-							className={cn(
-								'size-8 rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground',
-								chatOpen && 'bg-sidebar-accent text-sidebar-foreground',
-							)}
-							title={chatOpen ? 'Hide assistant' : 'Show assistant'}
-						>
-							<ChatCircle size={14} weight={chatOpen ? 'fill' : 'regular'} />
-						</Button>
-					)} */}
 					{sidebarProps.state === 'expanded' && <SidebarTrigger />}
 				</SidebarHeader>
 
 				<SidebarContent className="gap-3 px-2 py-3">
-					{/* <RailSection tone="sidebar">
-						<SidebarGroupContent>
-							<SidebarMenu className="gap-1">
-								{PRIMARY_NAV_ITEMS.map((item) => {
-									const isActive = activeView === item.id
-									return (
-										<SidebarMenuItem key={item.id}>
-											<SidebarMenuButton
-												render={<Link to={item.to} />}
-												isActive={isActive}
-												size="default"
-											>
-												<item.icon
-													size={16}
-													weight={isActive ? 'fill' : 'regular'}
-													className="shrink-0"
-												/>
-												<span className="text-[13px]">{item.label}</span>
-											</SidebarMenuButton>
-										</SidebarMenuItem>
-									)
-								})}
-							</SidebarMenu>
-						</SidebarGroupContent>
-					</RailSection> */}
-
 					<TasksSection onCreate={() => setNewTaskOpen(true)} />
-					<FilesSection />
+					<KnowledgeSection />
 					<AdminSection />
 				</SidebarContent>
 

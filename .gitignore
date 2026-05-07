@@ -52,3 +52,5 @@ test-company/
 local_spec.md
 my-company/
 .data/
+
+.lazyweb

@@ -59,6 +59,24 @@ function normalizePrefix(path?: string): string | undefined {
 function inferMimeType(path: string): string {
 	const lower = path.toLowerCase()
 	if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'text/markdown'
+	if (
+		lower.endsWith('.openapi') ||
+		lower.endsWith('.openapi.yaml') ||
+		lower.endsWith('.openapi.yml') ||
+		lower.endsWith('/openapi.yaml') ||
+		lower.endsWith('/openapi.yml') ||
+		lower.endsWith('/swagger.yaml') ||
+		lower.endsWith('/swagger.yml')
+	) {
+		return 'application/vnd.oai.openapi+yaml'
+	}
+	if (
+		lower.endsWith('.openapi.json') ||
+		lower.endsWith('/openapi.json') ||
+		lower.endsWith('/swagger.json')
+	) {
+		return 'application/vnd.oai.openapi+json'
+	}
 	if (lower.endsWith('.yaml') || lower.endsWith('.yml')) return 'text/yaml'
 	if (lower.endsWith('.json')) return 'application/json'
 	if (lower.endsWith('.txt')) return 'text/plain'
@@ -66,7 +84,7 @@ function inferMimeType(path: string): string {
 }
 
 function isIndexableMime(mimeType: string): boolean {
-	return /(^text\/)|markdown|yaml|json/.test(mimeType)
+	return /(^text\/)|markdown|yaml|json|openapi|swagger/.test(mimeType)
 }
 
 function resolveWriteScope(input: KnowledgeScopeInput): {

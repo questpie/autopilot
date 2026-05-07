@@ -1,29 +1,17 @@
 /**
- * ConfigManager — owns the live authored config with safe hot reload.
+ * ConfigManager owns the live DB-backed authored config snapshot.
  *
- * Properties:
- * - holds the current validated AuthoredConfig
- * - reload() reads from disk, validates, swaps atomically on success
- * - on failure: keeps old config, logs error, tracks last error
- * - file watcher with debounce for .autopilot/ changes
+ * `.autopilot/` bundles may seed/import config, but live reload reads from the
+ * config registry only. There is no filesystem watcher or filesystem fallback.
  */
-import { type FSWatcher, existsSync, watch as fsWatch } from 'node:fs'
-import { join } from 'node:path'
 import type { AuthoredConfig } from '../services/workflow-engine'
 import type { ConfigService } from './config-service'
-import { type ScopeChain, discoverScopes, resolveConfig } from './scope-resolver'
 
 export interface ConfigManagerOptions {
-	/** Company root directory for scope discovery. */
-	companyRoot: string
-	/** DB-backed config service. When set, reload() uses the DB instead of filesystem scopes. */
-	configService?: ConfigService
+	/** DB-backed config service used for all live reloads. */
+	configService: Pick<ConfigService, 'loadAuthoredConfig'>
 	/** Active project scope for this server instance. */
 	projectId?: string | null
-	/** Initial scope chain (avoids re-discovery on first load). */
-	initialChain?: ScopeChain
-	/** Debounce window for file watcher in ms. Default: 500. */
-	debounceMs?: number
 	/** Callback invoked after a successful reload with the new config. May be async. */
 	onReload?: (config: AuthoredConfig) => void | Promise<void>
 }
@@ -35,14 +23,9 @@ export interface ReloadResult {
 
 export class ConfigManager {
 	private config: AuthoredConfig
-	private readonly companyRoot: string
-	private readonly configService?: ConfigService
+	private readonly configService: Pick<ConfigService, 'loadAuthoredConfig'>
 	private readonly projectId: string | null
-	private readonly debounceMs: number
 	private readonly onReload?: (config: AuthoredConfig) => void | Promise<void>
-
-	private watchers: FSWatcher[] = []
-	private reloadTimer: ReturnType<typeof setTimeout> | null = null
 
 	/** ISO timestamp of last successful reload (null = initial load only). */
 	lastReloadAt: string | null = null
@@ -53,34 +36,27 @@ export class ConfigManager {
 
 	constructor(initialConfig: AuthoredConfig, options: ConfigManagerOptions) {
 		this.config = initialConfig
-		this.companyRoot = options.companyRoot
 		this.configService = options.configService
 		this.projectId = options.projectId ?? null
-		this.debounceMs = options.debounceMs ?? 500
 		this.onReload = options.onReload
 	}
 
-	/** Get the current validated authored config. */
+	/** Get the current validated authored config object. */
 	get(): AuthoredConfig {
 		return this.config
 	}
 
 	/**
-	 * Reload config from disk.
+	 * Reload config from the DB config registry.
 	 *
-	 * 1. Re-discover scopes
-	 * 2. Resolve and validate config
-	 * 3. On success: atomically swap all fields on the existing object, invoke onReload
-	 * 4. On failure: keep old config, record error
+	 * On success, fields are swapped on the existing object so request handlers
+	 * holding the old reference see the new config. On failure, the old config is
+	 * preserved and the error is recorded.
 	 */
 	async reload(): Promise<ReloadResult> {
 		try {
-			const newConfig = this.configService
-				? await this.configService.loadAuthoredConfig(this.projectId)
-				: await this.loadFromFilesystem()
+			const newConfig = await this.configService.loadAuthoredConfig(this.projectId)
 
-			// Atomic swap — single-threaded JS means these synchronous assignments
-			// cannot be observed in a half-applied state by any request handler.
 			this.config.company = newConfig.company
 			this.config.agents = newConfig.agents
 			this.config.workflows = newConfig.workflows
@@ -112,24 +88,8 @@ export class ConfigManager {
 		}
 	}
 
-	/** Start watching .autopilot/ directories for changes. */
-	startWatching(chain: ScopeChain): void {
-		if (this.configService) return
-		this.watchDir(chain.companyRoot!)
-		if (chain.projectRoot && chain.projectRoot !== chain.companyRoot) {
-			this.watchDir(chain.projectRoot)
-		}
-	}
-
-	/** Stop all watchers and pending timers. */
-	stop(): void {
-		if (this.reloadTimer) {
-			clearTimeout(this.reloadTimer)
-			this.reloadTimer = null
-		}
-		for (const w of this.watchers) w.close()
-		this.watchers = []
-	}
+	/** No-op kept for shutdown symmetry. */
+	stop(): void {}
 
 	/** Status snapshot for health/status endpoints. */
 	status(): { lastReloadAt: string | null; lastError: string | null; reloadCount: number } {
@@ -137,60 +97,6 @@ export class ConfigManager {
 			lastReloadAt: this.lastReloadAt,
 			lastError: this.lastError,
 			reloadCount: this.reloadCount,
-		}
-	}
-
-	// ── Private ───────────────────────────────────────────────────────────
-
-	private scheduleReload(): void {
-		if (this.configService) return
-		if (this.reloadTimer) clearTimeout(this.reloadTimer)
-		this.reloadTimer = setTimeout(() => {
-			this.reloadTimer = null
-			void this.reload()
-		}, this.debounceMs)
-	}
-
-	private watchDir(dir: string): void {
-		if (this.configService) return
-		const autopilotDir = join(dir, '.autopilot')
-		if (!existsSync(autopilotDir)) return
-		try {
-			const watcher = fsWatch(autopilotDir, { recursive: true }, (_event, filename) => {
-				if (
-					filename &&
-					(filename.endsWith('.yaml') || filename.endsWith('.yml') || filename.endsWith('.md'))
-				) {
-					this.scheduleReload()
-				}
-			})
-			this.watchers.push(watcher)
-		} catch (err) {
-			console.warn(
-				'[config] could not watch',
-				autopilotDir,
-				':',
-				err instanceof Error ? err.message : String(err),
-			)
-		}
-	}
-
-	private async loadFromFilesystem(): Promise<AuthoredConfig> {
-		const newChain = await discoverScopes(this.companyRoot)
-		const newResolved = await resolveConfig(newChain)
-
-		return {
-			company: newResolved.company,
-			agents: newResolved.agents,
-			workflows: newResolved.workflows,
-			environments: newResolved.environments,
-			providers: newResolved.providers,
-			capabilityProfiles: newResolved.capabilityProfiles,
-			skills: newResolved.skills,
-			context: newResolved.context,
-			scripts: newResolved.scripts,
-			defaults: newResolved.defaults,
-			queues: newResolved.company.queues ?? {},
 		}
 	}
 }

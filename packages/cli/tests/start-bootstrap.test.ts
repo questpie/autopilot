@@ -5,22 +5,21 @@
  * - Task routes require auth
  * - The full demo path is not blocked
  */
-import { test, expect, describe, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { createCompanyDb, type CompanyDbResult } from '../../orchestrator/src/db'
-import { createAuth, type Auth } from '../../orchestrator/src/auth'
+import { join } from 'node:path'
 import { createApp } from '../../orchestrator/src/api/app'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService } from '../../orchestrator/src/services'
-
-function post(body: unknown): RequestInit {
-	return {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(body),
-	}
-}
+import { type Auth, createAuth } from '../../orchestrator/src/auth'
+import { type CompanyDbResult, createCompanyDb } from '../../orchestrator/src/db'
+import {
+	ActivityService,
+	EnrollmentService,
+	RunService,
+	TaskService,
+	WorkerService,
+	WorkflowEngine,
+} from '../../orchestrator/src/services'
 
 /** POST with X-Local-Dev header for worker/run routes. */
 function workerPost(body: unknown): RequestInit {
@@ -94,7 +93,15 @@ describe('start bootstrap: auth + MCP', () => {
 		const runService = new RunService(dbResult.db)
 		const workflowEngine = new WorkflowEngine(
 			{
-				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, defaults: {} },
+				company: {
+					name: 'test',
+					slug: 'test',
+					description: '',
+					timezone: 'UTC',
+					language: 'en',
+					owner: { name: 'Test', email: 'test@test.com' },
+					defaults: {},
+				},
 				agents: new Map(),
 				workflows: new Map(),
 				environments: new Map(),
@@ -109,11 +116,26 @@ describe('start bootstrap: auth + MCP', () => {
 			workerService: new WorkerService(dbResult.db),
 			enrollmentService: new EnrollmentService(dbResult.db),
 			activityService: new ActivityService(dbResult.db),
+			queryService: {
+				getByRunIdAnyStatus: async () => null,
+			},
 			workflowEngine,
 		}
 
 		// Use the REAL createApp — local dev mode for these tests
-		app = createApp({ companyRoot, db: dbResult.db, auth, services, authoredConfig: { company: {} as any, agents: new Map(), workflows: new Map(), environments: new Map() }, allowLocalDevBypass: true })
+		app = createApp({
+			companyRoot,
+			db: dbResult.db,
+			auth,
+			services,
+			authoredConfig: {
+				company: {} as any,
+				agents: new Map(),
+				workflows: new Map(),
+				environments: new Map(),
+			},
+			allowLocalDevBypass: true,
+		})
 	})
 
 	afterAll(async () => {
@@ -144,7 +166,7 @@ describe('start bootstrap: auth + MCP', () => {
 	test('run event/complete routes accept local dev bypass', async () => {
 		const createRes = await app.request(
 			'/api/runs',
-			post({ agent_id: 'test-agent', runtime: 'claude-code' }),
+			workerPost({ agent_id: 'test-agent', runtime: 'claude-code' }),
 		)
 		expect(createRes.status).toBe(201)
 		const run = (await createRes.json()) as { id: string }
@@ -172,9 +194,10 @@ describe('start bootstrap: auth + MCP', () => {
 		expect(res.status).toBe(200)
 	})
 
-	test('ClaudeCodeAdapter accepts useMcp + workDir config', () => {
-		const { ClaudeCodeAdapter } = require('@questpie/autopilot-worker')
-		const adapter = new ClaudeCodeAdapter({
+	test('SpawnAgentAdapter accepts useMcp + workDir config', () => {
+		const { SpawnAgentAdapter } = require('@questpie/autopilot-worker')
+		const adapter = new SpawnAgentAdapter({
+			runtime: 'claude-code',
 			useMcp: true,
 			workDir: companyRoot,
 		})
@@ -186,7 +209,7 @@ describe('start bootstrap: auth + MCP', () => {
 		// Create a pending run
 		const runRes = await app.request(
 			'/api/runs',
-			post({ agent_id: 'dev', runtime: 'claude-code', instructions: 'Do something' }),
+			workerPost({ agent_id: 'dev', runtime: 'claude-code', instructions: 'Do something' }),
 		)
 		expect(runRes.status).toBe(201)
 		const run = (await runRes.json()) as { id: string }
@@ -195,14 +218,20 @@ describe('start bootstrap: auth + MCP', () => {
 		await app.request('/api/workers/register', workerPost({ id: 'w-full-test' }))
 
 		// Claim
-		const claimRes = await app.request('/api/workers/claim', workerPost({ worker_id: 'w-full-test' }))
+		const claimRes = await app.request(
+			'/api/workers/claim',
+			workerPost({ worker_id: 'w-full-test' }),
+		)
 		const claim = (await claimRes.json()) as { run: { id: string } | null }
 		expect(claim.run).not.toBeNull()
 		expect(claim.run!.id).toBe(run.id)
 
 		// Events
 		await app.request(`/api/runs/${run.id}/events`, workerPost({ type: 'started', summary: 'Go' }))
-		await app.request(`/api/runs/${run.id}/events`, workerPost({ type: 'progress', summary: 'Working' }))
+		await app.request(
+			`/api/runs/${run.id}/events`,
+			workerPost({ type: 'progress', summary: 'Working' }),
+		)
 
 		// Complete
 		const complRes = await app.request(
@@ -212,7 +241,9 @@ describe('start bootstrap: auth + MCP', () => {
 		expect(complRes.status).toBe(200)
 
 		// Verify
-		const finalRes = await app.request(`/api/runs/${run.id}`)
+		const finalRes = await app.request(`/api/runs/${run.id}`, {
+			headers: { 'X-Local-Dev': 'true' },
+		})
 		const final = (await finalRes.json()) as { status: string; summary: string }
 		expect(final.status).toBe('completed')
 		expect(final.summary).toBe('All done')

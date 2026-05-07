@@ -1,6 +1,8 @@
 # @questpie/autopilot
 
-AI-native company operating system. Agents call structured primitives (not chat). Human approval gates keep you in control. Filesystem-native — one Bun process, one SQLite file.
+CLI for running QUESTPIE Autopilot locally, connecting workers, managing tasks and Knowledge, and materializing local agent compatibility files.
+
+Autopilot's durable product state lives in the orchestrator database and storage. The filesystem is used for import/export packs, generated runtime compatibility files, fixtures, and ephemeral Git workspaces for project runs.
 
 ## Install
 
@@ -8,59 +10,37 @@ AI-native company operating system. Agents call structured primitives (not chat)
 bun add -g @questpie/autopilot
 ```
 
-## Quick start
+## Quick Start
 
 ```bash
-# Initialize a new company directory
-autopilot init my-company
-
-# Start the orchestrator
+autopilot bootstrap
 autopilot start
-
-# Ask an agent to do something
-autopilot ask "Draft a Q2 marketing plan"
+autopilot query "Summarize the current project state"
 ```
 
-## Configure
+`autopilot start` launches the orchestrator and a local worker. Workers execute through `spawn-agent` and attach Autopilot MCP tools to Claude Code, Codex, or OpenCode sessions.
 
-Set your OpenRouter API key via environment variable or `.env` file in your company directory:
-
-```bash
-OPENROUTER_API_KEY=sk-or-...
-```
-
-## CLI commands
+## Core Commands
 
 | Command | Description |
 | --- | --- |
-| `init` | Initialize a new company directory |
-| `start` | Start the orchestrator |
-| `ask` | Send a task to an agent |
-| `status` | Show orchestrator status |
-| `tasks` | List and manage tasks |
-| `agents` | List and manage agents |
-| `inbox` | View pending notifications |
-| `attach` | Attach to a running agent session |
-| `approve` | Approve a pending action |
-| `reject` | Reject a pending action |
-| `board` | Open the task board |
-| `channels` | List and manage channels |
-| `chat` | Send a message to a channel |
-| `knowledge` | Manage the knowledge base |
-| `artifacts` | List and manage artifacts |
-| `dashboard` | Open the web dashboard |
-| `auth` | Manage authentication |
-| `git` | Git integration commands |
-| `secrets` | Manage encrypted secrets |
-
-## Agent providers
-
-- [TanStack AI](https://tanstack.com/ai) with [OpenRouter](https://openrouter.ai) — supports Anthropic, OpenAI, Google, and more
+| `autopilot start` | Start orchestrator + local worker for development |
+| `autopilot server start` | Start only the orchestrator API |
+| `autopilot worker start` | Start/connect a worker |
+| `autopilot query` | Run a taskless operator query |
+| `autopilot tasks` | List and manage tasks |
+| `autopilot runs` | Inspect run state and artifacts |
+| `autopilot knowledge` | Import/search/manage Knowledge resources |
+| `autopilot agent skill add` | Install SKILL.md packages through `agent-install` |
+| `autopilot agent mcp add` | Materialize MCP server config through `agent-install` |
+| `autopilot agent guide set-section` | Upsert AGENTS.md guidance through `agent-install` |
+| `autopilot sync` | Materialize local compatibility files and packs |
+| `autopilot doctor` | Check local setup, worker runtimes, and API health |
 
 ## Links
 
+- [Architecture](../../docs/architecture.md)
 - [Documentation](https://autopilot.questpie.com)
-- [GitHub](https://github.com/questpie/autopilot)
 
 ## License
 

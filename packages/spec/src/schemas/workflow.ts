@@ -5,6 +5,8 @@ import { ExternalActionSchema } from './external-action'
 export const ExecutionTargetSchema = z.object({
 	/** Hard pin: only this worker may claim the run. */
 	required_worker_id: z.string().optional(),
+	/** Workers that should not claim this run, usually from retry failover. */
+	avoid_worker_ids: z.array(z.string()).default([]),
 	/** Runtime the run must execute on (e.g. 'claude-code'). */
 	required_runtime: z.string().optional(),
 	/** Tags (runtime names, model names, explicit tags) the claiming worker must advertise. */
@@ -76,7 +78,14 @@ export const StepTransitionSchema = z.object({
 // ─── Retry Policy ────────────────────────────────────────────────────────
 
 /** Error types for retry classification. */
-export const RetryErrorTypeSchema = z.enum(['infra', 'timeout', 'rate_limit', 'business', 'unknown'])
+export const RetryErrorTypeSchema = z.enum([
+	'infra',
+	'timeout',
+	'rate_limit',
+	'account_balance',
+	'business',
+	'unknown',
+])
 
 /** What to do when all retry attempts are exhausted. */
 export const RetryExhaustedActionSchema = z.enum(['fail', 'escalate', 'skip'])
@@ -91,8 +100,8 @@ export const RetryPolicySchema = z.object({
 	backoff_multiplier: z.number().positive().default(1),
 	/** Maximum delay in seconds. Omit for no cap. */
 	max_delay_seconds: z.number().positive().optional(),
-	/** Which error types to retry. Default: ['infra', 'timeout']. */
-	retry_on: z.array(RetryErrorTypeSchema).default(['infra', 'timeout']),
+	/** Which error types to retry. Default: infra, timeout, and account-balance failover. */
+	retry_on: z.array(RetryErrorTypeSchema).default(['infra', 'timeout', 'account_balance']),
 	/** What to do after max_attempts is exhausted. Default: 'fail'. */
 	on_exhausted: RetryExhaustedActionSchema.default('fail'),
 })

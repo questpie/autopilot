@@ -2,7 +2,7 @@
  * Tests for configurable retry policies on workflow steps.
  *
  * Covers:
- * - Error classification (infra, timeout, rate_limit, business, unknown)
+ * - Error classification (infra, timeout, rate_limit, account_balance, business, unknown)
  * - Step-level retry policy resolution
  * - Company-level default retry policy
  * - Retry counter tracking in task metadata
@@ -119,6 +119,14 @@ describe('classifyRunError', () => {
 		expect(classifyRunError('rate limit exceeded')).toBe('rate_limit')
 		expect(classifyRunError('too many requests')).toBe('rate_limit')
 		expect(classifyRunError('request throttled')).toBe('rate_limit')
+	})
+
+	test('classifies account balance errors', () => {
+		expect(classifyRunError('HTTP 402 Payment Required')).toBe('account_balance')
+		expect(classifyRunError('insufficient credits')).toBe('account_balance')
+		expect(classifyRunError('prepaid credit balance is too low')).toBe('account_balance')
+		expect(classifyRunError('quota exceeded for this account')).toBe('account_balance')
+		expect(classifyRunError('monthly spending limit reached')).toBe('account_balance')
 	})
 
 	test('classifies business errors', () => {
@@ -288,6 +296,73 @@ describe('RetryPolicy: company-level defaults', () => {
 		expect(failResult).not.toBeNull()
 		// Should be active (retrying), not failed — company default allows 1 retry
 		expect(failResult!.status).toBe('active')
+	})
+})
+
+describe('RetryPolicy: account balance failover', () => {
+	let env: Awaited<ReturnType<typeof createTestEnv>>
+
+	beforeAll(async () => {
+		const workflow = makeRetryWorkflow({
+			max_attempts: 2,
+			delay_seconds: 0,
+			backoff_multiplier: 1,
+			retry_on: ['account_balance'],
+			on_exhausted: 'fail',
+		})
+		const company = makeCompany()
+		const config = makeConfig(company, workflow)
+		env = await createTestEnv('account-balance-failover', config)
+	})
+
+	afterAll(async () => {
+		env.dbResult.raw.close()
+		await rm(env.companyRoot, { recursive: true, force: true })
+	})
+
+	test('retries account balance errors on another worker when available', async () => {
+		const result = await env.engine.materializeTask({
+			title: 'Balance failover test',
+			type: 'feature',
+			created_by: 'test',
+		})
+		expect(result).not.toBeNull()
+		const firstRunId = result!.runId!
+		const caps = [{ runtime: 'claude-code', models: [], maxConcurrent: 1 }]
+
+		const claimed = await env.runService.claim('worker-low-balance', 'claude-code', caps)
+		expect(claimed).not.toBeUndefined()
+		expect(claimed!.id).toBe(firstRunId)
+
+		await env.runService.complete(firstRunId, {
+			status: 'failed',
+			error: 'insufficient credits for this account',
+		})
+
+		const failResult = await env.engine.handleRunFailure(result!.task.id, firstRunId)
+		expect(failResult).not.toBeNull()
+		expect(failResult!.status).toBe('active')
+
+		const runs = await env.runService.list({ task_id: result!.task.id })
+		expect(runs.length).toBe(2)
+		const retryRun = runs.find((r) => r.id !== firstRunId)
+		expect(retryRun).toBeDefined()
+		expect(retryRun!.targeting).not.toBeNull()
+		const retryTargeting = JSON.parse(retryRun!.targeting!)
+		expect(retryTargeting.avoid_worker_ids).toEqual(['worker-low-balance'])
+
+		const skipped = await env.runService.claim('worker-low-balance', 'claude-code', caps)
+		expect(skipped).toBeUndefined()
+
+		const claimedByOther = await env.runService.claim('worker-funded', 'claude-code', caps)
+		expect(claimedByOther).not.toBeUndefined()
+		expect(claimedByOther!.id).toBe(retryRun!.id)
+
+		const events = await env.runService.getEvents(firstRunId)
+		const retryEvent = events.find((e) => e.type === 'retry_scheduled')
+		expect(retryEvent).toBeDefined()
+		expect(retryEvent!.summary).toContain('account_balance')
+		expect(retryEvent!.summary).toContain('worker-low-balance')
 	})
 })
 

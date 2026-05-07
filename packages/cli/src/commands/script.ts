@@ -74,7 +74,7 @@ scriptCmd.addCommand(
 					inputs?: Array<{ name: string; description?: string; type: string; required: boolean }>
 					outputs?: Array<{ name: string; description?: string; type: string }>
 					sandbox?: {
-						fs_scope?: { read: string[]; write: string[] }
+						workspace_scope?: { read: string[]; write: string[] }
 						network?: string
 						timeout_ms?: number
 						max_memory_mb?: number
@@ -99,9 +99,9 @@ scriptCmd.addCommand(
 					if (s.sandbox.max_memory_mb) {
 						console.log(`  ${dim('Max memory:')} ${s.sandbox.max_memory_mb}MB`)
 					}
-					if (s.sandbox.fs_scope) {
-						console.log(`  ${dim('FS read:')}    ${s.sandbox.fs_scope.read.join(', ') || '—'}`)
-						console.log(`  ${dim('FS write:')}   ${s.sandbox.fs_scope.write.join(', ') || '—'}`)
+					if (s.sandbox.workspace_scope) {
+						console.log(`  ${dim('Workspace read:')}  ${s.sandbox.workspace_scope.read.join(', ') || '—'}`)
+						console.log(`  ${dim('Workspace write:')} ${s.sandbox.workspace_scope.write.join(', ') || '—'}`)
 					}
 				}
 

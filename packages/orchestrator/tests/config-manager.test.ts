@@ -1,5 +1,5 @@
 /**
- * Tests for ConfigManager — hot reload with atomic swap and validation.
+ * Tests for ConfigManager — DB-backed hot reload with atomic swap.
  *
  * Covers:
  * - Unit: get(), status(), reload() success/failure, onReload callback, object identity
@@ -7,7 +7,7 @@
  * - Integration: conversation/provider lookup uses reloaded config
  */
 import { test, expect, describe, beforeAll, afterAll } from 'bun:test'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Hono } from 'hono'
@@ -37,105 +37,81 @@ function makeConfig(overrides?: Partial<AuthoredConfig>): AuthoredConfig {
 		capabilityProfiles: new Map(),
 		skills: new Map(),
 		context: new Map(),
+		scripts: new Map(),
 		defaults: { runtime: 'claude-code' },
 		queues: {},
 		...overrides,
 	}
 }
 
-let testDir: string
-
-beforeAll(async () => {
-	testDir = join(tmpdir(), `config-manager-test-${Date.now()}`)
-	await mkdir(testDir, { recursive: true })
-})
-
-afterAll(async () => {
-	await rm(testDir, { recursive: true, force: true })
-})
+function makeConfigSource(loader: () => Promise<AuthoredConfig>) {
+	return { loadAuthoredConfig: loader }
+}
 
 // ─── Tests ────────────────────────────────────────────────────────────────
 
 describe('ConfigManager', () => {
 	test('get() returns initial config', () => {
 		const config = makeConfig()
-		const cm = new ConfigManager(config, { companyRoot: testDir })
+		const cm = new ConfigManager(config, { configService: makeConfigSource(async () => config) })
 		expect(cm.get()).toBe(config)
 	})
 
 	test('status() reflects initial state', () => {
 		const config = makeConfig()
-		const cm = new ConfigManager(config, { companyRoot: testDir })
+		const cm = new ConfigManager(config, { configService: makeConfigSource(async () => config) })
 		const status = cm.status()
 		expect(status.lastReloadAt).toBeNull()
 		expect(status.lastError).toBeNull()
 		expect(status.reloadCount).toBe(0)
 	})
 
-	test('reload() with valid config swaps fields atomically', async () => {
-		// Set up a minimal .autopilot/company.yaml
-		const autopilotDir = join(testDir, '.autopilot')
-		await mkdir(autopilotDir, { recursive: true })
-		await writeFile(
-			join(autopilotDir, 'company.yaml'),
-			'name: ReloadedCompany\nslug: reloaded\ndefaults:\n  runtime: claude-code\n',
-		)
-
+	test('reload() swaps DB config fields atomically', async () => {
 		const config = makeConfig()
-		const cm = new ConfigManager(config, { companyRoot: testDir })
+		const reloaded = makeConfig({
+			company: { name: 'ReloadedCompany', slug: 'reloaded', defaults: { runtime: 'claude-code' } } as CompanyScope,
+		})
+		const cm = new ConfigManager(config, {
+			configService: makeConfigSource(async () => reloaded),
+		})
 
 		const result = await cm.reload()
 		expect(result.ok).toBe(true)
 		expect(result.error).toBeUndefined()
 
-		// Config should be updated
 		expect(cm.get().company.name).toBe('ReloadedCompany')
 		expect(cm.get().company.slug).toBe('reloaded')
-
-		// Status should reflect success
 		expect(cm.status().lastReloadAt).not.toBeNull()
 		expect(cm.status().lastError).toBeNull()
 		expect(cm.status().reloadCount).toBe(1)
 	})
 
 	test('reload() preserves old config on failure', async () => {
-		// Set up an invalid company.yaml that will fail Zod validation
-		const badDir = join(testDir, 'bad-config-' + Date.now())
-		const badAutopilotDir = join(badDir, '.autopilot')
-		await mkdir(badAutopilotDir, { recursive: true })
-		await writeFile(
-			join(badAutopilotDir, 'company.yaml'),
-			'invalid: [yaml: that: breaks: parsing: {{{\n',
-		)
-
 		const config = makeConfig()
 		const originalName = config.company.name
-		const cm = new ConfigManager(config, { companyRoot: badDir })
+		const cm = new ConfigManager(config, {
+			configService: makeConfigSource(async () => {
+				throw new Error('DB config validation failed')
+			}),
+		})
 
 		const result = await cm.reload()
 		expect(result.ok).toBe(false)
 		expect(result.error).toBeDefined()
 
-		// Original config should be preserved
 		expect(cm.get().company.name).toBe(originalName)
-
-		// Status should reflect failure
 		expect(cm.status().lastError).not.toBeNull()
 		expect(cm.status().reloadCount).toBe(0)
 	})
 
 	test('reload() invokes onReload callback on success', async () => {
-		const autopilotDir = join(testDir, '.autopilot')
-		await mkdir(autopilotDir, { recursive: true })
-		await writeFile(
-			join(autopilotDir, 'company.yaml'),
-			'name: CallbackTest\nslug: callback\ndefaults:\n  runtime: claude-code\n',
-		)
-
 		let callbackCalled = false
 		const config = makeConfig()
+		const reloaded = makeConfig({
+			company: { name: 'CallbackTest', slug: 'callback', defaults: { runtime: 'claude-code' } } as CompanyScope,
+		})
 		const cm = new ConfigManager(config, {
-			companyRoot: testDir,
+			configService: makeConfigSource(async () => reloaded),
 			onReload: () => { callbackCalled = true },
 		})
 
@@ -144,19 +120,12 @@ describe('ConfigManager', () => {
 	})
 
 	test('reload() does NOT invoke onReload callback on failure', async () => {
-		// Set up an invalid company.yaml
-		const badDir = join(testDir, 'bad-callback-' + Date.now())
-		const badAutopilotDir = join(badDir, '.autopilot')
-		await mkdir(badAutopilotDir, { recursive: true })
-		await writeFile(
-			join(badAutopilotDir, 'company.yaml'),
-			'invalid: [yaml: that: breaks: {{{\n',
-		)
-
 		let callbackCalled = false
 		const config = makeConfig()
 		const cm = new ConfigManager(config, {
-			companyRoot: badDir,
+			configService: makeConfigSource(async () => {
+				throw new Error('DB config validation failed')
+			}),
 			onReload: () => { callbackCalled = true },
 		})
 
@@ -165,61 +134,54 @@ describe('ConfigManager', () => {
 	})
 
 	test('same object reference is mutated (existing holders see updates)', async () => {
-		const autopilotDir = join(testDir, '.autopilot')
-		await mkdir(autopilotDir, { recursive: true })
-		await writeFile(
-			join(autopilotDir, 'company.yaml'),
-			'name: MutationTest\nslug: mutation\ndefaults:\n  runtime: claude-code\n',
-		)
-
 		const config = makeConfig()
 		const holderRef = config // simulate a consumer holding a reference
+		const reloaded = makeConfig({
+			company: { name: 'MutationTest', slug: 'mutation', defaults: { runtime: 'claude-code' } } as CompanyScope,
+		})
 
-		const cm = new ConfigManager(config, { companyRoot: testDir })
+		const cm = new ConfigManager(config, {
+			configService: makeConfigSource(async () => reloaded),
+		})
 		await cm.reload()
 
-		// The holder's reference should see the new values
 		expect(holderRef.company.name).toBe('MutationTest')
 		expect(holderRef).toBe(cm.get())
 	})
 
 	test('reload() includes skills field', async () => {
-		const autopilotDir = join(testDir, '.autopilot')
-		await mkdir(autopilotDir, { recursive: true })
-		await writeFile(
-			join(autopilotDir, 'company.yaml'),
-			'name: SkillsTest\nslug: skills\ndefaults:\n  runtime: claude-code\n',
-		)
-
 		const config = makeConfig({
 			skills: new Map([['old-skill', { id: 'old-skill', name: 'Old', description: '', path: '/fake', content: '' }]]),
 		})
+		const reloaded = makeConfig({
+			company: { name: 'SkillsTest', slug: 'skills', defaults: { runtime: 'claude-code' } } as CompanyScope,
+			skills: new Map(),
+		})
 
-		const cm = new ConfigManager(config, { companyRoot: testDir })
+		const cm = new ConfigManager(config, {
+			configService: makeConfigSource(async () => reloaded),
+		})
 		await cm.reload()
 
-		// After reload from disk (no skills files), skills should be empty
 		expect(cm.get().skills.size).toBe(0)
 	})
 
-	test('stop() cleans up watchers', () => {
+	test('stop() is idempotent', () => {
 		const config = makeConfig()
-		const cm = new ConfigManager(config, { companyRoot: testDir })
+		const cm = new ConfigManager(config, { configService: makeConfigSource(async () => config) })
 		// Should not throw
 		cm.stop()
 		cm.stop() // idempotent
 	})
 
 	test('successive reloads increment counter', async () => {
-		const autopilotDir = join(testDir, '.autopilot')
-		await mkdir(autopilotDir, { recursive: true })
-		await writeFile(
-			join(autopilotDir, 'company.yaml'),
-			'name: CountTest\nslug: count\ndefaults:\n  runtime: claude-code\n',
-		)
-
 		const config = makeConfig()
-		const cm = new ConfigManager(config, { companyRoot: testDir })
+		const reloaded = makeConfig({
+			company: { name: 'CountTest', slug: 'count', defaults: { runtime: 'claude-code' } } as CompanyScope,
+		})
+		const cm = new ConfigManager(config, {
+			configService: makeConfigSource(async () => reloaded),
+		})
 
 		await cm.reload()
 		await cm.reload()

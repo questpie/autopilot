@@ -415,7 +415,7 @@ describe('buildQueryInstructions without carryoverSummary', () => {
 		expect(result).not.toContain('## Conversation History')
 		expect(result).not.toContain('PRIOR_QUERY_CONTEXT')
 		expect(result).toContain('hello')
-		expect(result).toContain('QUERY MODE (read-only)')
+		expect(result).toContain('## Query Mode (read-only)')
 	})
 })
 

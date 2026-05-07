@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { ChatCircle, Folder, SquaresFour } from '@phosphor-icons/react'
+import { BookOpen, ChatCircle, SquaresFour } from '@phosphor-icons/react'
 import { useAgents } from '@/hooks/use-agents'
 import { useWorkers } from '@/hooks/use-workers'
 import { useTasks } from '@/hooks/use-tasks'
@@ -137,10 +137,10 @@ export function DashboardScreen() {
             variant="outline"
             size="sm"
             className="font-mono text-xs"
-            onClick={() => void navigate({ to: '/files' })}
+            onClick={() => void navigate({ to: '/knowledge' })}
           >
-            <Folder size={14} />
-            View files
+            <BookOpen size={14} />
+            Open Knowledge
           </Button>
           <Button
             variant="outline"

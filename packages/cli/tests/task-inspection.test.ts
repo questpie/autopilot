@@ -10,8 +10,8 @@ import { program } from '../src/index'
  */
 
 describe('task inspection commands', () => {
-	const tasksCmd = program.commands.find((c) => c.name() === 'tasks')!
-	const subNames = tasksCmd.commands.map((c) => c.name())
+	const taskCmd = program.commands.find((c) => c.name() === 'task')!
+	const subNames = taskCmd.commands.map((c) => c.name())
 
 	it('registers children subcommand', () => {
 		expect(subNames).toContain('children')
@@ -26,35 +26,35 @@ describe('task inspection commands', () => {
 	})
 
 	it('children command accepts task ID argument', () => {
-		const cmd = tasksCmd.commands.find((c) => c.name() === 'children')!
+		const cmd = taskCmd.commands.find((c) => c.name() === 'children')!
 		// Commander stores arguments in _args
 		expect((cmd as any)._args.length).toBe(1)
 	})
 
 	it('parents command accepts task ID argument', () => {
-		const cmd = tasksCmd.commands.find((c) => c.name() === 'parents')!
+		const cmd = taskCmd.commands.find((c) => c.name() === 'parents')!
 		expect((cmd as any)._args.length).toBe(1)
 	})
 
 	it('rollup command accepts task ID argument', () => {
-		const cmd = tasksCmd.commands.find((c) => c.name() === 'rollup')!
+		const cmd = taskCmd.commands.find((c) => c.name() === 'rollup')!
 		expect((cmd as any)._args.length).toBe(1)
 	})
 
 	it('children command has --relation option', () => {
-		const cmd = tasksCmd.commands.find((c) => c.name() === 'children')!
+		const cmd = taskCmd.commands.find((c) => c.name() === 'children')!
 		const optNames = cmd.options.map((o) => o.long)
 		expect(optNames).toContain('--relation')
 	})
 
 	it('parents command has --relation option', () => {
-		const cmd = tasksCmd.commands.find((c) => c.name() === 'parents')!
+		const cmd = taskCmd.commands.find((c) => c.name() === 'parents')!
 		const optNames = cmd.options.map((o) => o.long)
 		expect(optNames).toContain('--relation')
 	})
 
 	it('rollup command has --relation option', () => {
-		const cmd = tasksCmd.commands.find((c) => c.name() === 'rollup')!
+		const cmd = taskCmd.commands.find((c) => c.name() === 'rollup')!
 		const optNames = cmd.options.map((o) => o.long)
 		expect(optNames).toContain('--relation')
 	})

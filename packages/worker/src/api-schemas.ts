@@ -22,11 +22,11 @@ export const DiffQuerySchema = z.object({
     .transform((v) => v === 'true'),
 })
 
-export const FilesQuerySchema = z.object({
+export const TreeQuerySchema = z.object({
   path: z.string().optional(),
 })
 
-export const FileReadQuerySchema = z.object({
+export const WorkspaceReadQuerySchema = z.object({
   path: z.string().min(1),
 })
 
@@ -105,7 +105,7 @@ export const DiffResultSchema = z.object({
   stats: DiffStatsSchema,
 })
 
-export const FileEntrySchema = z.object({
+export const WorkspaceTreeEntrySchema = z.object({
   name: z.string(),
   path: z.string(),
   type: z.enum(['file', 'directory']),
@@ -126,6 +126,6 @@ export type WorkspaceDetail = z.infer<typeof WorkspaceDetailSchema>
 export type DriftSummary = z.infer<typeof DriftSummarySchema>
 export type FileDiff = z.infer<typeof FileDiffSchema>
 export type DiffResult = z.infer<typeof DiffResultSchema>
-export type FileEntry = z.infer<typeof FileEntrySchema>
-export type FileReadQuery = z.infer<typeof FileReadQuerySchema>
+export type WorkspaceTreeEntry = z.infer<typeof WorkspaceTreeEntrySchema>
+export type WorkspaceReadQuery = z.infer<typeof WorkspaceReadQuerySchema>
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>

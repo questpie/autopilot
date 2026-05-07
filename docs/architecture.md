@@ -1,153 +1,90 @@
 # Architecture
 
-## Overview
+## Current MVP Direction
+
+Autopilot is a DB-backed operator system for tasks, Knowledge, workers, MCP tools, and multi-agent orchestration. The filesystem is not the product database. It is used for import/export packs, local compatibility materialization, fixtures, and ephemeral Git workspaces created for project execution runs.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  HUMAN LAYER                                            │
-│  CLI · API · MCP · Telegram · Webhooks · Query          │
+│  OPERATOR SURFACES                                      │
+│  Dashboard · Chat · Tasks · Knowledge · CLI · MCP        │
 └──────────────────────┬──────────────────────────────────┘
                        │ intent / approvals / messages
 ┌──────────────────────▼──────────────────────────────────┐
-│  ORCHESTRATOR (single Bun process)                      │
-│                                                         │
-│  FS Watcher ──── watches authored company config        │
-│  Workflow Engine ── compiles + evaluates workflow steps  │
-│  Agent Spawner ──── Claude Agent SDK sessions           │
-│  Context Builder ── role-scoped company snapshots       │
-│  Memory Extractor ── persists learnings post-session    │
-│  Scheduler ──── cron jobs from team/schedules/*.yaml    │
-│  Webhook Routes ── /webhooks/*, HMAC-verified           │
-│  API Server ──── port 7778, Hono REST                   │
-│  Git Manager ──── auto-commit agent changes             │
-│  Stream Manager ── SSE for live session attach          │
-│  Workflow Store ── workflow_runs + step_runs in SQLite  │
+│  ORCHESTRATOR                                           │
+│  Hono API · task/query/session services · Knowledge API  │
+│  config registry · scheduler · run orchestration         │
 └──────────────────────┬──────────────────────────────────┘
-                       │ spawn / assign / notify
+                       │ claim / stream / inspect
 ┌──────────────────────▼──────────────────────────────────┐
-│  AGENT LAYER                                            │
-│                                                         │
-│  8 roles with system prompts + scoped tools             │
-│  7 unified tools (not chat)                             │
-│  Sandboxed filesystem access                            │
-│  Per-agent persistent memory                            │
+│  WORKERS                                                │
+│  spawn-agent runtime adapter · MCP server attachment     │
+│  isolated Git workspaces · read-only workspace inspect   │
 └──────────────────────┬──────────────────────────────────┘
-                       │ read / write / tool calls
+                       │ durable state / blobs / git diffs
 ┌──────────────────────▼──────────────────────────────────┐
 │  STORAGE                                                │
-│                                                         │
-│  Filesystem: YAML, Markdown, JSON (authored state)      │
-│  SQLite: tasks, messages, sessions, workflow runtime    │
-│  FTS5: full-text search over all entities               │
-│  sqlite-vec: vector embeddings for semantic search      │
-│  Durable Streams: append-only replay timelines          │
-│  Git: auto-commit for audit trail                       │
+│  SQLite control/config state · Knowledge records/blobs   │
+│  artifact storage · Git provider links for project runs  │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Tech Stack
+## Planes
 
-| Component | Technology |
-|-----------|-----------|
-| Runtime | Bun 1.3+ |
-| Language | TypeScript (strict) |
-| Agent SDK | Anthropic Claude Agent SDK |
-| HTTP Framework | Hono |
-| Database | SQLite via bun:sqlite + Drizzle ORM |
-| Search | FTS5 (full-text) + sqlite-vec (vector) |
-| Auth | Better Auth |
-| FS Watch | chokidar |
-| CLI | Commander.js |
-| Operator app | Deferred future surface, not part of the current deployable runtime |
-| Build | Turbo monorepo |
+### Database Control Plane
 
-## How Agent Spawning Works
+SQLite stores the durable state the product queries and enforces:
 
-1. A task is created in SQLite (from CLI, webhook, or another agent)
-2. The workflow engine matches the task to a workflow step
-3. The context builder assembles a prompt with 6 layers:
-   - **Identity** (~2K tokens) — role, tools, team info
-   - **Company state** (~3-5K tokens) — role-scoped snapshot
-   - **Agent memory** (~15-20K tokens) — persistent facts, decisions, patterns
-   - **Task context** (~8-15K tokens) — task details, specs, history
-   - **Skills discovery** — available skills from `skills/` directory
-   - **Tool list** — available unified tools scoped to the agent's role
-4. The agent spawner creates a Claude session via Agent SDK
-5. The agent executes unified tool calls
-6. Post-session: memory extractor (Claude Haiku) persists learnings to `context/memory/{agentId}/memory.yaml`
-7. The orchestrator persists workflow runtime state and moves the task to the next workflow step when validation allows it
+- tasks, queries, runs, run events, sessions, and messages
+- users, auth, preferences, and project registrations
+- DB-backed config records for agents, teams, workflows, providers, skills, scripts, and context settings
+- Knowledge document metadata and searchable resource records
 
-## Workflow Execution Model
+### Knowledge Plane
 
-Autopilot now treats workflows as a first-class runtime primitive:
+Knowledge is the product resource model. It is not a generic filesystem explorer.
 
-1. Workflow definitions live in `team/workflows/*.yaml`
-2. The orchestrator compiles them into normalized step contracts
-3. The workflow engine evaluates the current step and recommended action
-4. SQLite persists execution in:
-   - `workflow_runs` — one durable run per task/workflow
-   - `step_runs` — per-step attempts, executor info, validation mode, child workflow linkage
-5. Durable Streams appends timeline events for replay/debugging
+- Markdown and text resources render through rich read views.
+- OpenAPI resources render through the Scalar React reference.
+- Images and binary resources are resource objects backed by storage.
+- Future renderer plugins attach to resource MIME/type/config, not to a primary Files product area.
 
-This matters because the app, not the agent, owns workflow state.
+### Worker Execution Plane
 
-## Storage Planes
+Workers execute project work in isolated Git workspaces:
 
-### Filesystem = authored plane
+- the worker prepares an ephemeral worktree for a run
+- `spawn-agent` connects to Claude Code, Codex, or OpenCode through ACP/native adapters
+- Autopilot MCP tools are attached to the session
+- the orchestrator receives run events, artifacts, summaries, and workspace inspection data
+- project review is git diff/provider oriented, with GitHub first and adapter seams for GitLab later
 
-Use the filesystem for human-editable source material:
+The worker API is read-only. It exposes runtime status, workspace tree/read inspection, and git diffs for active runs. It does not become a second orchestrator or a company filesystem browser.
 
-- config
-- workflow definitions
-- role prompts
-- skills
-- knowledge
-- artifacts and project files
+### Filesystem Compatibility Plane
 
-### SQLite = control plane
+The filesystem remains useful for:
 
-Use SQLite for anything the app must query, resume, dedupe, or enforce:
+- project source checkout and ephemeral Git run workspaces
+- import/export packs and versionable distribution
+- local bootstrap and runtime compatibility output such as `AGENTS.md`, native skill folders, or MCP launcher materialization
+- test fixtures and development-only snapshots
 
-- tasks
-- messages
-- activity
-- agent sessions
-- workflow runs
-- step runs
-- auth
-- search indexes
+Durable product intent belongs in the database/config registry. Local files generated for agents are materialized output, not the source of truth.
 
-### Durable Streams = timeline plane
+## Runtime Model
 
-Use Durable Streams for live tailing and replay. It is a timeline layer, not the source of truth for workflow control state.
+The worker runtime adapter is `SpawnAgentAdapter`.
 
-## Unified Tools
+Supported runtime IDs remain `claude-code`, `codex`, and `opencode`, but they are connected through `spawn-agent` instead of separate direct adapters. Local agent setup should use `agent-install` where possible so agents receive native skills, MCP config, and workspace instructions in the format their runtime expects.
 
-Agents don't generate text. They call 7 unified tools:
+## Operator UI
 
-| Category | Tools |
-|----------|-------|
-| Workflow | `task` |
-| Collaboration | `message`, `pin` |
-| Internal Search | `search` |
-| External APIs | `http` |
-| Web Discovery | `search_web`, `browse` |
+Primary product modes:
 
-## Git Auto-Commit
+- Dashboard/Home
+- Chat
+- Tasks
+- Knowledge
 
-Every agent file operation is automatically committed:
-- Agent writes file → GitManager stages + commits
-- Commit message includes agent name, task ID, action
-- Full audit trail in git log
-- Human approval gates before merge to main
-
-## SQLite Schema
-
-The sidecar database (`.data/autopilot.db`) stores:
-- Tasks (indexed, searchable)
-- Messages (channels + direct)
-- Sessions (agent session logs)
-- Workflow runs and step runs (durable execution state)
-- Auth (Better Auth tables — users, sessions, tokens)
-- Search index (FTS5 virtual tables)
-- Embeddings (sqlite-vec virtual tables)
+Secondary/admin surfaces such as workflows, schedules, integrations, runtime, agents, and project inspection should remain scoped and contextual. They should not become new primary top-level modes for the MVP.

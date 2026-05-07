@@ -7,7 +7,6 @@ const validAgent = {
 	name: 'Peter',
 	role: 'developer',
 	description: 'Writes code',
-	fs_scope: { read: ['/projects'], write: ['/projects/app'] },
 }
 
 describe('AgentSchema current runtime-independent shape', () => {
@@ -18,10 +17,6 @@ describe('AgentSchema current runtime-independent shape', () => {
 		expect(result.name).toBe('Peter')
 		expect(result.role).toBe('developer')
 		expect(result.description).toBe('Writes code')
-		expect(result.fs_scope).toEqual({
-			read: ['/projects'],
-			write: ['/projects/app'],
-		})
 		expect(result.triggers).toEqual([])
 	})
 

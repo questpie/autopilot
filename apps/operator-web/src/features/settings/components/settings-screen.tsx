@@ -106,7 +106,7 @@ function AppPreferencesTab() {
 			<SettingsSection title="Developer">
 				<SettingRow
 					label="Developer mode"
-					description="Show advanced sections in navigation (Files, Agents, Workflows, Runtime)"
+					description="Show advanced operator sections such as agents, workflows, and runtime"
 					control={<ToggleSwitch checked={developerMode} onChange={setDeveloperMode} />}
 				/>
 			</SettingsSection>

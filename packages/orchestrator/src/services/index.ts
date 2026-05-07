@@ -27,7 +27,13 @@ export { TaskRelationService, DependencyCycleError } from './task-relations'
 export type { TaskRelationRow } from './task-relations'
 
 export { TaskGraphService } from './task-graph'
-export type { SpawnChildrenInput, SpawnChildrenResult, SpawnedChild, ChildCandidate, ChildRollup } from './task-graph'
+export type {
+	SpawnChildrenInput,
+	SpawnChildrenResult,
+	SpawnedChild,
+	ChildCandidate,
+	ChildRollup,
+} from './task-graph'
 
 export { ParentJoinBridge } from './parent-join-bridge'
 
@@ -50,9 +56,17 @@ export type { SharedSecretRow } from './secrets'
 
 export { ProjectService } from './projects'
 export type { ProjectRow } from './projects'
+export { buildGitDiffContext, resolveGitRemote } from './git-providers'
+export type { GitDiffContext, GitRemoteReference, GitProviderKind } from './git-providers'
 
 export { KnowledgeService } from './knowledge'
-export type { KnowledgeRow, KnowledgeDocument, KnowledgeContent, KnowledgeScopeInput, KnowledgeScopeType } from './knowledge'
+export type {
+	KnowledgeRow,
+	KnowledgeDocument,
+	KnowledgeContent,
+	KnowledgeScopeInput,
+	KnowledgeScopeType,
+} from './knowledge'
 
 export { ScheduleService, computeNextRun, interpolateTemplate } from './schedules'
 export type { ScheduleRow, ScheduleExecutionRow } from './schedules'
@@ -71,5 +85,12 @@ export type { IndexerConfig } from './indexer'
 export { search } from './search'
 export type { SearchScope, SearchResult } from './search'
 
-export { VfsService, DefaultWorkerRegistry, parseVfsUri, validatePath, VfsUriError, VfsSecurityError, VfsNotFoundError, VfsReadOnlyError, VfsEtagMismatchError, VfsScopeError, VfsWorkerUnavailableError } from './vfs'
-export type { WorkerConnection, WorkerRegistry, ReadResult } from './vfs'
+export {
+	WorkspaceInspectionService,
+	DefaultWorkerRegistry,
+	validatePath,
+	WorkspaceInspectionSecurityError,
+	WorkspaceInspectionNotFoundError,
+	WorkspaceInspectionWorkerUnavailableError,
+} from './workspace-inspection'
+export type { WorkerConnection, WorkerRegistry, ReadResult } from './workspace-inspection'

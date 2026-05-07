@@ -336,6 +336,19 @@ async function handleWatchEvent(
 			break
 		}
 
+		case 'run_event': {
+			const eventType = event.eventType as string | undefined
+			if (eventType !== 'retry_scheduled') return
+
+			const runId = event.runId as string
+			const summary = typeof event.summary === 'string' ? event.summary : 'Retry scheduled.'
+
+			console.log(`${dim(ts)} ${badge('RETRY', 'yellow')}  ${summary.slice(0, 160)}`)
+			console.log(`${dim('         ')} ${dim(`autopilot runs show ${runId}`)}`)
+			console.log('')
+			break
+		}
+
 		// Skip non-actionable events
 		default:
 			break

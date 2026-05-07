@@ -319,6 +319,31 @@ describe('Execution Targeting', () => {
 		expect(claimed!.id).toBe(runId)
 	})
 
+	test('targeting avoid_worker_ids skips failed workers but allows alternatives', async () => {
+		const suffix = Date.now()
+		const runtime = `failover-rt-${suffix}`
+		const runId = `run-avoid-worker-${suffix}`
+		await runService.create({
+			id: runId,
+			agent_id: 'dev',
+			runtime,
+			initiated_by: 'test',
+			targeting: JSON.stringify({
+				avoid_worker_ids: ['worker-failed'],
+				allow_fallback: true,
+			}),
+		})
+
+		const caps = [{ runtime, models: [], maxConcurrent: 1 }]
+
+		const noClaim = await runService.claim('worker-failed', runtime, caps)
+		expect(noClaim).toBeUndefined()
+
+		const claimed = await runService.claim('worker-healthy', runtime, caps)
+		expect(claimed).not.toBeUndefined()
+		expect(claimed!.id).toBe(runId)
+	})
+
 	// ── WorkflowEngine resolves targeting from step ──────────────────────
 
 	test('WorkflowEngine attaches targeting from step hints', async () => {

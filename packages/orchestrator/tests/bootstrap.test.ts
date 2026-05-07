@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os'
 import { Hono } from 'hono'
 import { createCompanyDb, type CompanyDb } from '../src/db'
 import type { CompanyDbResult } from '../src/db'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService } from '../src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, ArtifactService, ConversationBindingService, QueryService } from '../src/services'
 import type { Services, AppEnv } from '../src/api/app'
 import { createAuth, type Auth } from '../src/auth'
 import type { Actor } from '../src/auth/types'
@@ -169,7 +169,8 @@ describe('bootstrap', () => {
 		)
 		const artifactService = new ArtifactService(dbResult.db)
 		const conversationBindingService = new ConversationBindingService(dbResult.db)
-		services = { taskService, runService, workerService, enrollmentService, activityService, artifactService, conversationBindingService, sessionMessageService: {} as any, workflowEngine }
+		const queryService = new QueryService(dbResult.db)
+		services = { taskService, runService, workerService, enrollmentService, activityService, artifactService, conversationBindingService, queryService, sessionMessageService: {} as any, workflowEngine }
 
 		// App with real routes, fake auth
 		app = buildBootstrapApp({

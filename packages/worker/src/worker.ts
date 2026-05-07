@@ -24,7 +24,7 @@ import type { RunContext, RuntimeAdapter } from './runtimes/adapter'
 import { type WorkspaceInfo, WorkspaceManager } from './workspace'
 
 export interface WorkerCapability {
-	runtime: 'claude-code' | 'codex' | 'opencode' | 'direct-api'
+	runtime: 'claude-code' | 'codex' | 'opencode'
 	models: string[]
 	maxConcurrent: number
 	tags: string[]

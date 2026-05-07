@@ -43,15 +43,16 @@ import type {
 	TaskRelationService,
 	TaskService,
 	UserPreferenceService,
-	VfsService,
 	WorkerService,
 	WorkflowEngine,
+	WorkspaceInspectionService,
 } from '../services'
 import {
 	authMiddleware,
 	isLocalhostRequest,
 	resolveActor as resolveActorFn,
 } from './middleware/auth'
+import { isOwnerOrAdmin } from './middleware/roles'
 import { workerAuthMiddleware } from './middleware/worker-auth'
 import { chatSessions } from './routes/chat-sessions'
 import { configRoute } from './routes/config'
@@ -61,6 +62,7 @@ import { events } from './routes/events'
 import { intake } from './routes/intake'
 import { invites } from './routes/invites'
 import { knowledgeRoute } from './routes/knowledge'
+import { mcpTelemetry } from './routes/mcp-telemetry'
 import { preferences } from './routes/preferences'
 import { previews } from './routes/previews'
 import { projectsRoute } from './routes/projects'
@@ -74,8 +76,8 @@ import { secrets } from './routes/secrets'
 import { sessionsRoute } from './routes/sessions'
 import { taskGraph } from './routes/task-graph'
 import { tasks } from './routes/tasks'
-import { vfs } from './routes/vfs'
 import { workers } from './routes/workers'
+import { workspaceInspection } from './routes/workspace-inspection'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -95,7 +97,7 @@ export interface Services {
 	sessionService: SessionService
 	sessionMessageService: SessionMessageService
 	scheduleService: ScheduleService
-	vfsService: VfsService
+	workspaceInspectionService: WorkspaceInspectionService
 	scriptService: ScriptService
 	userPreferenceService: UserPreferenceService
 	projectService?: ProjectService
@@ -237,12 +239,18 @@ export function createApp(config: AppConfig) {
 	const userAuth = authMiddleware({ allowLocalDevBypass: config.allowLocalDevBypass ?? false })
 
 	// ── Config inspection (user auth required) ──────────────────────────
+	// All /api/config/* requires an authenticated actor for reads.
+	// Mutations and reload additionally require owner/admin (enforced by the
+	// route's per-handler requireOwnerOrAdmin guard, plus the inline check
+	// on /api/config/reload below).
 	app.use('/api/config/*', userAuth)
 	app.get('/api/config/reload-status', (c) => {
 		if (!config.configManager) return c.json({ available: false }, 200)
 		return c.json({ available: true, ...config.configManager.status() }, 200)
 	})
 	app.post('/api/config/reload', async (c) => {
+		const actor = c.get('actor')
+		if (!isOwnerOrAdmin(actor?.role)) return c.json({ error: 'Forbidden' }, 403)
 		if (!config.configManager) return c.json({ error: 'config manager not available' }, 503)
 		const result = await config.configManager.reload()
 		return c.json(result, result.ok ? 200 : 500)
@@ -333,15 +341,28 @@ export function createApp(config: AppConfig) {
 	app.use('/api/preferences/*', userAuth)
 	app.use('/api/preferences', userAuth)
 
-	// ── VFS routes (user auth — operator surface) ────────────────────
-	app.use('/api/vfs/*', userAuth)
-	app.use('/api/vfs', userAuth)
+	// ── Workspace inspection routes (user auth — operator surface) ───
+	app.use('/api/workspace-inspection/*', userAuth)
+	app.use('/api/workspace-inspection', userAuth)
+
+	// ── MCP control-plane telemetry (user auth — written by MCP server) ─
+	app.use('/api/mcp/*', userAuth)
+
 	app.use('/api/scripts/*', userAuth)
 	app.use('/api/scripts', userAuth)
 
-	// ── Invite routes (GET/POST/DELETE require user auth; GET /validate and POST /accept are public) ──
+	// ── Invite routes ───────────────────────────────────────────────────
+	// GET /api/invites/validate and POST /api/invites/accept are public
+	// (used by signup flow before a session exists). Everything else
+	// requires user auth + the route's own owner/admin role check.
+	// Without the explicit exclusion, /api/invites/:id middleware would
+	// match /validate and /accept and force them through auth.
 	app.use('/api/invites', userAuth)
-	app.use('/api/invites/:id', userAuth)
+	app.use('/api/invites/:id', async (c, next) => {
+		const id = c.req.param('id')
+		if (id === 'validate' || id === 'accept') return next()
+		return userAuth(c, next)
+	})
 
 	// ── Conversation routes ──────────────────────────────────────────────
 	// Binding management requires user auth; inbound /:providerId is self-authenticated via provider secret
@@ -363,12 +384,14 @@ export function createApp(config: AppConfig) {
 		.route('/api/enrollment', enrollment)
 		.route('/api/workers', workers)
 		.route('/api/runs', runs)
+		// Task graph has static routes like /relations that must be registered
+		// before the generic /:id task route.
+		.route('/api/tasks', taskGraph)
 		.route('/api/tasks', tasks)
 		.route('/api/events', events)
 		.route('/api/previews', previews)
 		.route('/api/intake', intake)
 		.route('/api/conversations', conversations)
-		.route('/api/tasks', taskGraph)
 		.route('/api/secrets', secrets)
 		.route('/api/queries', queries)
 		.route('/api/sessions', sessionsRoute)
@@ -379,7 +402,8 @@ export function createApp(config: AppConfig) {
 		.route('/api/queues', queues)
 		.route('/api/search', searchRoute)
 		.route('/api/preferences', preferences)
-		.route('/api/vfs', vfs)
+		.route('/api/workspace-inspection', workspaceInspection)
+		.route('/api/mcp/telemetry', mcpTelemetry)
 		.route('/api/scripts', scripts)
 		.route('/api/invites', invites)
 

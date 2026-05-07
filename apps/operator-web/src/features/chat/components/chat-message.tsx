@@ -268,7 +268,7 @@ function InlineRunEvents({ runId, fallbackContent }: { runId: string; fallbackCo
 				if (item.kind === 'progress' && item.event.summary) {
 					return (
 						<div key={item.event.id} className="py-0.5">
-								<Markdown content={item.event.summary} />
+							<Markdown content={item.event.summary} />
 						</div>
 					)
 				}
@@ -285,9 +285,7 @@ function InlineRunEvents({ runId, fallbackContent }: { runId: string; fallbackCo
 				}
 				return null
 			})}
-			{!hasProgress && (
-					<Markdown content={fallbackContent} />
-			)}
+			{!hasProgress && <Markdown content={fallbackContent} />}
 		</div>
 	)
 }
@@ -361,8 +359,8 @@ function renderAttachmentLink(attachment: ChatAttachment) {
 		if (attachment.refType === 'file') {
 			return (
 				<Link
-					to="/files"
-					search={{ path: attachment.refId, view: 'file' }}
+					to="/knowledge"
+					search={{ path: attachment.refId, view: 'resource' }}
 					className="truncate max-w-[280px] text-primary hover:underline"
 				>
 					{label}
@@ -373,7 +371,7 @@ function renderAttachmentLink(attachment: ChatAttachment) {
 		if (attachment.refType === 'directory') {
 			return (
 				<Link
-					to="/files"
+					to="/knowledge"
 					search={{ path: attachment.refId }}
 					className="truncate max-w-[280px] text-primary hover:underline"
 				>
@@ -685,7 +683,7 @@ export function ChatMessage({
 						<span>Task update</span>
 					</div>
 					{message.content && (
-							<Markdown content={message.content.replace(/^\[task_progress\]\s*/, '')} />
+						<Markdown content={message.content.replace(/^\[task_progress\]\s*/, '')} />
 					)}
 					<div className="mt-3">
 						<TaskActionBar taskId={taskId} taskNeedsApproval={taskNeedsApproval} />
@@ -731,7 +729,7 @@ export function ChatMessage({
 				{queryRunId ? (
 					<InlineRunEvents runId={queryRunId} fallbackContent={message.content} />
 				) : (
-						<Markdown content={message.content} />
+					<Markdown content={message.content} />
 				)}
 				{taskId && <TaskActionBar taskId={taskId} taskNeedsApproval={taskNeedsApproval} />}
 			</div>

@@ -57,7 +57,7 @@ const previews = new Hono<AppEnv>().get('/:runId/*', async (c) => {
 		try {
 			const content = await artifactService.resolveContent(match)
 			const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8')
-			return new Response(bytes, {
+			return new Response(new Uint8Array(bytes), {
 				headers: {
 					'Content-Type': match.mime_type || guessMimeType(match.title),
 					'Cache-Control': 'public, max-age=3600',
@@ -65,7 +65,10 @@ const previews = new Hono<AppEnv>().get('/:runId/*', async (c) => {
 				},
 			})
 		} catch (err) {
-			console.error(`[previews] failed to resolve content for ${match.id}:`, err instanceof Error ? err.message : String(err))
+			console.error(
+				`[previews] failed to resolve content for ${match.id}:`,
+				err instanceof Error ? err.message : String(err),
+			)
 			return c.text('Failed to resolve preview content', 500)
 		}
 	}

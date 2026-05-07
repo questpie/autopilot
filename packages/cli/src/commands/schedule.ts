@@ -14,7 +14,7 @@
 import { Command } from 'commander'
 import { program } from '../program'
 import { createApiClient } from '../utils/client'
-import { dim, success, error, badge, table, section } from '../utils/format'
+import { badge, dim, error, section, success, table } from '../utils/format'
 
 interface ScheduleSummary {
 	id: string
@@ -54,45 +54,43 @@ const scheduleCmd = new Command('schedule').description('Manage schedules')
 // ─── list ─────────────────────────────────────────────────────────────────
 
 scheduleCmd.addCommand(
-	new Command('list')
-		.description('List all schedules')
-		.action(async () => {
-			try {
-				const client = createApiClient()
-				const res = await client.api.schedules.$get()
+	new Command('list').description('List all schedules').action(async () => {
+		try {
+			const client = createApiClient()
+			const res = await client.api.schedules.$get()
 
-				if (!res.ok) {
-					console.error(error('Failed to fetch schedules'))
-					process.exit(1)
-				}
-
-				const items = (await res.json()) as ScheduleSummary[]
-
-				console.log(section('Schedules'))
-				if (items.length === 0) {
-					console.log(dim('  No schedules found'))
-					return
-				}
-
-				console.log(
-					table(
-						items.map((s) => [
-							dim(s.id),
-							isEnabled(s.enabled) ? badge('on', 'green') : badge('off', 'red'),
-							s.name,
-							dim(s.cron),
-							dim(s.agent_id),
-							dim(s.mode ?? 'task'),
-						]),
-					),
-				)
-				console.log('')
-				console.log(dim(`${items.length} schedule(s)`))
-			} catch (err) {
-				console.error(error(err instanceof Error ? err.message : String(err)))
+			if (!res.ok) {
+				console.error(error('Failed to fetch schedules'))
 				process.exit(1)
 			}
-		}),
+
+			const items = (await res.json()) as ScheduleSummary[]
+
+			console.log(section('Schedules'))
+			if (items.length === 0) {
+				console.log(dim('  No schedules found'))
+				return
+			}
+
+			console.log(
+				table(
+					items.map((s) => [
+						dim(s.id),
+						isEnabled(s.enabled) ? badge('on', 'green') : badge('off', 'red'),
+						s.name,
+						dim(s.cron),
+						dim(s.agent_id),
+						dim(s.mode ?? 'task'),
+					]),
+				),
+			)
+			console.log('')
+			console.log(dim(`${items.length} schedule(s)`))
+		} catch (err) {
+			console.error(error(err instanceof Error ? err.message : String(err)))
+			process.exit(1)
+		}
+	}),
 )
 
 // ─── show ────────────────────────────────────────────────────────────────
@@ -124,7 +122,9 @@ scheduleCmd.addCommand(
 				console.log(section(s.name))
 				console.log('')
 				console.log(`  ${dim('ID:')}          ${s.id}`)
-				console.log(`  ${dim('Status:')}      ${isEnabled(s.enabled) ? badge('enabled', 'green') : badge('disabled', 'red')}`)
+				console.log(
+					`  ${dim('Status:')}      ${isEnabled(s.enabled) ? badge('enabled', 'green') : badge('disabled', 'red')}`,
+				)
 				console.log(`  ${dim('Mode:')}        ${s.mode ?? 'task'}`)
 				console.log(`  ${dim('Cron:')}        ${s.cron}`)
 				console.log(`  ${dim('Timezone:')}    ${s.timezone ?? 'UTC'}`)
@@ -143,10 +143,13 @@ scheduleCmd.addCommand(
 					try {
 						const tmpl = JSON.parse(s.task_template)
 						for (const [k, v] of Object.entries(tmpl)) {
-							console.log(`  ${dim(k + ':')} ${String(v)}`)
+							console.log(`  ${dim(`${k}:`)} ${String(v)}`)
 						}
 					} catch (err) {
-						console.debug('[schedule] failed to parse task_template JSON:', err instanceof Error ? err.message : String(err))
+						console.debug(
+							'[schedule] failed to parse task_template JSON:',
+							err instanceof Error ? err.message : String(err),
+						)
 						console.log(`  ${s.task_template}`)
 					}
 				}
@@ -157,10 +160,13 @@ scheduleCmd.addCommand(
 					try {
 						const tmpl = JSON.parse(s.query_template)
 						for (const [k, v] of Object.entries(tmpl)) {
-							console.log(`  ${dim(k + ':')} ${String(v)}`)
+							console.log(`  ${dim(`${k}:`)} ${String(v)}`)
 						}
 					} catch (err) {
-						console.debug('[schedule] failed to parse query_template JSON:', err instanceof Error ? err.message : String(err))
+						console.debug(
+							'[schedule] failed to parse query_template JSON:',
+							err instanceof Error ? err.message : String(err),
+						)
 						console.log(`  ${s.query_template}`)
 					}
 				}
@@ -188,68 +194,83 @@ scheduleCmd.addCommand(
 		.option('--mode <mode>', 'Execution mode: task or query (default: task)')
 		.option('--prompt <text>', 'Query prompt (for query mode)')
 		.option('--start-after <datetime>', 'Delay execution until after this datetime (ISO 8601)')
-		.option('--concurrency-policy <policy>', 'Concurrency policy: skip, allow, queue (default: skip)')
-		.action(async (opts: {
-			name: string
-			cron: string
-			agent: string
-			workflow?: string
-			title?: string
-			type?: string
-			description?: string
-			timezone?: string
-			disabled?: boolean
-			mode?: string
-			prompt?: string
-			startAfter?: string
-			concurrencyPolicy?: string
-		}) => {
-			try {
-				const taskTemplate: Record<string, string> = {}
-				if (opts.title) taskTemplate.title = opts.title
-				if (opts.type) taskTemplate.type = opts.type
+		.option(
+			'--concurrency-policy <policy>',
+			'Concurrency policy: skip, allow, queue (default: skip)',
+		)
+		.action(
+			async (opts: {
+				name: string
+				cron: string
+				agent: string
+				workflow?: string
+				title?: string
+				type?: string
+				description?: string
+				timezone?: string
+				disabled?: boolean
+				mode?: string
+				prompt?: string
+				startAfter?: string
+				concurrencyPolicy?: string
+			}) => {
+				try {
+					const taskTemplate: Record<string, string> = {}
+					if (opts.title) taskTemplate.title = opts.title
+					if (opts.type) taskTemplate.type = opts.type
 
-				const body: Record<string, unknown> = {
-					name: opts.name,
-					cron: opts.cron,
-					agent_id: opts.agent,
-				}
-				if (opts.workflow) body.workflow_id = opts.workflow
-				if (opts.description) body.description = opts.description
-				if (opts.timezone) body.timezone = opts.timezone
-				if (opts.disabled) body.enabled = false
-				if (opts.mode) body.mode = opts.mode
-				if (opts.concurrencyPolicy) body.concurrency_policy = opts.concurrencyPolicy
-				if (Object.keys(taskTemplate).length > 0) {
-					body.task_template = JSON.stringify(taskTemplate)
-				}
-				if (opts.prompt) {
-					body.query_template = JSON.stringify({ prompt: opts.prompt })
-					if (!opts.mode) body.mode = 'query'
-				}
+					const body: Record<string, unknown> = {
+						name: opts.name,
+						cron: opts.cron,
+						agent_id: opts.agent,
+					}
+					if (opts.workflow) body.workflow_id = opts.workflow
+					if (opts.description) body.description = opts.description
+					if (opts.timezone) body.timezone = opts.timezone
+					if (opts.disabled) body.enabled = false
+					if (opts.mode) body.mode = opts.mode
+					if (opts.concurrencyPolicy) body.concurrency_policy = opts.concurrencyPolicy
+					if (Object.keys(taskTemplate).length > 0) {
+						body.task_template = JSON.stringify(taskTemplate)
+					}
+					if (opts.prompt) {
+						body.query_template = JSON.stringify({ prompt: opts.prompt })
+						if (!opts.mode) body.mode = 'query'
+					}
 
-				const client = createApiClient()
-				const res = await client.api.schedules.$post({
-					json: body as Record<string, unknown> & { name: string; cron: string; agent_id: string },
-				})
+					const client = createApiClient()
+					const res = await client.api.schedules.$post({
+						json: body as Record<string, unknown> & {
+							name: string
+							cron: string
+							agent_id: string
+						},
+					})
 
-				if (!res.ok) {
-					const errBody = (await res.json().catch(() => ({ error: 'Unknown error' }))) as { error?: string }
-					console.error(error(errBody.error ?? 'Failed to create schedule'))
+					if (!res.ok) {
+						const errBody = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
+							error?: string
+						}
+						console.error(error(errBody.error ?? 'Failed to create schedule'))
+						process.exit(1)
+					}
+
+					const created = (await res.json()) as {
+						id: string
+						name: string
+						next_run_at: string | null
+					}
+					console.log(success(`Schedule created: ${created.id}`))
+					console.log(dim(`  ${created.name}`))
+					if (created.next_run_at) {
+						console.log(dim(`  Next run: ${created.next_run_at}`))
+					}
+				} catch (err) {
+					console.error(error(err instanceof Error ? err.message : String(err)))
 					process.exit(1)
 				}
-
-				const created = (await res.json()) as { id: string; name: string; next_run_at: string | null }
-				console.log(success(`Schedule created: ${created.id}`))
-				console.log(dim(`  ${created.name}`))
-				if (created.next_run_at) {
-					console.log(dim(`  Next run: ${created.next_run_at}`))
-				}
-			} catch (err) {
-				console.error(error(err instanceof Error ? err.message : String(err)))
-				process.exit(1)
-			}
-		}),
+			},
+		),
 )
 
 // ─── enable ─────────────────────────────────────────────────────────────
@@ -320,7 +341,9 @@ scheduleCmd.addCommand(
 				})
 
 				if (!res.ok) {
-					const errBody = (await res.json().catch(() => ({ error: 'Unknown error' }))) as { error?: string }
+					const errBody = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
+						error?: string
+					}
 					console.error(error(errBody.error ?? `Failed to delete schedule: ${id}`))
 					process.exit(1)
 				}
@@ -345,10 +368,10 @@ scheduleCmd.addCommand(
 		.action(async (id: string, opts: { limit: string }) => {
 			try {
 				const client = createApiClient()
-				const limit = parseInt(opts.limit, 10)
+				const limit = Number.parseInt(opts.limit, 10)
 				const res = await client.api.schedules[':id'].history.$get({
 					param: { id },
-					query: { limit },
+					query: { limit: String(limit) },
 				})
 
 				if (!res.ok) {
@@ -367,13 +390,14 @@ scheduleCmd.addCommand(
 				console.log(
 					table(
 						items.map((e) => {
-							const statusBadge = e.status === 'triggered'
-								? badge('triggered', 'green')
-								: e.status === 'skipped'
-									? badge('skipped', 'yellow')
-									: e.status === 'failed'
-										? badge('failed', 'red')
-										: badge(e.status, 'blue')
+							const statusBadge =
+								e.status === 'triggered'
+									? badge('triggered', 'green')
+									: e.status === 'skipped'
+										? badge('skipped', 'yellow')
+										: e.status === 'failed'
+											? badge('failed', 'red')
+											: badge(e.status, 'blue')
 							const ref = e.task_id ?? e.query_id ?? dim('—')
 							return [
 								dim(e.id),
@@ -408,7 +432,9 @@ scheduleCmd.addCommand(
 				})
 
 				if (!res.ok) {
-					const errBody = (await res.json().catch(() => ({ error: 'Unknown error' }))) as { error?: string }
+					const errBody = (await res.json().catch(() => ({ error: 'Unknown error' }))) as {
+						error?: string
+					}
 					console.error(error(errBody.error ?? `Failed to trigger schedule: ${id}`))
 					process.exit(1)
 				}

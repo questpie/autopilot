@@ -1,16 +1,24 @@
-import { useRef, useState, useCallback, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react'
-import { ArrowUp, File, FileText, Paperclip, Stop, X } from '@phosphor-icons/react'
-import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import type { ChatAttachment } from '@/api/types'
-import { readDraggedChatAttachment } from '../lib/chat-dnd'
+import { Button } from '@/components/ui/button'
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
+import { ArrowUp, File, FileText, Paperclip, Stop, X } from '@phosphor-icons/react'
+import {
+	type ChangeEvent,
+	type ClipboardEvent,
+	type DragEvent,
+	type KeyboardEvent,
+	useCallback,
+	useRef,
+	useState,
+} from 'react'
+import { toast } from 'sonner'
+import { readDraggedChatAttachment } from '../lib/chat-dnd'
 import { CommandPalette, type SlashCommand } from './command-palette'
 
 interface ComposerAgent {
@@ -169,7 +177,7 @@ export function ChatComposer({
 		fileInputRef.current?.click()
 	}, [disabled, isSending, isRunning, isAttaching])
 
-	async function toAttachment(file: File): Promise<ChatAttachment> {
+	const toAttachment = useCallback(async (file: File): Promise<ChatAttachment> => {
 		const isTextLike =
 			file.type.startsWith('text/') ||
 			/\.(md|txt|json|js|jsx|ts|tsx|css|html|py|rs|go|sh|sql|yaml|yml|csv)$/i.test(file.name)
@@ -192,7 +200,7 @@ export function ChatComposer({
 			content,
 			source: 'upload',
 		}
-	}
+	}, [])
 
 	const handleFileChange = useCallback(
 		async (e: ChangeEvent<HTMLInputElement>) => {
@@ -210,7 +218,7 @@ export function ChatComposer({
 				setIsAttaching(false)
 			}
 		},
-		[appendAttachments, onAttachmentsChange],
+		[appendAttachments, onAttachmentsChange, toAttachment],
 	)
 
 	const handlePaste = useCallback(
@@ -252,7 +260,7 @@ export function ChatComposer({
 				setIsAttaching(false)
 			}
 		},
-		[appendAttachments, onAttachmentsChange],
+		[appendAttachments, onAttachmentsChange, toAttachment],
 	)
 
 	const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
@@ -266,21 +274,24 @@ export function ChatComposer({
 		setIsDragActive(false)
 	}, [])
 
-	const handleDrop = useCallback(async (e: DragEvent<HTMLDivElement>) => {
-		e.preventDefault()
-		setIsDragActive(false)
+	const handleDrop = useCallback(
+		async (e: DragEvent<HTMLDivElement>) => {
+			e.preventDefault()
+			setIsDragActive(false)
 
-		const draggedAttachment = readDraggedChatAttachment(e.dataTransfer)
-		if (draggedAttachment) {
-			appendAttachments([{ ...draggedAttachment, source: draggedAttachment.source ?? 'drag' }])
-			return
-		}
+			const draggedAttachment = readDraggedChatAttachment(e.dataTransfer)
+			if (draggedAttachment) {
+				appendAttachments([{ ...draggedAttachment, source: draggedAttachment.source ?? 'drag' }])
+				return
+			}
 
-		const files = Array.from(e.dataTransfer.files ?? [])
-		if (files.length > 0) {
-			await attachDroppedFiles(files)
-		}
-	}, [appendAttachments, attachDroppedFiles])
+			const files = Array.from(e.dataTransfer.files ?? [])
+			if (files.length > 0) {
+				await attachDroppedFiles(files)
+			}
+		},
+		[appendAttachments, attachDroppedFiles],
+	)
 
 	function renderAttachmentChip(
 		attachment: ChatAttachment,
@@ -356,21 +367,24 @@ export function ChatComposer({
 				>
 					{isDragActive && (
 						<div className="border-b border-border/60 bg-primary/8 px-4 py-2 text-xs text-primary">
-							Drop files, tasks, or file refs here
+							Drop files, tasks, or resource refs here
 						</div>
 					)}
 					{attachments.length > 0 && (
 						<div className="flex flex-wrap gap-2 border-b border-border/60 px-4 py-3">
 							{contextAttachments.map((attachment, index) =>
-								renderAttachmentChip(attachment, index, 'context'))}
+								renderAttachmentChip(attachment, index, 'context'),
+							)}
 							{attachments.map((attachment, index) =>
-								renderAttachmentChip(attachment, index, 'attachment'))}
+								renderAttachmentChip(attachment, index, 'attachment'),
+							)}
 						</div>
 					)}
 					{attachments.length === 0 && contextAttachments.length > 0 && (
 						<div className="flex flex-wrap gap-2 border-b border-border/60 px-4 py-3">
 							{contextAttachments.map((attachment, index) =>
-								renderAttachmentChip(attachment, index, 'context'))}
+								renderAttachmentChip(attachment, index, 'context'),
+							)}
 						</div>
 					)}
 

@@ -115,12 +115,11 @@ async function hydrateAttachments(
 
 				const runId =
 					typeof attachment.metadata?.runId === 'string' ? attachment.metadata.runId : null
-				const uri = runId ? `workspace://run/${runId}/${path}` : null
 
 				if (attachment.refType === 'file') {
 					try {
 						const file = runId
-							? await services.vfsService.read(uri!)
+							? await services.workspaceInspectionService.readRun(runId, path)
 							: await services.knowledgeService?.read(path)
 						if (!file) return attachment
 						const mimeType = 'mimeType' in file ? file.mimeType : file.mime_type
@@ -140,7 +139,6 @@ async function hydrateAttachments(
 								...(attachment.metadata ?? {}),
 								path,
 								runId,
-								...(uri ? { uri } : {}),
 								isText,
 							},
 						}
@@ -151,7 +149,7 @@ async function hydrateAttachments(
 
 				try {
 					const entries = runId
-						? (await services.vfsService.list(uri!)).entries
+						? (await services.workspaceInspectionService.listRun(runId, path)).entries
 						: ((await services.knowledgeService?.list({ path })) ?? []).map((doc) => ({
 								name: doc.path.split('/').pop() ?? doc.path,
 								path: doc.path,
@@ -179,7 +177,6 @@ async function hydrateAttachments(
 							...(attachment.metadata ?? {}),
 							path,
 							runId,
-							...(uri ? { uri } : {}),
 							entryCount: entries.length,
 						},
 					}

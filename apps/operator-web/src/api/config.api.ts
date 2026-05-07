@@ -25,6 +25,27 @@ export type ConfigRecord =
 	| Script
 	| ContextConfigRecord
 
+export interface ConfigReloadStatus {
+	available: boolean
+	lastReloadAt?: string | null
+	lastError?: string | null
+	reloadCount?: number
+}
+
+export interface ConfigReloadResult {
+	ok: boolean
+	error?: string
+}
+
+export interface DefaultSkillCatalogEntry {
+	id: string
+	availability: 'built_in' | 'plugin_backed'
+	name: string
+	description: string
+	tags: string[]
+	roles: string[]
+}
+
 function buildConfigPath(type: ConfigEntityType, id?: string, projectId?: string | null): string {
 	const path = id ? `/api/config/${type}/${encodeURIComponent(id)}` : `/api/config/${type}`
 	if (!projectId) return path
@@ -58,6 +79,25 @@ export async function saveConfigRecord(
 		throw new ApiError(res.status, res.statusText, await res.json().catch(() => undefined))
 	}
 	return res.json() as Promise<ConfigRecord>
+}
+
+export async function getConfigReloadStatus(): Promise<ConfigReloadStatus> {
+	return configFetch<ConfigReloadStatus>('/api/config/reload-status')
+}
+
+export async function getDefaultSkillCatalog(): Promise<DefaultSkillCatalogEntry[]> {
+	return configFetch<DefaultSkillCatalogEntry[]>('/api/config/skills/_defaults')
+}
+
+export async function reloadConfig(): Promise<ConfigReloadResult> {
+	const res = await fetch('/api/config/reload', {
+		method: 'POST',
+		credentials: 'include',
+	})
+	if (!res.ok) {
+		throw new ApiError(res.status, res.statusText, await res.json().catch(() => undefined))
+	}
+	return res.json() as Promise<ConfigReloadResult>
 }
 
 export async function deleteConfigRecord(

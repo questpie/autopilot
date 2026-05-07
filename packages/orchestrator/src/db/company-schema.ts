@@ -141,7 +141,7 @@ export const runs = sqliteTable(
 		task_id: text('task_id'),
 		project_id: text('project_id'),
 		worker_id: text('worker_id'),
-		runtime: text('runtime').notNull(), // claude-code | codex | opencode | direct-api
+		runtime: text('runtime').notNull(), // claude-code | codex | opencode
 		model: text('model'), // canonical model intent (e.g. 'claude-sonnet-4')
 		provider: text('provider'), // canonical provider hint (e.g. 'anthropic')
 		variant: text('variant'), // behavioral variant hint (e.g. 'extended-thinking')

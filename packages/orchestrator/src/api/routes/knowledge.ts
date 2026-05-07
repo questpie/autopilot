@@ -47,7 +47,7 @@ function serviceUnavailable() {
 }
 
 function isTextMime(mimeType: string): boolean {
-	return /(^text\/)|markdown|yaml|json|xml|javascript|typescript/.test(mimeType)
+	return /(^text\/)|markdown|yaml|json|xml|javascript|typescript|openapi|swagger/.test(mimeType)
 }
 
 const knowledgeRoute = new Hono<AppEnv>()

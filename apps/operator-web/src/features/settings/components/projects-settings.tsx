@@ -14,6 +14,8 @@ export function ProjectsSettings() {
 	const deleteMutation = useDeleteProject()
 	const [name, setName] = useState('')
 	const [path, setPath] = useState('')
+	const [gitRemote, setGitRemote] = useState('')
+	const [defaultBranch, setDefaultBranch] = useState('')
 
 	async function handleRegister() {
 		if (!path.trim()) {
@@ -25,9 +27,13 @@ export function ProjectsSettings() {
 			await registerMutation.mutateAsync({
 				name: name.trim() || undefined,
 				path: path.trim(),
+				git_remote: gitRemote.trim() || undefined,
+				default_branch: defaultBranch.trim() || undefined,
 			})
 			setName('')
 			setPath('')
+			setGitRemote('')
+			setDefaultBranch('')
 			toast.success('Project registered')
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to register project')
@@ -50,7 +56,7 @@ export function ProjectsSettings() {
 				description="Register repositories explicitly so project-scoped tasks and config overrides have a durable home. For git-aware setup from the terminal, use `autopilot init` from the repo root."
 				contentClassName="space-y-4"
 			>
-				<div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto]">
+				<div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
 					<Input
 						value={name}
 						onChange={(event) => setName(event.target.value)}
@@ -61,9 +67,21 @@ export function ProjectsSettings() {
 						onChange={(event) => setPath(event.target.value)}
 						placeholder="/absolute/path/to/project"
 					/>
-					<Button onClick={() => void handleRegister()} loading={registerMutation.isPending}>
-						Register
-					</Button>
+					<Input
+						value={gitRemote}
+						onChange={(event) => setGitRemote(event.target.value)}
+						placeholder="Git remote URL"
+					/>
+					<Input
+						value={defaultBranch}
+						onChange={(event) => setDefaultBranch(event.target.value)}
+						placeholder="Default branch, e.g. main"
+					/>
+					<div className="md:col-span-2 flex justify-end">
+						<Button onClick={() => void handleRegister()} loading={registerMutation.isPending}>
+							Register
+						</Button>
+					</div>
 				</div>
 			</SurfaceSection>
 

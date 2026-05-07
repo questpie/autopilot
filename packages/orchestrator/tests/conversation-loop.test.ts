@@ -2,11 +2,11 @@
  * Tests for bound conversation loop V1 — outbound delivery.
  *
  * Covers:
- * - Bound task events dispatch to the bound conversation provider
+ * - Task progress events dispatch to the bound conversation provider
  * - conversation_id / thread_id reach the handler correctly
  * - run_completed with preview_url reaches the bound conversation payload
  * - Unbound tasks do not trigger conversation delivery
- * - Existing notification_channel behavior remains unchanged
+ * - Existing notification_channel behavior remains separate
  * - Example conversation provider handles both conversation.ingest and notify.send
  */
 import { test, expect, describe, beforeAll, afterAll } from 'bun:test'
@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { Provider } from '@questpie/autopilot-spec'
 import { NotificationBridge } from '../src/providers/notification-bridge'
+import { TaskProgressBridge } from '../src/providers/task-progress-bridge'
 import { EventBus } from '../src/events/event-bus'
 import { invokeProvider } from '../src/providers/handler-runtime'
 
@@ -120,6 +121,7 @@ console.log(JSON.stringify({ ok: true }))`
 	}
 
 	test('bound task event dispatches to conversation provider with conversation context', async () => {
+		await writeFile(invocationsFile, '')
 		const eventBus = new EventBus()
 		const convProvider = makeConvProvider('conv-loop-1')
 
@@ -149,7 +151,7 @@ console.log(JSON.stringify({ ok: true }))`
 			defaults: { runtime: 'claude-code' },
 		}
 
-		const bridge = new NotificationBridge(
+		const bridge = new TaskProgressBridge(
 			eventBus,
 			config as any,
 			mockRunService as any,
@@ -182,6 +184,7 @@ console.log(JSON.stringify({ ok: true }))`
 	})
 
 	test('unbound task does NOT trigger conversation delivery', async () => {
+		await writeFile(invocationsFile, '')
 		const eventBus = new EventBus()
 		const convProvider = makeConvProvider('conv-loop-2')
 
@@ -199,7 +202,7 @@ console.log(JSON.stringify({ ok: true }))`
 			defaults: { runtime: 'claude-code' },
 		}
 
-		const bridge = new NotificationBridge(
+		const bridge = new TaskProgressBridge(
 			eventBus,
 			config as any,
 			mockRunService as any,
@@ -222,6 +225,7 @@ console.log(JSON.stringify({ ok: true }))`
 	})
 
 	test('preview_url reaches bound conversation payload', async () => {
+		await writeFile(invocationsFile, '')
 		const eventBus = new EventBus()
 		const convProvider = makeConvProvider('conv-loop-3')
 
@@ -261,7 +265,7 @@ console.log(JSON.stringify({ ok: true }))`
 			defaults: { runtime: 'claude-code' },
 		}
 
-		const bridge = new NotificationBridge(
+		const bridge = new TaskProgressBridge(
 			eventBus,
 			config as any,
 			previewRunService as any,
@@ -283,8 +287,6 @@ console.log(JSON.stringify({ ok: true }))`
 		const entry = JSON.parse(lines[lines.length - 1])
 		expect(entry.conversation_id).toBe('slack-channel-1')
 		expect(entry.preview_url).toBe('http://localhost:7778/api/previews/run-with-preview/index.html')
-
-		await writeFile(invocationsFile, '')
 	})
 
 	test('notification_channel still receives events (no regression)', async () => {
@@ -306,7 +308,7 @@ console.log(JSON.stringify({ ok: true }))`
 			defaults: { runtime: 'claude-code' },
 		}
 
-		const bridge = new NotificationBridge(
+		const notificationBridge = new NotificationBridge(
 			eventBus,
 			config as any,
 			mockRunService as any,
@@ -315,12 +317,12 @@ console.log(JSON.stringify({ ok: true }))`
 			mockBindingService as any,
 			{ companyRoot: testRoot },
 		)
-		bridge.start()
+		notificationBridge.start()
 
 		eventBus.emit({ type: 'run_completed', runId: 'run-notif-1', status: 'failed' })
 
 		await new Promise((resolve) => setTimeout(resolve, 2000))
-		bridge.stop()
+		notificationBridge.stop()
 
 		const logFile = Bun.file(notifFile)
 		expect(await logFile.exists()).toBe(true)
@@ -371,7 +373,7 @@ console.log(JSON.stringify({ ok: true }))`
 			defaults: { runtime: 'claude-code' },
 		}
 
-		const bridge = new NotificationBridge(
+		const notificationBridge = new NotificationBridge(
 			eventBus,
 			config as any,
 			mockRunService as any,
@@ -380,12 +382,23 @@ console.log(JSON.stringify({ ok: true }))`
 			mockBindingService as any,
 			{ companyRoot: testRoot },
 		)
-		bridge.start()
+		const taskProgressBridge = new TaskProgressBridge(
+			eventBus,
+			config as any,
+			mockRunService as any,
+			mockTaskService as any,
+			mockArtifactService as any,
+			mockBindingService as any,
+			{ companyRoot: testRoot },
+		)
+		notificationBridge.start()
+		taskProgressBridge.start()
 
 		eventBus.emit({ type: 'run_completed', runId: 'run-both', status: 'failed' })
 
 		await new Promise((resolve) => setTimeout(resolve, 2000))
-		bridge.stop()
+		notificationBridge.stop()
+		taskProgressBridge.stop()
 
 		// notification_channel should have received
 		const notifContent = (await Bun.file(notifFile).text()).trim()

@@ -46,9 +46,9 @@ import {
 	TaskGraphService,
 	TaskRelationService,
 	TaskService,
-	VfsService,
 	WorkerService,
 	WorkflowEngine,
+	WorkspaceInspectionService,
 } from '../src/services'
 import type { AuthoredConfig } from '../src/services'
 import { buildQueryInstructions } from '../src/services/queries'
@@ -82,7 +82,6 @@ const DEFAULT_AUTHORED_CONFIG: AuthoredConfig = {
 				role: 'You are a helpful assistant.',
 				capability_profiles: [],
 				triggers: [],
-				fs_scope: { include: [], exclude: [] },
 				secret_refs: [],
 			},
 		],
@@ -153,7 +152,7 @@ beforeAll(async () => {
 	const secretService = new SecretService(db)
 	const queryService = new QueryService(db)
 	const sessionService = new SessionService(db)
-	const vfsService = new VfsService(new DefaultWorkerRegistry())
+	const workspaceInspectionService = new WorkspaceInspectionService(new DefaultWorkerRegistry())
 	const knowledgeService = new KnowledgeService(db, new BlobStore(join(testDir, '.data')))
 
 	const workflowEngine = new WorkflowEngine(
@@ -182,7 +181,7 @@ beforeAll(async () => {
 		sessionService,
 		sessionMessageService: new SessionMessageService(db),
 		knowledgeService,
-		vfsService,
+		workspaceInspectionService,
 		scriptService: {} as never,
 		userPreferenceService: {} as never,
 		scheduleService: {} as never,

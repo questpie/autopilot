@@ -17,7 +17,7 @@ import {
   WorkspaceEntrySchema,
   WorkspaceDetailSchema,
   DiffResultSchema,
-  FileEntrySchema,
+  WorkspaceTreeEntrySchema,
   ErrorResponseSchema,
 } from '../src/api-schemas'
 import { z } from 'zod'
@@ -297,9 +297,9 @@ describe('GET /workspaces/:runId/diff', () => {
   })
 })
 
-// ─── Files endpoint ─────────────────────────────────────────────────────────
+// ─── Workspace tree endpoint ─────────────────────────────────────────────────────────
 
-describe('GET /workspaces/:runId/files', () => {
+describe('GET /workspaces/:runId/tree', () => {
   let repoRoot: string
   let workspace: WorkspaceManager
 
@@ -323,7 +323,7 @@ describe('GET /workspaces/:runId/files', () => {
       getWorkspace: () => workspace,
     }))
 
-    const res = await fetchApi(app, '/workspaces/run-files-test/files')
+    const res = await fetchApi(app, '/workspaces/run-files-test/tree')
     const data = await res.json() as any[]
     expect(data.length).toBeGreaterThanOrEqual(2)
     // Should have src directory and some files
@@ -342,7 +342,7 @@ describe('GET /workspaces/:runId/files', () => {
       getWorkspace: () => workspace,
     }))
 
-    const res = await fetchApi(app, '/workspaces/run-files-test/files?path=src')
+    const res = await fetchApi(app, '/workspaces/run-files-test/tree?path=src')
     const data = await res.json() as any[]
     const indexFile = data.find((f: any) => f.name === 'index.ts')
     expect(indexFile).toBeDefined()
@@ -355,7 +355,7 @@ describe('GET /workspaces/:runId/files', () => {
       getWorkspace: () => workspace,
     }))
 
-    const res = await fetchApi(app, '/workspaces/run-files-test/files?path=../../')
+    const res = await fetchApi(app, '/workspaces/run-files-test/tree?path=../../')
     expect(res.status).toBe(400)
   })
 
@@ -365,7 +365,7 @@ describe('GET /workspaces/:runId/files', () => {
       getWorkspace: () => workspace,
     }))
 
-    const res = await fetchApi(app, '/workspaces/run-files-test/files?path=nonexistent')
+    const res = await fetchApi(app, '/workspaces/run-files-test/tree?path=nonexistent')
     expect(res.status).toBe(404)
   })
 
@@ -375,7 +375,7 @@ describe('GET /workspaces/:runId/files', () => {
       getWorkspace: () => workspace,
     }))
 
-    const res = await fetchApi(app, '/workspaces/run-files-test/files')
+    const res = await fetchApi(app, '/workspaces/run-files-test/tree')
     const data = await res.json() as any[]
     const hidden = data.filter((f: any) => f.name.startsWith('.'))
     expect(hidden).toHaveLength(0)
@@ -414,7 +414,7 @@ describe('Read-only boundary', () => {
 
 // ─── Directories sorted correctly ───────────────────────────────────────────
 
-describe('File listing sort order', () => {
+describe('Workspace tree sort order', () => {
   test('directories come before files', async () => {
     const repoRoot = await createTempGitRepo()
     const workspace = new WorkspaceManager({ repoRoot })
@@ -428,7 +428,7 @@ describe('File listing sort order', () => {
       getWorkspace: () => workspace,
     }))
 
-    const res = await fetchApi(app, '/workspaces/run-sort-test/files')
+    const res = await fetchApi(app, '/workspaces/run-sort-test/tree')
     const data = await res.json() as any[]
     // README.md from initial commit + alpha.txt + zebra/
     const dirIdx = data.findIndex((f: any) => f.name === 'zebra')
@@ -513,7 +513,7 @@ describe('Response schema conformance', () => {
     await workspace.release({ runId: 'run-schema-diff', removeBranch: true })
   })
 
-  test('GET /workspaces/:runId/files conforms to FileEntrySchema[]', async () => {
+  test('GET /workspaces/:runId/tree conforms to WorkspaceTreeEntrySchema[]', async () => {
     const repoRoot = await createTempGitRepo()
     const workspace = new WorkspaceManager({ repoRoot })
     await workspace.acquire({ runId: 'run-schema-files' })
@@ -523,9 +523,9 @@ describe('Response schema conformance', () => {
       getWorkspace: () => workspace,
     }))
 
-    const res = await fetchApi(app, '/workspaces/run-schema-files/files')
+    const res = await fetchApi(app, '/workspaces/run-schema-files/tree')
     const data = await res.json()
-    expect(() => z.array(FileEntrySchema).parse(data)).not.toThrow()
+    expect(() => z.array(WorkspaceTreeEntrySchema).parse(data)).not.toThrow()
 
     await workspace.release({ runId: 'run-schema-files', removeBranch: true })
   })

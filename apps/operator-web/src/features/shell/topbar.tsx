@@ -13,7 +13,7 @@ interface TopbarProps {
 const MODE_ITEMS = [
 	{ id: 'chat', label: 'Chat', to: '/chat' },
 	{ id: 'tasks', label: 'Tasks', to: '/tasks' },
-	{ id: 'files', label: 'Files', to: '/files' },
+	{ id: 'knowledge', label: 'Knowledge', to: '/knowledge' },
 ] as const
 
 export function Topbar({ onSearchOpen }: TopbarProps) {

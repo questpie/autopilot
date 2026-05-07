@@ -37,6 +37,19 @@ const RATE_LIMIT_PATTERNS = [
 	/throttled/i,
 ]
 
+const ACCOUNT_BALANCE_PATTERNS = [
+	/\b402\b/,
+	/payment required/i,
+	/billing/i,
+	/insufficient (?:balance|credit|credits|funds|quota)/i,
+	/(?:credit|account|prepaid) balance/i,
+	/out of (?:credit|credits|funds|quota)/i,
+	/quota exceeded/i,
+	/spend(?:ing)? limit/i,
+	/hard limit/i,
+	/monthly limit/i,
+]
+
 const BUSINESS_PATTERNS = [
 	/can'?t do this/i,
 	/cannot complete/i,
@@ -60,6 +73,10 @@ export function classifyRunError(error: string | null | undefined): RetryErrorTy
 
 	for (const pattern of RATE_LIMIT_PATTERNS) {
 		if (pattern.test(error)) return 'rate_limit'
+	}
+
+	for (const pattern of ACCOUNT_BALANCE_PATTERNS) {
+		if (pattern.test(error)) return 'account_balance'
 	}
 
 	for (const pattern of BUSINESS_PATTERNS) {

@@ -1,247 +1,131 @@
-<div align="center">
-
 # QUESTPIE Autopilot
 
-> AI-native company operating system. Your company is a container. Your employees are agents.
+AI operator for running work through tasks, Knowledge, workers, and external MCP/provider surfaces.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-B700FF?style=flat-square)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-B700FF?style=flat-square)]()
-[![Bun](https://img.shields.io/badge/runtime-Bun-B700FF?style=flat-square)](https://bun.sh)
-[![Beta](https://img.shields.io/badge/status-BETA-B700FF?style=flat-square)]()
+Autopilot's current MVP direction is intentionally narrow:
 
-</div>
+- Dashboard/Home for daily attention and recent work
+- Chat for query and task conversation
+- Tasks for durable execution state
+- Knowledge for company/project resources and artifacts
+- Workers for isolated execution through `spawn-agent`
+- MCP/provider adapters for external channels and tools
 
----
+Developer filesystem access is not a product surface. It is limited to project workspaces for Git-backed runs, where a worker can clone or prepare an isolated workspace, produce diffs/artifacts, and then release the workspace.
 
 ## Quick Start
 
-### One-line install (VPS/server)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/questpie/autopilot/main/install.sh | bash
+bun install
+bun run --cwd packages/orchestrator dev
+bun run --cwd apps/operator-web dev
 ```
 
-### Docker
-```bash
-git clone https://github.com/questpie/autopilot
-cd autopilot
-cp .env.example .env
-docker compose up
-```
+The operator UI opens to the dashboard and keeps the primary navigation to Dashboard, Chat, Tasks, and Knowledge.
 
-Open `http://localhost:3000` for the dashboard. The local Caddy proxy keeps browser auth and API calls same-origin.
-
-> **Authentication:**
-> Set your OpenRouter API key in `.env` (`OPENROUTER_API_KEY=sk-or-...`)
-> or run `autopilot provider set openrouter --api-key <key>`.
-> One key gives you access to all models (Anthropic, OpenAI, Google, etc.).
-
-### bunx (local dev)
-```bash
-bunx @questpie/autopilot init my-company
-cd my-company
-
-# Set your OpenRouter API key
-autopilot provider set openrouter --api-key sk-or-...
-
-bunx @questpie/autopilot start
-```
-
----
-
-## What Happens
+For a local worker:
 
 ```bash
-$ autopilot ask "Build a pricing page with Stripe"
-
-CEO Agent decomposing intent...
-
-  task-050: Scope requirements      → Sam (strategist)
-  task-051: Design UI               → Jordan (design)
-  task-052: Implement with Stripe   → Max (developer)
-  task-053: Write copy & announce   → Morgan (marketing)
-
-Sam is starting now. You'll be notified when approvals are needed.
+bun run --cwd packages/cli autopilot worker start --url http://localhost:7778
 ```
 
-1. You give intent
-2. CEO agent decomposes into tasks
-3. Agents execute: strategist → planner → developer → reviewer → devops
-4. You approve at gates (merge, deploy, spend)
-5. Workflow execution is tracked durably in SQLite
-6. Files remain the authored source of truth. Every action is still git-auditable.
+Workers use the `SpawnAgentAdapter` path for Claude Code, Codex, and OpenCode-compatible execution instead of direct runtime adapters.
 
----
+## Current Architecture
 
-## Workflow Runtime Model
+```text
+Operator UI
+  Dashboard / Chat / Tasks / Knowledge
 
-Autopilot treats workflows as the primary execution primitive.
+Orchestrator
+  Hono API / tasks / runs / sessions / config / Knowledge / projects
 
-- `team/workflows/*.yaml` defines the authored workflow structure
-- the orchestrator compiles workflows into explicit step contracts
-- SQLite stores runtime execution in `workflow_runs` and `step_runs`
-- Durable Streams stores append-only replay timelines for sessions and workflow events
+Workers
+  spawn-agent runtime / agent-install helpers / isolated Git workspaces
 
-Agents execute the current step. The app owns validation, transition state, deduplication, and replayability.
+External Surfaces
+  MCP server / provider handlers / notification and conversation bridges
 
----
-
-## Your Team, Your Rules
-
-Autopilot ships with 8 default agents across 8 roles — meta, strategist, planner, developer, reviewer, devops, marketing, design. Customize them or create your own in `team/agents/*.yaml`.
-
-```yaml
-# team/agents/max.yaml
-id: max
-name: Max
-role: developer
-description: Implementation, tests, debugging
-model: anthropic/claude-sonnet-4
-tools: [fs, terminal]
-fs_scope:
-  read: ["**"]
-  write: ["**"]
+Persistence
+  SQLite + Drizzle / Knowledge DB records / blob storage / Git diffs for project work
 ```
 
----
+## Source Of Truth
 
-## Architecture
+- Config and runtime state live in the database.
+- Knowledge objects live in DB-backed records with storage for larger content.
+- Artifacts are Knowledge-like resources that can be rendered, referenced, and attached.
+- Project development uses ephemeral Git workspaces and diffs.
+- Workspace inspection is read-only and scoped to project runs.
 
-```
-Human         CLI · Dashboard · Telegram · Webhooks
-  │
-Orchestrator  Watcher · Workflows · Spawner · Context · Memory · Cron · Durable Streams
-  │
-Agents        TanStack AI + OpenRouter · Per-Agent Model Picker · 7 Tools · Sandboxed FS · Memory
-  │
-Storage       SQLite + Drizzle · YAML/MD/JSON · FTS5 + sqlite-vec · Git
-```
+`.autopilot` authored files are compatibility/bootstrap input. They are imported into the DB config registry and are not the live source of truth for the operator product.
 
-- **Config is files** — YAML, Markdown, JSON. `ls` your company config.
-- **Runtime is SQLite** — tasks, messages, sessions, workflow runs, step runs, search. Zero external deps.
-- **Git is the audit trail** — every agent action = commit.
-- **MCP server** — expose Autopilot to Claude Desktop/Code via tasks, agents, search, sessions.
-- **Durable Streams** — append-only session and workflow timelines with live tailing and replay.
-- **Per-agent model picker** — assign different models to different agents via OpenRouter.
-- **One Bun process** — orchestrator + API + dashboard. ~100MB RAM.
-- **Same-origin browser auth** — dashboard traffic stays on one origin; API proxying is handled by Vite in dev and Caddy in Docker/self-hosted setups.
+## Knowledge
 
----
+Knowledge is the user-facing resource surface. It covers company/project documents, task/run artifacts, markdown, images, OpenAPI documents, and renderer-backed previews.
 
-## Self-Hosted
+Expected renderer direction:
 
-Autopilot is designed to run on YOUR infrastructure. No SaaS lock-in.
+- Markdown content through markdown rendering
+- editable document content through Tiptap
+- raw code/diff/YAML/JSON through code-oriented viewers
+- OpenAPI through Scalar React references
+- images through native image previews
 
-| Setup | Command | Cost |
-|-------|---------|------|
-| Local (macOS/Linux) | `bunx @questpie/autopilot start` | Free (+ API costs) |
-| Docker | `docker compose up` | Free (+ API costs) |
-| Hetzner VPS | [One-click deploy →](docs/guides/vps-deployment.md) | €4.35/mo + API |
-| Any VPS | `curl ... install.sh \| bash` | Your VPS + API |
+## Workers And Projects
 
-[→ Full VPS deployment guide](docs/guides/vps-deployment.md)
+Workers execute runs through `spawn-agent`. Runtime setup and agent-facing capability installation should go through:
 
----
+- `agent-install` for skills, MCP config, and guide sections
+- `spawn-agent` for portable runtime execution
 
-## CLI Reference
+Project work is Git-oriented:
+
+- prepare isolated workspace
+- run agent work
+- capture diff and artifacts
+- expose compare/PR links through Git provider adapters
+- release the workspace when the run no longer needs it
+
+The rest of Autopilot is database-backed.
+
+## CLI
+
+Core commands:
 
 ```bash
-autopilot init <name>        # Create a new company
-autopilot start              # Start orchestrator + dashboard
-autopilot ask "<intent>"     # Send intent to CEO
-autopilot status             # Company overview
-autopilot tasks              # List tasks
-autopilot agents             # List agents
-autopilot attach <agent>     # Watch agent work (live)
-autopilot inbox              # Pending approvals
-autopilot approve <id>       # Approve action
-autopilot reject <id>        # Reject action
-autopilot chat <agent>       # Direct chat with agent
-autopilot dashboard          # Open web dashboard
-autopilot secrets            # Manage API keys
-autopilot auth               # Manage authentication
-autopilot provider set <p>   # Configure AI provider (openrouter)
+autopilot start
+autopilot worker start
+autopilot task
+autopilot task create --title "..." --type feature
+autopilot run
+autopilot run show <run-id>
+autopilot knowledge list
+autopilot agent skill add <skill>
+autopilot agent mcp add <name>
+autopilot doctor
 ```
 
----
-
-## Company Structure
-
-```
-my-company/
-├── company.yaml              # Company configuration
-├── team/
-│   ├── agents/               # AI agent definitions (one file per agent)
-│   ├── humans/               # Human team members (one file per human)
-│   ├── roles.yaml            # RBAC role definitions
-│   ├── schedules/            # Cron-triggered jobs (one file per schedule)
-│   ├── webhooks/             # External webhook integrations (one file per webhook)
-│   ├── workflows/            # development (12), marketing (7), incident (8)
-│   └── policies/             # Human approval requirements
-├── knowledge/                # Searchable knowledge base (markdown)
-├── skills/                   # Agent skills (agentskills.io, 20 built-in)
-├── dashboard/                # Living dashboard (pins, widgets, pages)
-├── tasks/                    # Task status directories (runtime)
-├── comms/                    # Communication channels (runtime)
-├── logs/                     # Activity & session logs (runtime)
-├── context/memory/           # Per-agent persistent memory (runtime)
-├── secrets/                  # Encrypted secrets (runtime)
-├── projects/                 # Project workspaces (runtime)
-├── artifacts/                # Generated apps & content (runtime)
-└── .data/autopilot.db        # SQLite (tasks, messages, workflow_runs, step_runs, FTS5, embeddings)
-```
-
-> **Note:** Tasks, messages, activity, workflow runs, and step runs are stored in SQLite (`.data/autopilot.db`), not as YAML files. Runtime directories are created by `autopilot init`, not from the template.
-
-> **Config format:** Legacy monolithic files (`team/agents.yaml`, `team/humans.yaml`, `team/webhooks.yaml`, `team/schedules.yaml`) are no longer supported. Use folder-based config only.
-
----
-
-## Deploy to Hetzner
-
-Best price/performance for self-hosting. ARM64 servers from €4.35/mo.
+## Development Checks
 
 ```bash
-# On your Hetzner VPS (Ubuntu 24.04):
-curl -fsSL https://get.docker.com | sh
-mkdir -p /opt/autopilot && cd /opt/autopilot
-curl -fsSL https://raw.githubusercontent.com/questpie/autopilot/main/install.sh | bash
+bun test
+bun run --cwd packages/spec typecheck
+bun run --cwd packages/worker typecheck
+bun run --cwd packages/orchestrator typecheck
+bun run --cwd packages/cli typecheck
+bun run --cwd apps/operator-web typecheck
+bun run --cwd apps/operator-web build
 ```
-
-[Get €20 free credits →](https://hetzner.cloud/?ref=Akyzglz8k22M)
-
----
 
 ## Documentation
 
-- [Getting Started](docs/getting-started.md)
 - [Architecture](docs/architecture.md)
-- [Agents & Roles](docs/agents.md)
-- [Internal Workflow Memo](docs/internal/workflow-operating-memo.md)
+- [Source of Truth Map](docs/source-of-truth-map.md)
+- [Runtime Setup](docs/guides/runtime-setup.md)
+- [Operator UI v2 Spec](docs/internal/operator-ui-v2-spec.md)
 - [Config Folder Migration](docs/guides/config-folder-migration.md)
-- [CLI Reference](docs/cli.md)
-- [VPS Deployment](docs/guides/vps-deployment.md)
-- [Docker Guide](docs/guides/docker.md)
-- [Security & Auth](docs/security.md)
-
----
-
-## Contributing
-
-```bash
-git clone https://github.com/questpie/autopilot.git
-cd autopilot && bun install
-bunx turbo build
-bunx turbo test
-```
-
----
 
 ## License
 
-[MIT](LICENSE) — QUESTPIE s.r.o. 2026
-
-<div align="center">
-
-Built by [QUESTPIE](https://questpie.com)
-
-</div>
+MIT

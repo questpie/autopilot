@@ -16,7 +16,7 @@ import { events } from '../../orchestrator/src/api/routes/events'
 import { createCompanyDb, type CompanyDb, type CompanyDbResult } from '../../orchestrator/src/db'
 import { createAuth, type Auth } from '../../orchestrator/src/auth'
 import type { Actor } from '../../orchestrator/src/auth/types'
-import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService } from '../../orchestrator/src/services'
+import { TaskService, RunService, WorkerService, EnrollmentService, WorkflowEngine, ActivityService, QueryService } from '../../orchestrator/src/services'
 
 const FAKE_ACTOR: Actor = {
 	id: 'test-user',
@@ -74,66 +74,13 @@ describe('Continuation flow', () => {
 
 		dbResult = await createCompanyDb(companyRoot)
 
-		// Create tables with new session columns
-		await dbResult.raw.execute(`DROP TABLE IF EXISTS tasks`)
-		await dbResult.raw.execute(`
-			CREATE TABLE tasks (
-				id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT DEFAULT '',
-				type TEXT NOT NULL, status TEXT NOT NULL, priority TEXT DEFAULT 'medium',
-				assigned_to TEXT, workflow_id TEXT, workflow_step TEXT,
-				context TEXT DEFAULT '{}', metadata TEXT DEFAULT '{}',
-				created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-			)
-		`)
-		await dbResult.raw.execute(`DROP TABLE IF EXISTS runs`)
-		await dbResult.raw.execute(`
-			CREATE TABLE runs (
-				id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, task_id TEXT, worker_id TEXT,
-				runtime TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
-				initiated_by TEXT, instructions TEXT, summary TEXT,
-				tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0,
-				error TEXT, started_at TEXT, ended_at TEXT, created_at TEXT NOT NULL,
-				runtime_session_ref TEXT, resumed_from_run_id TEXT,
-				preferred_worker_id TEXT, resumable INTEGER DEFAULT 0,
-				targeting TEXT
-			)
-		`)
-		await dbResult.raw.execute(`
-			CREATE TABLE IF NOT EXISTS run_events (
-				id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
-				type TEXT NOT NULL, summary TEXT, metadata TEXT DEFAULT '{}',
-				created_at TEXT NOT NULL
-			)
-		`)
-		await dbResult.raw.execute(`
-			CREATE TABLE IF NOT EXISTS join_tokens (
-				id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL, description TEXT,
-				created_by TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
-				used_at TEXT, used_by_worker_id TEXT
-			)
-		`)
-		await dbResult.raw.execute(`
-			CREATE TABLE IF NOT EXISTS workers (
-				id TEXT PRIMARY KEY, device_id TEXT, name TEXT,
-				status TEXT NOT NULL DEFAULT 'offline', capabilities TEXT DEFAULT '[]',
-				registered_at TEXT NOT NULL, last_heartbeat TEXT,
-				machine_secret_hash TEXT
-			)
-		`)
-		await dbResult.raw.execute(`
-			CREATE TABLE IF NOT EXISTS worker_leases (
-				id TEXT PRIMARY KEY, worker_id TEXT NOT NULL, run_id TEXT NOT NULL,
-				claimed_at TEXT NOT NULL, expires_at TEXT NOT NULL,
-				status TEXT NOT NULL DEFAULT 'active'
-			)
-		`)
-
 		auth = await createAuth(dbResult.db, companyRoot)
 		const taskService = new TaskService(dbResult.db)
 		const runService = new RunService(dbResult.db)
 		const workerService = new WorkerService(dbResult.db)
 		const enrollmentService = new EnrollmentService(dbResult.db)
 		const activityService = new ActivityService(dbResult.db)
+		const queryService = new QueryService(dbResult.db)
 		const workflowEngine = new WorkflowEngine(
 			{
 				company: { name: 'test', slug: 'test', description: '', timezone: 'UTC', language: 'en', owner: { name: 'Test', email: 'test@test.com' }, defaults: {} },
@@ -145,7 +92,7 @@ describe('Continuation flow', () => {
 			taskService,
 			runService,
 		)
-		services = { taskService, runService, workerService, enrollmentService, activityService, workflowEngine }
+		services = { taskService, runService, workerService, enrollmentService, activityService, queryService, workflowEngine }
 		app = buildTestApp({ companyRoot, db: dbResult.db, auth, services })
 	})
 

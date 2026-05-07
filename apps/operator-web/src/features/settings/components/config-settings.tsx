@@ -8,12 +8,23 @@ import { Spinner } from '@/components/ui/spinner'
 import { SurfaceSection } from '@/components/ui/surface-section'
 import { TiptapEditor } from '@/components/ui/tiptap-editor'
 import { useAppPreferences } from '@/hooks/use-app-preferences'
-import { useConfigRecords, useDeleteConfigRecord, useSaveConfigRecord } from '@/hooks/use-config'
+import {
+	useConfigRecords,
+	useConfigReloadStatus,
+	useDeleteConfigRecord,
+	useReloadConfig,
+	useSaveConfigRecord,
+} from '@/hooks/use-config'
 import { useProjects } from '@/hooks/use-projects'
 import Editor from '@monaco-editor/react'
 import { Settings2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { AgentSetupWizard } from './agent-setup-wizard'
+import { CapabilitySetupWizard } from './capability-setup-wizard'
+import { EnvironmentSetupWizard } from './environment-setup-wizard'
+import { ProviderSetupWizard } from './provider-setup-wizard'
+import { WorkflowSetupWizard } from './workflow-setup-wizard'
 
 type ScopeValue = 'company' | `project:${string}`
 
@@ -90,7 +101,16 @@ function createDefaultRecord(type: ConfigEntityType, id: string) {
 		case 'agents':
 			return { id, name: '', role: 'developer', description: '', capability_profiles: [] }
 		case 'workflows':
-			return { id, name: '', description: '', steps: [] }
+			return {
+				id,
+				name: '',
+				description: '',
+				workspace: { mode: 'isolated_worktree' },
+				steps: [
+					{ id: 'plan', type: 'agent', actions: [] },
+					{ id: 'done', type: 'done' },
+				],
+			}
 		case 'providers':
 			return {
 				id,
@@ -124,7 +144,7 @@ function createDefaultRecord(type: ConfigEntityType, id: string) {
 				inputs: [],
 				outputs: [],
 				sandbox: {
-					fs_scope: { read: ['.'], write: [] },
+					workspace_scope: { read: ['.'], write: [] },
 					network: 'unrestricted',
 					timeout_ms: 300000,
 				},
@@ -156,8 +176,10 @@ function stringifyRecord(
 export function ConfigSettings() {
 	const { theme } = useAppPreferences()
 	const projectsQuery = useProjects()
+	const reloadStatusQuery = useConfigReloadStatus()
 	const saveMutation = useSaveConfigRecord()
 	const deleteMutation = useDeleteConfigRecord()
+	const reloadMutation = useReloadConfig()
 	const [scopeValue, setScopeValue] = useState<ScopeValue>('company')
 	const [configType, setConfigType] = useState<ConfigEntityType>('company')
 	const [selectedId, setSelectedId] = useState<string | null>('company')
@@ -165,6 +187,7 @@ export function ConfigSettings() {
 	const [draftValue, setDraftValue] = useState('')
 	const [contextValue, setContextValue] = useState('')
 	const [parseError, setParseError] = useState<string | null>(null)
+	const [rawMode, setRawMode] = useState(false)
 	const projectId = scopeValue.startsWith('project:') ? scopeValue.slice('project:'.length) : null
 	const selectedProject =
 		(projectsQuery.data ?? []).find((project) => project.id === projectId) ?? null
@@ -199,6 +222,10 @@ export function ConfigSettings() {
 				? 'company'
 				: configType
 		if (nextType !== configType) setConfigType(nextType)
+	}, [configType, projectId])
+
+	useEffect(() => {
+		setRawMode(false)
 	}, [configType, projectId])
 
 	useEffect(() => {
@@ -267,7 +294,7 @@ export function ConfigSettings() {
 				projectId,
 			})
 			setSelectedId(id)
-			toast.success(`${currentType.label} saved`)
+			await reloadRuntimeAfterChange(`${currentType.label} saved`)
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Failed to save config record'
 			setParseError(message)
@@ -281,17 +308,61 @@ export function ConfigSettings() {
 		try {
 			await deleteMutation.mutateAsync({ type: configType, id, projectId })
 			setSelectedId(null)
-			toast.success(`${currentType.label} deleted`)
+			await reloadRuntimeAfterChange(`${currentType.label} deleted`)
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to delete config record')
 		}
 	}
+
+	async function reloadRuntimeAfterChange(prefix = 'Configuration updated') {
+		try {
+			const result = await reloadMutation.mutateAsync()
+			if (result.ok) {
+				toast.success(`${prefix} and runtime reloaded`)
+				return
+			}
+			toast.warning(`${prefix}, but runtime reload failed: ${result.error ?? 'unknown error'}`)
+		} catch (error) {
+			toast.warning(
+				`${prefix}, but runtime reload is unavailable: ${
+					error instanceof Error ? error.message : 'unknown error'
+				}`,
+			)
+		}
+	}
+
+	function handleManualReload() {
+		void reloadRuntimeAfterChange('Runtime config')
+	}
+
+	const reloadStatus = reloadStatusQuery.data
+	const reloadBadge = !reloadStatus?.available
+		? { label: 'reload unavailable', variant: 'warning' as const }
+		: reloadStatus.lastError
+			? { label: 'reload error', variant: 'destructive' as const }
+			: reloadStatus.lastReloadAt
+				? { label: `reloaded ${new Date(reloadStatus.lastReloadAt).toLocaleTimeString()}`, variant: 'success' as const }
+				: { label: 'initial config', variant: 'info' as const }
 
 	return (
 		<div className="space-y-6">
 			<SurfaceSection
 				title="Configuration"
 				description="Manage authored config through the new DB-backed config surface. Company scope is the default; switch to a project to edit scoped overrides."
+				action={
+					<div className="flex items-center gap-2">
+						<Badge variant={reloadBadge.variant}>{reloadBadge.label}</Badge>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={handleManualReload}
+							loading={reloadMutation.isPending}
+							disabled={reloadStatus?.available === false}
+						>
+							Reload runtime
+						</Button>
+					</div>
+				}
 				contentClassName="space-y-4"
 			>
 				<div className="grid gap-3 md:grid-cols-[minmax(0,240px)_minmax(0,220px)_auto]">
@@ -402,6 +473,15 @@ export function ConfigSettings() {
 						}
 						action={
 							<div className="flex items-center gap-2">
+								{!currentType.context ? (
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={() => setRawMode((value) => !value)}
+									>
+										{rawMode ? 'Guided form' : 'Raw JSON'}
+									</Button>
+								) : null}
 								{!currentType.singleton && selectedId ? (
 									<Button
 										variant="destructive"
@@ -423,7 +503,12 @@ export function ConfigSettings() {
 						}
 						contentClassName="space-y-4"
 					>
-						{!currentType.singleton && (
+						{!currentType.singleton &&
+						configType !== 'agents' &&
+						configType !== 'workflows' &&
+						configType !== 'capabilities' &&
+						configType !== 'providers' &&
+						configType !== 'environments' && (
 							<div>
 								<p className="mb-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
 									Record ID
@@ -436,7 +521,61 @@ export function ConfigSettings() {
 							</div>
 						)}
 
-						{currentType.context ? (
+						{rawMode && !currentType.context ? (
+							<div className="overflow-hidden rounded-xl border border-border/70 bg-card/60">
+								<Editor
+									height="520px"
+									language="json"
+									theme={editorTheme}
+									value={draftValue}
+									onChange={(value) => setDraftValue(value ?? '')}
+									options={{
+										minimap: { enabled: false },
+										fontSize: 13,
+										wordWrap: 'on',
+										scrollBeyondLastLine: false,
+									}}
+								/>
+							</div>
+						) : configType === 'agents' ? (
+							<AgentSetupWizard
+								value={draftValue}
+								onChange={setDraftValue}
+								draftId={draftId}
+								onDraftIdChange={setDraftId}
+								projectId={projectId}
+							/>
+						) : configType === 'workflows' ? (
+							<WorkflowSetupWizard
+								value={draftValue}
+								onChange={setDraftValue}
+								draftId={draftId}
+								onDraftIdChange={setDraftId}
+								projectId={projectId}
+							/>
+						) : configType === 'capabilities' ? (
+							<CapabilitySetupWizard
+								value={draftValue}
+								onChange={setDraftValue}
+								draftId={draftId}
+								onDraftIdChange={setDraftId}
+								projectId={projectId}
+							/>
+						) : configType === 'providers' ? (
+							<ProviderSetupWizard
+								value={draftValue}
+								onChange={setDraftValue}
+								draftId={draftId}
+								onDraftIdChange={setDraftId}
+							/>
+						) : configType === 'environments' ? (
+							<EnvironmentSetupWizard
+								value={draftValue}
+								onChange={setDraftValue}
+								draftId={draftId}
+								onDraftIdChange={setDraftId}
+							/>
+						) : currentType.context ? (
 							<div className="rounded-xl border border-border/70 bg-card/60 px-4 py-4">
 								<TiptapEditor
 									content={contextValue}

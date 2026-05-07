@@ -1,11 +1,11 @@
-import { Command } from 'commander'
 import { startServer } from '@questpie/autopilot-orchestrator'
+import type { AutopilotWorker } from '@questpie/autopilot-worker'
+import { Command } from 'commander'
 import { program } from '../program'
 import { findCompanyRoot, findProjectRoot } from '../utils/find-root'
-import { createLocalWorker } from './worker'
+import { brandHeader, dim, dot, error, separator, success, warning } from '../utils/format'
 import { resolveWorkerConcurrency } from '../utils/worker-concurrency'
-import { brandHeader, success, dim, error, warning, separator, dot } from '../utils/format'
-import type { AutopilotWorker } from '@questpie/autopilot-worker'
+import { createLocalWorker } from './worker'
 
 /**
  * `autopilot start` — local convenience wrapper.
@@ -16,7 +16,10 @@ program.addCommand(
 	new Command('start')
 		.description('Start orchestrator + local worker (local dev/demo mode)')
 		.option('-p, --port <port>', 'Server port', '7778')
-		.option('-c, --concurrency <n>', 'Max concurrent runs for local worker (defaults to company setting or 4)')
+		.option(
+			'-c, --concurrency <n>',
+			'Max concurrent runs for local worker (defaults to company setting or 4)',
+		)
 		.option('--no-worker', 'Skip starting the local worker')
 		.action(async (opts: { port: string; concurrency?: string; worker: boolean }) => {
 			let worker: AutopilotWorker | null = null
@@ -28,7 +31,11 @@ program.addCommand(
 				const port = Number.parseInt(opts.port, 10)
 
 				// ── 1. Start orchestrator ─────────────────────────────────────
-				const { server, stop: stopServer, workerRegistry } = await startServer({ companyRoot: root, port, allowLocalDevBypass: true })
+				const {
+					server,
+					stop: stopServer,
+					workerRegistry,
+				} = await startServer({ companyRoot: root, port, allowLocalDevBypass: true })
 				const orchestratorUrl = `http://localhost:${server.port}`
 
 				// ── 2. Start local worker ─────────────────────────────────────
@@ -41,13 +48,13 @@ program.addCommand(
 					})
 					await worker.start()
 
-					// Wire the local worker's API into VFS registry so workspace:// reads work
+					// Wire the local worker API into project workspace inspection.
 					const apiServer = worker.getApiServer()
 					if (apiServer) {
-						workerRegistry.setLocalWorker(
-							worker.getWorkerId() ?? 'local-dev',
-							{ baseUrl: `http://localhost:${apiServer.port}`, token: apiServer.token },
-						)
+						workerRegistry.setLocalWorker(worker.getWorkerId() ?? 'local-dev', {
+							baseUrl: `http://localhost:${apiServer.port}`,
+							token: apiServer.token,
+						})
 					}
 				}
 
@@ -66,7 +73,7 @@ program.addCommand(
 				console.log(separator())
 				console.log(`${dot('green')} ${success('Orchestrator is running.')}`)
 				if (worker) {
-					console.log(`${dot('green')} ${success('Local worker started (claude-code + MCP).')}`)
+					console.log(`${dot('green')} ${success('Local worker started (spawn-agent + MCP).')}`)
 				}
 				console.log(`${dot('yellow')} ${warning('Local dev auth bypass ACTIVE (localhost only).')}`)
 				console.log(dim('Press Ctrl+C to stop'))
@@ -85,7 +92,15 @@ program.addCommand(
 				process.on('SIGINT', shutdown)
 				process.on('SIGTERM', shutdown)
 			} catch (err) {
-				if (worker) await worker.stop().catch((stopErr) => console.debug('[start] worker stop error:', stopErr instanceof Error ? stopErr.message : String(stopErr)))
+				if (worker)
+					await worker
+						.stop()
+						.catch((stopErr) =>
+							console.debug(
+								'[start] worker stop error:',
+								stopErr instanceof Error ? stopErr.message : String(stopErr),
+							),
+						)
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				console.error(dim('Run "autopilot --help" for usage information.'))
 				process.exit(1)

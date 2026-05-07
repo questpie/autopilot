@@ -1,8 +1,8 @@
 # @questpie/autopilot-spec
 
-Zod schemas, TypeScript types, filesystem conventions, and validators for QUESTPIE Autopilot.
+Shared Zod schemas and TypeScript contracts for QUESTPIE Autopilot.
 
-This package defines the shared contract used across all Autopilot packages — the shape of tasks, agents, workflows, messages, company config, and the filesystem layout.
+This package defines cross-package API and data contracts for tasks, runs, sessions, Knowledge resources, artifacts, workers, runtime selection, workspace inspection, config records, and product primitives.
 
 ## Install
 
@@ -10,21 +10,23 @@ This package defines the shared contract used across all Autopilot packages — 
 bun add @questpie/autopilot-spec
 ```
 
-## What's included
+## What's Included
 
-- **Schemas** — Zod schemas for tasks, agents, workflows, messages, channels, knowledge entries, artifacts, and company configuration
-- **Types** — TypeScript types inferred from all schemas
-- **Filesystem conventions** — path constants and directory structure definitions for company directories
-- **Validators** — parsing and validation utilities for YAML frontmatter and config files
+- **Schemas** for product/runtime contracts shared across packages
+- **Types** inferred from those schemas
+- **Workspace inspection contracts** for read-only project run review
+- **Validation helpers** for config, packs, runtime selection, and primitives
+
+Filesystem conventions in this package are compatibility/import/export helpers. They are not the live product source of truth for company config or Knowledge.
 
 ## Dependencies
 
-- `zod` — schema definition and validation
-- `yaml` — YAML parsing for frontmatter-based config files
+- `zod`
+- `yaml`
 
 ## Links
 
-- [GitHub](https://github.com/questpie/autopilot)
+- [Architecture](../../docs/architecture.md)
 - [Documentation](https://autopilot.questpie.com)
 
 ## License

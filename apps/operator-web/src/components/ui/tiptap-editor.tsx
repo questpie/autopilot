@@ -58,8 +58,8 @@ const TIPTAP_CONTENT_CLASSNAME = cn(
 	'[&_.ProseMirror]:font-sans [&_.ProseMirror]:text-sm [&_.ProseMirror]:leading-[22px] [&_.ProseMirror]:text-foreground',
 	'[&_.ProseMirror]:outline-none [&_.ProseMirror]:break-words',
 	'[&_.ProseMirror>*+*]:mt-4',
-	'[&_.ProseMirror_h1]:mt-8 [&_.ProseMirror_h1]:mb-3 [&_.ProseMirror_h1]:text-balance [&_.ProseMirror_h1]:text-[28px] [&_.ProseMirror_h1]:font-semibold [&_.ProseMirror_h1]:tracking-[-0.02em] [&_.ProseMirror_h1]:text-foreground',
-	'[&_.ProseMirror_h2]:mt-7 [&_.ProseMirror_h2]:mb-3 [&_.ProseMirror_h2]:text-balance [&_.ProseMirror_h2]:text-[22px] [&_.ProseMirror_h2]:font-semibold [&_.ProseMirror_h2]:tracking-[-0.02em] [&_.ProseMirror_h2]:text-foreground',
+	'[&_.ProseMirror_h1]:mt-8 [&_.ProseMirror_h1]:mb-3 [&_.ProseMirror_h1]:text-balance [&_.ProseMirror_h1]:text-[28px] [&_.ProseMirror_h1]:font-semibold [&_.ProseMirror_h1]:tracking-normal [&_.ProseMirror_h1]:text-foreground',
+	'[&_.ProseMirror_h2]:mt-7 [&_.ProseMirror_h2]:mb-3 [&_.ProseMirror_h2]:text-balance [&_.ProseMirror_h2]:text-[22px] [&_.ProseMirror_h2]:font-semibold [&_.ProseMirror_h2]:tracking-normal [&_.ProseMirror_h2]:text-foreground',
 	'[&_.ProseMirror_h3]:mt-6 [&_.ProseMirror_h3]:mb-2 [&_.ProseMirror_h3]:text-balance [&_.ProseMirror_h3]:text-[18px] [&_.ProseMirror_h3]:font-semibold [&_.ProseMirror_h3]:text-foreground',
 	'[&_.ProseMirror_p]:my-0 [&_.ProseMirror_p]:text-pretty [&_.ProseMirror_p]:text-foreground',
 	'[&_.ProseMirror_a]:text-primary [&_.ProseMirror_a]:no-underline hover:[&_.ProseMirror_a]:underline',
@@ -261,7 +261,7 @@ function navigateToSmartLink(
 	}
 
 	if (type === 'file') {
-		void navigate({ to: '/files', search: { path: value, view: 'file' } })
+		void navigate({ to: '/knowledge', search: { path: value, view: 'resource' } })
 	}
 }
 

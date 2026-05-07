@@ -312,6 +312,11 @@ function isEligible(run: RunRow, workerId: string, workerTags: Set<string>): boo
 	const t = parsed.data
 	const allowFallback = t.allow_fallback !== false
 
+	if (t.avoid_worker_ids?.includes(workerId)) {
+		logSkip(run.id, workerId, 'worker avoided by retry failover')
+		return false
+	}
+
 	// Hard pin — required_worker_id is never relaxed by allow_fallback
 	if (t.required_worker_id && t.required_worker_id !== workerId) {
 		logSkip(run.id, workerId, `required_worker_id is ${t.required_worker_id}`)

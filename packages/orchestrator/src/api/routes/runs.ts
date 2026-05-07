@@ -1,17 +1,17 @@
 import { randomBytes } from 'node:crypto'
+import {
+	ArtifactKindSchema,
+	ContinueRunRequestSchema,
+	CreateRunRequestSchema,
+	RunCompletionSchema,
+	WorkerEventSchema,
+} from '@questpie/autopilot-spec'
+import type { CapabilityProfile, ResolvedCapabilities } from '@questpie/autopilot-spec'
 import { Hono } from 'hono'
 import { validator as zValidator } from 'hono-openapi'
 import { z } from 'zod'
-import {
-	WorkerEventSchema,
-	RunCompletionSchema,
-	CreateRunRequestSchema,
-	ContinueRunRequestSchema,
-	ArtifactKindSchema,
-} from '@questpie/autopilot-spec'
-import type { ResolvedCapabilities, CapabilityProfile } from '@questpie/autopilot-spec'
-import type { AppEnv } from '../app'
 import { eventBus } from '../../events/event-bus'
+import type { AppEnv } from '../app'
 
 function parseEventMetadata(raw: string | null | undefined): Record<string, unknown> | undefined {
 	if (!raw) return undefined
@@ -53,9 +53,10 @@ async function finalizeLinkedQuery(
 
 	if (!query.session_id) return
 
-	const content = result.status === 'failed'
-		? (result.error ?? result.summary ?? 'Query failed.')
-		: (result.summary ?? 'Query completed.')
+	const content =
+		result.status === 'failed'
+			? (result.error ?? result.summary ?? 'Query failed.')
+			: (result.summary ?? 'Query completed.')
 
 	await services.sessionMessageService?.upsertAssistantForQuery({
 		session_id: query.session_id,
@@ -84,109 +85,60 @@ const runs = new Hono<AppEnv>()
 		},
 	)
 	// GET /runs/:id — get run detail
-	.get(
-		'/:id',
-		zValidator('param', z.object({ id: z.string() })),
-		async (c) => {
-			const { runService } = c.get('services')
-			const { id } = c.req.valid('param')
-			const run = await runService.get(id)
-			if (!run) return c.json({ error: 'run not found' }, 404)
-			return c.json(run, 200)
-		},
-	)
+	.get('/:id', zValidator('param', z.object({ id: z.string() })), async (c) => {
+		const { runService } = c.get('services')
+		const { id } = c.req.valid('param')
+		const run = await runService.get(id)
+		if (!run) return c.json({ error: 'run not found' }, 404)
+		return c.json(run, 200)
+	})
 	// GET /runs/:id/events — get run events
-	.get(
-		'/:id/events',
-		zValidator('param', z.object({ id: z.string() })),
-		async (c) => {
-			const { runService } = c.get('services')
-			const { id } = c.req.valid('param')
-			const run = await runService.get(id)
-			if (!run) return c.json({ error: 'run not found' }, 404)
-			const events = await runService.getEvents(id)
-			return c.json(events, 200)
-		},
-	)
+	.get('/:id/events', zValidator('param', z.object({ id: z.string() })), async (c) => {
+		const { runService } = c.get('services')
+		const { id } = c.req.valid('param')
+		const run = await runService.get(id)
+		if (!run) return c.json({ error: 'run not found' }, 404)
+		const events = await runService.getEvents(id)
+		return c.json(events, 200)
+	})
 	// GET /runs/:id/stream — SSE stream of run progress events
-	.get(
-		'/:id/stream',
-		zValidator('param', z.object({ id: z.string() })),
-		async (c) => {
-			const { runService } = c.get('services')
-			const { id } = c.req.valid('param')
-			const run = await runService.get(id)
-			if (!run) return c.json({ error: 'run not found' }, 404)
-			const lastEventId = parseLastEventId(c.req.header('last-event-id') ?? undefined)
+	.get('/:id/stream', zValidator('param', z.object({ id: z.string() })), async (c) => {
+		const { runService } = c.get('services')
+		const { id } = c.req.valid('param')
+		const run = await runService.get(id)
+		if (!run) return c.json({ error: 'run not found' }, 404)
+		const lastEventId = parseLastEventId(c.req.header('last-event-id') ?? undefined)
 
-			const { readable, writable } = new TransformStream()
-			const writer = writable.getWriter()
-			const encoder = new TextEncoder()
+		const { readable, writable } = new TransformStream()
+		const writer = writable.getWriter()
+		const encoder = new TextEncoder()
 
-			function send(data: string, eventId?: number): void {
-				const prefix = eventId ? `id: ${eventId}\n` : ''
-				writer.write(encoder.encode(`${prefix}data: ${data}\n\n`)).catch(() => {})
-			}
+		function send(data: string, eventId?: number): void {
+			const prefix = eventId ? `id: ${eventId}\n` : ''
+			writer.write(encoder.encode(`${prefix}data: ${data}\n\n`)).catch(() => {})
+		}
 
-			const existingEvents = lastEventId === null
+		const existingEvents =
+			lastEventId === null
 				? await runService.getEvents(id)
 				: await runService.getEventsSince(id, lastEventId)
-			for (const evt of existingEvents) {
-				send(JSON.stringify({
+		for (const evt of existingEvents) {
+			send(
+				JSON.stringify({
 					type: 'run_event',
 					eventType: evt.type,
 					summary: evt.summary,
 					created_at: evt.created_at,
 					metadata: parseEventMetadata(evt.metadata),
-				}), evt.id)
-			}
+				}),
+				evt.id,
+			)
+		}
 
-			const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
-			if (terminalStatuses.has(run.status)) {
-				send(JSON.stringify({ type: 'run_completed', status: run.status, summary: run.summary }))
-				writer.close().catch(() => {})
-				return new Response(readable, {
-					headers: {
-						'Content-Type': 'text/event-stream',
-						'Cache-Control': 'no-cache',
-						Connection: 'keep-alive',
-					},
-				})
-			}
-
-			const unsubscribe = eventBus.subscribe((event) => {
-				if (event.type === 'run_event' && event.runId === id) {
-					send(JSON.stringify({
-						type: 'run_event',
-						eventType: event.eventType,
-						summary: event.summary,
-						created_at: event.created_at,
-						metadata: event.metadata,
-					}), event.eventId)
-				} else if (event.type === 'run_completed' && event.runId === id) {
-					runService.get(id).then((finalRun) => {
-						send(JSON.stringify({ type: 'run_completed', status: event.status, summary: finalRun?.summary ?? '' }))
-					}).catch((err) => {
-						console.error(`[runs/stream] failed to fetch final run ${id}:`, err instanceof Error ? err.message : String(err))
-						send(JSON.stringify({ type: 'run_completed', status: event.status, summary: '' }))
-					}).finally(() => {
-						unsubscribe()
-						clearInterval(heartbeat)
-						writer.close().catch(() => {})
-					})
-				}
-			})
-
-			const heartbeat = setInterval(() => {
-				send(JSON.stringify({ type: 'heartbeat', ts: new Date().toISOString() }))
-			}, 30_000)
-
-			c.req.raw.signal.addEventListener('abort', () => {
-				clearInterval(heartbeat)
-				unsubscribe()
-				writer.close().catch(() => {})
-			})
-
+		const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
+		if (terminalStatuses.has(run.status)) {
+			send(JSON.stringify({ type: 'run_completed', status: run.status, summary: run.summary }))
+			writer.close().catch(() => {})
 			return new Response(readable, {
 				headers: {
 					'Content-Type': 'text/event-stream',
@@ -194,21 +146,74 @@ const runs = new Hono<AppEnv>()
 					Connection: 'keep-alive',
 				},
 			})
-		},
-	)
+		}
+
+		const unsubscribe = eventBus.subscribe((event) => {
+			if (event.type === 'run_event' && event.runId === id) {
+				send(
+					JSON.stringify({
+						type: 'run_event',
+						eventType: event.eventType,
+						summary: event.summary,
+						created_at: event.created_at,
+						metadata: event.metadata,
+					}),
+					event.eventId,
+				)
+			} else if (event.type === 'run_completed' && event.runId === id) {
+				runService
+					.get(id)
+					.then((finalRun) => {
+						send(
+							JSON.stringify({
+								type: 'run_completed',
+								status: event.status,
+								summary: finalRun?.summary ?? '',
+							}),
+						)
+					})
+					.catch((err) => {
+						console.error(
+							`[runs/stream] failed to fetch final run ${id}:`,
+							err instanceof Error ? err.message : String(err),
+						)
+						send(JSON.stringify({ type: 'run_completed', status: event.status, summary: '' }))
+					})
+					.finally(() => {
+						unsubscribe()
+						clearInterval(heartbeat)
+						writer.close().catch(() => {})
+					})
+			}
+		})
+
+		const heartbeat = setInterval(() => {
+			send(JSON.stringify({ type: 'heartbeat', ts: new Date().toISOString() }))
+		}, 30_000)
+
+		c.req.raw.signal.addEventListener('abort', () => {
+			clearInterval(heartbeat)
+			unsubscribe()
+			writer.close().catch(() => {})
+		})
+
+		return new Response(readable, {
+			headers: {
+				'Content-Type': 'text/event-stream',
+				'Cache-Control': 'no-cache',
+				Connection: 'keep-alive',
+			},
+		})
+	})
 	// GET /runs/:id/artifacts — get run artifacts (metadata only, blob content not inlined)
-	.get(
-		'/:id/artifacts',
-		zValidator('param', z.object({ id: z.string() })),
-		async (c) => {
-			const { artifactService } = c.get('services')
-			const { id } = c.req.valid('param')
-			const arts = await artifactService.listForRun(id)
-			// Sanitize blob-backed rows: replace internal pointer with empty string
-			const sanitized = arts.map((a) => (a.blob_id ? { ...a, ref_value: '' } : a))
-			return c.json(sanitized, 200)
-		},
-	)
+	.get('/:id/artifacts', zValidator('param', z.object({ id: z.string() })), async (c) => {
+		const { artifactService } = c.get('services')
+		const { id } = c.req.valid('param')
+		const arts = await artifactService.listForRun(id)
+		// Sanitize blob-backed rows: replace internal pointer with empty string
+		const sanitized = arts.map((a) => (a.blob_id ? { ...a, ref_value: '' } : a))
+		return c.json(sanitized, 200)
+	})
 	// GET /runs/:id/artifacts/:artId/content — resolve and return artifact content
 	.get(
 		'/:id/artifacts/:artId/content',
@@ -221,14 +226,17 @@ const runs = new Hono<AppEnv>()
 			try {
 				const content = await artifactService.resolveContent(row)
 				const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8')
-				return new Response(bytes, {
+				return new Response(new Uint8Array(bytes), {
 					headers: {
 						'Content-Type': row.mime_type || 'application/octet-stream',
 						'Content-Length': String(bytes.length),
 					},
 				})
 			} catch (err) {
-				console.error(`[runs] failed to resolve artifact ${artId}:`, err instanceof Error ? err.message : String(err))
+				console.error(
+					`[runs] failed to resolve artifact ${artId}:`,
+					err instanceof Error ? err.message : String(err),
+				)
 				return c.json({ error: 'failed to resolve artifact content' }, 500)
 			}
 		},
@@ -258,7 +266,10 @@ const runs = new Hono<AppEnv>()
 
 			const activeStatuses = new Set(['pending', 'claimed', 'running'])
 			if (!activeStatuses.has(run.status)) {
-				return c.json({ error: `run ${id} is ${run.status} — cannot add artifacts to a terminal run` }, 409)
+				return c.json(
+					{ error: `run ${id} is ${run.status} — cannot add artifacts to a terminal run` },
+					409,
+				)
 			}
 
 			const kindParse = ArtifactKindSchema.safeParse(body.kind)
@@ -284,7 +295,9 @@ const runs = new Hono<AppEnv>()
 			if (normalizedKind === 'preview_file') {
 				const entry = body.title.endsWith('.html') ? body.title : 'index.html'
 				const baseUrl = c.get('orchestratorUrl')
-				previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
+				previewUrl = baseUrl
+					? `${baseUrl}/api/previews/${id}/${entry}`
+					: `/api/previews/${id}/${entry}`
 				await artifactService.create({
 					id: `art-preview-${Date.now()}-${randomBytes(6).toString('hex')}`,
 					run_id: id,
@@ -330,9 +343,10 @@ const runs = new Hono<AppEnv>()
 		// Resolve agent-level capability profiles into the targeting blob
 		const agent = authoredConfig.agents.get(body.agent_id)
 		const agentProfiles = agent?.capability_profiles ?? []
-		const resolvedCaps = agentProfiles.length > 0
-			? resolveAgentCapabilities(agentProfiles, authoredConfig.capabilityProfiles)
-			: undefined
+		const resolvedCaps =
+			agentProfiles.length > 0
+				? resolveAgentCapabilities(agentProfiles, authoredConfig.capabilityProfiles)
+				: undefined
 
 		let targetingJson: string | undefined
 		if (targeting || resolvedCaps) {
@@ -374,7 +388,10 @@ const runs = new Hono<AppEnv>()
 			// Verify authenticated worker owns this run
 			const authWorkerId = c.get('workerId')
 			if (authWorkerId && run.worker_id && run.worker_id !== authWorkerId) {
-				return c.json({ error: `Run ${id} belongs to worker ${run.worker_id}, not ${authWorkerId}` }, 403)
+				return c.json(
+					{ error: `Run ${id} belongs to worker ${run.worker_id}, not ${authWorkerId}` },
+					403,
+				)
 			}
 
 			// If first event is 'started', transition to running
@@ -423,7 +440,10 @@ const runs = new Hono<AppEnv>()
 			// Verify authenticated worker owns this run
 			const authWorkerId = c.get('workerId')
 			if (authWorkerId && run.worker_id && run.worker_id !== authWorkerId) {
-				return c.json({ error: `Run ${id} belongs to worker ${run.worker_id}, not ${authWorkerId}` }, 403)
+				return c.json(
+					{ error: `Run ${id} belongs to worker ${run.worker_id}, not ${authWorkerId}` },
+					403,
+				)
 			}
 
 			const result = await runService.complete(id, {
@@ -479,15 +499,17 @@ const runs = new Hono<AppEnv>()
 
 			// Auto-create preview_url artifact if preview files were stored
 			if (hasPreviewFiles) {
-				const singleHtmlEntry = previewFileTitles.length === 1
-					&& /\.(html?)$/i.test(previewFileTitles[0] ?? '')
-					? previewFileTitles[0]!
-					: null
+				const singleHtmlEntry =
+					previewFileTitles.length === 1 && /\.(html?)$/i.test(previewFileTitles[0] ?? '')
+						? previewFileTitles[0]!
+						: null
 				const entry = previewEntry ?? singleHtmlEntry ?? 'index.html'
 				// Canonical orchestrator URL for rendered links — not request-derived (reverse proxy / spoofing safe).
 				// Relative-path fallback only when orchestratorUrl is absent (tests, custom embed).
 				const baseUrl = c.get('orchestratorUrl')
-				const previewUrl = baseUrl ? `${baseUrl}/api/previews/${id}/${entry}` : `/api/previews/${id}/${entry}`
+				const previewUrl = baseUrl
+					? `${baseUrl}/api/previews/${id}/${entry}`
+					: `/api/previews/${id}/${entry}`
 				await artifactService.create({
 					id: `art-preview-${Date.now()}-${randomBytes(6).toString('hex')}`,
 					run_id: id,
@@ -542,7 +564,10 @@ const runs = new Hono<AppEnv>()
 				const completedTask = await taskService.get(run.task_id)
 				if (completedTask?.queue) {
 					workflowEngine.triggerNextInQueue(completedTask.queue).catch((err) => {
-						console.error('[runs] queue release error:', err instanceof Error ? err.message : String(err))
+						console.error(
+							'[runs] queue release error:',
+							err instanceof Error ? err.message : String(err),
+						)
 					})
 				}
 			}
@@ -651,7 +676,6 @@ const runs = new Hono<AppEnv>()
 			return c.json(continuation, 201)
 		},
 	)
-
 
 export { runs }
 

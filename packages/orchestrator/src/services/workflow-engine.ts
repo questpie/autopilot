@@ -74,6 +74,11 @@ interface StepContext {
 	priorRunSummaries?: Array<{ runId: string; summary: string }>
 }
 
+interface ProcessStepOptions {
+	/** Workers to exclude from the next run claim, usually after a worker-local failure. */
+	avoidWorkerIds?: string[]
+}
+
 /** Default max revisions before escalation. */
 const DEFAULT_MAX_REVISIONS = 3
 
@@ -521,6 +526,8 @@ export class WorkflowEngine {
 			const attempt = retryCount + 1 // current attempt number (1-indexed, original run = attempt 1)
 
 			if (attempt < policy.max_attempts) {
+				const failedWorkerId = run?.worker_id ?? undefined
+				const avoidWorkerIds = failedWorkerId ? [failedWorkerId] : []
 				// Retry: increment counter and create a new run
 				const newRetryCount = await this.incrementRetryCount(
 					taskId,
@@ -528,11 +535,14 @@ export class WorkflowEngine {
 					task.workflow_step ?? '',
 				)
 				const delay = this.computeRetryDelay(policy, newRetryCount)
+				const retrySummary =
+					`Retrying step "${task.workflow_step}" (attempt ${attempt + 1}/${policy.max_attempts}) after ${delay}s delay; error type: ${errorType}` +
+					(failedWorkerId ? `; avoiding worker ${failedWorkerId}` : '')
 
 				await this.activityService?.log({
 					actor: 'workflow-engine',
 					type: 'retry',
-					summary: `Retrying step "${task.workflow_step}" (attempt ${attempt + 1}/${policy.max_attempts}) after ${delay}s delay — error type: ${errorType}`,
+					summary: retrySummary,
 					details: JSON.stringify({
 						task_id: taskId,
 						run_id: runId,
@@ -541,7 +551,40 @@ export class WorkflowEngine {
 						attempt: attempt + 1,
 						max_attempts: policy.max_attempts,
 						delay_seconds: delay,
+						avoid_worker_ids: avoidWorkerIds,
 					}),
+				})
+
+				const retryEvent = await this.runService.appendEvent(runId, {
+					type: 'retry_scheduled',
+					summary: retrySummary,
+					metadata: JSON.stringify({
+						task_id: taskId,
+						run_id: runId,
+						step_id: task.workflow_step,
+						error_type: errorType,
+						attempt: attempt + 1,
+						max_attempts: policy.max_attempts,
+						delay_seconds: delay,
+						avoid_worker_ids: avoidWorkerIds,
+					}),
+				})
+				eventBus.emit({
+					type: 'run_event',
+					runId,
+					eventType: 'retry_scheduled',
+					summary: retrySummary,
+					eventId: retryEvent?.id,
+					created_at: retryEvent?.created_at,
+					metadata: {
+						task_id: taskId,
+						step_id: task.workflow_step,
+						error_type: errorType,
+						attempt: attempt + 1,
+						max_attempts: policy.max_attempts,
+						delay_seconds: delay,
+						avoid_worker_ids: avoidWorkerIds,
+					},
 				})
 
 				console.log(
@@ -559,7 +602,7 @@ export class WorkflowEngine {
 				const ctx = await this.buildStepContext(runId, taskId)
 				const updated = (await this.taskService.get(taskId))!
 				const actions: string[] = ['retry']
-				await this.processCurrentStep(updated, actions, ctx)
+				await this.processCurrentStep(updated, actions, ctx, { avoidWorkerIds })
 
 				return (await this.taskService.get(taskId))!
 			}
@@ -1016,6 +1059,7 @@ export class WorkflowEngine {
 		task: TaskRow,
 		actions: string[],
 		ctx: StepContext,
+		options: ProcessStepOptions = {},
 	): Promise<string | null> {
 		if (!task.workflow_id || !task.workflow_step) return null
 
@@ -1066,7 +1110,7 @@ export class WorkflowEngine {
 
 				await this.taskService.update(task.id, { status: 'active' })
 
-				const targeting = this.resolveTargeting(step, agentId)
+				const targeting = this.resolveTargeting(step, agentId, options)
 				const runtime = step.targeting?.required_runtime ?? this.defaultRuntime
 
 				// Resolve agent model/provider/variant from authored config
@@ -1300,19 +1344,32 @@ export class WorkflowEngine {
 
 	// ─── Targeting ──────────────────────────────────────────────────────
 
-	private resolveTargeting(step: WorkflowStep, agentId?: string): string | undefined {
+	private resolveTargeting(
+		step: WorkflowStep,
+		agentId?: string,
+		options: ProcessStepOptions = {},
+	): string | undefined {
 		const hasStepTargeting = !!step.targeting
 		const hasActions = (step.actions?.length ?? 0) > 0
 		const capabilities = this.resolveCapabilities(agentId, step)
+		const avoidWorkerIds = options.avoidWorkerIds ?? []
 
-		if (!hasStepTargeting && !hasActions && !capabilities) return undefined
+		if (!hasStepTargeting && !hasActions && !capabilities && avoidWorkerIds.length === 0) {
+			return undefined
+		}
 
 		const tags = [...(step.targeting?.required_worker_tags ?? [])]
+		const allowFallback = step.targeting?.allow_fallback ?? true
+		let requiredWorkerId = step.targeting?.required_worker_id
+		if (requiredWorkerId && allowFallback && avoidWorkerIds.includes(requiredWorkerId)) {
+			requiredWorkerId = undefined
+		}
 		const target: ResolvedTargeting = {
-			required_worker_id: step.targeting?.required_worker_id,
+			required_worker_id: requiredWorkerId,
+			avoid_worker_ids: avoidWorkerIds,
 			required_runtime: step.targeting?.required_runtime,
 			required_worker_tags: tags,
-			allow_fallback: step.targeting?.allow_fallback ?? true,
+			allow_fallback: allowFallback,
 		}
 
 		if (step.targeting?.environment) {
@@ -1339,6 +1396,7 @@ export class WorkflowEngine {
 
 		const hasConstraints =
 			target.required_worker_id ||
+			target.avoid_worker_ids.length > 0 ||
 			target.required_runtime ||
 			tags.length > 0 ||
 			target.actions ||

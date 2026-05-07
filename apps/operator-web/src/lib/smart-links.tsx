@@ -6,7 +6,7 @@
  *   TASK-<id>  /  task:<id>     → /tasks?taskId=<id>
  *   RUN-<id>   /  run:<id>      → /tasks (run surfaces inside task detail)
  *   session:<id>                → /chat?sessionId=<id>
- *   file paths (.ts/.tsx/…)     → /files?path=<path>&view=file
+ *   resource paths (.md/.openapi/…) → /knowledge?path=<path>&view=resource
  */
 
 import { Link } from '@tanstack/react-router'
@@ -17,10 +17,10 @@ import type { ReactNode } from 'react'
 type MatchType = 'task' | 'run' | 'session' | 'file'
 
 interface PatternDef {
-  regex: RegExp
-  type: MatchType
-  /** Extract the relevant capture group from a RegExpExecArray. */
-  capture: (m: RegExpExecArray) => string
+	regex: RegExp
+	type: MatchType
+	/** Extract the relevant capture group from a RegExpExecArray. */
+	capture: (m: RegExpExecArray) => string
 }
 
 /**
@@ -28,38 +28,40 @@ interface PatternDef {
  * doesn't accidentally match the file-path pattern.
  */
 const PATTERNS: PatternDef[] = [
-  {
-    // TASK-<id>  or  task:<id>  — IDs are slugs like "full-system-review-questpie-autopilot-a954"
-    regex: /\b(?:TASK|task)[:-]([\w][\w-]{3,})/g,
-    type: 'task',
-    capture: (m) => m[1],
-  },
-  {
-    // RUN-<id>  or  run:<id>  — IDs like "run-1776160625928-df0049bd3230"
-    regex: /\b(?:RUN|run)[:-]([\w][\w-]{3,})/g,
-    type: 'run',
-    capture: (m) => m[1],
-  },
-  {
-    // session:<id>  — IDs like "session-abc123" or UUIDs
-    regex: /\bsession[:-]([\w][\w-]{3,})/g,
-    type: 'session',
-    capture: (m) => m[1],
-  },
-  {
-    // Conservative file-path pattern — requires at least one path separator and
-    // a known extension, and must be preceded by whitespace or start-of-string.
-    regex: /(?:^|\s)((?:\.?\/)?(?:[\w.-]+\/)+[\w.-]+\.(?:ts|tsx|js|jsx|json|yaml|yml|md|css|html|py|rs|go|sh|sql))\b/g,
-    type: 'file',
-    capture: (m) => m[1],
-  },
+	{
+		// TASK-<id>  or  task:<id>  — IDs are slugs like "full-system-review-questpie-autopilot-a954"
+		regex: /\b(?:TASK|task)[:-]([\w][\w-]{3,})/g,
+		type: 'task',
+		capture: (m) => m[1],
+	},
+	{
+		// RUN-<id>  or  run:<id>  — IDs like "run-1776160625928-df0049bd3230"
+		regex: /\b(?:RUN|run)[:-]([\w][\w-]{3,})/g,
+		type: 'run',
+		capture: (m) => m[1],
+	},
+	{
+		// session:<id>  — IDs like "session-abc123" or UUIDs
+		regex: /\bsession[:-]([\w][\w-]{3,})/g,
+		type: 'session',
+		capture: (m) => m[1],
+	},
+	{
+		// Conservative resource-path pattern — requires at least one path separator and
+		// a known extension, and must be preceded by whitespace or start-of-string.
+		regex:
+			/(?:^|\s)((?:\.?\/)?(?:[\w.-]+\/)+[\w.-]+\.(?:ts|tsx|js|jsx|json|yaml|yml|md|css|html|py|rs|go|sh|sql))\b/g,
+		type: 'file',
+		capture: (m) => m[1],
+	},
 ]
 
 // ── Core parser ───────────────────────────────────────────────────────────────
 
 interface Segment {
-  text: string
-  link?: { type: MatchType; value: string }
+	key: string
+	text: string
+	link?: { type: MatchType; value: string }
 }
 
 /**
@@ -67,113 +69,129 @@ interface Segment {
  * text or a recognised reference that should become a hyperlink.
  */
 export function parseSmartSegments(text: string): Segment[] {
-  interface RawMatch {
-    start: number
-    end: number
-    full: string // the matched text (entire match[0])
-    type: MatchType
-    value: string // the extracted id / path
-  }
+	interface RawMatch {
+		start: number
+		end: number
+		full: string // the matched text (entire match[0])
+		type: MatchType
+		value: string // the extracted id / path
+	}
 
-  const rawMatches: RawMatch[] = []
+	const rawMatches: RawMatch[] = []
 
-  for (const def of PATTERNS) {
-    def.regex.lastIndex = 0
-    let m: RegExpExecArray | null
-    while ((m = def.regex.exec(text)) !== null) {
-      const value = def.capture(m)
-      // For file paths the captured group may have a leading space — trim it.
-      const full = m[0].startsWith(' ') ? m[0].slice(1) : m[0]
-      const start = m[0].startsWith(' ') ? m.index + 1 : m.index
-      rawMatches.push({ start, end: start + full.length, full, type: def.type, value })
-    }
-  }
+	for (const def of PATTERNS) {
+		def.regex.lastIndex = 0
+		let m = def.regex.exec(text)
+		while (m !== null) {
+			const value = def.capture(m)
+			// For file paths the captured group may have a leading space — trim it.
+			const full = m[0].startsWith(' ') ? m[0].slice(1) : m[0]
+			const start = m[0].startsWith(' ') ? m.index + 1 : m.index
+			rawMatches.push({ start, end: start + full.length, full, type: def.type, value })
+			m = def.regex.exec(text)
+		}
+	}
 
-  if (rawMatches.length === 0) return [{ text }]
+	if (rawMatches.length === 0) return [{ key: `text:0:${text.length}`, text }]
 
-  // Sort by start position; remove overlaps (first match wins).
-  rawMatches.sort((a, b) => a.start - b.start)
-  const accepted: RawMatch[] = []
-  let cursor = 0
-  for (const raw of rawMatches) {
-    if (raw.start < cursor) continue // overlaps a previously accepted match
-    accepted.push(raw)
-    cursor = raw.end
-  }
+	// Sort by start position; remove overlaps (first match wins).
+	rawMatches.sort((a, b) => a.start - b.start)
+	const accepted: RawMatch[] = []
+	let cursor = 0
+	for (const raw of rawMatches) {
+		if (raw.start < cursor) continue // overlaps a previously accepted match
+		accepted.push(raw)
+		cursor = raw.end
+	}
 
-  // Build segment list.
-  const segments: Segment[] = []
-  let pos = 0
-  for (const m of accepted) {
-    if (m.start > pos) segments.push({ text: text.slice(pos, m.start) })
-    segments.push({ text: m.full, link: { type: m.type, value: m.value } })
-    pos = m.end
-  }
-  if (pos < text.length) segments.push({ text: text.slice(pos) })
-  return segments
+	// Build segment list.
+	const segments: Segment[] = []
+	let pos = 0
+	for (const m of accepted) {
+		if (m.start > pos) {
+			segments.push({ key: `text:${pos}:${m.start}`, text: text.slice(pos, m.start) })
+		}
+		segments.push({
+			key: `${m.type}:${m.start}:${m.end}:${m.value}`,
+			text: m.full,
+			link: { type: m.type, value: m.value },
+		})
+		pos = m.end
+	}
+	if (pos < text.length) {
+		segments.push({ key: `text:${pos}:${text.length}`, text: text.slice(pos) })
+	}
+	return segments
 }
 
 // ── Link renderer ─────────────────────────────────────────────────────────────
 
-function SegmentLink({ segment }: { segment: Segment & { link: NonNullable<Segment['link']> } }): ReactNode {
-  const cls = 'font-mono text-xs text-primary hover:underline'
-  const { type, value } = segment.link
+function SegmentLink({
+	segment,
+}: { segment: Segment & { link: NonNullable<Segment['link']> } }): ReactNode {
+	const cls = 'font-mono text-xs text-primary hover:underline'
+	const { type, value } = segment.link
 
-  switch (type) {
-    case 'task':
-      return (
-        <Link to="/tasks" search={{ taskId: value }} className={cls}>
-          {segment.text}
-        </Link>
-      )
-    case 'run':
-      // Runs surface inside task detail via the task route; pass as taskId param
-      // until a dedicated run viewer route exists.
-      return (
-        <Link to="/tasks" search={{ taskId: value }} className={cls}>
-          {segment.text}
-        </Link>
-      )
-    case 'session':
-      return (
-        <Link to="/chat" search={{ sessionId: value }} className={cls}>
-          {segment.text}
-        </Link>
-      )
-    case 'file':
-      return (
-        <Link to="/files" search={{ path: value, view: 'file' }} className={cls}>
-          {segment.text}
-        </Link>
-      )
-  }
+	switch (type) {
+		case 'task':
+			return (
+				<Link to="/tasks" search={{ taskId: value }} className={cls}>
+					{segment.text}
+				</Link>
+			)
+		case 'run':
+			// Runs surface inside task detail via the task route; pass as taskId param
+			// until a dedicated run viewer route exists.
+			return (
+				<Link to="/tasks" search={{ taskId: value }} className={cls}>
+					{segment.text}
+				</Link>
+			)
+		case 'session':
+			return (
+				<Link to="/chat" search={{ sessionId: value }} className={cls}>
+					{segment.text}
+				</Link>
+			)
+		case 'file':
+			return (
+				<Link to="/knowledge" search={{ path: value, view: 'resource' }} className={cls}>
+					{segment.text}
+				</Link>
+			)
+	}
 }
 
 // ── React component ───────────────────────────────────────────────────────────
 
 interface SmartTextProps {
-  text: string
-  /** Extra classes to apply to the wrapping span. */
-  className?: string
+	text: string
+	/** Extra classes to apply to the wrapping span. */
+	className?: string
 }
 
 /**
  * Render a plain-text string with embedded references turned into links.
  */
 export function SmartText({ text, className }: SmartTextProps): ReactNode {
-  const segments = parseSmartSegments(text)
+	const segments = parseSmartSegments(text)
 
-  // Fast-path: nothing to linkify
-  if (segments.length === 1 && !segments[0].link) {
-    return <span className={className}>{text}</span>
-  }
+	// Fast-path: nothing to linkify
+	if (segments.length === 1 && !segments[0].link) {
+		return <span className={className}>{text}</span>
+	}
 
-  return (
-    <span className={className}>
-      {segments.map((seg, i) => {
-        if (!seg.link) return <span key={i}>{seg.text}</span>
-        return <SegmentLink key={i} segment={seg as Segment & { link: NonNullable<Segment['link']> }} />
-      })}
-    </span>
-  )
+	return (
+		<span className={className}>
+			{segments.map((seg) => {
+				if (!seg.link) return <span key={seg.key}>{seg.text}</span>
+				return (
+					<SegmentLink
+						key={seg.key}
+						segment={seg as Segment & { link: NonNullable<Segment['link']> }}
+					/>
+				)
+			})}
+		</span>
+	)
 }

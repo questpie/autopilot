@@ -18,6 +18,7 @@ import type { Services } from './api/app'
 import { createAuth } from './auth'
 import { ConfigManager } from './config/config-manager'
 import { ConfigService } from './config/config-service'
+import { seedDefaultSkills } from './config/default-skills'
 import { importAuthoredConfigFromScopes } from './config/import-authored-config'
 import { discoverScopes } from './config/scope-resolver'
 import { MasterKeyError, hasMasterKey } from './crypto'
@@ -47,9 +48,9 @@ import {
 	TaskRelationService,
 	TaskService,
 	UserPreferenceService,
-	VfsService,
 	WorkerService,
 	WorkflowEngine,
+	WorkspaceInspectionService,
 } from './services'
 import type { AuthoredConfig } from './services'
 import { Indexer } from './services/indexer'
@@ -96,7 +97,7 @@ export async function startServer(options?: StartServerOptions) {
 	const { db: indexDb, raw: indexDbRaw } = await createIndexDb(companyRoot)
 	console.log('[server] databases initialized')
 
-	// ── 4. Create config-backed services and seed from FS if needed ───────
+	// ── 4. Create config-backed services and import seed bundles if needed ─
 	const projectService = new ProjectService(companyDb)
 	const configService = new ConfigService(companyDb)
 	let currentProjectId: string | null = null
@@ -108,6 +109,15 @@ export async function startServer(options?: StartServerOptions) {
 
 	if (!currentProjectId && chain.projectRoot && chain.projectRoot !== chain.companyRoot) {
 		currentProjectId = (await projectService.findByPath(chain.projectRoot))?.id ?? null
+	}
+
+	// Idempotent default skill catalog seed. Safe to run on every startup —
+	// existing skill records (operator-edited or otherwise) are preserved.
+	const skillSeedResult = await seedDefaultSkills(configService)
+	if (skillSeedResult.inserted.length > 0) {
+		console.log(
+			`[server] seeded ${skillSeedResult.inserted.length} default skill(s): ${skillSeedResult.inserted.join(', ')}`,
+		)
 	}
 
 	const authoredConfig: AuthoredConfig = await configService.loadAuthoredConfig(currentProjectId)
@@ -140,7 +150,7 @@ export async function startServer(options?: StartServerOptions) {
 	const scriptService = new ScriptService(authoredConfig)
 
 	const workerRegistry = new DefaultWorkerRegistry()
-	const vfsService = new VfsService(workerRegistry)
+	const workspaceInspectionService = new WorkspaceInspectionService(workerRegistry)
 
 	// ── 6b. Validate master key if shared secrets are in use ────────────
 	if (!hasMasterKey()) {
@@ -201,10 +211,10 @@ export async function startServer(options?: StartServerOptions) {
 		userPreferenceService,
 		scheduleService,
 		scriptService,
-		vfsService,
+		workspaceInspectionService,
 	}
 
-	// Wire VFS registry — resolves which worker holds a run's active lease
+	// Wire workspace inspection registry — resolves which worker holds a run's active lease.
 	workerRegistry.setLeaseLookup((runId) => workerService.findActiveLeaseByRunId(runId))
 
 	// ── 7. Start notification bridge ─────────────────────────────────────
@@ -295,7 +305,6 @@ export async function startServer(options?: StartServerOptions) {
 
 	// ── 8. Config hot reload manager ────────────────────────────────────
 	const configManager = new ConfigManager(authoredConfig, {
-		companyRoot,
 		configService,
 		projectId: currentProjectId,
 		onReload: async (_cfg) => {
@@ -416,9 +425,6 @@ export async function startServer(options?: StartServerOptions) {
 	}, 15_000)
 
 	deferredTaskTimer.unref()
-
-	// ── 12. Start config reload hooks (DB-backed manager is a no-op here) ──
-	configManager.startWatching(chain)
 
 	// ── Stop function for graceful shutdown ─────────────────────────────
 	const stop = () => {

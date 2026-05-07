@@ -60,7 +60,6 @@ describe('DB-backed config loading', () => {
 	test('ConfigManager reload() swaps from DB service', async () => {
 		const initial = await configService.loadAuthoredConfig(null)
 		const manager = new ConfigManager(initial, {
-			companyRoot: root,
 			configService,
 		})
 

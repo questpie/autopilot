@@ -52,7 +52,6 @@ const DEFAULT_AUTHORED_CONFIG: AuthoredConfig = {
 			role: 'You are a helpful assistant.',
 			capability_profiles: [],
 			triggers: [],
-			fs_scope: { include: [], exclude: [] },
 			secret_refs: [],
 		}],
 	]),

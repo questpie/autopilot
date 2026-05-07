@@ -286,7 +286,7 @@ Stable releases follow the normal Changesets flow — no pre mode. Push changese
 | Worker | `@questpie/autopilot-worker` | Yes |
 | MCP Server | `@questpie/autopilot-mcp` | Yes |
 
-Private/ignored: `dashboard-v2`, `@questpie/autopilot-docs`.
+Private/ignored: `operator-web`, `@questpie/autopilot-docs`.
 
 ### npm authentication
 

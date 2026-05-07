@@ -1,11 +1,19 @@
 import type { ChatAttachment, Session, SessionMessage } from './types'
 import { api, ApiError, configFetch } from '@/lib/api'
 
+function normalizeChatSessions(data: unknown): Session[] {
+  if (Array.isArray(data)) return data as Session[]
+  if (data && typeof data === 'object' && Array.isArray((data as { sessions?: unknown }).sessions)) {
+    return (data as { sessions: Session[] }).sessions
+  }
+  return []
+}
+
 export async function getChatSessions(): Promise<Session[]> {
   const res = await api.api['chat-sessions'].$get({ query: {} })
   if (!res.ok) throw new ApiError(res.status, res.statusText)
   const data = await res.json()
-  return (data as { sessions: Session[] }).sessions
+  return normalizeChatSessions(data)
 }
 
 export async function getChatSessionMessages(id: string): Promise<SessionMessage[]> {

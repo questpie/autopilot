@@ -5,7 +5,9 @@ import {
 	CompanySchema,
 	CompanyScopeSchema,
 	ConversationResultSchema,
+	ExecutionTargetSchema,
 	HumanSchema,
+	RetryPolicySchema,
 	ScheduleSchema,
 	WorkflowSchema,
 	WorkerClaimRequestSchema,
@@ -139,6 +141,34 @@ describe('HumanSchema', () => {
 		expect(result.notification_routing).toEqual({})
 		expect(result.quiet_hours.enabled).toBe(false)
 		expect(result.quiet_hours.timezone).toBe('UTC')
+	})
+})
+
+describe('ExecutionTargetSchema', () => {
+	test('parses retry failover avoid_worker_ids', () => {
+		const result = ExecutionTargetSchema.parse({
+			avoid_worker_ids: ['worker-a'],
+			allow_fallback: true,
+		})
+
+		expect(result.avoid_worker_ids).toEqual(['worker-a'])
+	})
+})
+
+describe('RetryPolicySchema', () => {
+	test('defaults retry_on to transient and account balance failures', () => {
+		const result = RetryPolicySchema.parse({ max_attempts: 2 })
+
+		expect(result.retry_on).toEqual(['infra', 'timeout', 'account_balance'])
+	})
+
+	test('accepts account_balance retry classification', () => {
+		const result = RetryPolicySchema.parse({
+			max_attempts: 2,
+			retry_on: ['account_balance'],
+		})
+
+		expect(result.retry_on).toEqual(['account_balance'])
 	})
 })
 

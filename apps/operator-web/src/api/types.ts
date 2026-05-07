@@ -446,7 +446,7 @@ export interface Script {
 	inputs: Array<{ name: string; description: string; type: ScriptInputType; required: boolean }>
 	outputs: Array<{ name: string; description: string; type: ScriptInputType }>
 	sandbox: {
-		fs_scope: { read: string[]; write: string[] }
+		workspace_scope: { read: string[]; write: string[] }
 		network: 'none' | 'local' | 'unrestricted'
 		timeout_ms: number
 	}
@@ -503,10 +503,9 @@ export interface ScheduleWithHistory extends Schedule {
 	history: ScheduleExecution[]
 }
 
-// ── VFS (from packages/spec/src/schemas/vfs.ts) ──
+// ── Knowledge/resource listing shapes ──
 
-export interface VfsStatResult {
-	uri: string
+export interface ResourceStatResult {
 	type: 'file' | 'directory'
 	size: number
 	mime_type: string | null
@@ -514,7 +513,7 @@ export interface VfsStatResult {
 	etag: string | null
 }
 
-export interface VfsListEntry {
+export interface ResourceListEntry {
 	name: string
 	path: string
 	type: 'file' | 'directory'
@@ -522,27 +521,36 @@ export interface VfsListEntry {
 	mime_type?: string | null
 }
 
-export interface VfsListResult {
-	uri: string
-	entries: VfsListEntry[]
+export interface ResourceListResult {
+	entries: ResourceListEntry[]
 }
 
-export interface VfsDiffFile {
+export interface WorkspaceDiffFile {
 	path: string
 	status: string
 	diff: string
 }
 
-export interface VfsDiffResult {
-	uri: string
+export interface WorkspaceGitContext {
+	provider: 'github' | 'gitlab' | 'generic-git'
+	remote_url: string
+	web_url: string | null
+	default_branch: string | null
+	compare_url: string | null
+	change_request_kind: 'pull_request' | 'merge_request' | null
+	change_request_url: string | null
+}
+
+export interface WorkspaceDiffResult {
 	base: string
 	head: string
-	files: VfsDiffFile[]
+	files: WorkspaceDiffFile[]
 	stats: {
 		files_changed: number
 		insertions: number
 		deletions: number
 	}
+	git?: WorkspaceGitContext | null
 }
 
 // ── Knowledge ──

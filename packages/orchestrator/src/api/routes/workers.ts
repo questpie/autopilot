@@ -170,7 +170,7 @@ const workers = new Hono<AppEnv>()
 		await workerService.heartbeat(workerId)
 		return c.json({ ok: true as const }, 200)
 	})
-	// POST /workers/claim — claim next pending run (one-at-a-time)
+	// POST /workers/claim — claim next pending run; worker-side polling enforces local concurrency.
 	.post('/claim', zValidator('json', WorkerClaimRequestSchema), async (c) => {
 		const { runService, workerService, workflowEngine } = c.get('services')
 		const authWorkerId = c.get('workerId')

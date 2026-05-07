@@ -1,36 +1,36 @@
 /**
- * Worker App API — minimal read-only observability surface.
+ * Worker observability API — minimal read-only worker-local surface.
  *
- * This is NOT a second orchestrator. It is a small API that lets the future
- * worker app inspect worker-local state: runtime readiness, workspaces,
- * git drift, and file listings.
+ * This is NOT a second orchestrator. It is a small API that lets operator and
+ * developer surfaces inspect worker-local state: runtime readiness, workspaces,
+ * git drift, workspace trees, and read-only content.
  *
  * Auth: simple bearer token generated at startup.
  * All endpoints are read-only.
  */
 
-import { Hono } from 'hono'
-import { cors } from 'hono/cors'
-import { validator as zValidator } from 'hono-openapi'
 import { existsSync } from 'node:fs'
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
-import type { WorkspaceManager } from './workspace'
-import type { ResolvedRuntime } from './runtime-config'
+import { Hono } from 'hono'
+import { validator as zValidator } from 'hono-openapi'
+import { cors } from 'hono/cors'
 import {
-	RunIdParamSchema,
 	DiffQuerySchema,
-	FilesQuerySchema,
-	FileReadQuerySchema,
-	type RuntimeStatus,
-	type WorkerStatus,
-	type WorkspaceEntry,
-	type WorkspaceDetail,
-	type FileDiff,
 	type DiffResult,
 	type DriftSummary,
-	type FileEntry,
+	type FileDiff,
+	RunIdParamSchema,
+	type RuntimeStatus,
+	TreeQuerySchema,
+	type WorkerStatus,
+	type WorkspaceDetail,
+	type WorkspaceEntry,
+	WorkspaceReadQuerySchema,
+	type WorkspaceTreeEntry,
 } from './api-schemas'
+import type { ResolvedRuntime } from './runtime-config'
+import type { WorkspaceManager } from './workspace'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -162,31 +162,94 @@ function generateToken(): string {
 // ─── MIME / text helpers ───────────────────────────────────────────────────
 
 const TEXT_EXTENSIONS = new Set([
-	'.txt', '.md', '.markdown', '.json', '.yaml', '.yml', '.toml',
-	'.xml', '.html', '.htm', '.css', '.scss', '.less',
-	'.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
-	'.py', '.rb', '.go', '.rs', '.java', '.kt', '.swift', '.c', '.cpp', '.h',
-	'.sh', '.bash', '.zsh', '.fish',
-	'.sql', '.graphql', '.gql',
-	'.env', '.gitignore', '.dockerignore', '.editorconfig',
-	'.csv', '.tsv', '.log', '.conf', '.cfg', '.ini',
-	'.svelte', '.vue', '.astro',
-	'.lock', '.prisma',
+	'.txt',
+	'.md',
+	'.markdown',
+	'.openapi',
+	'.json',
+	'.yaml',
+	'.yml',
+	'.toml',
+	'.xml',
+	'.html',
+	'.htm',
+	'.css',
+	'.scss',
+	'.less',
+	'.js',
+	'.jsx',
+	'.ts',
+	'.tsx',
+	'.mjs',
+	'.cjs',
+	'.py',
+	'.rb',
+	'.go',
+	'.rs',
+	'.java',
+	'.kt',
+	'.swift',
+	'.c',
+	'.cpp',
+	'.h',
+	'.sh',
+	'.bash',
+	'.zsh',
+	'.fish',
+	'.sql',
+	'.graphql',
+	'.gql',
+	'.env',
+	'.gitignore',
+	'.dockerignore',
+	'.editorconfig',
+	'.csv',
+	'.tsv',
+	'.log',
+	'.conf',
+	'.cfg',
+	'.ini',
+	'.svelte',
+	'.vue',
+	'.astro',
+	'.lock',
+	'.prisma',
 ])
 
 const MIME_MAP: Record<string, string> = {
-	'.txt': 'text/plain', '.md': 'text/markdown', '.markdown': 'text/markdown',
-	'.json': 'application/json', '.yaml': 'application/yaml', '.yml': 'application/yaml',
-	'.toml': 'application/toml', '.xml': 'application/xml',
-	'.html': 'text/html', '.htm': 'text/html', '.css': 'text/css',
-	'.js': 'text/javascript', '.jsx': 'text/javascript', '.mjs': 'text/javascript',
-	'.ts': 'text/typescript', '.tsx': 'text/typescript',
-	'.py': 'text/x-python', '.rb': 'text/x-ruby', '.go': 'text/x-go',
-	'.rs': 'text/x-rust', '.java': 'text/x-java', '.sh': 'text/x-shellscript',
-	'.sql': 'text/x-sql', '.csv': 'text/csv',
-	'.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
-	'.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
-	'.pdf': 'application/pdf', '.zip': 'application/zip',
+	'.txt': 'text/plain',
+	'.md': 'text/markdown',
+	'.markdown': 'text/markdown',
+	'.openapi': 'application/vnd.oai.openapi+yaml',
+	'.json': 'application/json',
+	'.yaml': 'application/yaml',
+	'.yml': 'application/yaml',
+	'.toml': 'application/toml',
+	'.xml': 'application/xml',
+	'.html': 'text/html',
+	'.htm': 'text/html',
+	'.css': 'text/css',
+	'.js': 'text/javascript',
+	'.jsx': 'text/javascript',
+	'.mjs': 'text/javascript',
+	'.ts': 'text/typescript',
+	'.tsx': 'text/typescript',
+	'.py': 'text/x-python',
+	'.rb': 'text/x-ruby',
+	'.go': 'text/x-go',
+	'.rs': 'text/x-rust',
+	'.java': 'text/x-java',
+	'.sh': 'text/x-shellscript',
+	'.sql': 'text/x-sql',
+	'.csv': 'text/csv',
+	'.svg': 'image/svg+xml',
+	'.png': 'image/png',
+	'.jpg': 'image/jpeg',
+	'.jpeg': 'image/jpeg',
+	'.gif': 'image/gif',
+	'.webp': 'image/webp',
+	'.pdf': 'application/pdf',
+	'.zip': 'application/zip',
 }
 
 function getMimeType(filePath: string): string {
@@ -369,11 +432,11 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 			},
 		)
 
-		// ── GET /workspaces/:runId/files ──────────────────────────────────────
+		// ── GET /workspaces/:runId/tree ───────────────────────────────────────
 		.get(
-			'/workspaces/:runId/files',
+			'/workspaces/:runId/tree',
 			zValidator('param', RunIdParamSchema),
-			zValidator('query', FilesQuerySchema),
+			zValidator('query', TreeQuerySchema),
 			async (c) => {
 				const workspace = deps.getWorkspace()
 				if (!workspace) {
@@ -406,7 +469,7 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 				}
 
 				const dirEntries = await readdir(targetDir, { withFileTypes: true })
-				const entries: FileEntry[] = []
+				const entries: WorkspaceTreeEntry[] = []
 
 				for (const entry of dirEntries) {
 					// Skip hidden files/directories (.git, .worktrees, etc.)
@@ -431,11 +494,11 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 			},
 		)
 
-		// ── GET /workspaces/:runId/file ──────────────────────────────────────
+		// ── GET /workspaces/:runId/read ───────────────────────────────────────
 		.get(
-			'/workspaces/:runId/file',
+			'/workspaces/:runId/read',
 			zValidator('param', RunIdParamSchema),
-			zValidator('query', FileReadQuerySchema),
+			zValidator('query', WorkspaceReadQuerySchema),
 			async (c) => {
 				const workspace = deps.getWorkspace()
 				if (!workspace) {
@@ -454,7 +517,7 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 				const targetFile = join(wtPath, filePath)
 				const resolved = resolve(targetFile)
 				const resolvedRoot = resolve(wtPath)
-				if (!resolved.startsWith(resolvedRoot + '/') && resolved !== resolvedRoot) {
+				if (!resolved.startsWith(`${resolvedRoot}/`) && resolved !== resolvedRoot) {
 					return c.json({ error: 'path traversal not allowed' }, 400)
 				}
 
@@ -472,7 +535,7 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 
 				const fileStat = await stat(targetFile)
 				if (!fileStat.isFile()) {
-					return c.json({ error: 'path is not a file (use /files for directories)' }, 400)
+					return c.json({ error: 'path is not readable content (use /tree for directories)' }, 400)
 				}
 
 				const mimeType = getMimeType(filePath)
@@ -483,9 +546,9 @@ export function createWorkerApi(deps: WorkerApiDeps, config?: WorkerApiConfig) {
 					headers: {
 						'Content-Type': mimeType,
 						'Content-Length': String(fileStat.size),
-						'X-Vfs-Size': String(fileStat.size),
-						'X-Vfs-Type': 'file',
-						'X-Vfs-Text': isTextFile(filePath) ? 'true' : 'false',
+						'X-Workspace-Inspection-Size': String(fileStat.size),
+						'X-Workspace-Inspection-Type': 'file',
+						'X-Workspace-Inspection-Text': isTextFile(filePath) ? 'true' : 'false',
 					},
 				})
 			},
@@ -499,7 +562,10 @@ export type WorkerApiAppType = ReturnType<typeof createWorkerApi>['app']
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function listWorkspaces(workspace: WorkspaceManager, activeRunIds: ReadonlySet<string>): WorkspaceEntry[] {
+function listWorkspaces(
+	workspace: WorkspaceManager,
+	activeRunIds: ReadonlySet<string>,
+): WorkspaceEntry[] {
 	const repoRoot = workspace.repoRoot
 	const result = git(['worktree', 'list', '--porcelain'], repoRoot)
 	if (!result.ok) return []

@@ -285,6 +285,11 @@ describe('Watch Event Filtering', () => {
 		expect(isActionableEvent(event)).toBe(false)
 	})
 
+	test('retry_scheduled run_event is actionable', () => {
+		const event = { type: 'run_event', runId: 'r-1', eventType: 'retry_scheduled', summary: 'retrying' }
+		expect(isActionableEvent(event)).toBe(true)
+	})
+
 	test('heartbeat is NOT actionable', () => {
 		const event = { type: 'heartbeat' }
 		expect(isActionableEvent(event)).toBe(false)
@@ -409,6 +414,8 @@ function isActionableEvent(event: { type: string; [key: string]: unknown }): boo
 			const status = event.status as string
 			return status === 'failed' || status === 'completed'
 		}
+		case 'run_event':
+			return event.eventType === 'retry_scheduled'
 		default:
 			return false
 	}

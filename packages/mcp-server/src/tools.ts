@@ -8,8 +8,14 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { projectsApi, runs, schedulesApi, searchApi, tasks } from './api-client'
 import { env } from './env'
+import {
+	SENSITIVE_TOOLS,
+	confirmationRequiredResponse,
+	isConfirmed,
+	isSensitive,
+} from './policy'
+import { inferIds, recordInvocation } from './telemetry'
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }> }
 
@@ -49,6 +55,54 @@ async function configRequest(
 	)
 }
 
+async function apiRequest(
+	method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+	path: string,
+	body?: unknown,
+	query?: Record<string, string | undefined>,
+): Promise<ToolResult> {
+	const url = new URL(`${env.AUTOPILOT_API_URL}${path}`)
+	for (const [key, value] of Object.entries(query ?? {})) {
+		if (value) url.searchParams.set(key, value)
+	}
+
+	return ok(
+		await fetch(url, {
+			method,
+			headers: apiHeaders(),
+			...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+		}),
+	)
+}
+
+async function apiContentRequest(
+	path: string,
+	query?: Record<string, string | undefined>,
+): Promise<ToolResult> {
+	const url = new URL(`${env.AUTOPILOT_API_URL}${path}`)
+	for (const [key, value] of Object.entries(query ?? {})) {
+		if (value) url.searchParams.set(key, value)
+	}
+
+	const res = await fetch(url, { headers: apiHeaders() })
+	if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`)
+
+	const contentType = res.headers.get('content-type') ?? 'application/octet-stream'
+	if (contentType.includes('application/json')) {
+		const data = await res.json()
+		return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+	}
+
+	const bytes = Buffer.from(await res.arrayBuffer())
+	const isText =
+		/^text\//.test(contentType) ||
+		/(markdown|yaml|json|xml|javascript|typescript|openapi|swagger)/.test(contentType)
+	const payload = isText
+		? { content_type: contentType, size: bytes.length, text: bytes.toString('utf-8') }
+		: { content_type: contentType, size: bytes.length, base64: bytes.toString('base64') }
+	return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] }
+}
+
 async function knowledgeRequest(
 	method: 'GET' | 'PUT' | 'DELETE',
 	path: string,
@@ -76,16 +130,13 @@ async function handleTaskList(args: {
 	status?: string
 	assigned_to?: string
 	project_id?: string
+	workflow_id?: string
 }) {
-	return ok(
-		await tasks.$get({
-			query: { status: args.status, assigned_to: args.assigned_to, project_id: args.project_id },
-		}),
-	)
+	return apiRequest('GET', '/api/tasks', undefined, args)
 }
 
 async function handleTaskGet(args: { id: string }) {
-	return ok(await tasks[':id'].$get({ param: { id: args.id } }))
+	return apiRequest('GET', `/api/tasks/${encodeURIComponent(args.id)}`)
 }
 
 async function handleTaskCreate(args: {
@@ -100,7 +151,7 @@ async function handleTaskCreate(args: {
 	depends_on?: string[]
 	workflow_id?: string
 }) {
-	return ok(await tasks.$post({ json: args }))
+	return apiRequest('POST', '/api/tasks', args)
 }
 
 async function handleTaskUpdate(args: {
@@ -108,30 +159,46 @@ async function handleTaskUpdate(args: {
 	status?: string
 	title?: string
 	description?: string
+	priority?: string
 	assigned_to?: string
+	project_id?: string
+	workflow_id?: string
+	workflow_step?: string
+	context?: string
+	metadata?: string
 }) {
 	const { id, ...updates } = args
-	return ok(await tasks[':id'].$patch({ param: { id }, json: updates }))
+	return apiRequest('PATCH', `/api/tasks/${encodeURIComponent(id)}`, updates)
 }
 
-async function handleRunList(args: { task_id?: string; status?: string }) {
-	return ok(await runs.$get({ query: { task_id: args.task_id, status: args.status } }))
+async function handleRunList(args: { task_id?: string; status?: string; agent_id?: string }) {
+	return apiRequest('GET', '/api/runs', undefined, args)
 }
 
 async function handleRunGet(args: { id: string }) {
-	return ok(await runs[':id'].$get({ param: { id: args.id } }))
+	return apiRequest('GET', `/api/runs/${encodeURIComponent(args.id)}`)
 }
 
 async function handleProjectList() {
-	return ok(await projectsApi.$get())
+	return apiRequest('GET', '/api/projects')
 }
 
-async function handleProjectRegister(args: { path: string; name?: string }) {
-	return ok(await projectsApi.$post({ json: { path: args.path, name: args.name } }))
+async function handleProjectRegister(args: {
+	path: string
+	name?: string
+	git_remote?: string
+	default_branch?: string
+}) {
+	return apiRequest('POST', '/api/projects', {
+		path: args.path,
+		name: args.name,
+		git_remote: args.git_remote,
+		default_branch: args.default_branch,
+	})
 }
 
 async function handleProjectUnregister(args: { id: string }) {
-	return ok(await projectsApi[':id'].$delete({ param: { id: args.id } }))
+	return apiRequest('DELETE', `/api/projects/${encodeURIComponent(args.id)}`)
 }
 
 async function handleConfigGet(args: { type: string; id?: string; project_id?: string }) {
@@ -163,6 +230,24 @@ async function handleConfigDelete(args: { type: string; id: string; project_id?:
 	return configRequest('DELETE', `${args.type}/${args.id}`, undefined, {
 		project_id: args.project_id,
 	})
+}
+
+async function handleConfigDefaultSkills() {
+	return configRequest('GET', 'skills/_defaults')
+}
+
+async function handleConfigSeedDefaultSkills() {
+	return configRequest('POST', 'skills/_seed-defaults')
+}
+
+async function handleConfigReload() {
+	const url = new URL(`${env.AUTOPILOT_API_URL}/api/config/reload`)
+	return ok(
+		await fetch(url, {
+			method: 'POST',
+			headers: apiHeaders(),
+		}),
+	)
 }
 
 function knowledgeScopeQuery(args: {
@@ -245,27 +330,98 @@ async function handleKnowledgeSearch(args: {
 }
 
 async function handleTaskApprove(args: { id: string }) {
-	return ok(await tasks[':id'].approve.$post({ param: { id: args.id } }))
+	return apiRequest('POST', `/api/tasks/${encodeURIComponent(args.id)}/approve`)
 }
 
 async function handleTaskReject(args: { id: string; message: string }) {
-	return ok(
-		await tasks[':id'].reject.$post({ param: { id: args.id }, json: { message: args.message } }),
-	)
+	return apiRequest('POST', `/api/tasks/${encodeURIComponent(args.id)}/reject`, {
+		message: args.message,
+	})
 }
 
 async function handleTaskReply(args: { id: string; message: string }) {
-	return ok(
-		await tasks[':id'].reply.$post({ param: { id: args.id }, json: { message: args.message } }),
-	)
+	return apiRequest('POST', `/api/tasks/${encodeURIComponent(args.id)}/reply`, {
+		message: args.message,
+	})
 }
 
 async function handleTaskActivity(args: { id: string }) {
-	return ok(await tasks[':id'].activity.$get({ param: { id: args.id } }))
+	return apiRequest('GET', `/api/tasks/${encodeURIComponent(args.id)}/activity`)
+}
+
+async function handleTaskRetry(args: { id: string }) {
+	return apiRequest('POST', `/api/tasks/${encodeURIComponent(args.id)}/retry`)
+}
+
+async function handleTaskCancel(args: { id: string; reason?: string }) {
+	return apiRequest('POST', `/api/tasks/${encodeURIComponent(args.id)}/cancel`, {
+		reason: args.reason,
+	})
+}
+
+async function handleTaskDelete(args: { id: string; force?: boolean }) {
+	return apiRequest('DELETE', `/api/tasks/${encodeURIComponent(args.id)}`, undefined, {
+		force: args.force ? 'true' : undefined,
+	})
+}
+
+async function handleTaskRelations(args: { relation_type?: string }) {
+	return apiRequest('GET', '/api/tasks/relations', undefined, {
+		relation_type: args.relation_type,
+	})
 }
 
 async function handleRunArtifacts(args: { run_id: string }) {
-	return ok(await runs[':id'].artifacts.$get({ param: { id: args.run_id } }))
+	return apiRequest('GET', `/api/runs/${encodeURIComponent(args.run_id)}/artifacts`)
+}
+
+async function handleRunEvents(args: { id: string }) {
+	return apiRequest('GET', `/api/runs/${encodeURIComponent(args.id)}/events`)
+}
+
+async function handleRunArtifactContent(args: { run_id: string; artifact_id: string }) {
+	return apiContentRequest(
+		`/api/runs/${encodeURIComponent(args.run_id)}/artifacts/${encodeURIComponent(
+			args.artifact_id,
+		)}/content`,
+	)
+}
+
+async function handleRunArtifactCreate(args: {
+	run_id: string
+	title: string
+	content: string
+	kind?: string
+	ref_kind?: 'file' | 'url' | 'inline' | 'base64'
+	mime_type?: string
+	metadata?: string
+}) {
+	const metadata = args.metadata ? JSON.parse(args.metadata) : undefined
+	return apiRequest('POST', `/api/runs/${encodeURIComponent(args.run_id)}/artifacts`, {
+		kind: args.kind ?? 'other',
+		title: args.title,
+		ref_kind: args.ref_kind ?? 'inline',
+		ref_value: args.content,
+		mime_type: args.mime_type,
+		metadata,
+	})
+}
+
+async function handleRunCancel(args: { id: string; reason?: string }) {
+	return apiRequest('POST', `/api/runs/${encodeURIComponent(args.id)}/cancel`, {
+		reason: args.reason,
+	})
+}
+
+async function handleRunContinue(args: {
+	id: string
+	message: string
+	initiated_by?: string
+}) {
+	return apiRequest('POST', `/api/runs/${encodeURIComponent(args.id)}/continue`, {
+		message: args.message,
+		initiated_by: args.initiated_by,
+	})
 }
 
 async function handleTaskSpawnChildren(args: {
@@ -284,51 +440,61 @@ async function handleTaskSpawnChildren(args: {
 	relation_type?: string
 	origin_run_id?: string
 }) {
-	return ok(
-		await tasks[':id']['spawn-children'].$post({
-			param: { id: args.parent_task_id },
-			json: {
-				children: args.children,
-				relation_type: args.relation_type,
-				origin_run_id: args.origin_run_id,
-			},
-		}),
-	)
+	return apiRequest('POST', `/api/tasks/${encodeURIComponent(args.parent_task_id)}/spawn-children`, {
+		children: args.children,
+		relation_type: args.relation_type,
+		origin_run_id: args.origin_run_id,
+	})
 }
 
 async function handleTaskDepend(args: { task_id: string; depends_on: string[] }) {
-	return ok(
-		await tasks[':id'].dependencies.$post({
-			param: { id: args.task_id },
-			json: { depends_on: args.depends_on },
-		}),
-	)
+	return apiRequest('POST', `/api/tasks/${encodeURIComponent(args.task_id)}/dependencies`, {
+		depends_on: args.depends_on,
+	})
 }
 
 async function handleTaskDependencies(args: { id: string }) {
-	return ok(await tasks[':id'].dependencies.$get({ param: { id: args.id } }))
+	return apiRequest('GET', `/api/tasks/${encodeURIComponent(args.id)}/dependencies`)
 }
 
 async function handleTaskChildren(args: { id: string; relation_type?: string }) {
-	return ok(
-		await tasks[':id'].children.$get({
-			param: { id: args.id },
-			query: { relation_type: args.relation_type },
-		}),
-	)
+	return apiRequest('GET', `/api/tasks/${encodeURIComponent(args.id)}/children`, undefined, {
+		relation_type: args.relation_type,
+	})
 }
 
 async function handleTaskParents(args: { id: string; relation_type?: string }) {
-	return ok(
-		await tasks[':id'].parents.$get({
-			param: { id: args.id },
-			query: { relation_type: args.relation_type },
-		}),
-	)
+	return apiRequest('GET', `/api/tasks/${encodeURIComponent(args.id)}/parents`, undefined, {
+		relation_type: args.relation_type,
+	})
+}
+
+async function handleTaskDependents(args: { id: string }) {
+	return apiRequest('GET', `/api/tasks/${encodeURIComponent(args.id)}/dependents`)
+}
+
+async function handleTaskRollup(args: { id: string; relation_type?: string }) {
+	return apiRequest('GET', `/api/tasks/${encodeURIComponent(args.id)}/rollup`, undefined, {
+		relation_type: args.relation_type,
+	})
 }
 
 async function handleScheduleList() {
-	return ok(await schedulesApi.$get())
+	return apiRequest('GET', '/api/schedules')
+}
+
+async function handleScheduleGet(args: { id: string }) {
+	return apiRequest('GET', `/api/schedules/${encodeURIComponent(args.id)}`)
+}
+
+async function handleScheduleHistory(args: { id: string; limit?: number }) {
+	return apiRequest('GET', `/api/schedules/${encodeURIComponent(args.id)}/history`, undefined, {
+		limit: args.limit === undefined ? undefined : String(args.limit),
+	})
+}
+
+async function handleScheduleTrigger(args: { id: string }) {
+	return apiRequest('POST', `/api/schedules/${encodeURIComponent(args.id)}/trigger`)
 }
 
 async function handleScheduleCreate(args: {
@@ -343,7 +509,7 @@ async function handleScheduleCreate(args: {
 	timezone?: string
 	enabled?: boolean
 }) {
-	return ok(await schedulesApi.$post({ json: args }))
+	return apiRequest('POST', '/api/schedules', args)
 }
 
 async function handleScheduleUpdate(args: {
@@ -360,15 +526,26 @@ async function handleScheduleUpdate(args: {
 	enabled?: boolean
 }) {
 	const { id, ...updates } = args
-	return ok(await schedulesApi[':id'].$patch({ param: { id }, json: updates }))
+	return apiRequest('PATCH', `/api/schedules/${encodeURIComponent(id)}`, updates)
 }
 
 async function handleScheduleDelete(args: { id: string }) {
-	return ok(await schedulesApi[':id'].$delete({ param: { id: args.id } }))
+	return apiRequest('DELETE', `/api/schedules/${encodeURIComponent(args.id)}`)
 }
 
 async function handleSearch(args: { query: string; scope?: string }) {
-	return ok(await searchApi.$get({ query: { q: args.query, scope: args.scope } }))
+	return apiRequest('GET', '/api/search', undefined, { q: args.query, scope: args.scope })
+}
+
+async function handleWorkerList() {
+	return apiRequest('GET', '/api/workers')
+}
+
+async function handleWorkerJoinTokenCreate(args: { description?: string; ttl_seconds?: number }) {
+	return apiRequest('POST', '/api/enrollment/tokens', {
+		description: args.description,
+		ttl_seconds: args.ttl_seconds,
+	})
 }
 
 const ARTIFACT_EXT: Record<string, string> = {
@@ -447,19 +624,102 @@ async function handleArtifactCreate(args: {
 
 // ─── Tool registration ─────────────────────────────────────────────
 
+const TELEMETRY_SOURCE = 'mcp-server'
+
+const CONFIRMATION_SCHEMA: Record<string, z.ZodTypeAny> = {
+	confirm: z
+		.boolean()
+		.optional()
+		.describe('Set to true to acknowledge this sensitive operation and proceed with execution.'),
+	confirmation_token: z
+		.string()
+		.optional()
+		.describe('Alternative to `confirm`: a non-empty token issued by the operator UI.'),
+}
+
+function withGuard(
+	name: string,
+	handler: (args: Record<string, unknown>) => Promise<ToolResult>,
+): (args: Record<string, unknown>) => Promise<ToolResult> {
+	return async (rawArgs) => {
+		const args = (rawArgs ?? {}) as Record<string, unknown>
+		if (isSensitive(name, args) && !isConfirmed(args)) {
+			console.info('[mcp-policy] sensitive tool requires confirmation', { name })
+			return confirmationRequiredResponse(name, args)
+		}
+
+		const { confirm: _confirm, confirmation_token: _confirmationToken, ...handlerArgs } = args
+		void _confirm
+		void _confirmationToken
+
+		const ids = inferIds(name, args)
+		const startedAt = Date.now()
+		try {
+			const result = await handler(handlerArgs)
+			const durationMs = Date.now() - startedAt
+			await recordInvocation(
+				{
+					name,
+					args: handlerArgs,
+					startedAt,
+					runId: ids.runId,
+					taskId: ids.taskId,
+					projectId: ids.projectId,
+					source: TELEMETRY_SOURCE,
+				},
+				{ success: true, durationMs },
+			)
+			return result
+		} catch (err) {
+			const durationMs = Date.now() - startedAt
+			const errorObj = err instanceof Error ? err : new Error(String(err))
+			await recordInvocation(
+				{
+					name,
+					args: handlerArgs,
+					startedAt,
+					runId: ids.runId,
+					taskId: ids.taskId,
+					projectId: ids.projectId,
+					source: TELEMETRY_SOURCE,
+				},
+				{
+					success: false,
+					durationMs,
+					error: { class: errorObj.name, message: errorObj.message },
+				},
+			)
+			throw err
+		}
+	}
+}
+
 export function registerTools(server: McpServer): void {
-	server.tool(
+	const tool = (
+		name: string,
+		description: string,
+		schema: Record<string, z.ZodTypeAny>,
+		handler: (args: never) => Promise<ToolResult>,
+	): void => {
+		const isSensitiveByName = SENSITIVE_TOOLS.has(name) || name === 'config_set'
+		const finalSchema = isSensitiveByName ? { ...schema, ...CONFIRMATION_SCHEMA } : schema
+		const guarded = withGuard(name, handler as (args: Record<string, unknown>) => Promise<ToolResult>)
+		;(server.tool as unknown as Function)(name, description, finalSchema, guarded)
+	}
+
+	tool(
 		'task_list',
 		'List tasks with optional filters',
 		{
 			status: z.string().optional().describe('Filter by status (backlog, in_progress, done, etc.)'),
 			assigned_to: z.string().optional().describe('Filter by assigned agent ID'),
 			project_id: z.string().optional().describe('Filter by project ID'),
+			workflow_id: z.string().optional().describe('Filter by workflow ID'),
 		},
 		handleTaskList,
 	)
 
-	server.tool(
+	tool(
 		'task_get',
 		'Get a single task by ID',
 		{
@@ -468,7 +728,7 @@ export function registerTools(server: McpServer): void {
 		handleTaskGet,
 	)
 
-	server.tool(
+	tool(
 		'task_create',
 		'Create a new task',
 		{
@@ -488,13 +748,13 @@ export function registerTools(server: McpServer): void {
 				.string()
 				.optional()
 				.describe(
-					'Workflow ID (e.g. "direct" for one-shot, "dogfood" for dev). Falls back to company default if omitted.',
+						'Workflow ID (e.g. "direct" for one-shot, "bounded-dev" for reviewed work). Falls back to company default if omitted.',
 				),
 		},
 		handleTaskCreate,
 	)
 
-	server.tool(
+	tool(
 		'task_update',
 		'Update a task',
 		{
@@ -502,22 +762,58 @@ export function registerTools(server: McpServer): void {
 			status: z.string().optional().describe('New status'),
 			title: z.string().optional().describe('New title'),
 			description: z.string().optional().describe('New description'),
+			priority: z.string().optional().describe('New priority'),
 			assigned_to: z.string().optional().describe('New assignee'),
+			project_id: z.string().optional().describe('New project scope'),
+			workflow_id: z.string().optional().describe('New workflow ID'),
+			workflow_step: z.string().optional().describe('New workflow step ID'),
+			context: z.string().optional().describe('Task context JSON string'),
+			metadata: z.string().optional().describe('Task metadata JSON string'),
 		},
 		handleTaskUpdate,
 	)
 
-	server.tool(
+	tool(
+		'task_retry',
+		'Retry a failed task through the workflow engine',
+		{
+			id: z.string().describe('Task ID'),
+		},
+		handleTaskRetry,
+	)
+
+	tool(
+		'task_cancel',
+		'Cancel an active task and release/settle related workflow state',
+		{
+			id: z.string().describe('Task ID'),
+			reason: z.string().optional().describe('Optional cancellation reason'),
+		},
+		handleTaskCancel,
+	)
+
+	tool(
+		'task_delete',
+		'Delete a task with cascade. Active runs block deletion unless force is true.',
+		{
+			id: z.string().describe('Task ID'),
+			force: z.boolean().optional().describe('Delete even if active runs exist'),
+		},
+		handleTaskDelete,
+	)
+
+	tool(
 		'run_list',
 		'List runs with optional filters',
 		{
 			task_id: z.string().optional().describe('Filter by task ID'),
 			status: z.string().optional().describe('Filter by status'),
+			agent_id: z.string().optional().describe('Filter by agent ID'),
 		},
 		handleRunList,
 	)
 
-	server.tool(
+	tool(
 		'run_get',
 		'Get a single run by ID',
 		{
@@ -526,19 +822,51 @@ export function registerTools(server: McpServer): void {
 		handleRunGet,
 	)
 
-	server.tool('project_list', 'List registered projects', {}, handleProjectList)
+	tool(
+		'run_events',
+		'List progress events for a run',
+		{
+			id: z.string().describe('Run ID'),
+		},
+		handleRunEvents,
+	)
 
-	server.tool(
+	tool(
+		'run_cancel',
+		'Cancel a pending, claimed, or running run and propagate workflow failure handling',
+		{
+			id: z.string().describe('Run ID'),
+			reason: z.string().optional().describe('Optional cancellation reason'),
+		},
+		handleRunCancel,
+	)
+
+	tool(
+		'run_continue',
+		'Continue a completed or failed resumable run with a follow-up message',
+		{
+			id: z.string().describe('Original run ID'),
+			message: z.string().describe('Continuation message'),
+			initiated_by: z.string().optional().describe('Actor ID override'),
+		},
+		handleRunContinue,
+	)
+
+	tool('project_list', 'List registered projects', {}, handleProjectList)
+
+	tool(
 		'project_register',
 		'Register a git project path with the orchestrator',
 		{
 			path: z.string().describe('Absolute project path'),
 			name: z.string().optional().describe('Optional display name override'),
+			git_remote: z.string().optional().describe('Git remote URL for provider compare/PR links'),
+			default_branch: z.string().optional().describe('Default branch used for provider diff links'),
 		},
 		handleProjectRegister,
 	)
 
-	server.tool(
+	tool(
 		'project_unregister',
 		'Unregister a project by ID',
 		{
@@ -547,7 +875,7 @@ export function registerTools(server: McpServer): void {
 		handleProjectUnregister,
 	)
 
-	server.tool(
+	tool(
 		'config_get',
 		'Get config records for a type, or one specific record by id',
 		{
@@ -562,7 +890,7 @@ export function registerTools(server: McpServer): void {
 		handleConfigGet,
 	)
 
-	server.tool(
+	tool(
 		'config_list',
 		'List config records for a type',
 		{
@@ -572,7 +900,7 @@ export function registerTools(server: McpServer): void {
 		handleConfigList,
 	)
 
-	server.tool(
+	tool(
 		'config_set',
 		'Create or update a config record',
 		{
@@ -588,7 +916,7 @@ export function registerTools(server: McpServer): void {
 		handleConfigSet,
 	)
 
-	server.tool(
+	tool(
 		'config_delete',
 		'Delete a config record',
 		{
@@ -599,7 +927,28 @@ export function registerTools(server: McpServer): void {
 		handleConfigDelete,
 	)
 
-	server.tool(
+	tool(
+		'config_default_skills',
+		'List the default built-in/plugin-backed skill catalog',
+		{},
+		handleConfigDefaultSkills,
+	)
+
+	tool(
+		'config_seed_default_skills',
+		'Idempotently seed missing default skills into DB config. Requires owner/admin.',
+		{},
+		handleConfigSeedDefaultSkills,
+	)
+
+	tool(
+		'config_reload',
+		'Reload DB-backed config into the live orchestrator runtime after config_set or config_delete',
+		{},
+		handleConfigReload,
+	)
+
+	tool(
 		'knowledge_list',
 		'List knowledge documents visible to a company, project, or task scope',
 		{
@@ -612,7 +961,7 @@ export function registerTools(server: McpServer): void {
 		handleKnowledgeList,
 	)
 
-	server.tool(
+	tool(
 		'knowledge_read',
 		'Read the most specific visible knowledge document at a virtual path',
 		{
@@ -625,7 +974,7 @@ export function registerTools(server: McpServer): void {
 		handleKnowledgeRead,
 	)
 
-	server.tool(
+	tool(
 		'knowledge_write',
 		'Create or update a knowledge document',
 		{
@@ -641,7 +990,7 @@ export function registerTools(server: McpServer): void {
 		handleKnowledgeWrite,
 	)
 
-	server.tool(
+	tool(
 		'knowledge_delete',
 		'Delete a knowledge document from a specific scope',
 		{
@@ -654,7 +1003,7 @@ export function registerTools(server: McpServer): void {
 		handleKnowledgeDelete,
 	)
 
-	server.tool(
+	tool(
 		'knowledge_search',
 		'Search visible knowledge documents',
 		{
@@ -667,7 +1016,7 @@ export function registerTools(server: McpServer): void {
 		handleKnowledgeSearch,
 	)
 
-	server.tool(
+	tool(
 		'task_approve',
 		'Approve a task waiting on a human_approval workflow step',
 		{
@@ -676,7 +1025,7 @@ export function registerTools(server: McpServer): void {
 		handleTaskApprove,
 	)
 
-	server.tool(
+	tool(
 		'task_reject',
 		'Reject a task waiting on a human_approval workflow step',
 		{
@@ -686,7 +1035,7 @@ export function registerTools(server: McpServer): void {
 		handleTaskReject,
 	)
 
-	server.tool(
+	tool(
 		'task_reply',
 		'Reply to a task waiting on a human_approval step and advance the workflow. The reply message becomes instructions for the next agent step.',
 		{
@@ -696,7 +1045,7 @@ export function registerTools(server: McpServer): void {
 		handleTaskReply,
 	)
 
-	server.tool(
+	tool(
 		'task_activity',
 		'Get approval/rejection/reply history for a task',
 		{
@@ -705,7 +1054,7 @@ export function registerTools(server: McpServer): void {
 		handleTaskActivity,
 	)
 
-	server.tool(
+	tool(
 		'run_artifacts',
 		'List artifacts produced by a run. Artifacts are references (file paths, URLs, or short inline text) — not large blobs.',
 		{
@@ -714,7 +1063,35 @@ export function registerTools(server: McpServer): void {
 		handleRunArtifacts,
 	)
 
-	server.tool(
+	tool(
+		'run_artifact_content',
+		'Read resolved artifact content. Text content is returned as text; binary content is returned as base64.',
+		{
+			run_id: z.string().describe('Run ID'),
+			artifact_id: z.string().describe('Artifact ID'),
+		},
+		handleRunArtifactContent,
+	)
+
+	tool(
+		'run_artifact_create',
+		'Create an artifact on a specific active run. Use when AUTOPILOT_RUN_ID is unavailable or when operating on another run explicitly.',
+		{
+			run_id: z.string().describe('Run ID'),
+			title: z.string().describe('Artifact title or filename'),
+			content: z.string().describe('Artifact content, URL, file path, or base64 depending on ref_kind'),
+			kind: z.string().optional().describe('Artifact kind, defaults to other'),
+			ref_kind: z
+				.enum(['file', 'url', 'inline', 'base64'])
+				.optional()
+				.describe('Reference kind, defaults to inline'),
+			mime_type: z.string().optional().describe('Optional MIME type'),
+			metadata: z.string().optional().describe('Optional metadata JSON object'),
+		},
+		handleRunArtifactCreate,
+	)
+
+	tool(
 		'task_spawn_children',
 		'Create child tasks for a parent task (idempotent). Use dedupe_key to avoid duplicates on rerun.',
 		{
@@ -740,7 +1117,7 @@ export function registerTools(server: McpServer): void {
 		handleTaskSpawnChildren,
 	)
 
-	server.tool(
+	tool(
 		'task_depend',
 		'Add dependencies to a task (task will not start until all dependencies are done)',
 		{
@@ -750,7 +1127,7 @@ export function registerTools(server: McpServer): void {
 		handleTaskDepend,
 	)
 
-	server.tool(
+	tool(
 		'task_dependencies',
 		'List tasks that a task depends on',
 		{
@@ -759,7 +1136,16 @@ export function registerTools(server: McpServer): void {
 		handleTaskDependencies,
 	)
 
-	server.tool(
+	tool(
+		'task_dependents',
+		'List tasks that depend on this task',
+		{
+			id: z.string().describe('Task ID'),
+		},
+		handleTaskDependents,
+	)
+
+	tool(
 		'task_children',
 		'List child tasks of a parent task',
 		{
@@ -772,7 +1158,7 @@ export function registerTools(server: McpServer): void {
 		handleTaskChildren,
 	)
 
-	server.tool(
+	tool(
 		'task_parents',
 		'List parent tasks of a child task',
 		{
@@ -785,11 +1171,58 @@ export function registerTools(server: McpServer): void {
 		handleTaskParents,
 	)
 
+	tool(
+		'task_relations',
+		'Bulk list task graph relations, optionally filtered by relation type',
+		{
+			relation_type: z.string().optional().describe('Relation type filter'),
+		},
+		handleTaskRelations,
+	)
+
+	tool(
+		'task_rollup',
+		'Get derived child status rollup for a task',
+		{
+			id: z.string().describe('Task ID'),
+			relation_type: z.string().optional().describe('Relation type filter'),
+		},
+		handleTaskRollup,
+	)
+
 	// ─── Schedule tools ───────────────────────────────────────────────
 
-	server.tool('schedule_list', 'List all schedules', {}, handleScheduleList)
+	tool('schedule_list', 'List all schedules', {}, handleScheduleList)
 
-	server.tool(
+	tool(
+		'schedule_get',
+		'Get one schedule by ID',
+		{
+			id: z.string().describe('Schedule ID'),
+		},
+		handleScheduleGet,
+	)
+
+	tool(
+		'schedule_history',
+		'List recent executions for a schedule',
+		{
+			id: z.string().describe('Schedule ID'),
+			limit: z.number().optional().describe('Maximum execution rows to return'),
+		},
+		handleScheduleHistory,
+	)
+
+	tool(
+		'schedule_trigger',
+		'Manually trigger a schedule now',
+		{
+			id: z.string().describe('Schedule ID'),
+		},
+		handleScheduleTrigger,
+	)
+
+	tool(
 		'schedule_create',
 		'Create a new schedule with a cron expression',
 		{
@@ -816,7 +1249,7 @@ export function registerTools(server: McpServer): void {
 		handleScheduleCreate,
 	)
 
-	server.tool(
+	tool(
 		'schedule_update',
 		'Update a schedule',
 		{
@@ -838,7 +1271,7 @@ export function registerTools(server: McpServer): void {
 		handleScheduleUpdate,
 	)
 
-	server.tool(
+	tool(
 		'schedule_delete',
 		'Delete a schedule',
 		{
@@ -849,7 +1282,7 @@ export function registerTools(server: McpServer): void {
 
 	// ─── Search tool ──────────────────────────────────────────────────
 
-	server.tool(
+	tool(
 		'search',
 		'Full-text search across tasks, runs, context files, schedules, and knowledge',
 		{
@@ -862,7 +1295,21 @@ export function registerTools(server: McpServer): void {
 		handleSearch,
 	)
 
-	server.tool(
+	// ─── Worker / machine setup tools ─────────────────────────────────
+
+	tool('worker_list', 'List registered workers/machines', {}, handleWorkerList)
+
+	tool(
+		'worker_join_token_create',
+		'Create a worker join token for setting up a new machine. Requires owner/admin.',
+		{
+			description: z.string().optional().describe('Human-readable token description'),
+			ttl_seconds: z.number().optional().describe('Token TTL in seconds'),
+		},
+		handleWorkerJoinTokenCreate,
+	)
+
+	tool(
 		'artifact_create',
 		'Create a previewable artifact (HTML page, code snippet, document, image). For HTML artifacts, the content is served and a preview URL is returned. Produce self-contained HTML with all dependencies via CDN.',
 		{

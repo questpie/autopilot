@@ -238,10 +238,12 @@ export class TaskProgressBridge {
 		eventType: string
 		summary: string
 	}): Promise<void> {
+		const isRetryNotice = event.eventType === 'retry_scheduled'
 		if (
 			event.eventType !== 'started' &&
 			event.eventType !== 'progress' &&
-			event.eventType !== 'tool_use'
+			event.eventType !== 'tool_use' &&
+			!isRetryNotice
 		)
 			return
 
@@ -258,7 +260,7 @@ export class TaskProgressBridge {
 
 		// Throttle check
 		const lastSent = this.lastProgressSent.get(taskId) ?? 0
-		if (Date.now() - lastSent < TaskProgressBridge.PROGRESS_THROTTLE_MS) return
+		if (!isRetryNotice && Date.now() - lastSent < TaskProgressBridge.PROGRESS_THROTTLE_MS) return
 
 		const status = computeNormalizedStatus(task)
 		const baseUrl = this.config.orchestratorUrl

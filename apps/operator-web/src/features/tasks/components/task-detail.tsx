@@ -43,7 +43,7 @@ import {
 	Timer,
 	X,
 } from '@phosphor-icons/react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 import { buildRunsTimeline, buildTimeline } from '../lib/build-timeline'
 import { WorkflowTimeline } from './workflow-timeline'
@@ -395,12 +395,12 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 			</h1>
 
 			{detail.description && (
-        <Markdown
-          content={detail.description}
-          className="mt-4"
-          contentClassName="[&_.ProseMirror]:px-0 [&_.ProseMirror]:py-0 [&_.ProseMirror]:text-[13px] [&_.ProseMirror]:leading-6"
-        />
-      )}
+				<Markdown
+					content={detail.description}
+					className="mt-4"
+					contentClassName="[&_.ProseMirror]:px-0 [&_.ProseMirror]:py-0 [&_.ProseMirror]:text-[13px] [&_.ProseMirror]:leading-6"
+				/>
+			)}
 
 			{timelineEntries.length > 0 && (
 				<>
@@ -409,15 +409,7 @@ export function TaskDetail({ detail, isLoading, onBack, onSelectTask }: TaskDeta
 						<p className="text-sm font-medium text-muted-foreground">
 							{workflow ? 'Workflow timeline' : 'Run timeline'}
 						</p>
-						{workflow && (
-							<Link
-								to="/files"
-								search={{ path: `.autopilot/workflows/${detail.workflow_id}.yaml`, view: 'file' }}
-								className="text-sm text-primary hover:underline"
-							>
-								{workflow.name}
-							</Link>
-						)}
+						{workflow ? <span className="text-sm text-foreground">{workflow.name}</span> : null}
 					</div>
 					<WorkflowTimeline
 						entries={timelineEntries}

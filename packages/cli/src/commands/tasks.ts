@@ -362,6 +362,7 @@ tasksCmd.addCommand(
 
 				const res = await client.api.tasks[':id'].$delete({
 					param: { id },
+					query: {},
 				})
 
 				if (!res.ok) {

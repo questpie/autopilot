@@ -8,7 +8,6 @@ export type CompanySettings = z.infer<typeof schemas.CompanySettingsSchema>
 
 // Agents
 export type Agent = z.infer<typeof schemas.AgentSchema>
-export type FsScope = z.infer<typeof schemas.FsScopeSchema>
 export type AgentTrigger = z.infer<typeof schemas.AgentTriggerSchema>
 
 // Workflows
@@ -50,6 +49,7 @@ export type StandaloneScript = z.infer<typeof schemas.StandaloneScriptSchema>
 export type ScriptInput = z.infer<typeof schemas.ScriptInputSchema>
 export type ScriptOutput = z.infer<typeof schemas.ScriptOutputSchema>
 export type ScriptSandbox = z.infer<typeof schemas.ScriptSandboxSchema>
+export type WorkspaceScope = z.infer<typeof schemas.WorkspaceScopeSchema>
 
 // Worker Events
 export type WorkerEventType = z.infer<typeof schemas.WorkerEventTypeSchema>

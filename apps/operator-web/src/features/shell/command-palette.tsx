@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ChatCircle, CheckSquare, Folder, GearSix, House, CircleNotch } from '@phosphor-icons/react'
+import { BookOpen, ChatCircle, CheckSquare, GearSix, House, CircleNotch } from '@phosphor-icons/react'
 import {
   Command,
   CommandDialog,
@@ -24,13 +24,13 @@ const NAV_ITEMS = [
   { label: 'Home', to: '/', icon: House },
   { label: 'Chat', to: '/chat', icon: ChatCircle },
   { label: 'Tasks', to: '/tasks', icon: CheckSquare },
-  { label: 'Files', to: '/files', icon: Folder },
+  { label: 'Knowledge', to: '/knowledge', icon: BookOpen },
   { label: 'Settings', to: '/settings', icon: GearSix },
 ] as const
 
 function viewToScope(view: ReturnType<typeof useActiveView>): SearchScope | undefined {
   if (view === 'tasks') return 'tasks'
-  if (view === 'files') return 'context'
+  if (view === 'knowledge') return 'context'
   return undefined
 }
 

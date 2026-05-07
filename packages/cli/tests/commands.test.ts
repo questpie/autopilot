@@ -16,28 +16,28 @@ describe('command registration', () => {
 		expect(commandNames).toContain('start')
 	})
 
-	it('registers tasks command', () => {
-		expect(commandNames).toContain('tasks')
+	it('registers task command', () => {
+		expect(commandNames).toContain('task')
 	})
 
-	it('registers runs command', () => {
-		expect(commandNames).toContain('runs')
+	it('registers run command', () => {
+		expect(commandNames).toContain('run')
 	})
 
 	it('registers auth command', () => {
 		expect(commandNames).toContain('auth')
 	})
 
-	it('registers workflows command', () => {
-		expect(commandNames).toContain('workflows')
+	it('registers workflow command', () => {
+		expect(commandNames).toContain('workflow')
 	})
 
 	it('registers bootstrap command', () => {
 		expect(commandNames).toContain('bootstrap')
 	})
 
-	it('registers secrets command', () => {
-		expect(commandNames).toContain('secrets')
+	it('registers secret command', () => {
+		expect(commandNames).toContain('secret')
 	})
 
 	it('registers version command', () => {
@@ -48,8 +48,12 @@ describe('command registration', () => {
 		expect(commandNames).toContain('update')
 	})
 
-	it('has exactly 16 top-level commands', () => {
-		expect(program.commands.length).toBe(16)
+	it('registers agent command', () => {
+		expect(commandNames).toContain('agent')
+	})
+
+	it('has exactly 28 top-level commands', () => {
+		expect(program.commands.length).toBe(28)
 	})
 
 	it('registers inbox command', () => {
@@ -71,10 +75,10 @@ describe('command registration', () => {
 		expect(subNames).toContain('token')
 	})
 
-	it('has tasks subcommands: show, create, update, children, parents, rollup', () => {
-		const tasksCmd = program.commands.find((c) => c.name() === 'tasks')
-		expect(tasksCmd).toBeDefined()
-		const subNames = tasksCmd!.commands.map((c) => c.name())
+	it('has task subcommands: show, create, update, children, parents, rollup', () => {
+		const taskCmd = program.commands.find((c) => c.name() === 'task')
+		expect(taskCmd).toBeDefined()
+		const subNames = taskCmd!.commands.map((c) => c.name())
 		expect(subNames).toContain('show')
 		expect(subNames).toContain('create')
 		expect(subNames).toContain('update')
@@ -83,10 +87,10 @@ describe('command registration', () => {
 		expect(subNames).toContain('rollup')
 	})
 
-	it('has runs subcommands: show, continue, cancel', () => {
-		const runsCmd = program.commands.find((c) => c.name() === 'runs')
-		expect(runsCmd).toBeDefined()
-		const subNames = runsCmd!.commands.map((c) => c.name())
+	it('has run subcommands: show, continue, cancel', () => {
+		const runCmd = program.commands.find((c) => c.name() === 'run')
+		expect(runCmd).toBeDefined()
+		const subNames = runCmd!.commands.map((c) => c.name())
 		expect(subNames).toContain('show')
 		expect(subNames).toContain('continue')
 		expect(subNames).toContain('cancel')
@@ -100,5 +104,14 @@ describe('command registration', () => {
 		expect(subNames).toContain('setup')
 		expect(subNames).toContain('status')
 		expect(subNames).toContain('logout')
+	})
+
+	it('has agent subcommands: skill, mcp, guide', () => {
+		const agentCmd = program.commands.find((c) => c.name() === 'agent')
+		expect(agentCmd).toBeDefined()
+		const subNames = agentCmd!.commands.map((c) => c.name())
+		expect(subNames).toContain('skill')
+		expect(subNames).toContain('mcp')
+		expect(subNames).toContain('guide')
 	})
 })

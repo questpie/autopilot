@@ -69,9 +69,9 @@ describe('start (convenience) options', () => {
 	})
 })
 
-describe('tasks create command options', () => {
-	const tasksCmd = program.commands.find((c) => c.name() === 'tasks')
-	const createCmd = tasksCmd?.commands.find((c) => c.name() === 'create')
+describe('task create command options', () => {
+	const taskCmd = program.commands.find((c) => c.name() === 'task')
+	const createCmd = taskCmd?.commands.find((c) => c.name() === 'create')
 
 	it('has --title required option', () => {
 		expect(createCmd).toBeDefined()
@@ -86,19 +86,19 @@ describe('tasks create command options', () => {
 	})
 })
 
-describe('runs command options', () => {
-	const runsCmd = program.commands.find((c) => c.name() === 'runs')
+describe('run command options', () => {
+	const runCmd = program.commands.find((c) => c.name() === 'run')
 
 	it('has --status option', () => {
-		expect(runsCmd).toBeDefined()
-		const opts = runsCmd!.options.map((o) => o.long)
+		expect(runCmd).toBeDefined()
+		const opts = runCmd!.options.map((o) => o.long)
 		expect(opts).toContain('--status')
 	})
 })
 
-describe('runs continue command options', () => {
-	const runsCmd = program.commands.find((c) => c.name() === 'runs')
-	const continueCmd = runsCmd?.commands.find((c) => c.name() === 'continue')
+describe('run continue command options', () => {
+	const runCmd = program.commands.find((c) => c.name() === 'run')
+	const continueCmd = runCmd?.commands.find((c) => c.name() === 'continue')
 
 	it('has --message required option', () => {
 		expect(continueCmd).toBeDefined()

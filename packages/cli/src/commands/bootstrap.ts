@@ -10,13 +10,13 @@
  *   cli           CLI-only operator flow.
  */
 
-import { Command } from 'commander'
-import { existsSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
-import { stringify as stringifyYaml } from 'yaml'
 import { PATHS } from '@questpie/autopilot-spec'
+import { Command } from 'commander'
+import { stringify as stringifyYaml } from 'yaml'
 import { program } from '../program'
-import { brandHeader, success, dim, error, warning, section, dot } from '../utils/format'
+import { brandHeader, dim, dot, error, section, success, warning } from '../utils/format'
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -70,7 +70,8 @@ function companyYaml(config: BootstrapConfig): string {
 				type: 'feature',
 				title_template: '{{args}}',
 				description_template: '{{args}}\n\nThis work order was created from chat.',
-				instructions: 'Treat this as implementation work. Inspect existing docs/workflows first.\nDo not create new primitives unless the existing ones do not fit.',
+				instructions:
+					'Treat this as implementation work. Inspect existing docs/workflows first.\nDo not create new primitives unless the existing ones do not fit.',
 			},
 			task: {
 				action: 'task.create',
@@ -95,7 +96,8 @@ function devAgentYaml(): string {
 		id: 'dev',
 		name: 'Developer',
 		role: 'developer',
-		description: 'Implements features, fixes bugs, writes tests. Follows existing codebase patterns.',
+		description:
+			'Implements features, fixes bugs, writes tests. Follows existing codebase patterns.',
 	})
 }
 
@@ -234,11 +236,12 @@ Provider and workflow setup is repo/config work — use \`/build\` or create a t
 function docsReadmeMd(): string {
 	return `# Autopilot Documentation
 
-## Canonical Specs
+	## Canonical Specs
 
-- \`specs/autopilot/README.md\` — architecture overview and pass map
-- \`specs/autopilot/current-steering.md\` — current truth and invariants
-- \`specs/autopilot/primitive-roadmap.md\` — primitive layering and design guardrails
+	- \`specs/autopilot/README.md\` — architecture overview and pass map
+	- \`specs/autopilot/core-architecture-cleanup-proposal.md\` — current core architecture direction
+	- \`specs/autopilot/config-and-state-boundaries.md\` — config, Knowledge, project inspection, pack, and fixture boundaries
+	- \`specs/autopilot/primitive-roadmap.md\` — primitive layering and design guardrails
 
 ## Configuration
 
@@ -341,11 +344,12 @@ function askYesNo(question: string, defaultValue: boolean): boolean {
 // ─── Slug Helper ─────────────────────────────────────────────────────────
 
 function toSlug(name: string): string {
-	return name
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '')
-		|| 'my-company'
+	return (
+		name
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '') || 'my-company'
+	)
 }
 
 // ─── Bootstrap Logic ─────────────────────────────────────────────────────
@@ -363,7 +367,8 @@ function scaffoldLocalFirst(config: BootstrapConfig): WriteResult {
 	safeWrite(join(ap, 'agents', 'dev.yaml'), devAgentYaml(), result)
 
 	// Workflow
-	const workflowContent = config.workflow === 'bounded-dev' ? boundedDevWorkflowYaml() : simpleWorkflowYaml()
+	const workflowContent =
+		config.workflow === 'bounded-dev' ? boundedDevWorkflowYaml() : simpleWorkflowYaml()
 	safeWrite(join(ap, 'workflows', `${config.workflow}.yaml`), workflowContent, result)
 
 	// Workflow: direct (always scaffold alongside the chosen workflow)
@@ -392,28 +397,48 @@ function printNextSteps(config: BootstrapConfig): void {
 	console.log('')
 
 	if (config.mode === 'local-first') {
-		console.log(`  ${dot('cyan')} ${dim('1.')} Run ${success('autopilot sync')} to generate CLAUDE.md, AGENTS.md, and sync skills`)
-		console.log(`  ${dot('cyan')} ${dim('2.')} Run ${success('autopilot start')} to boot orchestrator + local worker`)
-		console.log(`  ${dot('cyan')} ${dim('3.')} Run ${success('autopilot auth setup')} to create your operator account`)
+		console.log(
+			`  ${dot('cyan')} ${dim('1.')} Run ${success('autopilot sync')} to generate CLAUDE.md, AGENTS.md, and sync skills`,
+		)
+		console.log(
+			`  ${dot('cyan')} ${dim('2.')} Run ${success('autopilot start')} to boot orchestrator + local worker`,
+		)
+		console.log(
+			`  ${dot('cyan')} ${dim('3.')} Run ${success('autopilot auth setup')} to create your operator account`,
+		)
 
 		if (config.surface === 'claude-code') {
 			console.log('')
 			console.log(`  ${dot('yellow')} ${dim('Claude Code + MCP setup:')}`)
 			console.log(`     Add to your project's .mcp.json:`)
-			console.log(`     ${dim('{ "mcpServers": { "autopilot": { "command": "bunx", "args": ["@questpie/autopilot-mcp"] } } }')}`)
+			console.log(
+				`     ${dim('{ "mcpServers": { "autopilot": { "command": "bunx", "args": ["@questpie/autopilot-mcp"] } } }')}`,
+			)
 		}
 
 		console.log('')
-		console.log(`  ${dot('cyan')} ${dim('4.')} Create your first task: ${success('autopilot tasks create -t "My first task" --type feature')}`)
-		console.log(`  ${dot('cyan')} ${dim('5.')} Check inbox and approve: ${success('autopilot inbox')}`)
+		console.log(
+			`  ${dot('cyan')} ${dim('4.')} Create your first task: ${success('autopilot tasks create -t "My first task" --type feature')}`,
+		)
+		console.log(
+			`  ${dot('cyan')} ${dim('5.')} Check inbox and approve: ${success('autopilot inbox')}`,
+		)
 	} else {
-		console.log(`  ${dot('cyan')} ${dim('1.')} Log in: ${success('autopilot auth login --url <orchestrator-url>')}`)
-		console.log(`     ${dim('(First-time owner? Use: autopilot auth setup --url <orchestrator-url>)')}`)
+		console.log(
+			`  ${dot('cyan')} ${dim('1.')} Log in: ${success('autopilot auth login --url <orchestrator-url>')}`,
+		)
+		console.log(
+			`     ${dim('(First-time owner? Use: autopilot auth setup --url <orchestrator-url>)')}`,
+		)
 		console.log(`  ${dot('cyan')} ${dim('2.')} Obtain a join token from the orchestrator admin:`)
 		console.log(`     ${dim('autopilot worker token create -d "my machine"')}`)
 		console.log(`  ${dot('cyan')} ${dim('3.')} Start a worker with the token:`)
-		console.log(`     ${success('autopilot worker start --url <orchestrator-url> --token <secret>')}`)
-		console.log(`  ${dot('cyan')} ${dim('4.')} Run ${success('autopilot sync')} to generate local compatibility files`)
+		console.log(
+			`     ${success('autopilot worker start --url <orchestrator-url> --token <secret>')}`,
+		)
+		console.log(
+			`  ${dot('cyan')} ${dim('4.')} Run ${success('autopilot sync')} to generate local compatibility files`,
+		)
 	}
 
 	console.log('')
@@ -433,111 +458,135 @@ const bootstrapCmd = new Command('bootstrap')
 	.option('--no-import-context', 'Skip importing existing repo context (README, CLAUDE.md)')
 	.option('--yes', 'Accept all defaults (non-interactive)')
 	.option('--cwd <dir>', 'Working directory (defaults to cwd)')
-	.action(async (opts: {
-		mode?: string
-		surface?: string
-		companyName?: string
-		companySlug?: string
-		projectName?: string
-		workflow?: string
-		runtime: string
-		importContext: boolean
-		yes?: boolean
-		cwd?: string
-	}) => {
-		try {
-			const repoRoot = resolve(opts.cwd ?? process.cwd())
-			const dirName = basename(repoRoot)
-			const nonInteractive = opts.yes === true
+	.action(
+		async (opts: {
+			mode?: string
+			surface?: string
+			companyName?: string
+			companySlug?: string
+			projectName?: string
+			workflow?: string
+			runtime: string
+			importContext: boolean
+			yes?: boolean
+			cwd?: string
+		}) => {
+			try {
+				const repoRoot = resolve(opts.cwd ?? process.cwd())
+				const dirName = basename(repoRoot)
+				const nonInteractive = opts.yes === true
 
-			console.log('')
-			console.log(brandHeader('Bootstrap'))
-			console.log('')
-
-			// Check for existing .autopilot/
-			const autopilotExists = existsSync(join(repoRoot, PATHS.AUTOPILOT_DIR))
-			if (autopilotExists) {
-				console.log(warning('.autopilot/ already exists. Existing files will NOT be overwritten.'))
 				console.log('')
-			}
-
-			// ── Collect config (interactive or flags) ────────────────────
-			const mode: BootstrapMode = (opts.mode as BootstrapMode) ??
-				(nonInteractive ? 'local-first' : askChoice('Setup mode', ['local-first', 'join-existing'], 'local-first'))
-
-			if (mode === 'join-existing') {
-				// Thin join-existing path
-				console.log('')
-				console.log(dim('Join-existing mode: connect to a running orchestrator.'))
+				console.log(brandHeader('Bootstrap'))
 				console.log('')
 
-				// Still scaffold .autopilot/ if missing so sync works
-				if (!autopilotExists) {
-					mkdirSync(join(repoRoot, PATHS.AUTOPILOT_DIR), { recursive: true })
-					console.log(success(`Created ${PATHS.AUTOPILOT_DIR}/`))
+				// Check for existing .autopilot/
+				const autopilotExists = existsSync(join(repoRoot, PATHS.AUTOPILOT_DIR))
+				if (autopilotExists) {
+					console.log(
+						warning('.autopilot/ already exists. Existing files will NOT be overwritten.'),
+					)
+					console.log('')
 				}
 
-				printNextSteps({ mode, surface: 'cli', companyName: '', companySlug: '', projectName: '', workflow: 'simple', runtime: opts.runtime, importContext: false, repoRoot })
-				return
-			}
+				// ── Collect config (interactive or flags) ────────────────────
+				const mode: BootstrapMode =
+					(opts.mode as BootstrapMode) ??
+					(nonInteractive
+						? 'local-first'
+						: askChoice('Setup mode', ['local-first', 'join-existing'], 'local-first'))
 
-			// ── Local-first flow ─────────────────────────────────────────
-			const surface: BootstrapSurface = (opts.surface as BootstrapSurface) ??
-				(nonInteractive ? 'claude-code' : askChoice('Primary operator surface', ['claude-code', 'cli'], 'claude-code'))
+				if (mode === 'join-existing') {
+					// Thin join-existing path
+					console.log('')
+					console.log(dim('Join-existing mode: connect to a running orchestrator.'))
+					console.log('')
 
-			const companyName = opts.companyName ??
-				(nonInteractive ? dirName : askString('Company name', dirName))
+					// Still scaffold .autopilot/ if missing so sync works
+					if (!autopilotExists) {
+						mkdirSync(join(repoRoot, PATHS.AUTOPILOT_DIR), { recursive: true })
+						console.log(success(`Created ${PATHS.AUTOPILOT_DIR}/`))
+					}
 
-			const companySlug = opts.companySlug ??
-				(nonInteractive ? toSlug(companyName) : askString('Company slug', toSlug(companyName)))
-
-			const projectName = opts.projectName ??
-				(nonInteractive ? dirName : askString('Project name', dirName))
-
-			const workflow: StarterWorkflow = (opts.workflow as StarterWorkflow) ??
-				(nonInteractive ? 'bounded-dev' : askChoice('Starter workflow', ['bounded-dev', 'simple'], 'bounded-dev'))
-
-			const importCtx = opts.importContext !== false &&
-				(nonInteractive || askYesNo('Import existing context (README, CLAUDE.md)?', true))
-
-			const config: BootstrapConfig = {
-				mode,
-				surface,
-				companyName,
-				companySlug,
-				projectName,
-				workflow,
-				runtime: opts.runtime,
-				importContext: importCtx,
-				repoRoot,
-			}
-
-			// ── Scaffold ─────────────────────────────────────────────────
-			console.log('')
-			const result = scaffoldLocalFirst(config)
-
-			if (result.created.length > 0) {
-				console.log(section('Created'))
-				for (const f of result.created) {
-					console.log(`  ${dot('green')} ${f}`)
+					printNextSteps({
+						mode,
+						surface: 'cli',
+						companyName: '',
+						companySlug: '',
+						projectName: '',
+						workflow: 'simple',
+						runtime: opts.runtime,
+						importContext: false,
+						repoRoot,
+					})
+					return
 				}
-			}
 
-			if (result.skipped.length > 0) {
+				// ── Local-first flow ─────────────────────────────────────────
+				const surface: BootstrapSurface =
+					(opts.surface as BootstrapSurface) ??
+					(nonInteractive
+						? 'claude-code'
+						: askChoice('Primary operator surface', ['claude-code', 'cli'], 'claude-code'))
+
+				const companyName =
+					opts.companyName ?? (nonInteractive ? dirName : askString('Company name', dirName))
+
+				const companySlug =
+					opts.companySlug ??
+					(nonInteractive ? toSlug(companyName) : askString('Company slug', toSlug(companyName)))
+
+				const projectName =
+					opts.projectName ?? (nonInteractive ? dirName : askString('Project name', dirName))
+
+				const workflow: StarterWorkflow =
+					(opts.workflow as StarterWorkflow) ??
+					(nonInteractive
+						? 'bounded-dev'
+						: askChoice('Starter workflow', ['bounded-dev', 'simple'], 'bounded-dev'))
+
+				const importCtx =
+					opts.importContext !== false &&
+					(nonInteractive || askYesNo('Import existing context (README, CLAUDE.md)?', true))
+
+				const config: BootstrapConfig = {
+					mode,
+					surface,
+					companyName,
+					companySlug,
+					projectName,
+					workflow,
+					runtime: opts.runtime,
+					importContext: importCtx,
+					repoRoot,
+				}
+
+				// ── Scaffold ─────────────────────────────────────────────────
 				console.log('')
-				console.log(dim('Skipped (already exist):'))
-				for (const f of result.skipped) {
-					console.log(`  ${dim(f)}`)
+				const result = scaffoldLocalFirst(config)
+
+				if (result.created.length > 0) {
+					console.log(section('Created'))
+					for (const f of result.created) {
+						console.log(`  ${dot('green')} ${f}`)
+					}
 				}
+
+				if (result.skipped.length > 0) {
+					console.log('')
+					console.log(dim('Skipped (already exist):'))
+					for (const f of result.skipped) {
+						console.log(`  ${dim(f)}`)
+					}
+				}
+
+				// ── Next steps ───────────────────────────────────────────────
+				printNextSteps(config)
+			} catch (err) {
+				console.error(error(err instanceof Error ? err.message : String(err)))
+				process.exit(1)
 			}
-
-			// ── Next steps ───────────────────────────────────────────────
-			printNextSteps(config)
-
-		} catch (err) {
-			console.error(error(err instanceof Error ? err.message : String(err)))
-			process.exit(1)
-		}
-	})
+		},
+	)
 
 program.addCommand(bootstrapCmd)

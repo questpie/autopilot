@@ -40,8 +40,9 @@
 	},
 	"dependencies": {
 		"@questpie/autopilot-orchestrator": "2.1.0-canary.1",
-		"@questpie/autopilot-worker": "1.1.0-canary.1",
 		"@questpie/autopilot-spec": "1.1.0-canary.1",
+		"@questpie/autopilot-worker": "1.1.0-canary.1",
+		"agent-install": "0.0.5",
 		"commander": "^13.0.0",
 		"hono": "^4.12.9",
 		"yaml": "^2.7.0"

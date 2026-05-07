@@ -1,12 +1,15 @@
 import { Command } from 'commander'
 import { program } from '../program'
-import { section, badge, dim, table, success, error, separator, dot } from '../utils/format'
 import { createApiClient, getBaseUrl } from '../utils/client'
+import { badge, dim, dot, error, section, separator, success, table } from '../utils/format'
 import { getAuthHeaders } from './auth'
 
 const runsCmd = new Command('run')
 	.description('List and inspect runs')
-	.option('-s, --status <status>', 'Filter by run status (pending, claimed, running, completed, failed)')
+	.option(
+		'-s, --status <status>',
+		'Filter by run status (pending, claimed, running, completed, failed)',
+	)
 	.option('-a, --agent <agent>', 'Filter by agent ID')
 	.option('-t, --task <task>', 'Filter by task ID')
 	.action(async (opts: { status?: string; agent?: string; task?: string }) => {
@@ -53,7 +56,10 @@ const runsCmd = new Command('run')
 						taskTitles.set(tid, t.title)
 					}
 				} catch (err) {
-					console.debug(`[runs] failed to fetch task title for ${tid}:`, err instanceof Error ? err.message : String(err))
+					console.debug(
+						`[runs] failed to fetch task title for ${tid}:`,
+						err instanceof Error ? err.message : String(err),
+					)
 				}
 			}
 
@@ -67,9 +73,7 @@ const runsCmd = new Command('run')
 			console.log(
 				table(
 					runs.map((r) => {
-						const taskLabel = r.task_id
-							? dim(taskTitles.get(r.task_id) ?? r.task_id)
-							: ''
+						const taskLabel = r.task_id ? dim(taskTitles.get(r.task_id) ?? r.task_id) : ''
 						return [
 							dim(r.id),
 							badge(r.status, statusColor(r.status)),
@@ -167,13 +171,21 @@ runsCmd.addCommand(
 						console.log('')
 						console.log(dim('Targeting:'))
 						if (t.required_runtime) console.log(`  ${dim('Runtime:')} ${t.required_runtime}`)
-						if (t.required_worker_id) console.log(`  ${dim('Worker (pinned):')} ${t.required_worker_id}`)
+						if (t.required_worker_id)
+							console.log(`  ${dim('Worker (pinned):')} ${t.required_worker_id}`)
 						if (Array.isArray(t.required_worker_tags) && t.required_worker_tags.length > 0) {
 							console.log(`  ${dim('Worker tags:')} ${t.required_worker_tags.join(', ')}`)
 						}
+						if (Array.isArray(t.avoid_worker_ids) && t.avoid_worker_ids.length > 0) {
+							console.log(`  ${dim('Avoid workers:')} ${t.avoid_worker_ids.join(', ')}`)
+						}
 						console.log(`  ${dim('Fallback:')} ${t.allow_fallback !== false ? 'yes' : 'no'}`)
 					} catch (err) {
-						console.log(dim(`  (invalid targeting JSON: ${err instanceof Error ? err.message : String(err)})`))
+						console.log(
+							dim(
+								`  (invalid targeting JSON: ${err instanceof Error ? err.message : String(err)})`,
+							),
+						)
 					}
 				}
 
@@ -220,7 +232,9 @@ runsCmd.addCommand(
 						console.log('')
 						console.log(dim('Artifacts:'))
 						for (const art of arts) {
-							console.log(`  ${badge(art.kind, 'cyan')} ${art.title}  ${dim(`${art.ref_kind}:${art.ref_value}`)}`)
+							console.log(
+								`  ${badge(art.kind, 'cyan')} ${art.title}  ${dim(`${art.ref_kind}:${art.ref_value}`)}`,
+							)
 						}
 					}
 				}
@@ -268,7 +282,7 @@ runsCmd.addCommand(
 				if (continuation.preferred_worker_id) {
 					console.log(dim(`  Routed to worker: ${continuation.preferred_worker_id}`))
 				}
-				console.log(dim(`  The run will be picked up by the worker on next poll.`))
+				console.log(dim('  The run will be picked up by the worker on next poll.'))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				process.exit(1)
@@ -337,11 +351,21 @@ runsCmd.addCommand(
 				}
 
 				if (run.status !== 'failed' && run.status !== 'completed') {
-					console.error(error(`Run ${id} is ${run.status} — can only retry failed or completed runs`))
+					console.error(
+						error(`Run ${id} is ${run.status} — can only retry failed or completed runs`),
+					)
 					process.exit(1)
 				}
 
-				const createPayload: Record<string, string> = {
+				const createPayload: {
+					agent_id: string
+					task_id?: string
+					runtime?: string
+					model?: string
+					provider?: string
+					variant?: string
+					instructions?: string
+				} = {
 					agent_id: run.agent_id,
 					runtime: run.runtime,
 				}
@@ -368,7 +392,7 @@ runsCmd.addCommand(
 				console.log(success(`Retry run created: ${newRun.id}`))
 				console.log(dim(`  Status: ${newRun.status}`))
 				console.log(dim(`  Retries: ${id}`))
-				console.log(dim(`  The run will be picked up by the worker on next poll.`))
+				console.log(dim('  The run will be picked up by the worker on next poll.'))
 			} catch (err) {
 				console.error(error(err instanceof Error ? err.message : String(err)))
 				process.exit(1)
@@ -387,22 +411,38 @@ interface RunEvent {
 
 function formatTime(iso: string): string {
 	const d = new Date(iso)
-	return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+	return d.toLocaleTimeString('en-GB', {
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit',
+		hour12: false,
+	})
 }
 
 function eventIcon(type: string): string {
 	switch (type) {
-		case 'started': return `${dot('green')} `
-		case 'completed': return `${dot('green')} `
-		case 'progress': return '\uD83D\uDCAC '
-		case 'tool_use': return '\uD83D\uDD27 '
-		case 'error': return '\u274C '
-		case 'artifact': return '\uD83D\uDCE6 '
-		case 'message_sent': return '\u2709\uFE0F  '
-		case 'task_updated': return '\uD83D\uDCCB '
-		case 'approval_needed': return '\u270B '
-		case 'external_action': return '\u2699\uFE0F  '
-		default: return '\u2022 '
+		case 'started':
+			return `${dot('green')} `
+		case 'completed':
+			return `${dot('green')} `
+		case 'progress':
+			return '\uD83D\uDCAC '
+		case 'tool_use':
+			return '\uD83D\uDD27 '
+		case 'error':
+			return '\u274C '
+		case 'artifact':
+			return '\uD83D\uDCE6 '
+		case 'message_sent':
+			return '\u2709\uFE0F  '
+		case 'task_updated':
+			return '\uD83D\uDCCB '
+		case 'approval_needed':
+			return '\u270B '
+		case 'external_action':
+			return '\u2699\uFE0F  '
+		default:
+			return '\u2022 '
 	}
 }
 
@@ -421,7 +461,10 @@ function renderEvent(evt: RunEvent): void {
 				const meta = typeof evt.metadata === 'string' ? JSON.parse(evt.metadata) : evt.metadata
 				if (meta.tool) detail = `${meta.tool}${summary ? ` ${summary}` : ''}`
 			} catch (err) {
-				console.debug('[watch] malformed tool_use metadata:', err instanceof Error ? err.message : String(err))
+				console.debug(
+					'[watch] malformed tool_use metadata:',
+					err instanceof Error ? err.message : String(err),
+				)
 			}
 		}
 		console.log(`  ${ts}  ${icon}${detail}`)
@@ -467,14 +510,19 @@ runsCmd.addCommand(
 							taskLabel = t.title
 						}
 					} catch (err) {
-						console.debug('[watch] failed to fetch task title:', err instanceof Error ? err.message : String(err))
+						console.debug(
+							'[watch] failed to fetch task title:',
+							err instanceof Error ? err.message : String(err),
+						)
 					}
 				}
 
 				// Print header
 				const shortId = run.id.length > 12 ? `${run.id.slice(0, 12)}...` : run.id
 				console.log('')
-				console.log(`  Run ${shortId}  ${badge(run.status)}  Agent: ${run.agent_id}${taskLabel ? `  Task: ${taskLabel}` : ''}`)
+				console.log(
+					`  Run ${shortId}  ${badge(run.status)}  Agent: ${run.agent_id}${taskLabel ? `  Task: ${taskLabel}` : ''}`,
+				)
 				console.log('')
 
 				// If run is already completed/failed, show historical events and exit
@@ -491,7 +539,11 @@ runsCmd.addCommand(
 						}
 					}
 					console.log('')
-					console.log(dim(`  Run ${run.status}. Showing ${run.status === 'failed' ? 'error' : 'historical'} events.`))
+					console.log(
+						dim(
+							`  Run ${run.status}. Showing ${run.status === 'failed' ? 'error' : 'historical'} events.`,
+						),
+					)
 					return
 				}
 
@@ -525,7 +577,14 @@ runsCmd.addCommand(
 
 				// Graceful Ctrl+C cleanup
 				const cleanup = () => {
-					reader.cancel().catch((err) => console.debug('[watch] reader cancel error:', err instanceof Error ? err.message : String(err)))
+					reader
+						.cancel()
+						.catch((err) =>
+							console.debug(
+								'[watch] reader cancel error:',
+								err instanceof Error ? err.message : String(err),
+							),
+						)
 					console.log('')
 					console.log(dim('  Detached from run stream.'))
 					process.exit(0)
@@ -548,7 +607,13 @@ runsCmd.addCommand(
 						if (!line.startsWith('data: ')) continue
 						const json = line.slice(6)
 						try {
-							const event = JSON.parse(json) as { type: string; runId?: string; eventType?: string; summary?: string; status?: string }
+							const event = JSON.parse(json) as {
+								type: string
+								runId?: string
+								eventType?: string
+								summary?: string
+								status?: string
+							}
 							if (event.type === 'heartbeat') continue
 
 							// Filter for events matching this run
@@ -573,13 +638,23 @@ runsCmd.addCommand(
 								})
 								console.log('')
 								console.log(dim(`  Run ${status}.`))
-								reader.cancel().catch((err) => console.debug('[watch] reader cancel error:', err instanceof Error ? err.message : String(err)))
+								reader
+									.cancel()
+									.catch((err) =>
+										console.debug(
+											'[watch] reader cancel error:',
+											err instanceof Error ? err.message : String(err),
+										),
+									)
 								process.removeListener('SIGINT', cleanup)
 								process.removeListener('SIGTERM', cleanup)
 								return
 							}
 						} catch (err) {
-							console.debug('[watch] malformed SSE data:', err instanceof Error ? err.message : String(err))
+							console.debug(
+								'[watch] malformed SSE data:',
+								err instanceof Error ? err.message : String(err),
+							)
 						}
 					}
 				}

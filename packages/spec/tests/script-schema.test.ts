@@ -38,7 +38,7 @@ describe('StandaloneScriptSchema', () => {
 			],
 			outputs: [{ name: 'result', description: 'Output JSON', type: 'json' }],
 			sandbox: {
-				fs_scope: { read: ['.'], write: ['./out'] },
+				workspace_scope: { read: ['.'], write: ['./out'] },
 				network: 'local',
 				timeout_ms: 60_000,
 				max_memory_mb: 512,
@@ -90,8 +90,8 @@ describe('StandaloneScriptSchema', () => {
 
 		expect(result.sandbox.network).toBe('unrestricted')
 		expect(result.sandbox.timeout_ms).toBe(300_000)
-		expect(result.sandbox.fs_scope.read).toEqual(['.'])
-		expect(result.sandbox.fs_scope.write).toEqual([])
+		expect(result.sandbox.workspace_scope.read).toEqual(['.'])
+		expect(result.sandbox.workspace_scope.write).toEqual([])
 		expect(result.sandbox.max_memory_mb).toBeUndefined()
 	})
 

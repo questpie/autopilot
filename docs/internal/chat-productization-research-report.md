@@ -148,7 +148,7 @@ Recommended contract direction:
 ## Open Questions / Decision Gates
 
 - Make agent selection session-scoped for now, because existing-session sends do not support per-message agent override.
-- Ship metadata-only binary attachments first; add VFS-backed durability later.
+- Ship metadata-only binary attachments first; add Knowledge/storage-backed durability later.
 - Remove persistent full-history mode from the rail.
 - Use implicit-but-visible page context in contextual entry points.
 - Use about 12 lines / 1,500 chars as the default paste-to-attachment threshold.

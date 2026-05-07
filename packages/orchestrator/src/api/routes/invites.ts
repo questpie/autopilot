@@ -12,11 +12,15 @@ import { eq } from 'drizzle-orm'
 import { randomBytes } from 'node:crypto'
 import * as authSchema from '../../db/auth-schema'
 import type { AppEnv } from '../app'
+import { isOwnerOrAdmin } from '../middleware/roles'
 
 const INVITE_TTL_DAYS = 7
 
-function requireAdminOrOwner(role: string | null | undefined): boolean {
-	return role === 'owner' || role === 'admin'
+const PRODUCT_ROLES = ['owner', 'admin', 'member', 'viewer'] as const
+type ProductRole = (typeof PRODUCT_ROLES)[number]
+
+function isProductRole(value: string | undefined): value is ProductRole {
+	return value !== undefined && (PRODUCT_ROLES as readonly string[]).includes(value)
 }
 
 const invites = new Hono<AppEnv>()
@@ -94,8 +98,9 @@ const invites = new Hono<AppEnv>()
 			return c.json({ error: 'Failed to create user' }, 500)
 		}
 
-		// If invite has a non-default role, update the user's role
-		if (row.role && row.role !== 'member') {
+		// If invite has a non-default product role, update the user's role.
+		// Stale invites with unknown roles fall through to the database hook default.
+		if (row.role && row.role !== 'member' && isProductRole(row.role)) {
 			await db
 				.update(authSchema.user)
 				.set({ role: row.role, updatedAt: new Date() })
@@ -113,7 +118,7 @@ const invites = new Hono<AppEnv>()
 	// GET / — list all invites (owner/admin only)
 	.get('/', async (c) => {
 		const actor = c.get('actor')
-		if (!requireAdminOrOwner(actor?.role)) {
+		if (!isOwnerOrAdmin(actor?.role)) {
 			return c.json({ error: 'Forbidden' }, 403)
 		}
 
@@ -124,7 +129,7 @@ const invites = new Hono<AppEnv>()
 	// POST / — create invite (owner/admin only)
 	.post('/', async (c) => {
 		const actor = c.get('actor')
-		if (!requireAdminOrOwner(actor?.role)) {
+		if (!isOwnerOrAdmin(actor?.role)) {
 			return c.json({ error: 'Forbidden' }, 403)
 		}
 
@@ -132,6 +137,13 @@ const invites = new Hono<AppEnv>()
 
 		if (!body.email) {
 			return c.json({ error: 'email is required' }, 400)
+		}
+
+		if (body.role !== undefined && !isProductRole(body.role)) {
+			return c.json(
+				{ error: `role must be one of: ${PRODUCT_ROLES.join(', ')}` },
+				400,
+			)
 		}
 
 		const db = c.get('db')
@@ -175,7 +187,7 @@ const invites = new Hono<AppEnv>()
 	// DELETE /:id — revoke invite (owner/admin only)
 	.delete('/:id', async (c) => {
 		const actor = c.get('actor')
-		if (!requireAdminOrOwner(actor?.role)) {
+		if (!isOwnerOrAdmin(actor?.role)) {
 			return c.json({ error: 'Forbidden' }, 403)
 		}
 

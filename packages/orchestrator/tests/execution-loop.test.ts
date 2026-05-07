@@ -289,8 +289,9 @@ describe('execution loop', () => {
 		expect(workerAfter.status).toBe('online')
 	})
 
-	test('concurrency guard: second claim returns null run when worker has active lease', async () => {
-		// Create two pending runs so one is available even after first claim
+	test('claim creates separate leases for multiple pending runs on the same worker', async () => {
+		// Worker-side polling enforces max concurrency; the route supports repeated claims
+		// so a worker with capacity can acquire multiple independent runs.
 		await app.request('/api/runs', post({ agent_id: 'agent-2', runtime: 'bun' }))
 		await app.request('/api/runs', post({ agent_id: 'agent-3', runtime: 'bun' }))
 
@@ -303,14 +304,14 @@ describe('execution loop', () => {
 		const firstBody = (await firstClaim.json()) as { run: unknown; lease_id: unknown }
 		expect(firstBody.run).not.toBeNull()
 
-		// Second claim -- worker already has active lease, returns null run
 		const secondClaim = await app.request(
 			'/api/workers/claim',
 			post({ worker_id: 'worker-2' }),
 		)
 		expect(secondClaim.status).toBe(200)
 		const secondBody = (await secondClaim.json()) as { run: unknown; lease_id: unknown }
-		expect(secondBody.run).toBeNull()
-		expect(secondBody.lease_id).toBeNull()
+		expect(secondBody.run).not.toBeNull()
+		expect(secondBody.lease_id).not.toBeNull()
+		expect(secondBody.lease_id).not.toBe(firstBody.lease_id)
 	})
 })

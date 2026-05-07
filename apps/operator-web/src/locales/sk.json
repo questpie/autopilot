@@ -5,7 +5,7 @@
 	"nav": {
 		"chat": "Konverzácia",
 		"tasks": "Úlohy",
-		"files": "Súbory",
+		"files": "Znalosti",
 		"settings": "Nastavenia"
 	},
 	"tasks": {
@@ -70,9 +70,9 @@
 		"approval_for": "Schvaľovateľ",
 		"prior_returns": "Predchádzajúce vrátenia",
 		"outputs_for_review": "Výstupy na kontrolu",
-		"view_in_files": "zobraziť v Súboroch",
+		"view_in_files": "zobraziť v Znalostiach",
 		"inspect_output": "zobraziť",
-		"open_related_files": "Otvoriť v Súboroch",
+		"open_related_files": "Otvoriť v Znalostiach",
 		"preview": "náhľad",
 		"hide_preview": "skryť"
 	},
@@ -288,7 +288,7 @@
 		"language_en": "English",
 		"language_auto": "Automaticky",
 		"dev_mode": "Developer mode",
-		"dev_mode_desc": "Zobrazí pokročilé sekcie v navigácii (Súbory, Agenti, Workflows, Runtime)",
+		"dev_mode_desc": "Zobrazí pokročilé operátorské sekcie ako agenti, workflows a runtime",
 		"about": "O produkte",
 		"about_version": "QUESTPIE Autopilot v2.1.0"
 	},
@@ -317,13 +317,13 @@
 		"service_other": "Iné"
 	},
 	"files": {
-		"title": "Súbory",
+		"title": "Znalosti",
 		"scope_all": "Všetko",
 		"scope_worktrees": "Worktrees",
 		"scope_outputs": "Výstupy",
 		"scope_generated": "Generované",
 		"changed_only": "Len zmenené",
-		"search": "Hľadať súbor...",
+		"search": "Hľadať v znalostiach...",
 		"info": "Informácie",
 		"diff": "Zmeny",
 		"context": "Kontext",
@@ -332,12 +332,12 @@
 		"lines_deleted": "-{{count}} riadkov",
 		"no_preview": "Náhľad nedostupný",
 		"dir_contents": "Obsah priečinka",
-		"scope_company": "Firemné súbory",
-		"scope_company_desc": "Zdieľané dokumenty, usmernenia a firemné súbory",
-		"scope_workspace": "Súbory úloh",
-		"scope_workspace_desc": "Súbory vytvorené alebo zmenené počas vykonávania úloh",
-		"empty_title": "Zatiaľ žiadne súbory",
-		"empty_desc": "Nahraj súbory alebo nechaj agentov vytvoriť obsah.",
+		"scope_company": "Firemné znalosti",
+		"scope_company_desc": "Zdieľané dokumenty, pravidlá a firemné zdroje",
+		"scope_workspace": "Projektové spustenie",
+		"scope_workspace_desc": "Zdrojové snippety a diffy z izolovaného projektového behu",
+		"empty_title": "Zatiaľ žiadne znalosti",
+		"empty_desc": "Nahraj zdroje alebo nechaj agentov vytvoriť trvácne výstupy.",
 		"filter_all": "Všetko",
 		"filter_docs": "Dokumenty",
 		"filter_images": "Obrázky",
@@ -438,8 +438,8 @@
 		"status_offline": "offline"
 	},
 	"advanced": {
-		"files_title": "Súbory",
-		"files_subtitle": "Súborový systém a worktree zmeny",
+		"files_title": "Znalosti",
+		"files_subtitle": "Znalosti a projektové diffy",
 		"files_changes": "{{count}} zmeny v worktree",
 		"agents_title": "Agenti",
 		"agents_subtitle": "Konfigurácia AI agentov",

@@ -1,5 +1,16 @@
-export { AgentSchema, FsScopeSchema, AgentTriggerSchema } from './agent'
-export { WorkflowSchema, WorkflowStepSchema, ExecutionTargetSchema, StepOutputSchema, StepInputSchema, StepTransitionSchema, RetryPolicySchema, RetryErrorTypeSchema, RetryExhaustedActionSchema, WorkspaceConfigSchema } from './workflow'
+export { AgentSchema, AgentTriggerSchema } from './agent'
+export {
+	WorkflowSchema,
+	WorkflowStepSchema,
+	ExecutionTargetSchema,
+	StepOutputSchema,
+	StepInputSchema,
+	StepTransitionSchema,
+	RetryPolicySchema,
+	RetryErrorTypeSchema,
+	RetryExhaustedActionSchema,
+	WorkspaceConfigSchema,
+} from './workflow'
 export { EnvironmentSchema } from './environment'
 export {
 	SecretRefSchema,
@@ -23,10 +34,23 @@ export {
 	ScriptInputSchema,
 	ScriptOutputSchema,
 	ScriptSandboxSchema,
+	WorkspaceScopeSchema,
 } from './script'
-export { ArtifactSchema, ArtifactKindSchema, ArtifactRefKindSchema, RunArtifactSchema } from './artifact'
+export {
+	ArtifactSchema,
+	ArtifactKindSchema,
+	ArtifactRefKindSchema,
+	RunArtifactSchema,
+} from './artifact'
 export { CompanySchema, CompanyOwnerSchema, CompanySettingsSchema } from './company'
-export { CompanyScopeSchema, CompanyScopeSettingsSchema, ProjectScopeSchema, ScopeDefaultsSchema, QueueConfigSchema, ConversationCommandConfigSchema } from './scope'
+export {
+	CompanyScopeSchema,
+	CompanyScopeSettingsSchema,
+	ProjectScopeSchema,
+	ScopeDefaultsSchema,
+	QueueConfigSchema,
+	ConversationCommandConfigSchema,
+} from './scope'
 export {
 	PackDependencySchema,
 	RegistrySchema,
@@ -94,28 +118,19 @@ export type { TypeDefinition } from './type-definition'
 export { ItemRecordSchema } from './item'
 export type { ItemRecord } from './item'
 export {
-	VfsSchemeSchema,
-	VfsParsedUriSchema,
-	VfsStatQuerySchema,
-	VfsStatResponseSchema,
-	VfsListQuerySchema,
-	VfsListEntrySchema,
-	VfsListResponseSchema,
-	VfsReadQuerySchema,
-	VfsWriteQuerySchema,
-	VfsWriteResponseSchema,
-	VfsDiffQuerySchema,
-	VfsDiffFileSchema,
-	VfsDiffResponseSchema,
-	VfsErrorResponseSchema,
-} from './vfs'
+	WorkspaceInspectionPathQuerySchema,
+	WorkspaceInspectionDiffQuerySchema,
+	WorkspaceInspectionStatResponseSchema,
+	WorkspaceInspectionEntrySchema,
+	WorkspaceInspectionListResponseSchema,
+	WorkspaceInspectionDiffFileSchema,
+	WorkspaceInspectionGitContextSchema,
+	WorkspaceInspectionDiffResponseSchema,
+} from './workspace-inspection'
 export type {
-	VfsScheme,
-	VfsParsedUri,
-	VfsStatResponse,
-	VfsListEntry,
-	VfsListResponse,
-	VfsWriteResponse,
-	VfsDiffResponse,
-	VfsErrorResponse,
-} from './vfs'
+	WorkspaceInspectionStatResponse,
+	WorkspaceInspectionEntry,
+	WorkspaceInspectionListResponse,
+	WorkspaceInspectionGitContext,
+	WorkspaceInspectionDiffResponse,
+} from './workspace-inspection'
