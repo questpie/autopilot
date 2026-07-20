@@ -1,0 +1,359 @@
+{
+  "operations": [
+    {
+      "type": "set",
+      "path": "ddl.table__COLON__public__DOT__channels",
+      "value": {
+        "isRlsEnabled": false,
+        "name": "channels",
+        "entityType": "tables",
+        "schema": "public"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__id",
+      "value": {
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "name": "id",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__company",
+      "value": {
+        "type": "varchar(36)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "name": "company",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__space",
+      "value": {
+        "type": "varchar(36)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "name": "space",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__name",
+      "value": {
+        "type": "varchar(160)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "name": "name",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__slug",
+      "value": {
+        "type": "varchar(120)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "name": "slug",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__kind",
+      "value": {
+        "type": "varchar(50)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'standard'",
+        "generated": null,
+        "identity": null,
+        "name": "kind",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__systemKey",
+      "value": {
+        "type": "varchar(80)",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "name": "systemKey",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__status",
+      "value": {
+        "type": "varchar(50)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'active'",
+        "generated": null,
+        "identity": null,
+        "name": "status",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__createdBy",
+      "value": {
+        "type": "varchar(36)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "name": "createdBy",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__version",
+      "value": {
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "1",
+        "generated": null,
+        "identity": null,
+        "name": "version",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__archivedAt",
+      "value": {
+        "type": "timestamp(3) with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "name": "archivedAt",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__created_at",
+      "value": {
+        "type": "timestamp(3)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "name": "created_at",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.column__COLON__public__DOT__channels__DOT__updated_at",
+      "value": {
+        "type": "timestamp(3)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "name": "updated_at",
+        "entityType": "columns",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.index__COLON__public__DOT__channels__DOT__channels_space_slug_unique",
+      "value": {
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "space",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "slug",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "name": "channels_space_slug_unique",
+        "entityType": "indexes",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.index__COLON__public__DOT__channels__DOT__channels_company_space_status_idx",
+      "value": {
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "company",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "space",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "status",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "name": "channels_company_space_status_idx",
+        "entityType": "indexes",
+        "schema": "public",
+        "table": "channels"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    },
+    {
+      "type": "set",
+      "path": "ddl.pk__COLON__public__DOT__channels__DOT__channels_pkey",
+      "value": {
+        "columns": [
+          "id"
+        ],
+        "nameExplicit": false,
+        "name": "channels_pkey",
+        "schema": "public",
+        "table": "channels",
+        "entityType": "pks"
+      },
+      "timestamp": "2026-07-20T22:58:58.571Z",
+      "migrationId": "phase0Channels20260720T225858"
+    }
+  ],
+  "metadata": {
+    "migrationId": "phase0Channels20260720T225858",
+    "timestamp": "2026-07-20T22:58:58.651Z",
+    "prevId": "00000000-0000-0000-0000-000000000000"
+  }
+}

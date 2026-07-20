@@ -120,6 +120,20 @@ export function createCompanyBootstrap(
 					},
 					access,
 				);
+				await collections.channels.create(
+					{
+						company: company.id,
+						space: wholeCompany.id,
+						name: "general",
+						slug: "general",
+						kind: "system_default",
+						systemKey: "general",
+						status: "active",
+						createdBy: ownerActor.id,
+						version: 1,
+					},
+					access,
+				);
 				await collections.space_memberships.create(
 					{
 						company: company.id,

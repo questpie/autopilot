@@ -20,6 +20,7 @@ import _coll_actor_invitations from "../collections/actor-invitations";
 import _coll_actor_role_bindings from "../collections/actor-role-bindings";
 import _coll_actors from "../collections/actors";
 import _coll_audit_events from "../collections/audit-events";
+import _coll_channels from "../collections/channels";
 import _coll_command_receipts from "../collections/command-receipts";
 import _coll_companies from "../collections/companies";
 import _coll_invitation_challenges from "../collections/invitation-challenges";
@@ -60,6 +61,7 @@ import { default as _svc_organizationDomain } from "../services/organization-dom
 
 // ── Migrations ─────────────────────────────────────────────
 import _mig_20260719T094552_phase0Organization from "../migrations/20260719T094552_phase-0-organization";
+import _mig_20260720T225858_phase0Channels from "../migrations/20260720T225858_phase-0-channels";
 
 // ── Core Singles ───────────────────────────────────────────
 import _appConfig from "../config/app";
@@ -142,6 +144,7 @@ _appPromise = createApp(
 			actor_role_bindings: _coll_actor_role_bindings,
 			actors: _coll_actors,
 			audit_events: _coll_audit_events,
+			channels: _coll_channels,
 			command_receipts: _coll_command_receipts,
 			companies: _coll_companies,
 			invitation_challenges: _coll_invitation_challenges,
@@ -180,7 +183,7 @@ _appPromise = createApp(
 		services: {
 			organizationDomain: _svc_organizationDomain,
 		},
-		migrations: [_mig_20260719T094552_phase0Organization],
+		migrations: [_mig_20260719T094552_phase0Organization, _mig_20260720T225858_phase0Channels],
 		config: {
 			app: _appConfig,
 			auth: _authConfig,

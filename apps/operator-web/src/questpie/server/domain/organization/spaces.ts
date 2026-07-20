@@ -78,6 +78,20 @@ export function createSpaces(
 				},
 				access,
 			);
+			await collections.channels.create(
+				{
+					company: input.companyId,
+					space: space.id,
+					name: "general",
+					slug: "general",
+					kind: "system_default",
+					systemKey: "general",
+					status: "active",
+					createdBy: actor.id,
+					version: 1,
+				},
+				access,
+			);
 			const lead = await fixedRole(input.companyId, "lead", access);
 			await createBinding(
 				{

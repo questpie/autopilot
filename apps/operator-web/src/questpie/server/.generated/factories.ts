@@ -13,7 +13,7 @@ const _allFieldDefs = _rawFieldDefs;
 // ── Entity key registry (names only — acyclic by construction) ─────
 declare global {
 	namespace Questpie {
-		interface CollectionKeys { activity_events: unknown; actor_invitations: unknown; actor_role_bindings: unknown; actors: unknown; audit_events: unknown; command_receipts: unknown; companies: unknown; invitation_challenges: unknown; projects: unknown; roles: unknown; space_memberships: unknown; spaces: unknown }
+		interface CollectionKeys { activity_events: unknown; actor_invitations: unknown; actor_role_bindings: unknown; actors: unknown; audit_events: unknown; channels: unknown; command_receipts: unknown; companies: unknown; invitation_challenges: unknown; projects: unknown; roles: unknown; space_memberships: unknown; spaces: unknown }
 		interface ChannelKeys { harnessProbe: unknown }
 		interface RouteKeys { "actors/archive": unknown; "actors/reactivate": unknown; "actors/suspend": unknown; "companies/bootstrap": unknown; "invitations/accept": unknown; "invitations/challenge": unknown; "invitations/exchange": unknown; "invitations/issue": unknown; "invitations/resend": unknown; "invitations/revoke": unknown; "projects/archive": unknown; "projects/create": unknown; "projects/rename": unknown; "projects/restore": unknown; "roleBindings/replace": unknown; "spaceMemberships/add": unknown; "spaceMemberships/change": unknown; "spaceMemberships/remove": unknown; "spaces/archive": unknown; "spaces/create": unknown; "spaces/restore": unknown; "spaces/update": unknown }
 		interface ServiceKeys { organizationDomain: unknown }
