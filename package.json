@@ -1,0 +1,38 @@
+{
+	"name": "questpie-autopilot-v2",
+	"private": true,
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"scripts": {
+		"build": "turbo run build",
+		"check-types": "turbo run check-types",
+		"dev": "turbo run dev --parallel",
+		"dev:app": "bun run --cwd apps/operator-web dev",
+		"dev:ui": "bun run --cwd packages/ui storybook",
+		"framework:link": "bun scripts/link-questpie.ts",
+		"framework:check": "bun scripts/check-questpie-link.ts",
+		"framework:release-gate": "bun scripts/check-questpie-link.ts --release-gate",
+		"format": "oxfmt .",
+		"format:check": "oxfmt --check .",
+		"lint": "oxlint . && bun scripts/lint-no-inline-styles.ts && bun scripts/lint-framework-boundaries.ts",
+		"storybook": "bun run --cwd packages/ui storybook",
+		"storybook:build": "bun run --cwd packages/ui build-storybook",
+		"storybook:test": "bun run --cwd packages/ui test-storybook",
+		"test": "bun test scripts/lint-framework-boundaries.test.ts scripts/verify-phase-0-acceptance.test.ts && turbo run test",
+		"verify:phase-0-acceptance": "bun scripts/verify-phase-0-acceptance.ts",
+		"verify:work": "bun scripts/verify-work.ts"
+	},
+	"devDependencies": {
+		"@playwright/test": "1.61.1",
+		"oxfmt": "0.59.0",
+		"oxlint": "1.74.0",
+		"turbo": "^2.10.5",
+		"typescript": "^5.9.2"
+	},
+	"overrides": {
+		"ws": "8.21.0"
+	},
+	"packageManager": "bun@1.3.14"
+}

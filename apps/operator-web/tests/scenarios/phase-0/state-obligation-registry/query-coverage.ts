@@ -1,0 +1,346 @@
+import { stableSelectors as selector } from "../contracts";
+import type {
+	NotApplicableReason,
+	QueryStateCoverage,
+	QueryStateDisposition,
+	QueryStateKey,
+	StateObligation,
+} from "./types";
+
+type DispositionTuple = readonly [
+	QueryStateDisposition,
+	QueryStateDisposition,
+	QueryStateDisposition,
+	QueryStateDisposition,
+	QueryStateDisposition,
+	QueryStateDisposition,
+	QueryStateDisposition,
+	QueryStateDisposition,
+	QueryStateDisposition,
+	QueryStateDisposition,
+	QueryStateDisposition,
+];
+
+function use(
+	obligationId: StateObligation["id"],
+	fixtureModeId: `${string}:${string}`,
+): QueryStateDisposition {
+	return { obligationId, fixtureModeId };
+}
+
+function na(notApplicable: NotApplicableReason): QueryStateDisposition {
+	return { notApplicable };
+}
+
+function states(values: DispositionTuple): Readonly<Record<QueryStateKey, QueryStateDisposition>> {
+	const [
+		initialLoading,
+		intrinsicEmpty,
+		filteredNoResults,
+		wholeSurfaceError,
+		deniedOrNotFound,
+		revokedWhileOpen,
+		archiveReadOnlyRestore,
+		versionConflict,
+		mutationError,
+		reconnectOrReplayGap,
+		longCopy,
+	] = values;
+	return {
+		initialLoading,
+		intrinsicEmpty,
+		filteredNoResults,
+		wholeSurfaceError,
+		deniedOrNotFound,
+		revokedWhileOpen,
+		archiveReadOnlyRestore,
+		versionConflict,
+		mutationError,
+		reconnectOrReplayGap,
+		longCopy,
+	};
+}
+
+const denied = use("US-SCOPE-01", "scope:denied");
+const revoked = use("US-SCOPE-01", "scope:revoked-while-open");
+const replayGap = use("US-QUERY-REALTIME-01", "realtime:replay-gap");
+const companyCopy = use("US-COPY-01", "copy:long-company");
+const workCopy = use("US-COPY-01", "copy:long-work");
+const actorCopy = use("US-COPY-01", "copy:long-actor");
+const markdownCopy = use("US-COPY-01", "copy:long-markdown");
+
+const setupStates = states([
+	use("US-SETUP-01", "setup:initial-loading"),
+	use("US-SETUP-01", "setup:new-company"),
+	na("NA-FILTER"),
+	use("US-SETUP-01", "setup:mutation-error"),
+	denied,
+	revoked,
+	na("NA-LIFECYCLE"),
+	use("US-SETUP-01", "setup:version-conflict"),
+	use("US-SETUP-01", "setup:mutation-error"),
+	na("NA-STATIC"),
+	companyCopy,
+]);
+
+export const phase0QueryStateCoverage = [
+	{
+		selector: selector.screenSignIn,
+		states: states([
+			use("US-AUTH-01", "auth:session-resolving"),
+			na("NA-DATA"),
+			na("NA-FILTER"),
+			use("US-AUTH-01", "auth:recoverable-error"),
+			use("US-AUTH-01", "auth:anonymous-redirect"),
+			use("US-AUTH-01", "auth:session-revoked"),
+			na("NA-LIFECYCLE"),
+			na("NA-IMMUTABLE"),
+			use("US-AUTH-01", "auth:recoverable-error"),
+			na("NA-STATIC"),
+			companyCopy,
+		]),
+	},
+	{
+		selector: selector.screenInvitationAcceptance,
+		states: states([
+			use("US-INVITE-01", "invitation:eligible"),
+			na("NA-DATA"),
+			na("NA-FILTER"),
+			use("US-INVITE-01", "invitation:query-error"),
+			use("US-INVITE-01", "invitation:wrong-account"),
+			use("US-INVITE-01", "invitation:revoked"),
+			na("NA-LIFECYCLE"),
+			use("US-INVITE-01", "invitation:accept-resend-race"),
+			use("US-INVITE-01", "invitation:mutation-error"),
+			na("NA-STATIC"),
+			companyCopy,
+		]),
+	},
+	{ selector: selector.screenCompanySetup, states: setupStates },
+	{ selector: selector.screenTeamSetup, states: setupStates },
+	{ selector: selector.screenWorkSetup, states: setupStates },
+	{
+		selector: selector.screenCompanyHome,
+		states: states([
+			use("US-HOME-01", "home:loading"),
+			use("US-HOME-01", "home:empty-human-only"),
+			na("NA-FILTER"),
+			use("US-HOME-01", "home:error"),
+			denied,
+			revoked,
+			na("NA-READONLY"),
+			na("NA-READONLY"),
+			na("NA-READONLY"),
+			replayGap,
+			companyCopy,
+		]),
+	},
+	{
+		selector: selector.screenCompanyActivity,
+		states: states([
+			use("US-ACTIVITY-01", "activity:loading"),
+			use("US-ACTIVITY-01", "activity:empty"),
+			use("US-ACTIVITY-01", "activity:filtered-empty"),
+			use("US-ACTIVITY-01", "activity:error"),
+			denied,
+			revoked,
+			na("NA-IMMUTABLE"),
+			na("NA-READONLY"),
+			na("NA-READONLY"),
+			replayGap,
+			companyCopy,
+		]),
+	},
+	{
+		selector: selector.screenAiSetup,
+		states: states([
+			use("US-AI-SETUP-01", "ai-setup:verifying"),
+			use("US-AI-SETUP-01", "ai-setup:unconfigured"),
+			use("US-AI-SETUP-01", "ai-setup:model-less"),
+			use("US-AI-SETUP-01", "ai-setup:provider-unavailable"),
+			denied,
+			revoked,
+			na("NA-SECURITY"),
+			use("US-AI-SETUP-01", "ai-setup:stale-verification"),
+			use("US-AI-SETUP-01", "ai-setup:invalid-credential"),
+			replayGap,
+			actorCopy,
+		]),
+	},
+	{
+		selector: selector.screenSpaceDirectory,
+		states: states([
+			use("US-SPACES-01", "spaces:loading"),
+			use("US-SPACES-01", "spaces:whole-company-only"),
+			use("US-SPACES-01", "spaces:filtered-empty"),
+			use("US-SPACES-01", "spaces:query-error"),
+			denied,
+			revoked,
+			use("US-SPACES-01", "spaces:restore-conflict"),
+			use("US-SPACES-01", "spaces:archive-conflict"),
+			use("US-SPACES-01", "spaces:archive-conflict"),
+			replayGap,
+			workCopy,
+		]),
+	},
+	{
+		selector: selector.screenSpaceOverview,
+		states: states([
+			use("US-SPACE-01", "space:loading"),
+			use("US-SPACE-01", "space:empty-sections"),
+			na("NA-FILTER"),
+			use("US-SPACE-01", "space:query-error"),
+			denied,
+			revoked,
+			use("US-SPACE-01", "space:archived-readonly"),
+			use("US-SPACE-01", "space:version-conflict"),
+			use("US-SPACE-01", "space:mutation-error"),
+			replayGap,
+			workCopy,
+		]),
+	},
+	{
+		selector: selector.screenProjectContext,
+		states: states([
+			use("US-PROJECT-01", "project:loading"),
+			use("US-PROJECT-01", "project:optional-absent"),
+			na("NA-FILTER"),
+			use("US-PROJECT-01", "project:query-error"),
+			denied,
+			revoked,
+			use("US-PROJECT-01", "project:archived"),
+			use("US-PROJECT-01", "project:version-conflict"),
+			use("US-PROJECT-01", "project:mutation-error"),
+			replayGap,
+			workCopy,
+		]),
+	},
+	{
+		selector: selector.screenChannelDirectory,
+		states: states([
+			use("US-CHANNELS-01", "channels:loading"),
+			na("NA-INVARIANT"),
+			use("US-CHANNELS-01", "channels:archived-filter-empty"),
+			use("US-CHANNELS-01", "channels:query-error"),
+			denied,
+			revoked,
+			use("US-CHANNELS-01", "channels:archived-readonly"),
+			use("US-CHANNELS-01", "channels:slug-conflict"),
+			use("US-CHANNELS-01", "channels:create-error"),
+			replayGap,
+			workCopy,
+		]),
+	},
+	{
+		selector: selector.screenGoalList,
+		states: states([
+			use("US-GOAL-01", "goal:loading"),
+			use("US-GOAL-01", "goal:empty-list"),
+			use("US-GOAL-01", "goal:filtered-empty"),
+			use("US-GOAL-01", "goal:query-error"),
+			denied,
+			revoked,
+			use("US-GOAL-01", "goal:archived-readonly"),
+			use("US-GOAL-01", "goal:version-conflict"),
+			use("US-GOAL-01", "goal:mutation-error"),
+			replayGap,
+			workCopy,
+		]),
+	},
+	{
+		selector: selector.screenGoalDetail,
+		states: states([
+			use("US-GOAL-01", "goal:loading"),
+			use("US-GOAL-01", "goal:empty-list"),
+			na("NA-FILTER"),
+			use("US-GOAL-01", "goal:query-error"),
+			denied,
+			revoked,
+			use("US-GOAL-01", "goal:archived-readonly"),
+			use("US-GOAL-01", "goal:version-conflict"),
+			use("US-GOAL-01", "goal:mutation-error"),
+			replayGap,
+			workCopy,
+		]),
+	},
+	{
+		selector: selector.screenTaskList,
+		states: states([
+			use("US-TASK-01", "task:loading"),
+			use("US-TASK-01", "task:empty-list"),
+			use("US-TASK-01", "task:filtered-empty"),
+			use("US-TASK-01", "task:query-error"),
+			denied,
+			revoked,
+			use("US-TASK-01", "task:archived-readonly"),
+			use("US-TASK-01", "task:version-conflict"),
+			use("US-TASK-01", "task:mutation-error"),
+			replayGap,
+			workCopy,
+		]),
+	},
+	{
+		selector: selector.screenTaskDetail,
+		states: states([
+			use("US-TASK-01", "task:loading"),
+			use("US-TASK-01", "task:empty-list"),
+			na("NA-FILTER"),
+			use("US-TASK-01", "task:query-error"),
+			denied,
+			revoked,
+			use("US-TASK-01", "task:archived-readonly"),
+			use("US-TASK-01", "task:version-conflict"),
+			use("US-TASK-01", "task:mutation-error"),
+			replayGap,
+			workCopy,
+		]),
+	},
+	{
+		selector: selector.screenChannelThread,
+		states: states([
+			use("US-THREAD-01", "thread:history-loading"),
+			use("US-THREAD-01", "thread:empty"),
+			na("NA-FILTER"),
+			use("US-THREAD-01", "thread:query-error"),
+			denied,
+			revoked,
+			use("US-THREAD-01", "thread:archived-readonly"),
+			na("NA-IMMUTABLE"),
+			use("US-THREAD-01", "thread:send-error"),
+			replayGap,
+			use("US-THREAD-01", "thread:long-structured-content"),
+		]),
+	},
+	{
+		selector: selector.screenNeedsYou,
+		states: states([
+			use("US-NEEDS-01", "needs:loading"),
+			use("US-NEEDS-01", "needs:empty"),
+			na("NA-FILTER"),
+			use("US-NEEDS-01", "needs:error"),
+			denied,
+			revoked,
+			na("NA-LIFECYCLE"),
+			use("US-NEEDS-01", "needs:stale-decision"),
+			use("US-NEEDS-01", "needs:decision-error"),
+			replayGap,
+			actorCopy,
+		]),
+	},
+	{
+		selector: selector.screenRunDetail,
+		states: states([
+			use("US-RUN-DETAIL-01", "run-detail:loading"),
+			use("US-RUN-DETAIL-01", "run-detail:empty-activity"),
+			na("NA-FILTER"),
+			use("US-RUN-DETAIL-01", "run-detail:query-error"),
+			denied,
+			revoked,
+			na("NA-LIFECYCLE"),
+			use("US-RUN-DETAIL-01", "run-detail:stale-command"),
+			use("US-RUN-DETAIL-01", "run-detail:command-error"),
+			replayGap,
+			markdownCopy,
+		]),
+	},
+] as const satisfies readonly QueryStateCoverage[];

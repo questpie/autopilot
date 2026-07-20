@@ -1,0 +1,19 @@
+{
+	"name": "storybook-object-list-template",
+	"startedAt": "2026-07-19T13:02:42.304Z",
+	"actions": [
+		{
+			"command": "browser open",
+			"args": [
+				"http://127.0.0.1:6007/iframe.html?id=templates-work-objectlist--tasks-populated&viewMode=story"
+			],
+			"timestamp": "2026-07-19T13:02:42.935Z"
+		},
+		{
+			"command": "browser screenshot",
+			"args": ["tmp/qprobe/sessions/questpie-autopilot-v2-bfc8beb3/shots/shot-002.png"],
+			"timestamp": "2026-07-19T13:02:44.767Z"
+		}
+	],
+	"finishedAt": "2026-07-19T13:02:44.957Z"
+}

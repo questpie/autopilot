@@ -1,0 +1,19 @@
+node_modules/
+.turbo/
+dist/
+.output/
+storybook-static/
+coverage/
+tmp/
+*.log
+.DS_Store
+
+# Local-only runtime state and secrets
+.env
+.env.local
+.questpie/
+
+# qprobe replay artifacts: playwright output plus the per-run rewritten config
+# (`qprobe replay` bakes the ephemeral --base URL into it on every run)
+test-results/
+tests/qprobe-product/playwright.config.ts

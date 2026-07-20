@@ -1,0 +1,68 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "vitest"],
+	"categories": {
+		"correctness": "error"
+	},
+	"rules": {
+		"jsx-a11y/anchor-has-content": "warn",
+		"jsx-a11y/click-events-have-key-events": "warn",
+		"jsx-a11y/control-has-associated-label": "warn",
+		"jsx-a11y/label-has-associated-control": "warn",
+		"jsx-a11y/no-noninteractive-element-interactions": "warn",
+		"jsx-a11y/prefer-tag-over-role": "warn"
+	},
+	"ignorePatterns": [
+		"**/node_modules/**",
+		"**/dist/**",
+		"**/.output/**",
+		"**/storybook-static/**",
+		"**/coverage/**",
+		"**/.turbo/**",
+		"tmp/**",
+		"apps/operator-web/src/routeTree.gen.ts",
+		"apps/operator-web/src/questpie/server/.generated/**",
+		"apps/operator-web/src/questpie/server/migrations/snapshots/**"
+	],
+	"env": {
+		"builtin": true,
+		"browser": true,
+		"node": true
+	},
+	"overrides": [
+		{
+			"files": ["apps/operator-web/**/*.{js,jsx,ts,tsx}"],
+			"rules": {
+				"no-restricted-imports": [
+					"error",
+					{
+						"patterns": [
+							{
+								"group": [
+									"@base-ui/react",
+									"@base-ui/react/*",
+									"@shadcn/*",
+									"shadcn",
+									"ai",
+									"ai/*",
+									"@ai-sdk/*"
+								],
+								"message": "Apps must consume UI and AI presentation through the public @questpie/ui surface."
+							}
+						]
+					}
+				]
+			}
+		},
+		{
+			"files": [
+				"**/*.test.{js,jsx,ts,tsx}",
+				"**/*.spec.{js,jsx,ts,tsx}",
+				"**/tests/**/*.{js,jsx,ts,tsx}"
+			],
+			"env": {
+				"vitest": true
+			}
+		}
+	]
+}

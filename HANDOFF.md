@@ -44,7 +44,7 @@ Sequence is strict: **data model + flows → design kit in Storybook → pages**
 
 ## 2. Why v2 — honest learnings (anti-patterns to NOT repeat)
 
-The first attempt built **89 HTML wireframe artboards** fast, via many parallel agents. It failed on coherence. The board is kept **only as inspiration for IA + flows**, never as a visual/impl reference. What went wrong, and the rule it implies:
+The first attempt built **89 HTML wireframe artboards** fast, via many parallel agents. It failed on coherence. The original warning was against copying one-off HTML and its contradictions. The owner has since ratified the complete board's repeated visual grammar as the canonical visual source for v2: we extract tokens, primitives, templates, IA, and flows from it, while rejecting ad-hoc classes, inline styles, duplicated anatomy, and stale domain assumptions. What went wrong, and the rule it implies:
 
 | What went wrong | Rule for v2 |
 |---|---|
@@ -133,7 +133,7 @@ Codex locks these in Storybook, ONE API each, defined variants only:
 
 ---
 
-## 10. Inspiration assets (mine for IA + flows, NOT visuals)
+## 10. Canonical board source (extract the repeated visual grammar, never copy one-off HTML)
 
 Old wireframe board: `~/.agent-board/projects/questpie-autopilot/wireframes/autopilot-operator-web-product-wireframes/` — 89 artboards + docs worth reading: **COVERAGE-MAP.md** (107-screen E2E inventory, priorities), **SCREEN-MAP.md** (goal-loop screen specs), **PERSONAS-SCENARIOS.md**, **ELEMENT-LOGIC.md** (per-element data-fill + generative glossary), **JUBLI-ADAPTIVE.md** (mobile adaptive patterns), **CONSISTENCY-AUDIT.md** (the sprawl analysis). Autopilot backend context: `questpie-cms/apps/autopilot/CONTEXT.md`. Product vision page: questpie.com/autopilot.
 

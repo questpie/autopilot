@@ -1,0 +1,45 @@
+{
+	"schemaVersion": 1,
+	"source": {
+		"repositoryPath": "/Users/drepkovsky/questpie/repos/questpie-cms",
+		"branch": "feat/autopilot-prerabka-v1",
+		"baselineCommit": "725c7e96d4ace6143ab4b54836ccb5e3f5946ee1",
+		"comparisonRef": "origin/main",
+		"comparisonCommit": "4be15299ffafa8a4808474823815a3dc6d49689d"
+	},
+	"versions": {
+		"publishedBaseline": "3.16.0",
+		"targetRelease": "3.17.0"
+	},
+	"localDevelopmentPackages": {
+		"questpie": "questpie",
+		"@questpie/ai": "ai",
+		"@questpie/executor": "executor",
+		"@questpie/mcp": "mcp",
+		"@questpie/openapi": "openapi",
+		"@questpie/sandbox": "sandbox",
+		"@questpie/tanstack-query": "tanstack-query",
+		"@questpie/workflows": "workflows"
+	},
+	"appRuntimePackages": [
+		"questpie",
+		"@questpie/mcp",
+		"@questpie/openapi",
+		"@questpie/tanstack-query",
+		"@questpie/workflows"
+	],
+	"runtimeConsumerRoots": ["apps/operator-web"],
+	"fixedReleaseGroup": [
+		"questpie",
+		"@questpie/admin",
+		"@questpie/ai",
+		"@questpie/elysia",
+		"@questpie/hono",
+		"@questpie/mcp",
+		"@questpie/next",
+		"@questpie/openapi",
+		"@questpie/sandbox",
+		"@questpie/tanstack-query",
+		"@questpie/workflows"
+	]
+}

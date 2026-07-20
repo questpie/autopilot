@@ -1,0 +1,7 @@
+/* Storybook's centered layout uses 100vw for the canvas root. On platforms with
+ * non-overlay scrollbars that is wider than the layout viewport once a story
+ * becomes vertically scrollable. Clamp the preview root to the available body
+ * width so long component catalogs never create horizontal page overflow. */
+body.sb-main-centered #storybook-root {
+	max-width: 100%;
+}

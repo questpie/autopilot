@@ -1,0 +1,12 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"useTabs": true,
+	"printWidth": 100,
+	"ignorePatterns": [
+		"**/*.md",
+		"tmp/**",
+		"apps/operator-web/src/routeTree.gen.ts",
+		"apps/operator-web/src/questpie/server/.generated/**",
+		"apps/operator-web/src/questpie/server/migrations/snapshots/**"
+	]
+}
