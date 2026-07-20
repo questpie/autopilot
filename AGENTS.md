@@ -13,7 +13,7 @@ This repo uses **agent-board** as the durable store for goals, specs, tasks, kno
 - Treat `docs/architecture/framework-capability-reuse.md` as a binding backend gate. Reuse QUESTPIE for auth, collections, queries, realtime, search/vector, queues, workflows, AI, MCP, sandbox, executor, storage, and secrets; when a generic contract is missing, implement and release it upstream in `questpie-cms` instead of creating an Autopilot-local substitute.
 - Keep data, commands, query factories, realtime reconciliation, view projections, components, templates, and routes in separate modules. Prefer deep modules with small public interfaces over wide bags of helpers or `ReactNode` slots.
 - Treat a hand-written product module approaching roughly 350 lines as an architecture-review signal, not a quota to game. Split by cohesive invariant or capability before adding more behavior; generated registry source, migrations, and scenario fixtures may be longer when their tooling or linear narrative requires it. Never replace one mega file with a shallow bag of mutually dependent helpers.
-- Do not touch git remotes. Preserve unrelated working-tree changes and do not switch branches while other agents share the workspace.
+- The agent may push reviewed, gate-green work to `origin` (github.com/questpie/autopilot main) without asking (owner standing authorization, 2026-07-21). It must NOT force-push, rewrite published history, delete remote branches, or change repo/branch settings without explicit per-action confirmation — those remain destructive owner-gated operations. Preserve unrelated working-tree changes and do not switch branches while other agents share the workspace.
 
 ## Upstream dependency research protocol
 
