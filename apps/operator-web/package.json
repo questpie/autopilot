@@ -11,6 +11,8 @@
 		"dev": "bun --bun vite dev --port 3000",
 		"build": "vite build",
 		"start": "bun run .output/server/index.mjs",
+		"preview": "bun run build && bun run preview:serve",
+		"preview:serve": "NODE_ENV=production bun run .output/server/index.mjs",
 		"check-types": "tsc --noEmit",
 		"routes:generate": "tsr generate",
 		"questpie:generate": "questpie generate -c src/questpie/server/questpie.config.ts",

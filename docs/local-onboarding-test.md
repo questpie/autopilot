@@ -5,13 +5,17 @@ onboarding flow against your local **dev** database, in a real browser.
 
 ## TL;DR
 
+From the repo root:
+
 ```bash
-cd apps/operator-web
-bun run db:push                 # dev DB only — sync schema (safe; never run against prod)
-bun run build                   # produce .output/server/index.mjs
-set -a; source .env; set +a     # load DATABASE_URL, APP_URL, BETTER_AUTH_SECRET, MAIL_ADAPTER=console
-NODE_ENV=production bun --no-env-file run .output/server/index.mjs
+bun run preview:db      # one-time (and after schema changes): sync the dev DB — safe, never prod
+bun run preview         # build + serve the app on http://localhost:3000 against the dev DB
 ```
+
+`bun run preview` = `build` + `preview:serve` (`NODE_ENV=production` + the console mail
+adapter, reading `apps/operator-web/.env`). After a code change, re-run `bun run preview`
+to rebuild; to just restart the server on the existing build, use `bun run preview:serve`.
+This replaces `bun dev`, which is currently broken (see below).
 
 Then, in this terminal, watch stdout while you use the app at
 <http://localhost:3000>:
