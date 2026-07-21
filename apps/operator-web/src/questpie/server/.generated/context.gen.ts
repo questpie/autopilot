@@ -30,6 +30,10 @@ import _channel_harnessProbe from "../channels/harness-probe";
 import _route_actors_archive from "../routes/actors/archive";
 import _route_actors_reactivate from "../routes/actors/reactivate";
 import _route_actors_suspend from "../routes/actors/suspend";
+import _route_channels_archive from "../routes/channels/archive";
+import _route_channels_create from "../routes/channels/create";
+import _route_channels_rename from "../routes/channels/rename";
+import _route_channels_restore from "../routes/channels/restore";
 import _route_companies_bootstrap from "../routes/companies/bootstrap";
 import _route_invitations_accept from "../routes/invitations/accept";
 import _route_invitations_challenge from "../routes/invitations/challenge";
@@ -82,7 +86,7 @@ type _AppAuthConfig = _MPConfigSub<typeof _modules, "auth"> & typeof _authConfig
 type _AppSessionAuthConfig = _AppAuthConfig;
 type _AppSession = NonNullable<InferSessionFromAuthConfig<_AppSessionAuthConfig>> | null;
 
-export type AppRouteKeys = "spaceMemberships/change" | "spaceMemberships/remove" | "spaceMemberships/add" | "projects/restore" | "projects/archive" | "projects/rename" | "projects/create" | "spaces/restore" | "spaces/archive" | "spaces/create" | "spaces/update" | "roleBindings/replace" | "actors/archive" | "actors/suspend" | "actors/reactivate" | "companies/bootstrap" | "invitations/challenge" | "invitations/issue" | "invitations/resend" | "invitations/revoke" | "invitations/accept" | "invitations/exchange";
+export type AppRouteKeys = "spaceMemberships/change" | "spaceMemberships/remove" | "spaceMemberships/add" | "projects/restore" | "projects/archive" | "projects/rename" | "projects/create" | "spaces/restore" | "spaces/archive" | "spaces/create" | "spaces/update" | "roleBindings/replace" | "actors/archive" | "actors/suspend" | "actors/reactivate" | "companies/bootstrap" | "channels/restore" | "channels/archive" | "channels/rename" | "channels/create" | "invitations/challenge" | "invitations/issue" | "invitations/resend" | "invitations/revoke" | "invitations/accept" | "invitations/exchange";
 
 type _CollectionsAPI = { [K in keyof AppCollections]: CollectionAPI<AppCollections[K], AppCollections> };
 type _JobHandlerCollections = _ModuleCollections & {

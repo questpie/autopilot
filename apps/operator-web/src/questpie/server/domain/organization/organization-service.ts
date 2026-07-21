@@ -1,5 +1,6 @@
 import { service } from "questpie/services";
 import { createActorMembership } from "./actor-membership";
+import { createChannels } from "./channels";
 import { createCompanyBootstrap } from "./company-bootstrap";
 import { createCompanyParticipation } from "./company-participation";
 import { createInvitationAcceptance } from "./invitation-acceptance";
@@ -29,6 +30,7 @@ export default service()
 		const spaces = createSpaces(serviceContext, commandContext);
 		const spaceMemberships = createSpaceMemberships(serviceContext, commandContext);
 		const projects = createProjects(serviceContext, commandContext);
+		const channels = createChannels(serviceContext, commandContext);
 
 		return {
 			...companyBootstrap,
@@ -39,5 +41,6 @@ export default service()
 			...spaceMemberships,
 			replaceRoleBindings: companyParticipation.replaceRoleBindings,
 			...projects,
+			...channels,
 		};
 	});

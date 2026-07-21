@@ -36,6 +36,10 @@ import _channel_harnessProbe from "../channels/harness-probe";
 import _route_actors_archive from "../routes/actors/archive";
 import _route_actors_reactivate from "../routes/actors/reactivate";
 import _route_actors_suspend from "../routes/actors/suspend";
+import _route_channels_archive from "../routes/channels/archive";
+import _route_channels_create from "../routes/channels/create";
+import _route_channels_rename from "../routes/channels/rename";
+import _route_channels_restore from "../routes/channels/restore";
 import _route_companies_bootstrap from "../routes/companies/bootstrap";
 import _route_invitations_accept from "../routes/invitations/accept";
 import _route_invitations_challenge from "../routes/invitations/challenge";
@@ -163,6 +167,10 @@ _appPromise = createApp(
 			"actors/archive": _route_actors_archive,
 			"actors/reactivate": _route_actors_reactivate,
 			"actors/suspend": _route_actors_suspend,
+			"channels/archive": _route_channels_archive,
+			"channels/create": _route_channels_create,
+			"channels/rename": _route_channels_rename,
+			"channels/restore": _route_channels_restore,
 			"companies/bootstrap": _route_companies_bootstrap,
 			"invitations/accept": _route_invitations_accept,
 			"invitations/challenge": _route_invitations_challenge,
