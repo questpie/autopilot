@@ -31,3 +31,19 @@ The smallest fork-INDEPENDENT surface is the raw `spaces.visible(companyId)` bou
 ## Upstream gaps (none block the validation surface)
 
 Typed realtime `findOne`/live-item builder in `@questpie/tanstack-query` (interim: `find({where:{id},limit:1},{realtime:true})` works today); the rest is conditional on the shell-liveness answer.
+
+## Amendment (2026-07-21): reusable options are the key surface; arm-first invalidation
+
+Ratified from a follow-up grill grounded in `docs/architecture/realtime-tanstack-query-patterns.md` (primary sources cited there: TkDodo, TanStack Query v5 docs, `streamedQuery` source). This refines two decisions above and adds the module home. The core — bounded live snapshots are truth, one-arm-per-logical-read, optimistic acknowledgement-only, surface-denied vs 401 — stands and is confirmed by the research.
+
+- **Module home.** Each feature owns `features/<name>/queries.ts` and `features/<name>/mutations.ts`; all data work (options, optimistic acknowledgement, invalidation) lives there. `app-data-context` is a thin composer that assembles the per-feature arms/commands into the request-scoped context — the pattern it already uses for commands, extended to queries. Components only consume; no data logic in components.
+
+- **SUPERSEDES "Typed key-factory contract."** There is no hand-written key vocabulary. A read is a reusable `queryOptions` arm (`q.collections.X.find(opts, { realtime })`); its key IS `arm(params).queryKey`. Derived UI projections are a `select` over ONE live arm, never a second `q.custom.query` with a hand-written key — TanStack structural sharing heals every projection off one stream. `q.custom.query` is a last resort for a read with no collection counterpart. `src/lib/data/query-keys.ts` (the parallel segment vocabulary plus the speculative fan-outs, which had zero consumers) is deleted; invalidation targets are an option `.queryKey` or the framework collection prefix `q.key(["collections", name])`.
+
+- **Never invalidate a mounted live arm.** A `streamedQuery` arm is permanently `fetching`; `invalidateQueries` on it re-invokes `streamFn` and re-opens the SSE subscription (default `cancelRefetch:true` kills the in-flight stream first) — pure waste, the stream is already the authoritative writer. The live arm and its `select` projections are the region where invalidation is ABSENT.
+
+- **REFINES "Channel-event reconciliation."** The reconciler stays invalidation-only and never touches a live arm. It is a central dispatch whose `event → affected option-keys` entries are CONTRIBUTED per feature (`features/<name>/realtime.ts`), composed into one dispatcher (mirroring how `app-data-context` composes queries/commands). It invalidates only EDGE reads — non-live/one-shot reads, aggregates NOT computed via `select` over a live arm, and cross-collection semantic consequences whose target is not itself a mounted live arm — targeted by prefix/`exact`/`predicate`, capped by `refetchType:'active'`. Entries are added only when a surface needs one; no speculative fan-outs.
+
+- **Decision rule (invalidate vs `setQueryData` vs rely-on-stream).** Mounted arm, or a `select` over one → rely on the stream, do nothing. Not live, but the event carries the complete authoritative object for a hot additive read → `setQueryData`. Otherwise (REST/paginated/derived/cross-entity) → targeted `invalidateQueries`. In one line: the stream owns everything it feeds; invalidation owns the edges; a mounted live arm is never invalidated.
+
+- **Live-arm config (source-confirmed).** `streamedQuery` with a replace reducer, `refetchMode:"append"` (the only correct mode — `reset` blanks the UI on reconnect, `replace` never writes for an unending stream), `staleTime: Infinity`, `refetchOnWindowFocus:false`. Transport owns reconnect/replay (`sinceSeq` + full snapshot); pick a single reconnect owner (transport vs `refetchOnReconnect`) to avoid double-opening the subscription.
