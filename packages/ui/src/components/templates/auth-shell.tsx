@@ -72,7 +72,7 @@ function AuthShell({
 	return (
 		<div
 			data-slot="auth-shell"
-			className="flex min-h-dvh w-full items-center justify-center bg-canvas px-4 py-8"
+			className="flex min-h-dvh w-full items-center justify-center bg-background px-4 py-8"
 		>
 			<form
 				data-slot="auth-shell-frame"
@@ -118,7 +118,7 @@ function AuthShell({
 								{error ? (
 									<>
 										<span
-											className="mt-[0.4375rem] size-1.5 shrink-0 rounded-full bg-attention-ink"
+											className="mt-[0.4375rem] size-1.5 shrink-0 rounded-full bg-warning"
 											aria-hidden
 										/>
 										<span className="text-pretty text-muted-foreground">{error}</span>

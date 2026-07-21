@@ -39,7 +39,7 @@ function AiSettingsRoute() {
 			) : null}
 			<section
 				aria-labelledby="ai-settings-unavailable"
-				className="mt-6 rounded-md border border-hairline p-3"
+				className="mt-6 rounded-md border border-border-subtle p-3"
 			>
 				<h2 id="ai-settings-unavailable" className="text-sm font-medium">
 					Kým poskytovateľ chýba

@@ -29,7 +29,7 @@ export function ActivityFeed({ rows }: ActivityFeedProps) {
 					{rows.map((row) => (
 						<li
 							key={row.id}
-							className="flex items-baseline gap-2 rounded-md border border-hairline p-3 text-sm"
+							className="flex items-baseline gap-2 rounded-md border border-border-subtle p-3 text-sm"
 						>
 							<span className="font-medium">{row.actorName}</span>
 							<span className="text-muted-foreground">{row.verbLabel}</span>

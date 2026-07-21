@@ -62,7 +62,7 @@ function RunCard({
 			data-part="run-summary"
 			// A bounded run object is a raised WHITE object on the thread (board .run sits
 			// on --color-surface); the canvas-subtle rail tone inverted figure/ground.
-			className="run-card grid h-[var(--run-card-height)] max-w-2xl grid-rows-[2.25rem_minmax(0,1fr)_2.25rem] bg-surface"
+			className="run-card grid h-[var(--run-card-height)] max-w-2xl grid-rows-[2.25rem_minmax(0,1fr)_2.25rem] bg-card"
 			data-fixed-height="true"
 			data-run-phase={run.state.kind === "live" ? run.state.phase : undefined}
 			data-run-state={run.state.kind}
@@ -80,7 +80,7 @@ function RunCard({
 			</WorkBlockHeader>
 			<WorkBlockContent className="run-card__activity grid min-h-0 grid-rows-2 overflow-hidden">
 				<WorkBlockRow className="h-9 min-h-0 py-1.5">
-					<span className="size-[0.4375rem] rounded-full bg-action" aria-hidden />
+					<span className="size-[0.4375rem] rounded-full bg-primary" aria-hidden />
 					<span
 						data-slot={run.state.kind === "live" ? "run-current-action" : "run-state-summary"}
 						className="min-w-0 flex-1 truncate"

@@ -38,7 +38,7 @@ function SpaceContext({
 	return (
 		<header
 			data-slot="space-context"
-			className="space-context flex min-h-[var(--shell-topbar)] items-center gap-3 border-b border-hairline px-4"
+			className="space-context flex min-h-[var(--shell-topbar)] items-center gap-3 border-b border-border-subtle px-4"
 		>
 			{Icon ? <Icon data-slot="space-context-icon" aria-hidden /> : null}
 			<h1 className="ui-type-topbar-title truncate">{title}</h1>
@@ -49,13 +49,13 @@ function SpaceContext({
 					size="sm"
 					onClick={onChangeProject}
 				>
-					<span className="font-normal text-ink-muted">{projectLabel}:</span>
+					<span className="font-normal text-muted-foreground">{projectLabel}:</span>
 					{projectValue}
 					<ChevronDownIcon data-icon="inline-end" />
 				</Button>
 			) : null}
 			{meta ? (
-				<span className="space-context__meta ui-type-meta truncate text-ink-muted">{meta}</span>
+				<span className="space-context__meta ui-type-meta truncate text-muted-foreground">{meta}</span>
 			) : null}
 			{visibleMembers.length ? (
 				<div data-slot="space-members" className="ml-auto flex items-center -space-x-1">
@@ -66,7 +66,7 @@ function SpaceContext({
 						</span>
 					))}
 					{hiddenMemberCount > 0 ? (
-						<span className="ui-mono flex size-[1.375rem] items-center justify-center rounded-full bg-surface-muted text-ink-muted">
+						<span className="ui-mono flex size-[1.375rem] items-center justify-center rounded-full bg-muted text-muted-foreground">
 							+{hiddenMemberCount}
 						</span>
 					) : null}

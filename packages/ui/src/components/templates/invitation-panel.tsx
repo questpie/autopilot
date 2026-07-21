@@ -110,7 +110,7 @@ function InvitationFrame({
 		<div
 			data-slot="invitation-panel"
 			data-status={status}
-			className="flex min-h-dvh w-full items-center justify-center bg-canvas px-4 py-8"
+			className="flex min-h-dvh w-full items-center justify-center bg-background px-4 py-8"
 		>
 			<form
 				data-slot="invitation-panel-frame"

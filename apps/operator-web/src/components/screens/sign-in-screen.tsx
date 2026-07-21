@@ -33,7 +33,7 @@ function InvitationContinuationNotice({
 	return (
 		<div
 			data-testid="invitation-continuation"
-			className="grid gap-1 rounded-[var(--radius-control)] border border-hairline bg-canvas-subtle p-3 text-sm"
+			className="grid gap-1 rounded-[var(--radius-control)] border border-border-subtle bg-sidebar p-3 text-sm"
 		>
 			<p className="font-medium">Pokračujete v pozvánke</p>
 			<p className="text-pretty text-muted-foreground">{message}</p>

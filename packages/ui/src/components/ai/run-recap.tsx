@@ -10,7 +10,7 @@ function RunRecap({
 }) {
 	return (
 		<section data-slot="run-recap" aria-label="Zhrnutie dokončeného behu">
-			<p className="border-b border-hairline px-4 py-3 text-[length:var(--type-md)]">
+			<p className="border-b border-border-subtle px-4 py-3 text-[length:var(--type-md)]">
 				{recap.summary}
 			</p>
 			<RunProvenanceList items={recap.items} onOpen={onOpenRecord} />

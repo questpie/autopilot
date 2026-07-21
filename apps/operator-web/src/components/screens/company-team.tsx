@@ -26,7 +26,7 @@ export function CompanyTeam({ roster }: CompanyTeamProps) {
 				{roster.members.map((member) => (
 					<li
 						key={member.id}
-						className="flex items-center justify-between gap-3 rounded-md border border-hairline p-3"
+						className="flex items-center justify-between gap-3 rounded-md border border-border-subtle p-3"
 					>
 						<span className="truncate font-medium">{member.name}</span>
 						<span className="shrink-0 text-sm text-muted-foreground">{memberStatus(member)}</span>
@@ -40,7 +40,7 @@ export function CompanyTeam({ roster }: CompanyTeamProps) {
 						{roster.invitations.map((invitation) => (
 							<li
 								key={invitation.id}
-								className="flex items-center justify-between gap-3 rounded-md border border-hairline p-3 text-sm"
+								className="flex items-center justify-between gap-3 rounded-md border border-border-subtle p-3 text-sm"
 							>
 								<span className="truncate">{invitation.email}</span>
 								<span className="shrink-0 text-muted-foreground">Pozvánka čaká</span>

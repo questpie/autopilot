@@ -24,7 +24,7 @@ function WorkBlockHeader({ className, ...props }: ComponentProps<typeof CardHead
 			data-slot="work-block-header"
 			// Board .approval__head .ic (primitives.css:61): 14px caution glyph.
 			className={cn(
-				"flex min-h-11 flex-row items-center gap-2 border-b border-hairline px-3 py-2 text-[length:var(--type-md)] text-muted-foreground [&_svg:not([class*='size-'])]:size-[var(--icon-banner)]",
+				"flex min-h-11 flex-row items-center gap-2 border-b border-border-subtle px-3 py-2 text-[length:var(--type-md)] text-muted-foreground [&_svg:not([class*='size-'])]:size-[var(--icon-banner)]",
 				className,
 			)}
 			{...props}
@@ -42,7 +42,7 @@ function WorkBlockRow({ className, ...props }: ComponentProps<"div">) {
 			data-slot="work-block-row"
 			// Board run-context row glyphs (.run__fail .ic, primitives.css:49): 15px.
 			className={cn(
-				"flex min-h-9 min-w-0 items-center gap-3 px-3 py-2 text-[length:var(--type-md)] not-last:border-b not-last:border-hairline [&_svg:not([class*='size-'])]:size-[var(--icon-control)]",
+				"flex min-h-9 min-w-0 items-center gap-3 px-3 py-2 text-[length:var(--type-md)] not-last:border-b not-last:border-border-subtle [&_svg:not([class*='size-'])]:size-[var(--icon-control)]",
 				className,
 			)}
 			{...props}
@@ -55,7 +55,7 @@ function WorkBlockFooter({ className, ...props }: ComponentProps<typeof CardFoot
 		<CardFooter
 			data-slot="work-block-footer"
 			className={cn(
-				"min-h-9 justify-between gap-2 border-t border-hairline px-3 py-1.5",
+				"min-h-9 justify-between gap-2 border-t border-border-subtle px-3 py-1.5",
 				className,
 			)}
 			{...props}

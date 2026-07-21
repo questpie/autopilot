@@ -33,7 +33,7 @@ export function ChannelDirectory({ channels }: ChannelDirectoryProps) {
 							<div
 								data-testid="channel-row"
 								data-channel-default={channel.isSystemDefault ? "true" : undefined}
-								className="flex w-full items-center justify-between gap-3 rounded-md border border-hairline p-3 text-left"
+								className="flex w-full items-center justify-between gap-3 rounded-md border border-border-subtle p-3 text-left"
 							>
 								<span className="font-medium">
 									<span className="text-muted-foreground">#</span>

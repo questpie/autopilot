@@ -17,7 +17,7 @@ function Surface({ level = "flat", interactive, selected, className, ...props }:
 			data-selected={selected || undefined}
 			className={cn(
 				"rounded-xl shadow-none",
-				level === "flat" && "border-hairline bg-surface",
+				level === "flat" && "border-border-subtle bg-card",
 				level === "raised" && "border-border bg-card shadow-sm",
 				level === "overlay" && "border-border bg-popover shadow-md",
 				interactive && "transition-colors hover:border-border",

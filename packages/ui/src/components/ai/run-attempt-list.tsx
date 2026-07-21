@@ -55,7 +55,7 @@ function RunAttemptList({ attempts }: { attempts: readonly RunAttemptProjection[
 	}
 
 	return (
-		<ul aria-label="Pokusy behu" className="divide-y divide-hairline">
+		<ul aria-label="Pokusy behu" className="divide-y divide-border-subtle">
 			{attempts.map((attempt) => (
 				<li key={attempt.id}>
 					<Item className="rounded-none px-4 py-3">

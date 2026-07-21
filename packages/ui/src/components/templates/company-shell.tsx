@@ -86,7 +86,7 @@ function CompanyActorIdentity({
 			<span className="min-w-0 flex-1">
 				<strong className="block truncate text-[0.8125rem] font-medium">{actor.name}</strong>
 				{role ? (
-					<small className="block truncate text-[0.6875rem] text-ink-muted">{role}</small>
+					<small className="block truncate text-[0.6875rem] text-muted-foreground">{role}</small>
 				) : null}
 			</span>
 			<Button variant="ghost" size="icon-xs" aria-label={menuLabel} onClick={onOpenMenu}>
@@ -139,13 +139,13 @@ function CompanyShell({
 	return (
 		<div data-slot="company-shell">
 			<SidebarProvider className="min-h-dvh">
-				<Sidebar collapsible="none" className="hidden min-h-dvh border-r border-hairline lg:flex">
+				<Sidebar collapsible="none" className="hidden min-h-dvh border-r border-border-subtle lg:flex">
 					<div data-slot="company-rail" className="contents">
 						<SidebarHeader className="gap-1 p-2">
 							<CompanyIdentity companyName={companyName} />
 							<Button
 								variant="secondary"
-								className="company-command w-full justify-start text-ink-muted"
+								className="company-command w-full justify-start text-muted-foreground"
 								onClick={onOpenCommand}
 							>
 								<SearchIcon data-icon="inline-start" />
@@ -160,7 +160,7 @@ function CompanyShell({
 								onNavigate={navigate}
 							/>
 						</SidebarContent>
-						<SidebarFooter className="gap-2 border-t border-hairline p-2">
+						<SidebarFooter className="gap-2 border-t border-border-subtle p-2">
 							{footerNotice}
 							<CompanyActorIdentity
 								actor={actor}
@@ -172,10 +172,10 @@ function CompanyShell({
 						</SidebarFooter>
 					</div>
 				</Sidebar>
-				<SidebarInset className="min-h-dvh min-w-0 bg-canvas">
+				<SidebarInset className="min-h-dvh min-w-0 bg-background">
 					<header
 						data-slot="mobile-place-header"
-						className="sticky top-0 flex items-center gap-3 border-b border-hairline px-3 lg:hidden"
+						className="sticky top-0 flex items-center gap-3 border-b border-border-subtle px-3 lg:hidden"
 					>
 						<Button
 							variant="ghost"
@@ -211,7 +211,7 @@ function CompanyShell({
 						{children}
 					</div>
 					<nav
-						className="ui-app-shell-mobile-nav fixed inset-x-0 bottom-0 grid border-t border-hairline lg:hidden"
+						className="ui-app-shell-mobile-nav fixed inset-x-0 bottom-0 grid border-t border-border-subtle lg:hidden"
 						aria-label={mobileNavigationLabel}
 					>
 						{mobileItems.slice(0, 2).map(({ slot, item }) => (
@@ -275,7 +275,7 @@ function CompanyShell({
 										onNavigate={navigate}
 									/>
 								</div>
-								<div className="border-t border-hairline p-2">
+								<div className="border-t border-border-subtle p-2">
 									<CompanyActorIdentity
 										actor={actor}
 										role={actorRole}

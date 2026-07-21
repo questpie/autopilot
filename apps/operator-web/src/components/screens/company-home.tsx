@@ -14,7 +14,7 @@ export function CompanyHome({ companyName }: CompanyHomeProps) {
 	return (
 		<div data-testid="screen-company-home" className="mx-auto w-full max-w-3xl px-4 py-8">
 			<header className="mb-6">
-				<p className="ui-eyebrow text-xs text-ink-muted">Domov</p>
+				<p className="ui-eyebrow text-xs text-muted-foreground">Domov</p>
 				<h1 className="mt-1 text-2xl font-semibold tracking-tight">{companyName}</h1>
 				<p className="mt-1 text-sm text-muted-foreground">
 					Vitajte v pracovnom priestore. Váš tím je pripravený začať.

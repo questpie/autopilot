@@ -178,7 +178,7 @@ function ChannelThread({
 			data-vessel-kind={vessel.kind}
 			data-content-state={content.kind}
 		>
-			<header className="flex h-[3.25rem] shrink-0 items-center justify-between gap-3 border-b border-hairline px-4">
+			<header className="flex h-[3.25rem] shrink-0 items-center justify-between gap-3 border-b border-border-subtle px-4">
 				<div className="min-w-0">
 					<h2 className="truncate font-semibold">{title}</h2>
 					{threadVessel ? (
@@ -192,7 +192,7 @@ function ChannelThread({
 			{threadVessel ? (
 				<div
 					data-slot="thread-vessel-context"
-					className="flex min-h-10 items-center justify-between gap-3 border-b border-hairline bg-canvas-subtle px-4"
+					className="flex min-h-10 items-center justify-between gap-3 border-b border-border-subtle bg-sidebar px-4"
 				>
 					<ActorStack members={threadVessel.participants} size="sm" />
 					<Button

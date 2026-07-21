@@ -63,12 +63,12 @@ function RunPermissionList({
 							// The WorkBlock chrome is a hairline ring (Card ring-1); retint it gold
 							// while pending so the gate reads as a bounded caution object (board
 							// .approval gold border), not a neutral card.
-							className={cn(pending && "ring-attention-border")}
+							className={cn(pending && "ring-warning-border")}
 						>
 							<WorkBlockHeader
 								className={cn(
 									"text-foreground",
-									pending && "bg-attention-surface text-attention-ink",
+									pending && "bg-warning-surface text-warning-foreground",
 								)}
 							>
 								<ShieldAlertIcon aria-hidden />

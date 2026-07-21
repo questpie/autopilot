@@ -14,7 +14,7 @@ function MessageMention({ actor_id, children, node: _node, node_id }: MessageMen
 			data-slot="actor-mention"
 			data-actor-id={actor_id}
 			data-node-id={node_id}
-			className="rounded-[0.375rem] bg-agent-tint px-1 font-medium text-agent-ink-aa"
+			className="rounded-[0.375rem] bg-agent px-1 font-medium text-agent-foreground"
 		>
 			{children}
 		</span>
@@ -25,7 +25,7 @@ const messageMarkdownComponents = {
 	a: ({ children, node: _node, ...props }) => (
 		<a
 			{...props}
-			className="wrap-anywhere font-medium text-agent-ink-aa underline"
+			className="wrap-anywhere font-medium text-agent-foreground underline"
 			rel="noopener noreferrer"
 			target="_blank"
 		>

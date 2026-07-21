@@ -19,7 +19,7 @@ function BrandMark({ size = 26, className, ...props }: BrandMarkProps) {
 			{...props}
 		>
 			<path d="M22 10V2H2V22H10" stroke="currentColor" strokeWidth={2} strokeLinecap="square" />
-			<path d="M23 13H13V23H23V13Z" className="fill-[var(--action)]" />
+			<path d="M23 13H13V23H23V13Z" className="fill-[var(--primary)]" />
 		</svg>
 	);
 }

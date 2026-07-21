@@ -61,7 +61,7 @@ function CommandInput({
 	...props
 }: React.ComponentProps<typeof CommandPrimitive.Input> & { shortcut?: string }) {
 	return (
-		<div data-slot="command-input-wrapper" className="border-b border-hairline p-3 md:p-4">
+		<div data-slot="command-input-wrapper" className="border-b border-border-subtle p-3 md:p-4">
 			<InputGroup className="h-[var(--touch-target)]! overflow-hidden rounded-none! border-0 bg-transparent shadow-none! md:h-12!">
 				<InputGroupAddon align="inline-start">
 					<SearchIcon />
@@ -76,7 +76,7 @@ function CommandInput({
 				/>
 				{shortcut ? (
 					<InputGroupAddon align="inline-end" className="has-[>kbd]:mr-0!">
-						<kbd className="rounded-[var(--radius-sm)] bg-surface-muted px-1.5 py-1 font-mono text-[length:var(--type-xs)] font-medium text-ink-muted-aa">
+						<kbd className="rounded-[var(--radius-sm)] bg-muted px-1.5 py-1 font-mono text-[length:var(--type-xs)] font-medium text-muted-foreground">
 							{shortcut}
 						</kbd>
 					</InputGroupAddon>

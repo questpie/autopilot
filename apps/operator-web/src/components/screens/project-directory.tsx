@@ -33,7 +33,7 @@ export function ProjectDirectory({ projects }: ProjectDirectoryProps) {
 						<li key={project.id}>
 							<div
 								data-testid="project-row"
-								className="flex w-full items-center justify-between gap-3 rounded-md border border-hairline p-3 text-left"
+								className="flex w-full items-center justify-between gap-3 rounded-md border border-border-subtle p-3 text-left"
 							>
 								<span className="font-medium">{project.name}</span>
 							</div>

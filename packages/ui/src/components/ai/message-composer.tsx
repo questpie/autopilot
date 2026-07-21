@@ -100,7 +100,7 @@ function MessageComposer({
 					<FieldLabel className="sr-only" htmlFor={inputId}>
 						{placeholder}
 					</FieldLabel>
-					<InputGroup className="message-composer-control rounded-[var(--radius-md)] has-disabled:bg-canvas-subtle! has-disabled:opacity-100">
+					<InputGroup className="message-composer-control rounded-[var(--radius-md)] has-disabled:bg-sidebar! has-disabled:opacity-100">
 						{draft.mentions.length || draft.attachments.length ? (
 							<InputGroupAddon align="block-start" className="flex-wrap justify-start gap-2">
 								{draft.mentions.map((mention) => (

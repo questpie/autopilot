@@ -19,7 +19,7 @@ function StateBand({ tone = "neutral", label, meta, action, className }: StateBa
 			data-tone={tone}
 			role="status"
 			className={cn(
-				"flex min-h-7 items-center gap-2 border-b border-hairline px-3 text-xs",
+				"flex min-h-7 items-center gap-2 border-b border-border-subtle px-3 text-xs",
 				className,
 			)}
 		>

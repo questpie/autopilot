@@ -48,7 +48,7 @@ export function CreateSpaceDialog({ onClose, onSubmit }: CreateSpaceDialogProps)
 				className="absolute inset-0 bg-black/40"
 				onClick={onClose}
 			/>
-			<div className="relative w-full max-w-md rounded-t-lg border border-hairline bg-background p-4 md:rounded-lg">
+			<div className="relative w-full max-w-md rounded-t-lg border border-border-subtle bg-background p-4 md:rounded-lg">
 				<h2 className="text-lg font-semibold">Nový priestor</h2>
 				{error ? (
 					<div className="mt-2">

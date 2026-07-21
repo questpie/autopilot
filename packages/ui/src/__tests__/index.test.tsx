@@ -198,7 +198,7 @@ describe("@questpie/ui public design kit", () => {
 		const selectSource = readFileSync(new URL("components/ui/select.tsx", import.meta.url), "utf8");
 
 		expect(select).toContain("h-8");
-		expect(select).toContain("bg-surface");
+		expect(select).toContain("bg-card");
 		expect(select).toContain("rounded-[var(--radius-sm)]");
 		expect(select).toContain("text-[0.9375rem]");
 		expect(selectSource).toContain("min-h-10");

@@ -89,7 +89,7 @@ function ObjectViewBar({
 	];
 
 	return (
-		<div data-slot="object-view-bar" className="object-view-bar border-b border-hairline">
+		<div data-slot="object-view-bar" className="object-view-bar border-b border-border-subtle">
 			<ToggleGroup
 				aria-label="Uložené pohľady"
 				value={[activePresetId]}
@@ -110,7 +110,7 @@ function ObjectViewBar({
 							{preset.agentAuthored ? <SparklesIcon data-icon="inline-start" aria-hidden /> : null}
 							{Icon ? <Icon data-icon="inline-start" aria-hidden /> : null}
 							{preset.tone === "live" ? (
-								<span className="size-1.5 rounded-full bg-action" aria-hidden />
+								<span className="size-1.5 rounded-full bg-primary" aria-hidden />
 							) : null}
 							{preset.label}
 						</ToggleGroupItem>

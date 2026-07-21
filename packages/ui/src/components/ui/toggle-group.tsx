@@ -49,7 +49,7 @@ function ToggleGroup({
 			data-spacing={spacing}
 			data-orientation={orientation}
 			className={cn(
-				"group/toggle-group flex w-fit flex-row items-center rounded-[var(--switcher-radius)] border border-hairline bg-surface-muted p-[var(--switcher-pad)] data-vertical:flex-col data-vertical:items-stretch",
+				"group/toggle-group flex w-fit flex-row items-center rounded-[var(--switcher-radius)] border border-border-subtle bg-muted p-[var(--switcher-pad)] data-vertical:flex-col data-vertical:items-stretch",
 				spacing === undefined ? "gap-[var(--switcher-gap)]" : spacingClasses[spacing],
 				className,
 			)}
@@ -83,7 +83,7 @@ function ToggleGroupItem({
 					variant: context.variant || variant,
 					size: context.size || size,
 				}),
-				"min-w-0 rounded-[var(--switcher-seg-radius)] border-transparent bg-transparent px-3 text-[length:var(--type-md)] leading-none text-ink-muted shadow-none hover:bg-surface-selected hover:text-ink aria-pressed:bg-surface aria-pressed:text-ink [&_svg:not([class*='size-'])]:size-[var(--switcher-seg-icon)]",
+				"min-w-0 rounded-[var(--switcher-seg-radius)] border-transparent bg-transparent px-3 text-[length:var(--type-md)] leading-none text-muted-foreground shadow-none hover:bg-accent hover:text-foreground aria-pressed:bg-card aria-pressed:text-foreground [&_svg:not([class*='size-'])]:size-[var(--switcher-seg-icon)]",
 				className,
 			)}
 			{...props}

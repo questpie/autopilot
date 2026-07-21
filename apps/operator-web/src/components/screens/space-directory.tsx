@@ -22,7 +22,7 @@ export function SpaceDirectory({ spaces, onOpenSpace, onCreate }: SpaceDirectory
 				<button
 					type="button"
 					onClick={onCreate}
-					className="rounded-md border border-hairline px-3 py-1.5 text-sm font-medium hover:bg-muted"
+					className="rounded-md border border-border-subtle px-3 py-1.5 text-sm font-medium hover:bg-muted"
 				>
 					Nový priestor
 				</button>
@@ -33,7 +33,7 @@ export function SpaceDirectory({ spaces, onOpenSpace, onCreate }: SpaceDirectory
 						<button
 							type="button"
 							onClick={() => onOpenSpace(space.slug)}
-							className="flex w-full items-center justify-between gap-3 rounded-md border border-hairline p-3 text-left hover:bg-muted"
+							className="flex w-full items-center justify-between gap-3 rounded-md border border-border-subtle p-3 text-left hover:bg-muted"
 						>
 							<span className="font-medium">{space.name}</span>
 							{space.isWholeCompany ? (

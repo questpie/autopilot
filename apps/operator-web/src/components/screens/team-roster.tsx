@@ -114,7 +114,7 @@ function InvitationRow({
 function DeliveryLinkNotice({ issued }: { issued: IssuedLink }) {
 	if (!issued.href) {
 		return (
-			<p className="rounded-md border border-hairline p-3 text-sm text-muted-foreground">
+			<p className="rounded-md border border-border-subtle p-3 text-sm text-muted-foreground">
 				{`Pozvánka pre ${issued.email} už existuje, ale jej odkaz sa nedá znova zobraziť. Použite „Poslať znova“ a odovzdajte nový odkaz.`}
 			</p>
 		);
@@ -122,7 +122,7 @@ function DeliveryLinkNotice({ issued }: { issued: IssuedLink }) {
 	return (
 		<section
 			aria-label="Odkaz pozvánky"
-			className="grid gap-2 rounded-md border border-hairline p-3"
+			className="grid gap-2 rounded-md border border-border-subtle p-3"
 		>
 			<p className="text-sm font-medium">{`Pozvánka pre ${issued.email} je pripravená`}</p>
 			<p className="text-sm text-muted-foreground">

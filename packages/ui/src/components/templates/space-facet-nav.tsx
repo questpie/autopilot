@@ -56,7 +56,7 @@ function SpaceFacetNav({ facets, activeId, onChange }: SpaceFacetNavProps) {
 							<Icon data-icon="inline-start" aria-hidden />
 							{facet.label}
 							{facet.count !== undefined ? (
-								<span className="ui-mono text-ink-muted">{facet.count}</span>
+								<span className="ui-mono text-muted-foreground">{facet.count}</span>
 							) : null}
 						</TabsTrigger>
 					);

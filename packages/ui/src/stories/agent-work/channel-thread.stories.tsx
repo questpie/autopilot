@@ -249,9 +249,9 @@ export const AnchoredThread380: Story = {
 		},
 	},
 	render: (args) => (
-		<div className="grid min-h-[40rem] grid-cols-[minmax(0,1fr)_var(--detail-aside)] bg-canvas">
-			<main aria-label="Obsah úlohy" className="min-w-0 bg-surface" />
-			<aside data-part="anchored-thread-vessel" className="min-w-0 border-l border-hairline">
+		<div className="grid min-h-[40rem] grid-cols-[minmax(0,1fr)_var(--detail-aside)] bg-background">
+			<main aria-label="Obsah úlohy" className="min-w-0 bg-card" />
+			<aside data-part="anchored-thread-vessel" className="min-w-0 border-l border-border-subtle">
 				<ChannelThread {...args} />
 			</aside>
 		</div>

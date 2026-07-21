@@ -198,7 +198,7 @@ function ObjectRow({
 				) : null}
 				{notice ? <Status state={noticeState} label={notice.label} /> : null}
 				{suggestion ? (
-					<Badge variant="secondary" className="text-agent-ink">
+					<Badge variant="secondary" className="text-agent-foreground">
 						<SparklesIcon aria-hidden />
 						{suggestion}
 					</Badge>

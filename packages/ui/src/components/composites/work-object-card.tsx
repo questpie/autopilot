@@ -86,7 +86,7 @@ function WorkObjectCard({
 						{notice ? (
 							<Status state={noticeState} label={notice.label} />
 						) : suggestion ? (
-							<Badge variant="secondary" className="text-agent-ink">
+							<Badge variant="secondary" className="text-agent-foreground">
 								<SparklesIcon aria-hidden />
 								{suggestion}
 							</Badge>

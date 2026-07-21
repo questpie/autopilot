@@ -19,9 +19,9 @@ const stepCopy: Record<WorkStepProjection["state"], string> = {
 function StepIcon({ state }: { state: WorkStepProjection["state"] }) {
 	switch (state) {
 		case "done":
-			return <CheckIcon aria-hidden className="text-success-ink" />;
+			return <CheckIcon aria-hidden className="text-success-foreground" />;
 		case "running":
-			return <LoaderCircleIcon aria-hidden className="text-action" />;
+			return <LoaderCircleIcon aria-hidden className="text-primary" />;
 		case "failed":
 			return <XIcon aria-hidden className="text-destructive" />;
 		case "pending":

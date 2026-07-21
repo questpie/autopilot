@@ -9,12 +9,12 @@ const buttonVariants = cva(
 		variants: {
 			variant: {
 				default:
-					"bg-primary text-primary-foreground shadow-[var(--button-primary-shadow)] hover:bg-[var(--action-hover)] focus-visible:ring-action/30 active:bg-[var(--action-pressed)]",
+					"bg-primary text-primary-foreground shadow-[var(--button-primary-shadow)] hover:bg-[var(--primary-hover)] focus-visible:ring-primary/30 active:bg-[var(--primary-active)]",
 				// Reserved coral 1.5px anatomy (board .btn--outline). NOT a neutral tier —
 				// neutral secondary actions use `secondary` (borderless soft fill).
 				// `--agent-ink-aa` is the coral family's AA-safe ink (AA in both themes).
 				outline:
-					"border-[1.5px] border-[var(--agent-ink-aa)] text-[var(--agent-ink-aa)] hover:bg-primary/10 aria-expanded:bg-primary/10 active:bg-primary/10",
+					"border-[1.5px] border-[var(--agent-foreground)] text-[var(--agent-foreground)] hover:bg-primary/10 aria-expanded:bg-primary/10 active:bg-primary/10",
 				secondary:
 					"bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
 				ghost:

@@ -23,7 +23,7 @@ function SelectionBar({ count, context, actions, onClear }: SelectionBarProps) {
 		<div data-slot="work-selection-bar" className="work-selection-bar">
 			<Checkbox checked aria-label="Vybrané úlohy" />
 			<strong>{count} vybrané</strong>
-			<span className="text-ink-faint" aria-hidden>
+			<span className="text-foreground-subtle" aria-hidden>
 				·
 			</span>
 			<div className="work-selection-bar__compact-actions">

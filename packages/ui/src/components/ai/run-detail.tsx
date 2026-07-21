@@ -119,7 +119,7 @@ function RunDetail({
 							description="Sem pribudnú zoskupené významové kroky, nie surový výpis nástrojov."
 						/>
 					) : (
-						<ul aria-label="Aktivita behu" className="divide-y divide-hairline">
+						<ul aria-label="Aktivita behu" className="divide-y divide-border-subtle">
 							{groups.map((group) => (
 								<li key={group.id}>
 									<Item className="rounded-none px-4 py-3">

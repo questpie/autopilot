@@ -52,7 +52,7 @@ export function AiOnboardingStep({ onSkip }: AiOnboardingStepProps) {
 				primaryAction={{ label: "Nastaviť neskôr" }}
 				onSubmit={onSkip}
 			>
-				<section aria-labelledby="ai-unavailable" className="rounded-md border border-hairline p-3">
+				<section aria-labelledby="ai-unavailable" className="rounded-md border border-border-subtle p-3">
 					<h2 id="ai-unavailable" className="text-sm font-medium">
 						Kým poskytovateľ chýba
 					</h2>
@@ -99,7 +99,7 @@ export function WorkOnboardingStep({ onConfirm }: WorkOnboardingStepProps) {
 				primaryAction={{ label: "Vstúpiť do pracovného priestoru" }}
 				onSubmit={onConfirm}
 			>
-				<section aria-labelledby="work-included" className="rounded-md border border-hairline p-3">
+				<section aria-labelledby="work-included" className="rounded-md border border-border-subtle p-3">
 					<h2 id="work-included" className="text-sm font-medium">
 						Čo máte pripravené
 					</h2>
@@ -176,7 +176,7 @@ export function CompanyOnboardingStep({ onSubmit }: CompanyOnboardingStepProps) 
 				</FieldGroup>
 				<section
 					aria-labelledby="company-creation-preview"
-					className="rounded-md border border-hairline p-3"
+					className="rounded-md border border-border-subtle p-3"
 				>
 					<h2 id="company-creation-preview" className="text-sm font-medium">
 						Čo sa vytvorí

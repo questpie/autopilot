@@ -32,7 +32,7 @@ function RunProvenanceList({
 	onOpen: (recordId: string) => void;
 }) {
 	return (
-		<ul aria-label="Proveniencia behu" className="divide-y divide-hairline">
+		<ul aria-label="Proveniencia behu" className="divide-y divide-border-subtle">
 			{items.map((item) => {
 				const Icon = kindIcons[item.kind];
 				return (

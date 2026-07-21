@@ -40,7 +40,7 @@ const emptyMediaVariants = cva(
 			variant: {
 				default: "bg-transparent",
 				icon: `${medallion} bg-muted text-muted-foreground`,
-				"icon-attention": `${medallion} bg-attention-surface text-attention-ink`,
+				"icon-attention": `${medallion} bg-warning-surface text-warning-foreground`,
 			},
 		},
 		defaultVariants: {

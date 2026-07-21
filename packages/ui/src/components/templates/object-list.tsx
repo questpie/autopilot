@@ -140,7 +140,7 @@ function ObjectList({ projection, onAction }: ObjectListProps) {
 	return (
 		<section
 			data-slot="object-list"
-			className="object-list-shell flex min-h-0 flex-1 flex-col bg-canvas"
+			className="object-list-shell flex min-h-0 flex-1 flex-col bg-background"
 		>
 			<SpaceContext {...context} />
 			{connection ? (
