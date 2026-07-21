@@ -147,6 +147,7 @@
 	--radius: 0.875rem;
 	--radius-sm: 0.625rem;
 	--radius-md: 0.875rem;
+	--radius-control: 0.75rem; /* 12px — form controls; < --radius-md keeps controls concentric inside cards */
 	--radius-lg: 1.125rem;
 	--radius-xl: 1.5rem;
 	--radius-sheet: 1.75rem;

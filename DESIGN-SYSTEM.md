@@ -27,7 +27,7 @@ Autopilot is a warm, paper-like operational workspace. Persistent chrome is flat
 
 The shared hue family never means shared component semantics. A light-mode advancing CTA uses the accessible solid `--action-solid` with white `--action-ink`, an inset top highlight, and the restrained action glow. Agent identity uses only `--agent-tint` plus `--agent-ink-aa` in marks, mentions, and provenance; it never inherits solid-button fill, foreground, or glow. These roles are separate tokens and are not interchangeable even though both descend from the canonical coral family.
 
-This contract explicitly supersedes the rejected Inter, blue-action, violet-Agent, roomy KPI-card direction. Cards are bounded work objects, not the default page layout.
+This contract explicitly supersedes the rejected Inter, blue-action, violet-Agent, and KPI-card-as-layout direction. Cards are bounded work objects, not the default page layout. Controls use the generous 40px/12px scale (re-ratified 2026-07-21, §3.3); "roomy" applies to control ergonomics, never to reintroducing KPI cards as the page layout.
 
 ## 3. Foundations
 
@@ -72,7 +72,8 @@ Uppercase section labels use `11/14`, semibold, and restrained tracking. Large d
 | Role | Canonical measurement |
 | --- | --- |
 | Base spacing | 4px scale; frequent gaps 8px and 12px |
-| Desktop controls | 32px default, 28px compact |
+| Desktop controls | 40px default, 32px compact, 44px large |
+| Control radius | 12px (button, field, select), unified |
 | Touch target | at least 44px; mobile selection rows 48px |
 | Company rail | 236px |
 | Top/context bar | 61px |
@@ -81,6 +82,8 @@ Uppercase section labels use `11/14`, semibold, and restrained tracking. Large d
 | Bounded card radius | 14px maximum |
 | Desktop overlay | about 320px wide, 12px radius |
 | Mobile Sheet | max 448px, 92dvh, 28px top radius, 40×6 grabber |
+
+> Geometry re-ratified 2026-07-21 (owner): the control scale moved one step up — 40px default, 32px compact, 44px large — with a unified 12px control radius, for a more generous, less pill-like feel. Dense rows, tables, rail chrome, and cards-as-bounded-objects are unchanged. This supersedes the earlier 32px/14px control geometry.
 
 Corners stay compact in persistent chrome. Shadow belongs to floating content; primary coral actions may receive a restrained glow. The shell and lists never become a field of elevated cards.
 

@@ -28,11 +28,11 @@ Components do not choose independent geometry. The semantic role determines the 
 
 | Role | Height | Radius | Type | Notes |
 | --- | --- | --- | --- | --- |
-| compact action | 27–28px | 10px | 13/16, 600 | dense row action only |
-| default button | 32px | 14px | 15/20, 500–600 | `.btn` radius-md; neutral tier is borderless `secondary`, never a border |
-| default field | 32px | 10px | 15/20, 500 | Input, Select trigger, search — radius-sm |
-| large action | 36px | 14px | 15/20, 600 | `.btn` radius-md; focused flow, not shell chrome |
-| desktop icon action | 28/30/36px | 10px | 16px Lucide | accessible name required |
+| compact action | 32px | 10px | 13/16, 600 | dense row action only |
+| default button | 40px | 12px | 15/20, 500–600 | radius-control; neutral tier is borderless `secondary`, never a border |
+| default field | 40px | 12px | 15/20, 500 | Input, Select trigger, search — radius-control (unified with buttons) |
+| large action | 44px | 12px | 15/20, 600 | radius-control; focused flow, not shell chrome |
+| desktop icon action | 32/40/44px | 12px | 16px Lucide | accessible name required |
 | Badge/count | 20px | pill | 12/16, 500 | neutral descriptive data |
 | Status | 22px | pill | 12/16, 500 | dot + visible label |
 | technical Tag | 18px | 6px | 11/14 mono | separate semantic anatomy |
@@ -42,6 +42,8 @@ Components do not choose independent geometry. The semantic role determines the 
 | bounded work object | content-driven | 14px | role-specific | Run, permission, review |
 | large panel | content-driven | 18px | role-specific | sparse use |
 | mobile Sheet | up to 92dvh | 28px top | role-specific | safe-area footer |
+
+> Re-ratified 2026-07-21: control scale bumped one step (default 40px, compact 32px, large 44px) with a unified 12px control radius (`--radius-control`). Dense rows, tables, and rail chrome keep their explicit compact metrics; cards stay 14px so controls nest concentrically.
 
 Coarse-pointer targets are at least 44×44px. A smaller visible control may extend its hit area only when it cannot overlap a neighboring target.
 
