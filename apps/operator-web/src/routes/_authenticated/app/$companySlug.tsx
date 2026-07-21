@@ -13,8 +13,8 @@ import { StateBand, StatePanel } from "@questpie/ui";
 import { CompanyShell } from "@questpie/ui/components/templates";
 
 import type { AgentsSnapshot } from "@/features/actors/queries";
+import { deriveCompanyShell } from "@/features/company/queries";
 import type { SpacesSnapshot } from "@/features/spaces/queries";
-import { deriveCompanyShell } from "@/lib/data/feature-queries";
 import { isSurfaceDenied } from "@/lib/data/surface-denied";
 import { buildCompanyNavigation } from "@/lib/navigation/company-nav";
 
