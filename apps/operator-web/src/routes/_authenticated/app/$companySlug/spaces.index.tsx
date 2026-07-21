@@ -6,7 +6,7 @@ import { StatePanel } from "@questpie/ui";
 
 import { CreateSpaceDialog } from "@/components/screens/create-space-dialog";
 import { SpaceDirectory } from "@/components/screens/space-directory";
-import { deriveSpaceDirectory, type SpacesSnapshot } from "@/lib/data/feature-queries";
+import { deriveSpaceDirectory, type SpacesSnapshot } from "@/features/spaces/queries";
 import { isSurfaceDenied } from "@/lib/data/surface-denied";
 
 export const Route = createFileRoute("/_authenticated/app/$companySlug/spaces/")({

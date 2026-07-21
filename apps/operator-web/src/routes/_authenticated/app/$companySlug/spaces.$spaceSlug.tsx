@@ -9,7 +9,7 @@ import { ProjectDirectory } from "@/components/screens/project-directory";
 import { SpaceOverview } from "@/components/screens/space-directory";
 import { type ChannelsSnapshot, deriveChannelDirectory } from "@/features/channels/queries";
 import { deriveProjectDirectory, type ProjectsSnapshot } from "@/features/projects/queries";
-import type { SpaceSummary } from "@/lib/data/feature-queries";
+import type { SpaceSummary } from "@/features/spaces/queries";
 import { isSurfaceDenied } from "@/lib/data/surface-denied";
 
 export const Route = createFileRoute("/_authenticated/app/$companySlug/spaces/$spaceSlug")({

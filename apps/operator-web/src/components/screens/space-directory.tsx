@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { SpaceContext } from "@questpie/ui";
 
-import type { SpaceSummary } from "@/lib/data/feature-queries";
+import type { SpaceSummary } from "@/features/spaces/queries";
 
 export type SpaceDirectoryProps = {
 	spaces: readonly SpaceSummary[];
