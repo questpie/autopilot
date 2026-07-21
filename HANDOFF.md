@@ -1,5 +1,35 @@
 # QUESTPIE Autopilot — v2 rebuild HANDOFF
 
+## ⭐ CURRENT STATE — session handoff (2026-07-21) — START HERE
+
+The **organization half** of the Phase-0 dogfood loop is built, reviewed, and pushed to `origin/main`. The **AI / work half** is not started yet. Run `agent-board status` (goal `01-week-1-dogfood`) for live task state.
+
+**Dogfood loop status:** create company ✅ · invite actors ✅ · activate Autopilot ❌ · enter Space ✅ · create Goal ❌ · create+assign Task ❌ · mention Autopilot ❌ · observe Run ❌ · attributable reply ❌
+
+**Built + pushed:**
+- Backend: 13 collections + `organization` domain service (idempotency receipts, audit, optimistic version) + ~25 typed command routes (companies/invitations/actors/spaces/space-memberships/role-bindings/projects/channels). Better Auth + **email verification** wired via the framework mailer.
+- Frontend: sign-in + onboarding + company shell + **LIVE directories** for spaces (spaces.index), and channels + projects (both in the space detail route). Reactive-data layer: `feature-queries.ts`, `query-keys.ts`, `use-optimistic-mutation.ts`, `surface-denied.ts`.
+- Commits: `586d983` email-verify · `8a3929e` channel commands · `a450fde` spaces-live + optimistic hook · `45b1f7e` channel directory live · `1323980` project directory live · `8f66741` preview scripts · `50e1bea` CSS/design-system fix. Parent task `implement-space-project-and-channel-management` = **DONE**.
+
+**Verified working:** F01 (bootstrap human company, e2e) · F03 (space/project/channel vertical) · the reactive-data pattern · and in-browser the full sign-up → console verify link → verify → onboarding, now correctly **styled**.
+
+**Run / test:**
+- App: `bun run preview:db` (one-time + after schema changes; dev DB is docker-compose `apps/operator-web/docker-compose.yml`, persistent volume) then `bun run preview` → <http://localhost:3000>. See `docs/local-onboarding-test.md`. **`bun dev` is broken** (below).
+- Tests/gates: `bun run --cwd apps/operator-web test:scenario` (F01/F03 e2e over a real HTTP harness), `test:phase-0`, root `bun run test` / `check-types` / `lint`.
+
+**NEXT (owner should steer — product-defining):** model + build **Goals and Tasks** — board tasks `model-goals-tasks-events-and-typed-commands` → `implement-the-phase-0-goal-and-task-work-loop`. Then conversation/mentions (`model-conversation-sequencing`, `implement-mention-and-assignment-...`), then the AI backbone (durable Runs, provider registry, SecretStore, agent-workload-authority), then the F01–F06 proofs.
+
+**⚠️ Owner actions / blocked:**
+1. **Commit + release the framework `safeClone` fix upstream.** `questpie-cms/packages/questpie/src/shared/utils/data-utils.ts` is modified LOCALLY (uncommitted). It makes `deepMerge` preserve function-valued config (Better Auth hooks) instead of `DataCloneError`. The app depends on it via the symlink; it is release-gated → owner's upstream flow.
+2. **`bun dev` (Vite HMR) is broken** — blocked task `fix-bun-dev-…` holds the full diagnosis + a ready-to-hand agent prompt (TanStack Start's server-fn compiler chokes on the linked framework **source**; fix needs dist-consumption or an upstream change). Use `bun run preview` meanwhile.
+3. **Channel reconciler deferred** — blocked task `channel-reconciler-…`; build it WITH the conversation surface (no message/thread/subscription exists yet — building it now would be a speculative invalidation bus).
+
+**Discipline (keep it):** every task design → implement → adversarial review; FE/data increments ALSO get the full 5-lens (react-doctor + tanstack-start/router/query + vercel-react); ground in installed source (**ADR 0022** for reactive-data; framework src) not memory; ungroundable/owner-blocking = **BLOCK, don't guess**; **KISS-first**. Conversation Slovak, code/docs English. Push reviewed-green increments to origin main (standing auth); no force-push / history-rewrite without confirmation.
+
+**Key gotchas (board knowledge has detail):** (a) framework `deepMerge` can't clone function auth hooks → `safeClone` fix; (b) the app CSS MUST `@import "@questpie/ui/styles.css"` (the canonical design system, with `@source` scanning the kit) — a stale stub shipped the whole app **unstyled**; (c) a realtime LIVE query arm needs `staleTime:0 + refetchOnMount:"always"` or the stream never opens ("looks live but isn't"); (d) version-mismatch domain errors must wrap in `translateDomainError` → 409 (channels does; projects/spaces still 500 — follow-up task exists).
+
+---
+
 > **Purpose:** hand this to Codex to turn into detailed technical + design specifications, then implement. It is the brief + context + guardrails for a **fresh, deliberate rebuild** of Autopilot as real code. It is NOT the spec — Codex writes the spec from this.
 
 ---
