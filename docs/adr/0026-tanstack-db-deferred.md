@@ -12,9 +12,9 @@ TanStack DB — client collections, incremental (differential-dataflow) live que
 - **Do not adopt TanStack DB in Phase 0.** Keep the ADR 0022 realtime-first react-query pattern, which already has a working SSR seed and covers the phase-0 needs.
 - Reasons (grounded):
   - **Maturity:** core `@tanstack/db` is 0.6.x, `react-db` 0.1.x, the `db-ivm` engine 0.1.x — all pre-1.0; the 1.0 target slipped 7+ months and maintainers call it experimental.
-  - **Sync mismatch:** DB's sync contract is row-delta-native (`begin/write/commit/truncate`); our realtime is SSE full-snapshot-replace. Feeding it snapshots is against the grain — the adapter would have to diff each snapshot back into row-ops, re-deriving the delta the transport deliberately discards.
   - **SSR regression:** DB has no SSR/hydration story for a custom sync path, versus our shipped loader → hydrate → stream-upgrade.
-  - **The reconciler shrinks but does not disappear:** the SSE transport, multiplexer, replay ledger, and snapshot server all remain; DB would sit above that backbone, not replace it.
+  - **Sync mismatch (a lesser, non-decisive reason):** DB's sync contract is row-delta-native (`begin/write/commit/truncate`); our realtime is SSE full-snapshot-replace. Per the eval this is *workable, not a blocker* — a custom sync (or the built-in Query collection) diffs each snapshot into row-ops, a solved, shipped pattern — so it is an awkward-fit tradeoff that ranks below maturity and SSR, not a co-equal grounded reason.
+  - **DB does not replace the realtime backbone, and barely shrinks our reconciler:** the SSE transport, multiplexer, replay ledger, and snapshot server all remain — DB sits above that backbone, not in place of it. And per ADR 0022 our reconciler is already edge-only (live arms + `select` self-heal; the speculative fan-outs are removed), so the cross-collection reconciliation DB would fold into its sync layer is marginal for phase-0.
 - **Future direction:** revisit when TanStack DB reaches 1.0 with a real SSR story — and then as a `@questpie/tanstack-db` framework package (owned upstream in `questpie-cms`, per framework-capability-reuse), ideally paired with a QUESTPIE **delta / change-stream realtime mode**, since the full-snapshot-replace model is the core mismatch with DB's incremental engine.
 
 ## Consequences

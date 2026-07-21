@@ -19,10 +19,10 @@ TanStack Router file-based routing (verified against `@tanstack/router-generator
 
 ## Consequences
 
-- Each feature has locality: its reads, writes, keys-via-options, realtime edges, and contracts sit together.
-- `feature-queries.ts` is split per feature and deleted as a shared module.
+- Each feature has locality: its reads, writes, realtime edges, and contracts sit together. Two things stay central by nature (see ADR 0022): the hand-written `key` of a genuine multi-collection `q.custom.query` composite (a 2-collection join cannot be a `select` over one feature's arm), and the cross-feature invalidation vocabulary (a fan-out names keys spanning several features at once).
+- `feature-queries.ts` is dismantled: each feature's arms move to its `queries.ts`, and a thin composer (`app-data-context`) assembles the per-feature arms into the request-scoped context.
 - Routes remain routing-only, so a route move does not drag feature logic with it.
-- A new feature is a new folder — one obvious home, no shared bag to edit.
+- Adding a feature has one obvious home — its folder. The only shared touch-points are the one-line composer wiring and any cross-feature consistency entry; both inherently span features, so they are not a shared bag of unrelated feature logic.
 
 ## Rejected alternatives
 
