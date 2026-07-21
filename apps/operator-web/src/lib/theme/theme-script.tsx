@@ -1,14 +1,15 @@
-import { THEME_MEDIA_QUERY, THEME_STORAGE_KEY } from "./theme-contract";
+import { THEME_MEDIA_QUERY, THEME_STORAGE_KEY, type ThemeName } from "./theme-contract";
 
 interface ThemeScriptProps {
 	nonce?: string;
+	defaultTheme?: ThemeName;
 }
 
-function createThemeInitializer(storageKey: string) {
+function createThemeInitializer(storageKey: string, defaultTheme: ThemeName = "system") {
 	return `(() => {
   const root = document.documentElement;
   const storageKey = ${JSON.stringify(storageKey)};
-  let preference = "system";
+  let preference = ${JSON.stringify(defaultTheme)};
 
   try {
     const stored = localStorage.getItem(storageKey);
@@ -25,13 +26,17 @@ function createThemeInitializer(storageKey: string) {
 })();`;
 }
 
-function ThemeScript({ nonce }: ThemeScriptProps) {
+function ThemeScript({ nonce, defaultTheme }: ThemeScriptProps) {
 	return (
 		<script
 			nonce={nonce}
 			suppressHydrationWarning
-			// The pre-hydration script is required to apply the stored/system theme before paint.
-			dangerouslySetInnerHTML={{ __html: createThemeInitializer(THEME_STORAGE_KEY) }}
+			// The pre-hydration script applies the stored preference (or the app's
+			// configured default) before paint so there is no theme flash. The default
+			// flows in from ThemeProvider so the script and React state never disagree.
+			dangerouslySetInnerHTML={{
+				__html: createThemeInitializer(THEME_STORAGE_KEY, defaultTheme),
+			}}
 		/>
 	);
 }

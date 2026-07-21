@@ -111,7 +111,7 @@ function ThemeProvider({
 
 	return (
 		<ThemeContext.Provider value={value}>
-			<ThemeScript nonce={nonce} />
+			<ThemeScript nonce={nonce} defaultTheme={defaultTheme} />
 			{children}
 		</ThemeContext.Provider>
 	);

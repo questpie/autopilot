@@ -15,17 +15,26 @@ export const Route = createRootRouteWithContext<AppDataContext>()({
 			},
 			{
 				name: "theme-color",
-				content: "#fafafa",
+				content: "#fbf9f5",
 				media: "(prefers-color-scheme: light)",
 			},
 			{
 				name: "theme-color",
-				content: "#121212",
+				content: "#141210",
 				media: "(prefers-color-scheme: dark)",
 			},
 			{ title: "operator-web" },
 		],
-		links: [{ rel: "stylesheet", href: appCss }],
+		links: [
+			{ rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+			{ rel: "icon", type: "image/png", sizes: "96x96", href: "/favicon-96x96.png" },
+			{ rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32x32.png" },
+			{ rel: "icon", type: "image/png", sizes: "16x16", href: "/favicon-16x16.png" },
+			{ rel: "icon", href: "/favicon.ico", sizes: "48x48" },
+			{ rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
+			{ rel: "manifest", href: "/site.webmanifest" },
+			{ rel: "stylesheet", href: appCss },
+		],
 	}),
 	notFoundComponent: () => (
 		<main className="mx-auto flex min-h-svh max-w-md flex-col items-center justify-center px-6 text-center">
@@ -46,7 +55,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 				<HeadContent />
 			</head>
 			<body className="bg-background text-foreground min-h-svh antialiased">
-				<ThemeProvider defaultTheme="system">
+				<ThemeProvider defaultTheme="light">
 					{children}
 					<ThemeToaster />
 					<Scripts />

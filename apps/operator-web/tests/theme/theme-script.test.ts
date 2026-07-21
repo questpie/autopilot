@@ -13,10 +13,12 @@ function runThemeScript({
 	storedTheme,
 	systemDark = false,
 	storageThrows = false,
+	defaultTheme,
 }: {
 	storedTheme?: string;
 	systemDark?: boolean;
 	storageThrows?: boolean;
+	defaultTheme?: "light" | "dark" | "system";
 }) {
 	const state: ThemeDomState = { dark: false };
 	const root = {
@@ -50,7 +52,7 @@ function runThemeScript({
 		"document",
 		"window",
 		"localStorage",
-		createThemeInitializer("test-theme"),
+		createThemeInitializer("test-theme", defaultTheme),
 	);
 
 	execute(
@@ -94,5 +96,17 @@ describe("TanStack Start pre-hydration theme script", () => {
 	test("falls back to system when storage is invalid or unavailable", () => {
 		expect(runThemeScript({ storedTheme: "sepia", systemDark: true }).dark).toBe(true);
 		expect(runThemeScript({ storageThrows: true, systemDark: false }).dark).toBe(false);
+	});
+
+	test("uses the configured app default over the OS preference (light-first)", () => {
+		// Warm-paper light is the brand default: a dark-OS visitor still gets light
+		// until they explicitly opt into dark, and an invalid stored value resolves to
+		// that default rather than following the system query.
+		expect(runThemeScript({ defaultTheme: "light", systemDark: true }).dark).toBe(false);
+		expect(
+			runThemeScript({ storedTheme: "sepia", defaultTheme: "light", systemDark: true }).dark,
+		).toBe(false);
+		// An explicit stored preference always wins over the default.
+		expect(runThemeScript({ storedTheme: "dark", defaultTheme: "light" }).dark).toBe(true);
 	});
 });
