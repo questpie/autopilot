@@ -17,6 +17,7 @@ import {
 	deriveCompanyShell,
 	type SpacesSnapshot,
 } from "@/lib/data/feature-queries";
+import { isSurfaceDenied } from "@/lib/data/surface-denied";
 import { buildCompanyNavigation } from "@/lib/navigation/company-nav";
 
 export const Route = createFileRoute("/_authenticated/app/$companySlug")({
@@ -119,19 +120,6 @@ function footerNoticeFor(online: boolean, autopilotPending: boolean): ReactNode 
 	if (!online) return <StateBand tone="attention" label="Bez pripojenia — pracujeme offline" />;
 	if (autopilotPending) return <StateBand tone="neutral" label="Autopilot: Vyžaduje nastavenie" />;
 	return null;
-}
-
-/**
- * A truth read whose access was denied: a non-retryable realtime admission
- * rejection (RealtimeTopicRejectedError carries `retryable:false`) or a REST 403.
- * Per the owner decision this denies only THIS surface — the session continues. A
- * 401 is deliberately NOT surface-denied: an invalid session stays the pathless
- * guard's concern, which keeps the existing /sign-in redirect.
- */
-function isSurfaceDenied(error: unknown): boolean {
-	if (!error || typeof error !== "object") return false;
-	if ("retryable" in error && (error as { retryable?: unknown }).retryable === false) return true;
-	return "status" in error && (error as { status?: unknown }).status === 403;
 }
 
 /**

@@ -227,6 +227,38 @@ export type SpaceSummary = {
 };
 
 /**
+ * The per-space fields the directory projection reads. It is exactly the shell's
+ * `ShellSpaceDoc` plus the optional `description` — so the SAME bounded live
+ * snapshot the shell subscribes to (`spaces.visibleLive`, typed `SpacesSnapshot`)
+ * feeds this derive unchanged: `ShellSpaceDoc` is assignable here because
+ * `description` is optional, and at runtime the full find result carries it.
+ */
+export type SpaceDirectoryDoc = ShellSpaceDoc & { description?: string | null };
+
+/**
+ * PURE directory projection (ADR 0022 decompose pattern): active spaces mapped to
+ * `SpaceSummary`, Whole Company first then by Slovak-collated name. Run this
+ * client-side over a bounded live snapshot (the route re-derives it in a `useMemo`
+ * off `spaces.visibleLive`), exactly as the shell re-runs `deriveCompanyShell` —
+ * so the directory stays LIVE without a second server projection. The plain
+ * `spaces.directory` arm reuses this same function for its request-scoped read.
+ */
+export function deriveSpaceDirectory(docs: readonly SpaceDirectoryDoc[]): SpaceSummary[] {
+	return docs
+		.map((space) => ({
+			id: space.id,
+			name: space.name,
+			slug: space.slug,
+			isWholeCompany: space.isWholeCompany,
+			description: space.description ?? null,
+		}))
+		.sort((a, b) => {
+			if (a.isWholeCompany !== b.isWholeCompany) return a.isWholeCompany ? -1 : 1;
+			return a.name.localeCompare(b.name, "sk");
+		});
+}
+
+/**
  * Identity bridge for the workspace's duplicated @tanstack/react-query copies:
  * the app's copy and the one nested under @questpie/tanstack-query resolve as two
  * structurally identical but NOMINALLY distinct Query classes (see
@@ -379,29 +411,23 @@ export function createFeatureQueries(q: AppQueryOptions) {
 				staleTime: 0,
 				refetchOnMount: "always",
 			}),
-			/** Directory/overview projection: active spaces, Whole Company first. */
+			/**
+			 * Directory/overview projection: active spaces, Whole Company first. Plain
+			 * request-scoped read for the `$spaceSlug` slug→space resolve (re-runs the
+			 * route when the slug changes). The LIVE directory route does NOT read this —
+			 * it derives the SAME projection client-side off `spaces.visibleLive` via
+			 * `deriveSpaceDirectory` (the ADR decompose pattern), which this arm reuses so
+			 * both paths share one projection.
+			 */
 			directory: (companyId: string): EnsureQueryDataOptions<SpaceSummary[]> => {
 				const find = q.collections.spaces.find(spacesVisibleOptions(companyId));
 				const fetchSpaces = find.queryFn as unknown as () => Promise<{
-					docs: readonly (SpaceSummary & { description?: string | null })[];
+					docs: readonly SpaceDirectoryDoc[];
 				}>;
 				return q.custom.query({
 					key: keys.spaces.directory(companyId),
-					queryFn: async (): Promise<SpaceSummary[]> => {
-						const spaces = await fetchSpaces();
-						return spaces.docs
-							.map((space) => ({
-								id: space.id,
-								name: space.name,
-								slug: space.slug,
-								isWholeCompany: space.isWholeCompany,
-								description: space.description ?? null,
-							}))
-							.sort((a, b) => {
-								if (a.isWholeCompany !== b.isWholeCompany) return a.isWholeCompany ? -1 : 1;
-								return a.name.localeCompare(b.name, "sk");
-							});
-					},
+					queryFn: async (): Promise<SpaceSummary[]> =>
+						deriveSpaceDirectory((await fetchSpaces()).docs),
 				}) as unknown as EnsureQueryDataOptions<SpaceSummary[]>;
 			},
 		},
