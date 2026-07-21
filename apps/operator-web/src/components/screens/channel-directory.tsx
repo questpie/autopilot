@@ -1,6 +1,6 @@
 import { StatePanel } from "@questpie/ui";
 
-import type { ChannelSummary } from "@/lib/data/feature-queries";
+import type { ChannelSummary } from "@/features/channels/queries";
 
 export type ChannelDirectoryProps = {
 	channels: readonly ChannelSummary[];

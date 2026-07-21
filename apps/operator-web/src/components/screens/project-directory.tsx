@@ -1,6 +1,6 @@
 import { StatePanel } from "@questpie/ui";
 
-import type { ProjectSummary } from "@/lib/data/feature-queries";
+import type { ProjectSummary } from "@/features/projects/queries";
 
 export type ProjectDirectoryProps = {
 	projects: readonly ProjectSummary[];
