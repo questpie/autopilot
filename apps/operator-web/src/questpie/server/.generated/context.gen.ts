@@ -53,6 +53,9 @@ import _route_spaces_update from "../routes/spaces/update";
 // ── Services ───────────────────────────────────────────────
 import { default as _svc_organizationDomain } from "../services/organization-domain";
 
+// ── Emails ─────────────────────────────────────────────────
+import _email_verifyEmail from "../emails/verify-email";
+
 // ── Migrations ─────────────────────────────────────────────
 import _mig_20260719T094552_phase0Organization from "../migrations/20260719T094552_phase-0-organization";
 import _mig_20260720T225858_phase0Channels from "../migrations/20260720T225858_phase-0-channels";
@@ -65,7 +68,7 @@ import _authConfig from "../config/auth";
 import _mcpConfig from "../config/mcp";
 import _openapi from "../config/openapi";
 
-import type { AppCollections, AppChannels, AppGlobals, AppJobs, _ModuleCollections, _AppDefaultServices, _AppServicesSeam, _AppTopLevelServices, _AppCustomServiceNamespaces, AppWorkflows, _Registry_Collections, _Registry_Channels, _Registry_Globals, _Registry_Jobs, _Registry_Routes, _Registry_Services, _Registry_Emails, _Registry_FieldTypes, _Registry_Workflows, _Registry_McpTools, _AllModuleFields } from "./entities.gen";
+import type { AppCollections, AppChannels, AppGlobals, AppJobs, _ModuleCollections, _AppDefaultServices, _AppServicesSeam, _AppTopLevelServices, _AppCustomServiceNamespaces, AppEmailTemplates, AppWorkflows, _Registry_Collections, _Registry_Channels, _Registry_Globals, _Registry_Jobs, _Registry_Routes, _Registry_Services, _Registry_Emails, _Registry_FieldTypes, _Registry_Workflows, _Registry_McpTools, _AllModuleFields } from "./entities.gen";
 import type { AnyCollectionOrBuilder, AnyGlobalOrBuilder, CollectionAPI, DrizzleClientFromQuestpieConfig, InferContextExtensionsFromAppConfig, InferSessionFromAuthConfig, MailerService, Questpie, QuestpieConfig, QueueClient, QueueJobType, ServiceInstancesInNamespace, TablesFromConfig, z } from "questpie/types";
 import type { ChannelsService } from "questpie/channels";
 
@@ -131,7 +134,7 @@ type _AppInfraRecord = {
 	// Infrastructure
 	app: _AppQuestpie;
 	db: _AppDb;
-	email: _AppQuestpie["email"];
+	email: MailerService<AppEmailTemplates>;
 	queue: QueueClient<AppJobs>;
 	storage: _AppStorage;
 	kv: _AppQuestpie["kv"];
@@ -165,7 +168,7 @@ declare global {
 		interface JobHandlerContext {
 			// Infrastructure
 			db: _AppDb;
-			email: _AppQuestpie["email"];
+			email: MailerService<AppEmailTemplates>;
 			queue: QueueClient<_ExecutionContextJobs>;
 			storage: _AppStorage;
 			kv: _AppQuestpie["kv"];
@@ -193,7 +196,7 @@ declare global {
 		interface WorkflowContext {
 			// Infrastructure
 			db: _AppDb;
-			email: _AppQuestpie["email"];
+			email: MailerService<AppEmailTemplates>;
 			queue: QueueClient<_ExecutionContextJobs>;
 			storage: _AppStorage;
 			kv: _AppQuestpie["kv"];

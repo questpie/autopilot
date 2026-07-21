@@ -59,6 +59,9 @@ import _route_spaces_update from "../routes/spaces/update";
 // ── Services ───────────────────────────────────────────────
 import { default as _svc_organizationDomain } from "../services/organization-domain";
 
+// ── Emails ─────────────────────────────────────────────────
+import _email_verifyEmail from "../emails/verify-email";
+
 // ── Migrations ─────────────────────────────────────────────
 import _mig_20260719T094552_phase0Organization from "../migrations/20260719T094552_phase-0-organization";
 import _mig_20260720T225858_phase0Channels from "../migrations/20260720T225858_phase-0-channels";
@@ -182,6 +185,9 @@ _appPromise = createApp(
 		},
 		services: {
 			organizationDomain: _svc_organizationDomain,
+		},
+		emailTemplates: {
+			verifyEmail: _email_verifyEmail,
 		},
 		migrations: [_mig_20260719T094552_phase0Organization, _mig_20260720T225858_phase0Channels],
 		config: {

@@ -17,6 +17,7 @@ declare global {
 		interface ChannelKeys { harnessProbe: unknown }
 		interface RouteKeys { "actors/archive": unknown; "actors/reactivate": unknown; "actors/suspend": unknown; "companies/bootstrap": unknown; "invitations/accept": unknown; "invitations/challenge": unknown; "invitations/exchange": unknown; "invitations/issue": unknown; "invitations/resend": unknown; "invitations/revoke": unknown; "projects/archive": unknown; "projects/create": unknown; "projects/rename": unknown; "projects/restore": unknown; "roleBindings/replace": unknown; "spaceMemberships/add": unknown; "spaceMemberships/change": unknown; "spaceMemberships/remove": unknown; "spaces/archive": unknown; "spaces/create": unknown; "spaces/restore": unknown; "spaces/update": unknown }
 		interface ServiceKeys { organizationDomain: unknown }
+		interface EmailKeys { verifyEmail: unknown }
 	}
 }
 

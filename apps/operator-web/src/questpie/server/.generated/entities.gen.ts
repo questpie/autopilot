@@ -54,6 +54,9 @@ import _route_spaces_update from "../routes/spaces/update";
 // ── Services ───────────────────────────────────────────────
 import { default as _svc_organizationDomain } from "../services/organization-domain";
 
+// ── Emails ─────────────────────────────────────────────────
+import _email_verifyEmail from "../emails/verify-email";
+
 // ── Migrations ─────────────────────────────────────────────
 import _mig_20260719T094552_phase0Organization from "../migrations/20260719T094552_phase-0-organization";
 import _mig_20260720T225858_phase0Channels from "../migrations/20260720T225858_phase-0-channels";
@@ -169,7 +172,9 @@ export type _AppTopLevelServices = ServiceTopLevelInstances<_AppServiceDefinitio
 export type _AppCustomServiceNamespaces = ServiceCustomNamespaceInstances<_AppServiceDefinitions>;
 
 /** All email templates in the app — use with email.sendTemplate() */
-export type AppEmailTemplates = Record<string, never>;
+export type AppEmailTemplates = {
+	verifyEmail: typeof _email_verifyEmail;
+};
 
 /** All fieldtypes in the app (modules + user, user overrides) */
 export type AppFieldTypes = _ModuleFieldTypes;

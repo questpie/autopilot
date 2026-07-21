@@ -188,11 +188,12 @@ export const signUpUser = async (options: SignUpUserOptions): Promise<SignedUpUs
 };
 
 /**
- * Documented harness-only deviation: requireEmailVerification is true but no
- * sendVerificationEmail is wired anywhere (framework or app), so no
- * verification email ever reaches the ConsoleAdapter. This one admin SQL flip
- * (quoted camelCase column, straight from the committed migration) is the only
- * seam; the sign-in-before-verify 403 negative keeps it honest.
+ * Documented harness-only deviation: requireEmailVerification is true and the
+ * app now wires sendVerificationEmail (config/auth.ts), so a verification email
+ * DOES reach the ConsoleAdapter on sign-up. The harness cannot click that
+ * emailed link, so this one admin SQL flip (quoted camelCase column, straight
+ * from the committed migration) is how it satisfies verification without the
+ * interactive step; the sign-in-before-verify 403 negative keeps it honest.
  */
 export const markEmailVerified = async (db: DisposableDb, email: string): Promise<void> => {
 	const result = await db.exec(
