@@ -1,4 +1,6 @@
-import { SpaceContext, StatePanel } from "@questpie/ui";
+import type { ReactNode } from "react";
+
+import { SpaceContext } from "@questpie/ui";
 
 import type { SpaceSummary } from "@/lib/data/feature-queries";
 
@@ -47,26 +49,20 @@ export function SpaceDirectory({ spaces, onOpenSpace, onCreate }: SpaceDirectory
 
 export type SpaceOverviewProps = {
 	space: SpaceSummary;
+	/** The Space body — the LIVE channel directory the detail route mounts (SPEC 10.5). */
+	children: ReactNode;
 };
 
-/** Space overview: the space header and its default #general channel (SPEC 10.5). */
-export function SpaceOverview({ space }: SpaceOverviewProps) {
+/**
+ * Space overview: the space header with its #general anchor over the Space body.
+ * The body is the LIVE channel directory the detail route derives off
+ * `channels.visibleLive` and passes as `children`, so this template stays query-free.
+ */
+export function SpaceOverview({ space, children }: SpaceOverviewProps) {
 	return (
 		<div data-testid="screen-space-overview">
 			<SpaceContext title={space.name} meta="#general" />
-			<div className="mx-auto w-full max-w-3xl px-4 py-8">
-				<p className="text-sm text-muted-foreground">
-					Predvolený kanál <span className="font-medium text-foreground">#general</span> je
-					pripravený pre rozhovory v tomto priestore.
-				</p>
-				<div className="mt-6">
-					<StatePanel
-						state="empty"
-						title="Priestor je pripravený"
-						description="Tímový obsah tohto priestoru pribudne, hneď ako v ňom začnete pracovať."
-					/>
-				</div>
-			</div>
+			<div className="mx-auto w-full max-w-3xl px-4 py-8">{children}</div>
 		</div>
 	);
 }

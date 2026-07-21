@@ -28,6 +28,13 @@ describe("static/live arms share ONE cache key (SSR static-load -> stream-upgrad
 		const live = queries.actors.agentsLive("company-hreben");
 		expect(live.queryKey).toEqual(plain.queryKey);
 	});
+
+	test("channels.visible and channels.visibleLive queryKeys are deep-equal (space-scoped)", () => {
+		const plain = queries.channels.visible("space-cela");
+		const live = queries.channels.visibleLive("space-cela");
+		// Same invariant as spaces, keyed by spaceId: identical options => identical key.
+		expect(live.queryKey).toEqual(plain.queryKey);
+	});
 });
 
 describe("typed key factory is behaviour-preserving (keys hash identically)", () => {
@@ -50,6 +57,13 @@ describe("typed key factory is behaviour-preserving (keys hash identically)", ()
 			"spaces",
 			"directory",
 			"c1",
+		]);
+		// Channels are SPACE-scoped, so the directory projection key is keyed by spaceId.
+		expect(queries.channels.directory("s1").queryKey).toEqual([
+			...PREFIX,
+			"channels",
+			"directory",
+			"s1",
 		]);
 		expect(queries.activity.feed("c1").queryKey).toEqual([...PREFIX, "activity", "feed", "c1"]);
 		expect(queries.onboarding.state().queryKey).toEqual([...PREFIX, "onboarding", "state"]);
@@ -77,6 +91,16 @@ describe("consistency-group fan-outs are ready invalidate targets", () => {
 		expect(directoryTarget).toEqual(queries.spaces.directory("c1").queryKey);
 		const spacesKey = queries.spaces.visible("c1").queryKey;
 		expect(spacesKey.slice(0, collectionTarget.length)).toEqual(collectionTarget);
+	});
+
+	test("onChannelChange fans out over the channels collection + the space-scoped directory", () => {
+		const [collectionTarget, directoryTarget] = keys.onChannelChange("s1");
+		expect(collectionTarget).toEqual([...PREFIX, "collections", "channels"]);
+		// Directory target is qualified + keyed by spaceId, so it matches the real key.
+		expect(directoryTarget).toEqual(queries.channels.directory("s1").queryKey);
+		// The channels prefix prefix-matches the real space-scoped channels read.
+		const channelsKey = queries.channels.visible("s1").queryKey;
+		expect(channelsKey.slice(0, collectionTarget.length)).toEqual(collectionTarget);
 	});
 
 	test("onAgentChange fans out over the ACTORS collection (agents are not a collection)", () => {

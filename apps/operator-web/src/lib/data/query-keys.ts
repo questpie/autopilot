@@ -43,6 +43,11 @@ export function createQueryKeys(q: AppQueryOptions) {
 	const spaces = {
 		directory: (companyId: string): QueryKey => ["spaces", "directory", companyId],
 	};
+	// Channels are SPACE-SCOPED, so the directory projection key is keyed by spaceId
+	// (not companyId) — one directory entry per Space.
+	const channels = {
+		directory: (spaceId: string): QueryKey => ["channels", "directory", spaceId],
+	};
 	const activity = {
 		feed: (companyId: string): QueryKey => ["activity", "feed", companyId],
 	};
@@ -63,6 +68,7 @@ export function createQueryKeys(q: AppQueryOptions) {
 		company,
 		team,
 		spaces,
+		channels,
 		activity,
 		onboarding,
 		session,
@@ -74,6 +80,17 @@ export function createQueryKeys(q: AppQueryOptions) {
 			collection("spaces"),
 			qualify(company.shell(companyId)),
 			qualify(spaces.directory(companyId)),
+		],
+		/**
+		 * A Channel changed: refetch the raw channels collection AND the derived
+		 * channel-directory projection for its Space. Channels are SPACE-SCOPED, so the
+		 * directory target is keyed by spaceId. Vocabulary ONLY (ADR 0022) — inc6 owns
+		 * the reconciler that fans this out on a channel write; the LIVE directory arm
+		 * already reconciles by identity off the stream, so no reconciler exists yet.
+		 */
+		onChannelChange: (spaceId: string): QueryKey[] => [
+			collection("channels"),
+			qualify(channels.directory(spaceId)),
 		],
 		/**
 		 * An Agent (an actor with kind:"agent") changed: refetch the actors
