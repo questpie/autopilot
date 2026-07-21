@@ -3,6 +3,7 @@ export * from "./actor-chip";
 export * from "./actor-identity";
 export * from "./actor-mark";
 export * from "./actor-stack";
+export * from "./brand-mark";
 export * from "./command-palette";
 export * from "./contextual-thread-panel";
 export * from "./adaptive-combobox";

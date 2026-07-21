@@ -6,6 +6,19 @@
 			"runtimeExecutable": "bun",
 			"runtimeArgs": ["run", "--cwd", "packages/ui", "storybook"],
 			"port": 6006
+		},
+		{
+			"name": "operator-web-preview",
+			"runtimeExecutable": "bun",
+			"runtimeArgs": ["run", "--cwd", "apps/operator-web", "preview"],
+			"port": 3000,
+			"autoPort": true
+		},
+		{
+			"name": "operator-web-dev",
+			"runtimeExecutable": "bun",
+			"runtimeArgs": ["run", "--cwd", "apps/operator-web", "dev"],
+			"port": 3000
 		}
 	]
 }

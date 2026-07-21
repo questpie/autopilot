@@ -3,6 +3,7 @@ import { type ReactNode, useMemo, useState } from "react";
 
 import { ActorMark } from "@questpie/ui/components/composites/actor-mark";
 import type { ActorProjection } from "@questpie/ui/components/composites/actor";
+import { BrandMark } from "@questpie/ui/components/composites/brand-mark";
 import { Button } from "@questpie/ui/components/ui/button";
 import {
 	Drawer,
@@ -57,18 +58,10 @@ export interface CompanyShellProps {
 
 const mobileSlotOrder: readonly MobileNavigationSlot[] = ["home", "spaces", "inbox", "self"];
 
-function BrandMark() {
-	return (
-		<span data-slot="company-brand-mark" aria-hidden>
-			<span />
-		</span>
-	);
-}
-
 function CompanyIdentity({ companyName }: { companyName: string }) {
 	return (
 		<div data-slot="company-identity" className="flex min-h-9 items-center gap-2 px-2">
-			<BrandMark />
+			<BrandMark size={20} />
 			<strong className="truncate text-[0.9375rem] font-semibold">{companyName}</strong>
 		</div>
 	);

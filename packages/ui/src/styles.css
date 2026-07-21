@@ -468,26 +468,6 @@
 		margin-bottom: 0;
 	}
 
-	[data-slot="company-brand-mark"] {
-		position: relative;
-		display: inline-flex;
-		width: 1.625rem;
-		height: 1.625rem;
-		flex: none;
-		border-radius: 0.4375rem;
-		background: var(--ink);
-	}
-
-	[data-slot="company-brand-mark"] > span {
-		position: absolute;
-		bottom: 0.25rem;
-		left: 0.25rem;
-		width: 0.4375rem;
-		height: 0.4375rem;
-		border-radius: 0.125rem;
-		background: var(--action);
-	}
-
 	.actor-mark {
 		position: relative;
 		display: inline-flex;

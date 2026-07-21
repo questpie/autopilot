@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { BrandMark } from "@questpie/ui/components/composites/brand-mark";
 import { Button } from "@questpie/ui/components/ui/button";
 import { Card, CardFooter } from "@questpie/ui/components/ui/card";
 import { Spinner } from "@questpie/ui/components/ui/spinner";
@@ -39,14 +40,6 @@ export interface AuthShellProps {
 	onSubmit?: () => void;
 }
 
-function AuthShellBrandMark() {
-	return (
-		<span data-slot="company-brand-mark" aria-hidden>
-			<span />
-		</span>
-	);
-}
-
 function AuthShell({
 	brand = "QUESTPIE",
 	title,
@@ -80,7 +73,7 @@ function AuthShell({
 						data-slot="auth-shell-brand"
 						className="flex min-h-12 items-center gap-2 border-b border-hairline px-4"
 					>
-						<AuthShellBrandMark />
+						<BrandMark size={20} />
 						<span className="text-[0.8125rem] font-semibold tracking-[0.08em]">{brand}</span>
 						{step ? (
 							<span data-slot="auth-shell-step" className="ui-type-meta ml-auto tabular-nums">
