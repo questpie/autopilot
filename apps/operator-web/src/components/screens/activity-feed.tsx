@@ -1,6 +1,6 @@
 import { StatePanel } from "@questpie/ui";
 
-import type { ActivityRow } from "@/lib/data/feature-queries";
+import type { ActivityRow } from "@/features/activity/queries";
 
 export type ActivityFeedProps = {
 	rows: readonly ActivityRow[];
