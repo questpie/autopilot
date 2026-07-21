@@ -327,6 +327,21 @@
 		@apply font-sans;
 	}
 
+	/* Autofilled fields keep the control's own surface. Chrome's default
+	   `-webkit-autofill` paints a pale-blue background onto the <input> only —
+	   next to a leading icon (or on the paper card) that reads as a mismatched
+	   seam splitting the field in two. Autofill can't be overridden with
+	   `background`, so repaint with the field surface via an inset shadow and
+	   keep the filled text legible. */
+	[data-slot="input"]:-webkit-autofill,
+	[data-slot="input"]:-webkit-autofill:hover,
+	[data-slot="input"]:-webkit-autofill:focus,
+	[data-slot="input-group-control"]:-webkit-autofill {
+		-webkit-text-fill-color: var(--foreground);
+		-webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+		caret-color: var(--foreground);
+	}
+
 	h1,
 	h2,
 	h3 {

@@ -1,14 +1,6 @@
 import { useState } from "react";
 
-import {
-	AuthShell,
-	Field,
-	FieldDescription,
-	FieldGroup,
-	FieldLabel,
-	Input,
-	StateBand,
-} from "@questpie/ui";
+import { AuthShell, Field, FieldDescription, FieldGroup, FieldLabel, Input } from "@questpie/ui";
 
 import { type CompanyBootstrapDraft, previewCompanySlug } from "@/lib/data/commands/companies";
 
@@ -148,7 +140,7 @@ export function CompanyOnboardingStep({ onSubmit }: CompanyOnboardingStepProps) 
 				title="Vytvorte svoju spoločnosť"
 				description="Pomenujte spoločnosť, v ktorej bude váš tím spolupracovať."
 				step={{ current: 1, total: ONBOARDING_TOTAL_STEPS }}
-				stateBand={inlineError ? <StateBand tone="danger" label={inlineError} /> : undefined}
+				error={inlineError ?? undefined}
 				primaryAction={{ label: "Pokračovať", pendingLabel: "Vytvárame spoločnosť…", pending }}
 				onSubmit={() => {
 					void submit();

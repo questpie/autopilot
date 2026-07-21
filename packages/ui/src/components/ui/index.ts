@@ -16,6 +16,7 @@ export * from "./drawer";
 export * from "./dropdown-menu";
 export * from "./empty";
 export * from "./field";
+export * from "./icon-input";
 export * from "./input-group";
 export * from "./input";
 export * from "./item";

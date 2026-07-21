@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { LockIcon, MailIcon } from "lucide-react";
 import { expect, fireEvent, fn, userEvent, within } from "storybook/test";
 
 import { StateBand } from "./components/composites";
@@ -10,6 +11,7 @@ import {
 	Field,
 	FieldDescription,
 	FieldLabel,
+	IconInput,
 	Input,
 } from "./components/ui";
 
@@ -24,21 +26,23 @@ function SignInFields({
 		<>
 			<Field>
 				<FieldLabel htmlFor="sign-in-email">E-mail</FieldLabel>
-				<Input
+				<IconInput
 					id="sign-in-email"
 					type="email"
 					autoComplete="email"
 					placeholder="marek@hreben.sk"
+					icon={<MailIcon />}
 					defaultValue={email}
 					disabled={disabled}
 				/>
 			</Field>
 			<Field>
 				<FieldLabel htmlFor="sign-in-password">Heslo</FieldLabel>
-				<Input
+				<IconInput
 					id="sign-in-password"
 					type="password"
 					autoComplete="current-password"
+					icon={<LockIcon />}
 					disabled={disabled}
 				/>
 			</Field>
@@ -213,15 +217,36 @@ export const CredentialPending: Story = {
 
 export const InlineError: Story = {
 	args: {
-		stateBand: <StateBand tone="danger" label="Nesprávny e-mail alebo heslo" meta="Skúste znova" />,
+		error: "Nesprávny e-mail alebo heslo. Skúste to znova.",
+		children: <SignInFields email="marek@hreben.sk" />,
+	},
+	globals: { viewport: { value: "shell1024", isRotated: false } },
+	play: async ({ canvasElement }) => {
+		const error = canvasElement.querySelector('[data-slot="auth-shell-error"]');
+		if (!(error instanceof HTMLElement)) throw new Error("Chýba riadok chyby prihlásenia");
+		await expect(error).toHaveAttribute("role", "status");
+		await expect(error).toHaveTextContent("Nesprávny e-mail alebo heslo");
+		await expect(within(canvasElement).getByLabelText("E-mail")).toHaveValue("marek@hreben.sk");
+	},
+};
+
+export const OfflineBanner: Story = {
+	args: {
+		stateBand: (
+			<StateBand
+				tone="attention"
+				label="Offline — nedá sa spojiť s prihlásením"
+				meta="obnovujem…"
+			/>
+		),
+		primaryAction: { label: "Prihlásiť sa", disabled: true },
 		children: <SignInFields email="marek@hreben.sk" />,
 	},
 	globals: { viewport: { value: "shell1024", isRotated: false } },
 	play: async ({ canvasElement }) => {
 		const band = canvasElement.querySelector('[data-slot="state-band"]');
-		if (!(band instanceof HTMLElement)) throw new Error("Chýba pás chybového stavu");
-		await expect(band).toHaveAttribute("data-tone", "danger");
-		await expect(within(canvasElement).getByLabelText("E-mail")).toHaveValue("marek@hreben.sk");
+		if (!(band instanceof HTMLElement)) throw new Error("Chýba pás stavu pripojenia");
+		await expect(band).toHaveAttribute("data-tone", "attention");
 	},
 };
 

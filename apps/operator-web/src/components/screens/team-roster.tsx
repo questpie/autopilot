@@ -11,7 +11,6 @@ import {
 	FieldLabel,
 	Input,
 	ListRow,
-	StateBand,
 	Status,
 } from "@questpie/ui";
 
@@ -215,7 +214,7 @@ export function TeamOnboardingStep({
 				title="Pozvite svoj tím"
 				description="Toto je váš tím dnes. Pozvánky doručíte odkazom — e-maily sa zatiaľ neodosielajú."
 				step={{ current: 2, total: ONBOARDING_TOTAL_STEPS }}
-				stateBand={inlineError ? <StateBand tone="danger" label={inlineError} /> : undefined}
+				error={inlineError ?? undefined}
 				primaryAction={{ label: "Pokračovať" }}
 				onSubmit={onContinue}
 			>
