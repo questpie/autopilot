@@ -12,11 +12,8 @@ import { type ReactNode, useMemo, useSyncExternalStore } from "react";
 import { StateBand, StatePanel } from "@questpie/ui";
 import { CompanyShell } from "@questpie/ui/components/templates";
 
-import {
-	type AgentsSnapshot,
-	deriveCompanyShell,
-	type SpacesSnapshot,
-} from "@/lib/data/feature-queries";
+import type { AgentsSnapshot } from "@/features/actors/queries";
+import { deriveCompanyShell, type SpacesSnapshot } from "@/lib/data/feature-queries";
 import { isSurfaceDenied } from "@/lib/data/surface-denied";
 import { buildCompanyNavigation } from "@/lib/navigation/company-nav";
 

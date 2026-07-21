@@ -1,5 +1,6 @@
 import type { EnsureQueryDataOptions, UseSuspenseQueryOptions } from "@tanstack/react-query";
 
+import { agentsOptions, createActorsQueries, type ShellAgentDoc } from "@/features/actors/queries";
 import { createChannelsQueries } from "@/features/channels/queries";
 import { createProjectsQueries } from "@/features/projects/queries";
 import type { NavSpace } from "@/lib/navigation/company-nav";
@@ -13,16 +14,15 @@ import { createQueryKeys } from "@/lib/data/query-keys";
 import type { AppQueryOptions } from "@/lib/query";
 
 const COMPANY_LIST_LIMIT = 50;
-// SPACE_LIST_LIMIT and AGENT_LIST_LIMIT feed the {realtime:true} LIVE arms, so
-// both MUST stay <= the realtime admission cap (maxFindLimit, framework default
-// 100 — questpie .../server/.../realtime/admission.ts). The server rejects a live
-// subscription whose topic.limit exceeds the cap with a NON-retryable rejection
-// (admission.ts: `limit > maxFindLimit`), which surfaces on the shared cache entry
-// and surface-denies the whole shell. Because the plain and live arms of one read
-// share ONE cache key, they pass IDENTICAL options — so the live arm's cap is also
-// the paired plain arm's limit.
+// SPACE_LIST_LIMIT feeds the {realtime:true} LIVE spaces arms, so it MUST stay <=
+// the realtime admission cap (maxFindLimit, framework default 100 — questpie
+// .../server/.../realtime/admission.ts). The server rejects a live subscription whose
+// topic.limit exceeds the cap with a NON-retryable rejection (admission.ts:
+// `limit > maxFindLimit`), which surfaces on the shared cache entry and surface-denies
+// the whole shell. Because the plain and live arms of one read share ONE cache key,
+// they pass IDENTICAL options — so the live arm's cap is also the paired plain arm's
+// limit. (AGENT_LIST_LIMIT moved with the actors feature.)
 const SPACE_LIST_LIMIT = 100;
-const AGENT_LIST_LIMIT = 100;
 // REST-only reads (roster, activity, shell-composite actor joins) never open a
 // realtime topic, so they keep the larger roster page size.
 const ACTOR_LIST_LIMIT = 200;
@@ -122,7 +122,6 @@ export function deriveTeamRoster(input: {
 
 /** Minimal read shapes the shell projection needs. */
 export type ShellSpaceDoc = { id: string; name: string; slug: string; isWholeCompany: boolean };
-export type ShellAgentDoc = { kind: string; setupStatus: string };
 
 /**
  * The bounded live-snapshot shapes the shell reads from the paired find arms
@@ -130,7 +129,6 @@ export type ShellAgentDoc = { kind: string; setupStatus: string };
  * data shape because they hash to one cache entry — only the queryFn differs.
  */
 export type SpacesSnapshot = { docs: readonly ShellSpaceDoc[] };
-export type AgentsSnapshot = { docs: readonly ShellAgentDoc[] };
 
 // Return-type safety the per-arm `as unknown as ...<Snapshot>` casts used to throw
 // away: pin each raw arm's hand-narrowed Snapshot to the framework's inferred find
@@ -141,10 +139,6 @@ export type AgentsSnapshot = { docs: readonly ShellAgentDoc[] };
 type _SpacesSnapshotTracksFind = AssertExtends<
 	FindResultOf<AppQueryOptions["collections"]["spaces"]["find"]>,
 	SpacesSnapshot
->;
-type _AgentsSnapshotTracksFind = AssertExtends<
-	FindResultOf<AppQueryOptions["collections"]["actors"]["find"]>,
-	AgentsSnapshot
 >;
 
 /** What the adaptive shell derives from server truth for its one nav config. */
@@ -258,16 +252,6 @@ export function createFeatureQueries(q: AppQueryOptions) {
 			orderBy: { name: "asc" },
 			limit: SPACE_LIST_LIMIT,
 		}) satisfies Parameters<typeof q.collections.spaces.find>[0];
-	// Feeds BOTH the plain `agents` and the live `agentsLive` arm, so its limit is
-	// the realtime-capped AGENT_LIST_LIMIT (<= maxFindLimit): the shared-key
-	// invariant means the live arm's admission cap governs both arms' options.
-	const agentsOptions = (companyId: string) =>
-		({
-			where: { company: companyId, kind: "agent" },
-			orderBy: { createdAt: "asc" },
-			limit: AGENT_LIST_LIMIT,
-		}) satisfies Parameters<typeof q.collections.actors.find>[0];
-
 	const companiesVisible = () =>
 		q.collections.companies.find({
 			where: { status: "active" },
@@ -400,28 +384,7 @@ export function createFeatureQueries(q: AppQueryOptions) {
 		},
 		channels: createChannelsQueries(q),
 		projects: createProjectsQueries(q),
-		actors: {
-			/**
-			 * Agents are actors with kind:"agent" (not a collection). Plain arm for
-			 * loader prefetch — a raw factory the shell projection derives from. Same
-			 * `asAppQueryOptions` identity bridge as spaces.visible.
-			 */
-			agents: (companyId: string): EnsureQueryDataOptions<AgentsSnapshot> =>
-				asAppQueryOptions<AgentsSnapshot>(q.collections.actors.find(agentsOptions(companyId))),
-			/**
-			 * Live arm of the SAME agents read: identical options + {realtime:true},
-			 * so it shares one cache entry with `agents` (identical key).
-			 */
-			agentsLive: (companyId: string): UseSuspenseQueryOptions<AgentsSnapshot> => ({
-				...asAppQueryOptions<AgentsSnapshot>(
-					q.collections.actors.find(agentsOptions(companyId), { realtime: true }),
-				),
-				// Same mount-fetch forcing as spaces.visibleLive: open the stream despite the
-				// loader-fresh snapshot (see that arm for the full rationale).
-				staleTime: 0,
-				refetchOnMount: "always",
-			}),
-		},
+		actors: createActorsQueries(q),
 		activity: {
 			/** Company activity feed: persisted events joined to Actor names, newest first. */
 			feed: (companyId: string): EnsureQueryDataOptions<ActivityRow[]> => {
