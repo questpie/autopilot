@@ -9,6 +9,7 @@ import {
 	type SpacesSnapshot,
 	spacesVisibleOptions,
 } from "@/features/spaces/queries";
+import { createTeamQueries } from "@/features/team/queries";
 import type { NavSpace } from "@/lib/navigation/company-nav";
 import {
 	asAppQueryOptions,
@@ -23,7 +24,6 @@ const COMPANY_LIST_LIMIT = 50;
 // REST-only reads (roster, activity, shell-composite actor joins) never open a
 // realtime topic, so they keep the larger roster page size.
 const ACTOR_LIST_LIMIT = 200;
-const INVITATION_LIST_LIMIT = 200;
 const ACTIVITY_LIST_LIMIT = 200;
 
 /** Minimal read shape the onboarding derivation needs from a visible company. */
@@ -57,63 +57,6 @@ export function deriveOnboardingState(companies: {
 		companySlug: first?.slug ?? null,
 		companyName: first?.name ?? null,
 		ownerActorId: first?.createdByActor ?? null,
-	};
-}
-
-/** Minimal read shapes the roster derivation needs. */
-export type RosterActorDoc = {
-	id: string;
-	name: string;
-	kind: "human" | "agent";
-	membershipStatus: string;
-	setupStatus: string;
-};
-export type RosterInvitationDoc = {
-	id: string;
-	email: string;
-	status: string;
-	expiresAt: string | Date;
-	version: number;
-};
-
-export type TeamRosterMember = RosterActorDoc & {
-	/** Slovak role label the step renders; null renders nothing. */
-	roleLabel: string | null;
-	/** True for the dormant agent awaiting AI setup — 'Vyžaduje nastavenie'. */
-	pendingSetup: boolean;
-};
-export type TeamRosterInvitation = {
-	id: string;
-	email: string;
-	status: string;
-	/** ISO string — serializable through the SSR loader stream. */
-	expiresAt: string;
-	version: number;
-};
-export type TeamRoster = {
-	members: TeamRosterMember[];
-	invitations: TeamRosterInvitation[];
-};
-
-/** Server-truth roster projection: actors + pending invitations, nothing faked. */
-export function deriveTeamRoster(input: {
-	actors: readonly RosterActorDoc[];
-	invitations: readonly RosterInvitationDoc[];
-	ownerActorId: string | null;
-}): TeamRoster {
-	return {
-		members: input.actors.map((actor) => ({
-			...actor,
-			roleLabel: actor.id === input.ownerActorId ? "Vlastník" : null,
-			pendingSetup: actor.kind === "agent" && actor.setupStatus === "pending_setup",
-		})),
-		invitations: input.invitations.map((invitation) => ({
-			id: invitation.id,
-			email: invitation.email,
-			status: invitation.status,
-			expiresAt: new Date(invitation.expiresAt).toISOString(),
-			version: invitation.version,
-		})),
 	};
 }
 
@@ -215,45 +158,7 @@ export function createFeatureQueries(q: AppQueryOptions) {
 				}) as unknown as EnsureQueryDataOptions<OnboardingState>;
 			},
 		},
-		team: {
-			/**
-			 * Server-truth team roster for a company: every actor plus pending
-			 * invitations. Same duplicated-identity casts as onboarding.state;
-			 * the builders' queryFns ignore their context argument at runtime.
-			 */
-			roster: (input: {
-				companyId: string;
-				ownerActorId: string | null;
-			}): EnsureQueryDataOptions<TeamRoster> => {
-				const actorsFind = q.collections.actors.find({
-					where: { company: input.companyId },
-					orderBy: { createdAt: "asc" },
-					limit: ACTOR_LIST_LIMIT,
-				});
-				const invitationsFind = q.collections.actor_invitations.find({
-					where: { company: input.companyId, status: "pending" },
-					orderBy: { createdAt: "asc" },
-					limit: INVITATION_LIST_LIMIT,
-				});
-				const fetchActors = actorsFind.queryFn as unknown as () => Promise<{
-					docs: readonly RosterActorDoc[];
-				}>;
-				const fetchInvitations = invitationsFind.queryFn as unknown as () => Promise<{
-					docs: readonly RosterInvitationDoc[];
-				}>;
-				return q.custom.query({
-					key: keys.team.roster(input.companyId),
-					queryFn: async (): Promise<TeamRoster> => {
-						const [actors, invitations] = await Promise.all([fetchActors(), fetchInvitations()]);
-						return deriveTeamRoster({
-							actors: actors.docs,
-							invitations: invitations.docs,
-							ownerActorId: input.ownerActorId,
-						});
-					},
-				}) as unknown as EnsureQueryDataOptions<TeamRoster>;
-			},
-		},
+		team: createTeamQueries(q),
 		spaces: createSpacesQueries(q),
 		channels: createChannelsQueries(q),
 		projects: createProjectsQueries(q),

@@ -1,4 +1,4 @@
-import type { TeamRoster } from "@/lib/data/feature-queries";
+import type { TeamRoster } from "@/features/team/queries";
 
 export type CompanyTeamProps = {
 	roster: TeamRoster;

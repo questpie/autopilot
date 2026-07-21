@@ -21,11 +21,7 @@ import {
 	type InvitationRevokeOutcome,
 	isValidInviteEmail,
 } from "@/lib/data/commands/invitations";
-import type {
-	TeamRoster,
-	TeamRosterInvitation,
-	TeamRosterMember,
-} from "@/lib/data/feature-queries";
+import type { TeamRoster, TeamRosterInvitation, TeamRosterMember } from "@/features/team/queries";
 
 import { ONBOARDING_TOTAL_STEPS } from "@/components/screens/onboarding-steps";
 
