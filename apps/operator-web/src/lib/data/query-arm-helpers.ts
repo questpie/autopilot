@@ -4,7 +4,7 @@ import type { EnsureQueryDataOptions, UseSuspenseQueryOptions } from "@tanstack/
  * Feature-agnostic helpers shared by every `features/<name>/queries.ts` factory
  * (ADR 0023). These carry no feature knowledge — a per-feature arm module imports
  * the identity bridge and the drift guards from here so the query factories can be
- * split out of the old monolithic `feature-queries.ts` without duplication.
+ * split out of the old monolithic query module without duplication.
  */
 
 /** Structural check for the typed client's access-denied error (403). */

@@ -1,12 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { QueryObserver } from "@tanstack/react-query";
 
+import { deriveProjectDirectory, type ProjectsSnapshot } from "@/features/projects/queries";
 import { createAppClient } from "@/lib/client";
-import {
-	createFeatureQueries,
-	deriveProjectDirectory,
-	type ProjectsSnapshot,
-} from "@/lib/data/feature-queries";
+import { createAppQueries } from "@/lib/data/app-data-context";
 import { createAppQueryOptions } from "@/lib/query";
 import { createAppQueryClient } from "@/lib/query-client";
 
@@ -34,7 +31,7 @@ describe("project directory is LIVE off visible/visibleLive + a pure derive (ADR
 	test("mounting the projects live arm opens the stream despite a loader-fresh snapshot", async () => {
 		const client = createAppClient({ baseURL: BASE_URL });
 		const stub = installStreamStub<ProjectsSnapshot>(client);
-		const queries = createFeatureQueries(createAppQueryOptions(client));
+		const queries = createAppQueries(createAppQueryOptions(client));
 
 		const seeded: ProjectsSnapshot = {
 			docs: [{ id: "project-alfa", name: "Alfa", slug: "alfa" }],
@@ -76,7 +73,7 @@ describe("project directory is LIVE off visible/visibleLive + a pure derive (ADR
 	test("a pushed snapshot flows through deriveProjectDirectory: new project appears, by name", async () => {
 		const client = createAppClient({ baseURL: BASE_URL });
 		const stub = installStreamStub<ProjectsSnapshot>(client);
-		const queries = createFeatureQueries(createAppQueryOptions(client));
+		const queries = createAppQueries(createAppQueryOptions(client));
 
 		const seeded: ProjectsSnapshot = {
 			docs: [{ id: "project-alfa", name: "Alfa", slug: "alfa" }],

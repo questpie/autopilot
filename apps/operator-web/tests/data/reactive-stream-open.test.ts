@@ -1,12 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { QueryObserver } from "@tanstack/react-query";
 
+import type { AgentsSnapshot } from "@/features/actors/queries";
+import type { SpacesSnapshot } from "@/features/spaces/queries";
 import { createAppClient } from "@/lib/client";
-import {
-	type AgentsSnapshot,
-	createFeatureQueries,
-	type SpacesSnapshot,
-} from "@/lib/data/feature-queries";
+import { createAppQueries } from "@/lib/data/app-data-context";
 import { createAppQueryOptions } from "@/lib/query";
 import { createAppQueryClient } from "@/lib/query-client";
 
@@ -25,7 +23,7 @@ describe("live arms open the realtime stream on mount under the app QueryClient 
 	test("spaces.visibleLive: mounting opens the stream despite a loader-fresh snapshot, and a pushed snapshot updates the observer", async () => {
 		const client = createAppClient({ baseURL: BASE_URL });
 		const stub = installStreamStub<SpacesSnapshot>(client);
-		const queries = createFeatureQueries(createAppQueryOptions(client));
+		const queries = createAppQueries(createAppQueryOptions(client));
 
 		const seeded: SpacesSnapshot = {
 			docs: [
@@ -89,7 +87,7 @@ describe("live arms open the realtime stream on mount under the app QueryClient 
 	test("actors.agentsLive: mounting opens the stream, its topic limit is within the realtime cap, and a pushed snapshot updates the observer", async () => {
 		const client = createAppClient({ baseURL: BASE_URL });
 		const stub = installStreamStub<AgentsSnapshot>(client);
-		const queries = createFeatureQueries(createAppQueryOptions(client));
+		const queries = createAppQueries(createAppQueryOptions(client));
 
 		const seeded: AgentsSnapshot = { docs: [{ kind: "agent", setupStatus: "pending_setup" }] };
 		const pushed: AgentsSnapshot = { docs: [{ kind: "agent", setupStatus: "ready" }] };

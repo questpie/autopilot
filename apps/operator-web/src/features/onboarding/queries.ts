@@ -1,9 +1,6 @@
 import type { EnsureQueryDataOptions } from "@tanstack/react-query";
 
-import {
-	companiesVisibleOptions,
-	type VisibleCompany,
-} from "@/features/company/queries";
+import { companiesVisibleOptions, type VisibleCompany } from "@/features/company/queries";
 import { isAccessDenied } from "@/lib/data/query-arm-helpers";
 import { createQueryKeys } from "@/lib/data/query-keys";
 import type { AppQueryOptions } from "@/lib/query";

@@ -1,14 +1,21 @@
+import { createActivityQueries } from "@/features/activity/queries";
+import { createActorsQueries } from "@/features/actors/queries";
+import { createChannelsQueries } from "@/features/channels/queries";
+import { createCompaniesQueries, createCompanyQueries } from "@/features/company/queries";
+import { createOnboardingQueries } from "@/features/onboarding/queries";
+import { createProjectsQueries } from "@/features/projects/queries";
+import { createSpacesQueries } from "@/features/spaces/queries";
+import { createTeamQueries } from "@/features/team/queries";
 import { createAppClient } from "@/lib/client";
 import { createCompaniesCommands } from "@/lib/data/commands/companies";
 import { createInvitationsCommands } from "@/lib/data/commands/invitations";
 import { createSpacesCommands } from "@/lib/data/commands/spaces";
-import { createFeatureQueries } from "@/lib/data/feature-queries";
 import {
 	createInvitationChallengeQuery,
 	createInvitationExchange,
 } from "@/lib/data/invitation-continuation";
 import { createSessionQuery } from "@/lib/data/session";
-import { createAppQueryOptions } from "@/lib/query";
+import { createAppQueryOptions, type AppQueryOptions } from "@/lib/query";
 import { createAppQueryClient } from "@/lib/query-client";
 
 const REQUEST_IDENTITY_HEADERS = ["authorization", "cookie"] as const;
@@ -40,6 +47,21 @@ export function selectRequestIdentityHeaders(headers: Headers) {
 	return selected;
 }
 
+/** Thin ADR-0023 composer preserving the public context.queries feature namespaces. */
+export function createAppQueries(q: AppQueryOptions) {
+	return {
+		companies: createCompaniesQueries(q),
+		onboarding: createOnboardingQueries(q),
+		team: createTeamQueries(q),
+		spaces: createSpacesQueries(q),
+		channels: createChannelsQueries(q),
+		projects: createProjectsQueries(q),
+		actors: createActorsQueries(q),
+		activity: createActivityQueries(q),
+		company: createCompanyQueries(q),
+	};
+}
+
 function createDataContext({
 	baseURL,
 	fetch,
@@ -50,7 +72,7 @@ function createDataContext({
 
 	return {
 		queryClient: createAppQueryClient(),
-		queries: createFeatureQueries(q),
+		queries: createAppQueries(q),
 		commands: {
 			companies: createCompaniesCommands({
 				bootstrap: (submission) => client.routes.companies.bootstrap.post(submission),

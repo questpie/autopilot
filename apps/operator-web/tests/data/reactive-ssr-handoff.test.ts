@@ -1,15 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { dehydrate, hashKey, hydrate, QueryClient } from "@tanstack/react-query";
 
+import type { SpacesSnapshot } from "@/features/spaces/queries";
 import { createAppClient } from "@/lib/client";
-import { createFeatureQueries, type SpacesSnapshot } from "@/lib/data/feature-queries";
+import { createAppQueries } from "@/lib/data/app-data-context";
 import { createAppQueryOptions } from "@/lib/query";
 
 const BASE_URL = "https://operator.example.test";
 const COMPANY_ID = "company-hreben";
 
 const q = createAppQueryOptions(createAppClient({ baseURL: BASE_URL }));
-const queries = createFeatureQueries(q);
+const queries = createAppQueries(q);
 
 /**
  * The bounded live snapshot a real loader prefetches (plain arm) and the real

@@ -1,10 +1,7 @@
 import type { EnsureQueryDataOptions } from "@tanstack/react-query";
 
 import { agentsOptions, type ShellAgentDoc } from "@/features/actors/queries";
-import {
-	type ShellSpaceDoc,
-	spacesVisibleOptions,
-} from "@/features/spaces/queries";
+import { type ShellSpaceDoc, spacesVisibleOptions } from "@/features/spaces/queries";
 import { isAccessDenied } from "@/lib/data/query-arm-helpers";
 import { createQueryKeys } from "@/lib/data/query-keys";
 import type { NavSpace } from "@/lib/navigation/company-nav";

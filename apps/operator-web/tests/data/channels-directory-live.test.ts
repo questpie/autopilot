@@ -1,12 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { QueryObserver } from "@tanstack/react-query";
 
+import { type ChannelsSnapshot, deriveChannelDirectory } from "@/features/channels/queries";
 import { createAppClient } from "@/lib/client";
-import {
-	type ChannelsSnapshot,
-	createFeatureQueries,
-	deriveChannelDirectory,
-} from "@/lib/data/feature-queries";
+import { createAppQueries } from "@/lib/data/app-data-context";
 import { createAppQueryOptions } from "@/lib/query";
 import { createAppQueryClient } from "@/lib/query-client";
 
@@ -34,7 +31,7 @@ describe("channel directory is LIVE off visible/visibleLive + a pure derive (ADR
 	test("mounting the channels live arm opens the stream despite a loader-fresh snapshot", async () => {
 		const client = createAppClient({ baseURL: BASE_URL });
 		const stub = installStreamStub<ChannelsSnapshot>(client);
-		const queries = createFeatureQueries(createAppQueryOptions(client));
+		const queries = createAppQueries(createAppQueryOptions(client));
 
 		const seeded: ChannelsSnapshot = {
 			docs: [{ id: "channel-general", name: "General", slug: "general", kind: "system_default" }],
@@ -76,7 +73,7 @@ describe("channel directory is LIVE off visible/visibleLive + a pure derive (ADR
 	test("a pushed snapshot flows through deriveChannelDirectory: new channel appears, #general first", async () => {
 		const client = createAppClient({ baseURL: BASE_URL });
 		const stub = installStreamStub<ChannelsSnapshot>(client);
-		const queries = createFeatureQueries(createAppQueryOptions(client));
+		const queries = createAppQueries(createAppQueryOptions(client));
 
 		const seeded: ChannelsSnapshot = {
 			docs: [{ id: "channel-general", name: "General", slug: "general", kind: "system_default" }],

@@ -14,7 +14,7 @@ import type { AppQueryOptions } from "@/lib/query";
  *   - SEGMENT builders return RAW, un-prefixed parts (`company.shell(id)` =>
  *     `["company","shell",id]`). They feed `q.custom.query({ key })`, which
  *     prepends the prefix itself, so they are behaviour-preserving drop-ins for
- *     the literals previously inlined in feature-queries.ts / session.ts.
+ *     the literals previously inlined in the old query monolith / session.ts.
  *   - COLLECTION prefixes and consistency-group fan-outs return FULLY-QUALIFIED
  *     keys (via `q.key`), because they are `invalidateQueries` targets that
  *     prefix-match the real `["autopilot-v2", …]` entries in the cache.

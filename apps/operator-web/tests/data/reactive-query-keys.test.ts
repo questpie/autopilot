@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
 import { createAppClient } from "@/lib/client";
-import { createFeatureQueries } from "@/lib/data/feature-queries";
+import { createAppQueries } from "@/lib/data/app-data-context";
 import { createQueryKeys } from "@/lib/data/query-keys";
 import { createSessionQuery } from "@/lib/data/session";
 import { createAppQueryOptions } from "@/lib/query";
 
 const BASE_URL = "https://operator.example.test";
 const q = createAppQueryOptions(createAppClient({ baseURL: BASE_URL }));
-const queries = createFeatureQueries(q);
+const queries = createAppQueries(q);
 const keys = createQueryKeys(q);
 
 /** ["autopilot-v2", ...] — the configured keyPrefix (lib/query.ts). */
