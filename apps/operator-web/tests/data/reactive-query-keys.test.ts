@@ -35,6 +35,12 @@ describe("static/live arms share ONE cache key (SSR static-load -> stream-upgrad
 		// Same invariant as spaces, keyed by spaceId: identical options => identical key.
 		expect(live.queryKey).toEqual(plain.queryKey);
 	});
+	test("projects.visible and projects.visibleLive queryKeys are deep-equal (space-scoped)", () => {
+		const plain = queries.projects.visible("space-cela");
+		const live = queries.projects.visibleLive("space-cela");
+		// Same invariant as channels, keyed by spaceId: identical options => identical key.
+		expect(live.queryKey).toEqual(plain.queryKey);
+	});
 });
 
 describe("typed key factory is behaviour-preserving (keys hash identically)", () => {
@@ -62,6 +68,13 @@ describe("typed key factory is behaviour-preserving (keys hash identically)", ()
 		expect(queries.channels.directory("s1").queryKey).toEqual([
 			...PREFIX,
 			"channels",
+			"directory",
+			"s1",
+		]);
+		// Projects are SPACE-scoped like channels, so the directory key is keyed by spaceId.
+		expect(queries.projects.directory("s1").queryKey).toEqual([
+			...PREFIX,
+			"projects",
 			"directory",
 			"s1",
 		]);
@@ -101,6 +114,15 @@ describe("consistency-group fan-outs are ready invalidate targets", () => {
 		// The channels prefix prefix-matches the real space-scoped channels read.
 		const channelsKey = queries.channels.visible("s1").queryKey;
 		expect(channelsKey.slice(0, collectionTarget.length)).toEqual(collectionTarget);
+	});
+	test("onProjectChange fans out over the projects collection + the space-scoped directory", () => {
+		const [collectionTarget, directoryTarget] = keys.onProjectChange("s1");
+		expect(collectionTarget).toEqual([...PREFIX, "collections", "projects"]);
+		// Directory target is qualified + keyed by spaceId, so it matches the real key.
+		expect(directoryTarget).toEqual(queries.projects.directory("s1").queryKey);
+		// The projects prefix prefix-matches the real space-scoped projects read.
+		const projectsKey = queries.projects.visible("s1").queryKey;
+		expect(projectsKey.slice(0, collectionTarget.length)).toEqual(collectionTarget);
 	});
 
 	test("onAgentChange fans out over the ACTORS collection (agents are not a collection)", () => {

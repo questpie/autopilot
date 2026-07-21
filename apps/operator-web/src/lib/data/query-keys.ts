@@ -48,6 +48,11 @@ export function createQueryKeys(q: AppQueryOptions) {
 	const channels = {
 		directory: (spaceId: string): QueryKey => ["channels", "directory", spaceId],
 	};
+	// Projects are SPACE-SCOPED like channels, so the directory projection key is keyed
+	// by spaceId (not companyId) — one directory entry per Space.
+	const projects = {
+		directory: (spaceId: string): QueryKey => ["projects", "directory", spaceId],
+	};
 	const activity = {
 		feed: (companyId: string): QueryKey => ["activity", "feed", companyId],
 	};
@@ -69,6 +74,7 @@ export function createQueryKeys(q: AppQueryOptions) {
 		team,
 		spaces,
 		channels,
+		projects,
 		activity,
 		onboarding,
 		session,
@@ -91,6 +97,17 @@ export function createQueryKeys(q: AppQueryOptions) {
 		onChannelChange: (spaceId: string): QueryKey[] => [
 			collection("channels"),
 			qualify(channels.directory(spaceId)),
+		],
+		/**
+		 * A Project changed: refetch the raw projects collection AND the derived
+		 * project-directory projection for its Space. Projects are SPACE-SCOPED, so the
+		 * directory target is keyed by spaceId. Vocabulary ONLY (ADR 0022), the exact
+		 * mirror of onChannelChange — the LIVE directory arm already reconciles by
+		 * identity off the stream, so no reconciler consumer exists yet.
+		 */
+		onProjectChange: (spaceId: string): QueryKey[] => [
+			collection("projects"),
+			qualify(projects.directory(spaceId)),
 		],
 		/**
 		 * An Agent (an actor with kind:"agent") changed: refetch the actors

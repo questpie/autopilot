@@ -5,10 +5,13 @@ import { useMemo } from "react";
 import { StatePanel } from "@questpie/ui";
 
 import { ChannelDirectory } from "@/components/screens/channel-directory";
+import { ProjectDirectory } from "@/components/screens/project-directory";
 import { SpaceOverview } from "@/components/screens/space-directory";
 import {
 	type ChannelsSnapshot,
 	deriveChannelDirectory,
+	deriveProjectDirectory,
+	type ProjectsSnapshot,
 	type SpaceSummary,
 } from "@/lib/data/feature-queries";
 import { isSurfaceDenied } from "@/lib/data/surface-denied";
@@ -21,22 +24,33 @@ export const Route = createFileRoute("/_authenticated/app/$companySlug/spaces/$s
 		const space = spaces.find((candidate) => candidate.slug === params.spaceSlug);
 		// A slug outside the visitor's spaces answers the uniform not-found.
 		if (!space) throw notFound();
-		// LIVE channel directory (mirrors spaces.index): prefetch the PLAIN channels
-		// arm so SSR ships a static snapshot, then the component mounts the LIVE arm on
-		// the IDENTICAL key and the stream upgrades that ONE cache entry in place — no
-		// frozen loader read. Channels are SPACE-SCOPED, so this reads the channels of
-		// THIS space. Surface-denied is handled exactly as spaces.index does: a 403 /
-		// non-retryable realtime rejection returns a `denied` flag the component renders
-		// gracefully, never a throw to the router error boundary; every other error
-		// (incl. 401) rethrows for the guard/router to own.
-		const channelsDenied = await context.queryClient
-			.ensureQueryData(context.queries.channels.visible(space.id))
-			.then(() => false)
-			.catch((error: unknown) => {
-				if (isSurfaceDenied(error)) return true;
-				throw error;
-			});
-		return { space, channelsDenied };
+		// LIVE channel + project directories (mirrors spaces.index): seed the PLAIN arms
+		// so SSR ships a static snapshot, then the components mount the LIVE arms on the
+		// IDENTICAL keys and the streams upgrade those ONE cache entries in place — no
+		// frozen loader read. Both are SPACE-SCOPED (the channels / projects of THIS
+		// space) and depend only on the already-resolved `space.id`, so they prefetch in
+		// PARALLEL — one round-trip, not two. Each carries its OWN denied flag so the two
+		// live sections degrade independently: a 403 / non-retryable realtime rejection
+		// returns a `denied` flag the component renders gracefully, never a throw to the
+		// router error boundary; every other error (incl. 401) rethrows for the
+		// guard/router to own (Promise.all propagates the first such rejection).
+		const [channelsDenied, projectsDenied] = await Promise.all([
+			context.queryClient
+				.ensureQueryData(context.queries.channels.visible(space.id))
+				.then(() => false)
+				.catch((error: unknown) => {
+					if (isSurfaceDenied(error)) return true;
+					throw error;
+				}),
+			context.queryClient
+				.ensureQueryData(context.queries.projects.visible(space.id))
+				.then(() => false)
+				.catch((error: unknown) => {
+					if (isSurfaceDenied(error)) return true;
+					throw error;
+				}),
+		]);
+		return { space, channelsDenied, projectsDenied };
 	},
 	head: () => ({
 		meta: [{ title: "Priestor — QUESTPIE Autopilot" }],
@@ -45,16 +59,20 @@ export const Route = createFileRoute("/_authenticated/app/$companySlug/spaces/$s
 });
 
 /**
- * Route gate. The loader marks the channels truth read denied when it 403s, so we
- * branch here BEFORE mounting the live arm — on a load-time denial we render the
- * graceful surface-denied UI and never open a stream that would only reject again.
- * The live channel directory is a separate component so its hooks stay unconditional.
+ * Route gate. The loader marks each truth read (channels, projects) denied when it
+ * 403s, so we branch here BEFORE mounting each live arm — on a load-time denial we
+ * render the graceful surface-denied UI and never open a stream that would only
+ * reject again. Each live directory is a separate component so its hooks stay
+ * unconditional. Both space-scoped directories compose under the ONE SpaceOverview.
  */
 function SpaceOverviewRoute() {
-	const { space, channelsDenied } = Route.useLoaderData();
+	const { space, channelsDenied, projectsDenied } = Route.useLoaderData();
 	return (
 		<SpaceOverview space={space}>
-			{channelsDenied ? <ChannelsSurfaceDenied /> : <SpaceChannelsLive space={space} />}
+			<div className="grid gap-10">
+				{channelsDenied ? <ChannelsSurfaceDenied /> : <SpaceChannelsLive space={space} />}
+				{projectsDenied ? <ProjectsSurfaceDenied /> : <SpaceProjectsLive space={space} />}
+			</div>
 		</SpaceOverview>
 	);
 }
@@ -70,6 +88,23 @@ function ChannelsSurfaceDenied() {
 			<StatePanel
 				state="access"
 				title="Prístup ku kanálom bol zamietnutý"
+				description="Vaše oprávnenia sa medzičasom zmenili. Prihlásenie zostáva aktívne."
+			/>
+		</div>
+	);
+}
+
+/**
+ * SURFACE-DENIED: access to this Space's projects was revoked — the projects mirror
+ * of ChannelsSurfaceDenied. Degrades only the project body, in-shell; the session and
+ * the rest of the Space stay intact.
+ */
+function ProjectsSurfaceDenied() {
+	return (
+		<div data-testid="projects-surface-denied">
+			<StatePanel
+				state="access"
+				title="Prístup k projektom bol zamietnutý"
 				description="Vaše oprávnenia sa medzičasom zmenili. Prihlásenie zostáva aktívne."
 			/>
 		</div>
@@ -102,4 +137,26 @@ function SpaceChannelsLive({ space }: { space: SpaceSummary }) {
 	if (channelsDenied) return <ChannelsSurfaceDenied />;
 
 	return <ChannelDirectory channels={channels} />;
+}
+
+/**
+ * The LIVE project directory — the exact mirror of SpaceChannelsLive. The loader
+ * seeded the plain projects arm; here we subscribe to the live arm on the SAME key,
+ * so the hydrated snapshot upgrades to a stream in place and the PURE
+ * deriveProjectDirectory re-runs client-side. A project created in this Space (via the
+ * projects.create route) is persisted and appears here off the stream — no invalidate,
+ * no frozen loader read.
+ */
+function SpaceProjectsLive({ space }: { space: SpaceSummary }) {
+	const { queries } = Route.useRouteContext();
+	const projectsQuery = useSuspenseQuery<ProjectsSnapshot>(queries.projects.visibleLive(space.id));
+	const projectsDenied = isSurfaceDenied(projectsQuery.error);
+	const projects = useMemo(
+		() => deriveProjectDirectory(projectsQuery.data.docs),
+		[projectsQuery.data],
+	);
+
+	if (projectsDenied) return <ProjectsSurfaceDenied />;
+
+	return <ProjectDirectory projects={projects} />;
 }

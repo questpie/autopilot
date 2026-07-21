@@ -49,14 +49,15 @@ export function SpaceDirectory({ spaces, onOpenSpace, onCreate }: SpaceDirectory
 
 export type SpaceOverviewProps = {
 	space: SpaceSummary;
-	/** The Space body — the LIVE channel directory the detail route mounts (SPEC 10.5). */
+	/** The Space body — the LIVE channel + project directories the detail route mounts (SPEC 10.5). */
 	children: ReactNode;
 };
 
 /**
  * Space overview: the space header with its #general anchor over the Space body.
- * The body is the LIVE channel directory the detail route derives off
- * `channels.visibleLive` and passes as `children`, so this template stays query-free.
+ * The body is the LIVE channel + project directories the detail route derives off
+ * `channels.visibleLive` / `projects.visibleLive` and passes as `children`, so this
+ * template stays query-free.
  */
 export function SpaceOverview({ space, children }: SpaceOverviewProps) {
 	return (
