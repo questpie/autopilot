@@ -40,6 +40,75 @@ function InvitationContinuationNotice({
 	);
 }
 
+type ResendStatus = "idle" | "sending" | "sent" | "error";
+
+/**
+ * Unverified-account state: the account exists but its address is not verified,
+ * so Better Auth grants no session. A verification link is sent to the address
+ * at sign-up (`emailVerification.sendOnSignUp`); this screen lets the visitor
+ * request a fresh one via `sendVerificationEmail`. Whether that mail leaves over
+ * console/SMTP/Plunk is an env-level adapter choice in `questpie.config.ts`, not
+ * a concern this UI reflects.
+ */
+function VerifyEmailPending({
+	email,
+	redirectTo,
+	onBack,
+}: {
+	email: string;
+	redirectTo: string;
+	onBack: () => void;
+}) {
+	const [status, setStatus] = useState<ResendStatus>("idle");
+
+	const resend = async () => {
+		if (status === "sending") return;
+		setStatus("sending");
+		const { error } = await authClient.sendVerificationEmail({
+			email,
+			// After clicking the link the visitor lands on their intended
+			// destination; the SSR guard resolves the (now valid) session there.
+			callbackURL: redirectTo,
+		});
+		setStatus(error ? "error" : "sent");
+	};
+
+	const stateBand =
+		status === "sent" ? (
+			<StateBand tone="live" label={`Overovací e-mail sme znova odoslali na ${email}.`} />
+		) : status === "error" ? (
+			<StateBand tone="danger" label="E-mail sa nepodarilo odoslať. Skúste to o chvíľu znova." />
+		) : undefined;
+
+	return (
+		<div data-testid="screen-sign-in">
+			<AuthShell
+				title="Overte svoj e-mail"
+				description={`Poslali sme overovací odkaz na ${email}. Otvorte ho a dokončite aktiváciu účtu.`}
+				stateBand={stateBand}
+				primaryAction={{
+					label: "Poslať e-mail znova",
+					pendingLabel: "Odosielame…",
+					pending: status === "sending",
+				}}
+				secondaryAction={{
+					label: "Späť na prihlásenie",
+					disabled: status === "sending",
+					onSelect: onBack,
+				}}
+				onSubmit={() => {
+					void resend();
+				}}
+			>
+				<p className="text-sm text-muted-foreground">
+					Skontrolujte si doručenú poštu aj priečinok so spamom. Ak odkaz nedorazil, pošlite si ho
+					nanovo.
+				</p>
+			</AuthShell>
+		</div>
+	);
+}
+
 type Mode = "sign-in" | "sign-up";
 
 const COPY = {
@@ -105,27 +174,15 @@ export function SignInScreen({ redirectTo, continuation }: SignInScreenProps) {
 	};
 
 	if (verificationPendingFor) {
-		// Honest state: requireEmailVerification is on, but no verification
-		// sender is wired anywhere yet — never claim an e-mail was sent.
 		return (
-			<div data-testid="screen-sign-in">
-				<AuthShell
-					title="Overte svoj e-mail"
-					description={`Účet ${verificationPendingFor} čaká na overenie e-mailovej adresy. Po overení sa budete môcť prihlásiť.`}
-					secondaryAction={{
-						label: "Späť na prihlásenie",
-						onSelect: () => {
-							setVerificationPendingFor(null);
-							setMode("sign-in");
-						},
-					}}
-				>
-					<p className="text-sm text-muted-foreground">
-						Overovacie e-maily zatiaľ neodosielame automaticky — overenie adresy vybavuje správca
-						prostredia.
-					</p>
-				</AuthShell>
-			</div>
+			<VerifyEmailPending
+				email={verificationPendingFor}
+				redirectTo={redirectTo}
+				onBack={() => {
+					setVerificationPendingFor(null);
+					setMode("sign-in");
+				}}
+			/>
 		);
 	}
 
